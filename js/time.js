@@ -79,13 +79,10 @@ export function routinesFor(settings, key) {
   return out.sort((a, b) => a.start - b.start);
 }
 
-/** 夜の休憩を区間で返す(無ければ null) */
-export function eveningRestFor(settings) {
-  const er = settings?.eveningRest;
-  const s = hm(er?.start);
-  const min = +er?.min;
-  if (s == null || !(min > 0)) return null;
-  return { start: s, end: s + min };
+/** 長い休憩の分(v0.7: 時刻固定ではなく plan が動的に置く)。無ければ 0 */
+export function longRestMin(settings) {
+  const m = +settings?.longRest?.min;
+  return m > 0 ? m : 0;
 }
 
 /** 区間の重なりをまとめて開始順に返す。入力は {start,end} の配列(end<=start は捨てる) */
@@ -121,18 +118,16 @@ export function sumMin(list) {
 }
 
 /**
- * 使える時間(分)= 作業時間帯 − 生活ルーティン − busy − 移動 − 夜の休憩 − 習慣(§6.1)
- * extra: busy/transit などの追加区間 [{start,end}](分)。Phase 4 までは空。
+ * 使える時間(分)= 作業時間帯 − 生活ルーティン − busy − 移動 − 長い休憩 − 習慣(§6.1)
+ * extra: busy/transit などの追加区間 [{start,end}](分)。
  */
 export function usableMin(settings, key, extra = []) {
   const w = windowFor(settings, key);
   if (!w) return 0;
   const cuts = [...routinesFor(settings, key), ...extra];
-  const er = eveningRestFor(settings);
-  if (er) cuts.push(er);
   const free = sumMin(subtractIntervals([w], cuts));
   const habitMin = (settings?.habits || []).reduce((a, h) => a + (+h.min > 0 ? +h.min : 0), 0);
-  return Math.max(0, free - habitMin);
+  return Math.max(0, free - habitMin - longRestMin(settings));
 }
 
 /** 作業に回せる時間(分)= usable × ratio(既定 0.6) */

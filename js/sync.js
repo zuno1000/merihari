@@ -1,7 +1,7 @@
 // merihari ─ sync.js: 端末側暗号化(PBKDF2-SHA256 310,000 回 → AES-256-GCM)・Drive appDataFolder・マージ(仕様書 F7・§8.2)。
 // merge は純関数で対称(merge(a,b) ≡ merge(b,a))。tests で固定する。
 import * as store from './store.js';
-import { gfetch, getToken, isConnected, savedToken } from './google.js';
+import { gfetch, getToken, isConnected, savedToken, loadGis } from './google.js';
 import { el, sheet, toast } from './ui.js';
 
 export const DRIVE_FILE = 'merihari.enc';
@@ -150,9 +150,18 @@ async function upload(id, body, interactive) {
 }
 
 let syncing = null;
+/** 同期で手元のデータが変わったあとに呼ぶ(main.js が画面の描き直しを登録する) */
+export const hooks = { onChanged: null };
+/** キー順を揃えた JSON(マージ前後の比較用) */
+function stableJSON(v) {
+  if (Array.isArray(v)) return '[' + v.map(stableJSON).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stableJSON(v[k])).join(',') + '}';
+  return JSON.stringify(v);
+}
+const sansMeta = (d) => { const c = { ...d }; delete c.meta; return c; };
 /**
  * Drive と同期。interactive=false のときはトークンとパスフレーズが揃っているときだけ静かに実行(無ければ 'skip')。
- * 戻り値: 'ok' | 'skip'
+ * 戻り値: 'ok'(他の端末の変更を取り込んだ) | 'same'(手元が最新・上げただけ) | 'skip'
  */
 export async function syncDrive({ interactive = false } = {}) {
   if (syncing) return syncing;
@@ -170,11 +179,13 @@ export async function syncDrive({ interactive = false } = {}) {
       ({ pass, hint } = await askPass({ hint, isNew: !file }));
     }
     let data = store.state.data;
+    const before = stableJSON(sansMeta(store.migrate(data)));
     if (remoteTxt) {
       let remote;
       try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
       data = merge(data, remote);
     }
+    const changed = stableJSON(sansMeta(data)) !== before;
     const nowISO = store.nowISO();
     data = pruneTombstones(data, nowISO);
     data.meta.lastSyncAt = nowISO;
@@ -184,18 +195,54 @@ export async function syncDrive({ interactive = false } = {}) {
     await upload(file?.id || null, body, interactive);
     local.lastSyncAt = Date.now(); local.pendingSync = false; local.syncHint = hint || local.syncHint || '';
     store.saveLocal();
-    return 'ok';
+    if (changed) { try { hooks.onChanged?.(); } catch (e) { console.warn(e); } }
+    return changed ? 'ok' : 'same';
   })();
   try { return await syncing; } finally { syncing = null; }
 }
 
-/** 自然なタップに乗せる同期(F7-3)。条件が揃わなければ何もしない */
-export function autoSync() {
-  const local = store.state.local;
-  if (!isConnected() || !savedToken() || !getPass() || !local.pendingSync) return;
-  if (local.lastSyncAt && Date.now() - local.lastSyncAt < AUTO_INTERVAL_MS) return;
-  syncDrive({ interactive: false }).then((r) => { if (r === 'ok') toast('同期しました'); }).catch((e) => console.warn('auto sync', e));
+/**
+ * 自動同期の判断(純関数・v0.7、tangoquest の方式)。
+ * s = { connected, hasToken, hasPass, online, now, lastSyncAt, pending }
+ * 戻り値: 'silent'(いま静かに) | 'gesture'(次のタップで: 鍵が無くポップアップが要る) | 'none'
+ */
+export function autoSyncDecision(s) {
+  if (!s.connected || s.online === false) return 'none';
+  if (s.lastSyncAt && s.now - s.lastSyncAt < AUTO_INTERVAL_MS) return 'none';
+  if (s.hasToken && s.hasPass) return 'silent';
+  return 'gesture';
 }
+const autoState = () => ({ connected: isConnected(), hasToken: !!savedToken(), hasPass: !!getPass(), online: navigator.onLine, now: Date.now(), lastSyncAt: store.state.local.lastSyncAt || 0, pending: !!store.state.local.pendingSync });
+
+let gesturePending = false;
+const say = (r, auto) => { if (r === 'ok') toast('他の端末の記録を取り込みました'); else if (!auto) toast(r === 'same' ? '同期しました(この端末が最新)' : '同期を見送りました'); };
+/** 自然なタップに乗せる同期(F7-3)。未同期の変更があり、鍵が揃っていて、前回から 5 分以上なら静かに実行 */
+export function autoSync() {
+  const st = autoState();
+  if (!st.pending) return;
+  if (autoSyncDecision(st) !== 'silent') return;
+  syncDrive({ interactive: false }).then((r) => say(r, true)).catch((e) => console.warn('auto sync', e));
+}
+/**
+ * 開いたとき・戻ったときの同期(v0.7): 鍵があれば静かに(他の端末の変更を取り込む)。
+ * 鍵が無ければ(ふつうは起動のたび: トークンとパスフレーズは sessionStorage)、次のタップ(ユーザー操作あり=ポップアップが通る)で同期する。
+ */
+export function autoSyncOnOpen() {
+  const d = autoSyncDecision(autoState());
+  if (d === 'none') return;
+  if (d === 'silent') { gesturePending = false; syncDrive({ interactive: false }).then((r) => say(r, true)).catch((e) => console.warn('auto sync', e)); return; }
+  gesturePending = true;
+  loadGis().catch(() => {}); // タップ時にポップアップが止められないよう先読み
+}
+/** 最初のタップ(pointerdown ではなく click: iOS でユーザー操作として扱われる)。同期が控えていれば、タップの処理とは別に走らせる */
+export function autoSyncOnGesture() {
+  if (!gesturePending) return false;
+  if (autoSyncDecision({ ...autoState(), hasToken: true, hasPass: true }) !== 'silent') { gesturePending = false; return false; }
+  gesturePending = false;
+  syncDrive({ interactive: true }).then((r) => say(r, true)).catch((e) => { console.warn('auto sync', e); toast(`同期できませんでした: ${e.message}`); });
+  return true;
+}
+export const gesturePendingGet = () => gesturePending;
 
 /** 全端末のデータ消去(世代 resetAt を上げてから同期し、最後にこの端末を消す) */
 export async function resetEverywhere() {

@@ -59,8 +59,8 @@ const summary = {
   window() { const w = S().window; return isSimpleWindow(w) ? `平日 ${fmtT(w.mon[0])}–${fmtT(w.mon[1])} / 土日 ${fmtT(w.sat[0])}–${fmtT(w.sat[1])}` : '曜日ごと'; },
   routines() { const r = S().routines.filter((x) => !x.off); return r.length ? r.map((x) => `${x.name} ${fmtT(x.start)}`).join('・') : 'なし'; },
   habits() { const h = S().habits; return h.length ? h.map((x) => `${x.name} ${x.min}分`).join('・') : 'なし'; },
-  rest() { const s = S(); return `${fmtT(s.eveningRest.start)} から ${s.eveningRest.min}分・${s.restEvery.workMin}分ごとに${s.restEvery.restMin}分`; },
-  transit() { const s = S(); return `片道 ${s.transitMin}分${s.outingByBusy ? '・予定がある日は外出' : ''}`; },
+  rest() { const s = S(); return `${s.restEvery.workMin}分ごとに${s.restEvery.restMin}分${s.longRest.min ? `・長め ${s.longRest.min}分` : ''}`; },
+  transit() { const s = S(); return `片道 ${s.transitMin}分・${{ home: '原則 在宅', out: '原則 外出', weekday: '曜日で決める' }[s.outingDefault] || '原則 在宅'}`; },
   categories() { const c = S().categories.slice().sort((a, b) => a.order - b.order); return `${c.slice(0, 4).map((x) => x.name).join('・')}${c.length > 4 ? ` …全${c.length}件` : ''}`; },
 };
 
@@ -105,13 +105,13 @@ function sectionRoutines(rerender) {
 function sectionTransit(rerender) {
   const s = S();
   const daysBox = el('div', { hidden: s.outingDefault !== 'weekday' }, [el('p.muted.small', '外出扱いにする曜日'), dayChips(s.outingDays, () => store.touchSettings())]);
-  const memCount = Object.keys(s.outingMemory || {}).length;
-  return card('移動', '外出扱いの予定の前後に、片道分の移動を置きます。予定の内容は読まないので、外出かどうかは「既定」と、タイムラインで予定をタップして選んだ結果(曜日と時刻で記憶)で決めます。',
-    el('div.row.field', [el('span.label', '外出時 片道'), numInput(s.transitMin, 0, 300, (v) => { s.transitMin = v; store.touchSettings(); }), el('span.unit', '分')]),
+  const memCount = Object.keys(s.outingMemory || {}).length + Object.keys(s.transitMemory || {}).length;
+  return card('移動', '外出扱いの予定の前後に、片道分の移動を置きます。予定の内容は読まないので、外出かどうかと移動の長さは、ここでの既定と、タイムラインで予定をタップして選んだ結果(曜日と時刻で記憶)で決めます。',
+    el('div.row.field', [el('span.label', '片道の既定'), numInput(s.transitMin, 0, 300, (v) => { s.transitMin = v; store.touchSettings(); }), el('span.unit', '分')]),
     el('p.muted.small', 'カレンダーの予定の既定'),
     seg({ home: '原則 在宅', weekday: '曜日で決める', out: '原則 外出' }, s.outingDefault || 'home', (v) => { s.outingDefault = v; store.touchSettings(); daysBox.hidden = v !== 'weekday'; }),
     daysBox,
-    memCount ? el('div.row', [el('span.muted.small', `覚えた判定 ${memCount} 件`), el('button.btn.sm.ghost', { type: 'button', onclick: () => { s.outingMemory = {}; store.touchSettings(); toast('消しました'); rerender && rerender(); } }, '消す')]) : null,
+    memCount ? el('div.row', [el('span.muted.small', `予定をタップして覚えた指定 ${memCount} 件`), el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: () => { s.outingMemory = {}; s.transitMemory = {}; store.touchSettings(); toast('消しました'); rerender && rerender(); } }, '消す')]) : null,
     el('details', [el('summary.muted.small', 'くわしく'),
       el('div.row.field', [el('span.label', '外出候補とみなす予定の長さ'), numInput(s.outingMinBusyMin, 5, 600, (v) => { s.outingMinBusyMin = v; store.touchSettings(); }), el('span.unit', '分以上')])]));
 }
@@ -133,9 +133,11 @@ function sectionHabits(rerender) {
 function sectionRest() {
   const s = S();
   const pct = el('b', `${Math.round(s.ratio * 100)}`);
-  return card('休憩の方針', '休憩も予定として置きます(メリハリ)。',
-    el('div.row.field', [el('span.label', '夜の休憩'), timeInput(s.eveningRest.start, (v) => { s.eveningRest.start = v; store.touchSettings(); }), el('span', 'から'), numInput(s.eveningRest.min, 0, 300, (v) => { s.eveningRest.min = v; store.touchSettings(); }), el('span.unit', '分')]),
+  return card('休憩の方針', '休憩も予定として置きます(メリハリ)。時刻は決めず、その日の作業の量と進み具合から理想スケジュールが置きます。',
     el('div.row.field', [el('span.label', '作業'), numInput(s.restEvery.workMin, 15, 240, (v) => { s.restEvery.workMin = v; store.touchSettings(); }), el('span', '分ごとに休憩'), numInput(s.restEvery.restMin, 0, 60, (v) => { s.restEvery.restMin = v; store.touchSettings(); }), el('span.unit', '分')]),
+    el('div.row.field', [el('span.label', '長めの休憩'), numInput(s.longRest.min, 0, 300, (v) => { s.longRest.min = v; store.touchSettings(); }), el('span.unit', '分を1日1回')]),
+    el('div.row.field', [el('span.label', '目安'), el('span', '作業が'), numInput(s.longRest.afterMin, 30, 720, (v) => { s.longRest.afterMin = v; store.touchSettings(); }), el('span.unit', '分進んだら')]),
+    el('p.muted.small', '作業が少ない日は 6 割ほど進んだところ、1時間未満なら作業のあとに置きます。記録で休憩を取っていればその分は置きません。'),
     el('details', [el('summary.muted.small', 'くわしく'),
       el('label.field.col', [el('span', ['使える時間のうち作業に回せる割合: ', pct, '%(実績から週1回だけ校正を提案します)']),
         el('input', { type: 'range', min: 20, max: 100, step: 5, value: Math.round(s.ratio * 100), oninput: (e) => { pct.textContent = e.target.value; }, onchange: (e) => { s.ratio = +e.target.value / 100; store.touchSettings(); } })])]));
@@ -181,7 +183,7 @@ function sectionGoogle(rerender) {
     ]),
     el('div.row.wrap', { style: { marginTop: '10px' } }, connected ? [
       el('button.btn', { type: 'button', onclick: () => run('予定を取得中…', async () => { await google.fetchBusy({ force: true, interactive: true }); toast('予定を取得しました'); }) }, '予定を取得'),
-      el('button.btn.primary', { type: 'button', onclick: () => run('同期中…', async () => { const r = await sync.syncDrive({ interactive: true }); toast(r === 'ok' ? '同期しました' : '同期を見送りました'); }) }, 'Drive と同期'),
+      el('button.btn.primary', { type: 'button', onclick: () => run('同期中…', async () => { const r = await sync.syncDrive({ interactive: true }); toast(r === 'skip' ? '同期を見送りました' : r === 'ok' ? '同期しました(他の端末の変更を取り込み)' : '同期しました(この端末が最新)'); }) }, 'Drive と同期'),
       el('button.btn.ghost', { type: 'button', onclick: () => confirmSheet('Google との接続を解除しますか?', 'この端末のトークンと予定のキャッシュを消します。Drive 上の暗号化ファイルは残ります。', '解除', () => { google.disconnect(); sync.forgetPass(); toast('解除しました'); rerender(); }, true) }, '接続を解除'),
     ] : [
       el('button.btn.primary.grow', { type: 'button', onclick: () => run('Google に接続中…', async () => { await google.getToken({ interactive: true }); try { await google.fetchBusy({ force: true, interactive: true }); } catch (e) { console.warn(e); } toast('接続しました'); }) }, '接続する'),
@@ -205,13 +207,13 @@ function sectionHelp() {
     li(['今日やること: 期限から逆算して、今日やっておくべき量があるもの。理想スケジュールに入ります。', '期限までにやること: 今日の分は 0 でも、空いた作業枠があれば順に細分化して入れます(期限が近づくと自動で「今日やること」に上がります)。', 'やりたいこと: 義務ではないもの。予定には入れず、空いた時間に。']),
     p('「今日やること」の量は、残り見積 × 今日の作業枠 ÷ 期限までの作業枠 で決めます(5分丸め・最小単位以上)。期限を過ぎていれば残り全部。'),
     h('理想スケジュールの組み方'),
-    li(['固定: カレンダーの予定 → 移動 → 生活ルーティン → 夜の休憩 → 習慣。', '作業: 今日やること → 余った枠に期限までにやること。1枠は最大90分、90分ごとに休憩10分。最後の30分は空けます。', '作業に回せる割合(既定60%)が上限。入り切らない分は朝の提案で伝えます。', '理想ブロックをタップで 今やる / 後ろへ / 今日はやらない。「今から再計画」でいま以降だけ組み直します。']),
+    li(['固定: カレンダーの予定 → 移動 → 生活ルーティン → 習慣。', '作業: 今日やること → 余った枠に期限までにやること。1枠は最大90分。最後の30分は空けます。', '休憩: 時刻は決めません。続けて作業した分が「作業◯分ごと」に達したら短い休憩、その日の作業が「目安」の分だけ進んだら長めの休憩(作業が少ない日は 6 割ほど進んだところ)。食事や予定の切れ目も休憩として数えます。', '作業に回せる割合(既定60%)が上限。入り切らない分は朝の提案で伝えます。', '理想ブロックをタップで 今やる / 後ろへ / 今日はやらない / 長さ −15・+15・+30。「今から再計画」でいま以降だけ組み直します。']),
     h('移動と外出'),
-    li(['カレンダーからは「予定の有無」だけを読み、内容は読みません。', '外出かどうかは 設定の既定(原則在宅 / 曜日で決める / 原則外出)で決め、タイムラインで予定をタップして「在宅/外出」を選ぶと、その曜日・時刻を次回から覚えます。', '外出の予定の前後に片道分の移動を置きます。続けて外出する予定は1回の外出にまとめます。']),
+    li(['カレンダーからは「予定の有無」だけを読み、内容は読みません。', '外出かどうかは 設定の既定(原則在宅 / 曜日で決める / 原則外出)で決め、タイムラインで予定をタップして「在宅/外出」を選ぶと、その曜日・時刻を次回から覚えます。', '外出の予定の前後に片道分の移動を置きます。移動の長さは予定(または移動)をタップして変えられ、同じ曜日・時刻で次回から覚えます。既定の長さは 設定 › 移動。', '続けて外出する予定は1回の外出にまとめます。']),
     h('レポート'),
     li(['作業時間帯の終了30分前から「今日のレポート」。翌朝に確定し、「昨日」の1行で振り返れます。', '肯定的な事実を先に、改善点は事実だけ。責める言葉は使いません。', '図: 作業の合計と先週比、1日の帯(理想/実績)、カテゴリ別、7日間の推移。']),
     h('Google とプライバシー'),
-    li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '同期は記録やタブ切替に乗せて5分おきに静かに行います。']),
+    li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズを聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。']),
     h('ショートカット'),
     li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了(iOS のショートカットから)。']),
   ]);

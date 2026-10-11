@@ -1,10 +1,10 @@
-:root{--bg:#f5f6f9;--fg:#1f2130;--muted:#747a90;--line:#e6e8f0;--card:#fff;--accent:#2b6cb0;--accent-bg:#e8f0fa;--danger:#c53030;--danger-bg:#fdeaea;--shadow:0 2px 10px rgba(30,40,80,.06)}
+:root{--bg:#f6f4ee;--fg:#24262e;--muted:#767b8c;--line:#e9e6de;--card:#fff;--accent:#2f6fcf;--accent-bg:#e9f0fb;--danger:#c53030;--danger-bg:#fdeaea;--shadow:0 2px 12px rgba(40,40,30,.06);--radius:18px}
 @media (prefers-color-scheme:dark){:root{--bg:#171716;--fg:#ecebe6;--muted:#a09f97;--line:#2e2e2b;--card:#1f1f1d;--accent:#7fb0e8;--accent-bg:#1c2a3a;--danger:#fc8181;--danger-bg:#3a1c1c;--shadow:none}}
 *{box-sizing:border-box;touch-action:manipulation}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.6;font-size:16px}
 #view{padding:12px 14px calc(84px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
-h1{font-size:22px;margin:8px 0 12px;line-height:1.3}
+h1{font-size:23px;margin:8px 0 14px;line-height:1.3;letter-spacing:.01em}
 h2{font-size:15px;margin:0 0 6px}
 p{margin:4px 0}
 .muted{color:var(--muted)}
@@ -13,11 +13,12 @@ p{margin:4px 0}
 
 /* タブ */
 #tabs{position:fixed;left:0;right:0;bottom:0;display:flex;border-top:1px solid var(--line);background:var(--card);padding-bottom:env(safe-area-inset-bottom);z-index:5}
-#tabs button{flex:1;border:0;background:none;color:var(--muted);font-size:14px;padding:12px 0;min-height:48px;font-family:inherit;cursor:pointer}
-#tabs button.on{color:var(--accent);font-weight:600}
+#tabs button{flex:1;border:0;background:none;color:var(--muted);font-size:14px;padding:10px 0;min-height:52px;font-family:inherit;cursor:pointer;position:relative}
+#tabs button.on{color:var(--accent);font-weight:700}
+#tabs button.on::after{content:"";position:absolute;left:50%;bottom:6px;width:18px;height:3px;border-radius:2px;background:var(--accent);transform:translateX(-50%)}
 
 /* カード・ヒーロー */
-.card,.hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 12px;box-shadow:var(--shadow)}
+.card,.hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:0 0 14px;box-shadow:var(--shadow)}
 .hero{border-color:var(--accent-bg);background:linear-gradient(180deg,var(--accent-bg),var(--card) 90%)}
 .hero h1{margin:4px 0 6px}
 .wizard-head{margin:4px 0 12px}
@@ -49,12 +50,13 @@ details{margin-top:8px}
 summary{cursor:pointer;list-style-position:inside}
 
 /* ボタン・チップ */
-.btn{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:12px;padding:10px 14px;min-height:44px;cursor:pointer;flex:none}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:10px 16px;min-height:46px;cursor:pointer;flex:none;font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;box-shadow:0 3px 10px rgba(47,111,207,.22)}
+.btn.primary.grow{min-height:50px;font-size:17px}
 .btn.danger{color:var(--danger);border-color:var(--danger);background:var(--danger-bg)}
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
 .btn.sm{min-height:36px;padding:6px 10px;font-size:14px}
-.btn.block{display:block;width:100%;margin-top:10px}
+.btn.block{display:block;width:100%;margin-top:10px;border-radius:14px}
 .btn:disabled{opacity:.45;cursor:default}
 .days{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:8px 14px;min-height:44px;cursor:pointer;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
@@ -71,7 +73,7 @@ ul.news{margin:6px 0 0;padding-left:1.2em;font-size:13px;color:var(--muted)}
 
 /* シート・トースト */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;z-index:20}
-.sheet{background:var(--card);color:var(--fg);width:100%;max-width:640px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -4px 24px rgba(0,0,0,.2);max-height:88vh;max-height:88dvh;overflow-y:auto}
+.sheet{background:var(--card);color:var(--fg);width:100%;max-width:640px;border-radius:24px 24px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -4px 24px rgba(0,0,0,.2);max-height:88vh;max-height:88dvh;overflow-y:auto}
 .sheet h2{font-size:17px;margin-bottom:8px}
 .sheet .row{margin-top:14px}
 #toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translate(-50%,8px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30;max-width:90vw}
@@ -107,7 +109,7 @@ button.blk{cursor:pointer}
 /* ---- 設定: 一覧(ラベル左/値右)と項目画面 ---- */
 .group{margin:0 0 16px}
 .group h2{font-size:12px;color:var(--muted);font-weight:600;margin:0 4px 6px;letter-spacing:.02em}
-.list{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
 .srow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:none;color:var(--fg);font-family:inherit;font-size:15px;text-align:left;min-height:48px}
 .srow:first-child{border-top:0}
 button.srow{cursor:pointer}
@@ -123,26 +125,29 @@ button.srow:active{background:var(--accent-bg)}
 .subhead h1{margin:0}
 .btn.back{padding-left:4px;font-size:15px}
 .section-view .card>h2{display:none}
-.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;width:100%;background:var(--bg);border-radius:12px;padding:3px;margin:4px 0 10px;box-sizing:border-box}
-.seg button{display:block;width:100%;min-width:0;border:0;background:none;border-radius:10px;padding:0 6px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;height:36px;line-height:36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;width:100%;background:var(--bg);border-radius:999px;padding:3px;margin:4px 0 10px;box-sizing:border-box}
+.seg button{display:block;width:100%;min-width:0;border:0;background:none;border-radius:999px;padding:0 6px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;height:36px;line-height:36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;-webkit-appearance:none;appearance:none;margin:0}
 .seg button.active{background:var(--card);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .label.w3{width:2.6em}
 
 /* ---- 今日: 上部の1行と記録中カード ---- */
 .today-head{display:flex;align-items:center;gap:10px;min-height:40px;margin:0 0 6px}
 .today-head b{font-size:17px}
-.now-card{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-left:4px solid;border-radius:14px;padding:6px 8px 6px 12px;margin:0 0 10px;box-shadow:var(--shadow)}
+.now-card{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:var(--radius);padding:6px 8px 6px 12px;margin:0 0 10px;box-shadow:var(--shadow)}
 .now-main{flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:0;background:none;color:var(--fg);font-family:inherit;font-size:16px;text-align:left;padding:4px 0;cursor:pointer}
 .now-main .sub{width:100%;font-size:12px}
 .note{margin:0 2px 8px}
 
 /* ---- ヒーロー(状態機械)・タスク ---- */
-.hero-card{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-left:4px solid;border-radius:14px;padding:10px 12px;margin:0 0 10px;box-shadow:var(--shadow)}
+.hero-card{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:var(--radius);padding:14px 16px;margin:0 0 12px;box-shadow:var(--shadow)}
 .hero-card.behind{background:#fff8ec}
 @media (prefers-color-scheme:dark){.hero-card.behind{background:#2a2416}}
 .hero-main{display:flex;flex-direction:column;gap:2px;min-width:0}
-.hero-title{font-size:16px;line-height:1.4}
-.hero-btns{justify-content:flex-end}
+.hero-title{font-size:19px;line-height:1.4;font-weight:700}
+.hero-main .sub{font-size:14px;margin-top:2px}
+.hero-btns{justify-content:flex-end;gap:10px}
+.hero-btns .btn.sm{min-height:44px;padding:8px 18px;font-size:15px}
+.hero-btns .btn.sm.primary{flex:1}
 .tl-foot{justify-content:flex-end;margin-top:6px}
 .chips.small{margin-top:0;gap:6px}
 .chip.sm2{min-height:34px;padding:4px 12px;font-size:13px}
@@ -255,9 +260,9 @@ details.group summary{padding:4px;cursor:pointer}
 .fab.rec{background:var(--danger);box-shadow:0 4px 14px rgba(197,48,48,.35);font-size:18px}
 .tl-nav{display:flex;align-items:center;gap:6px;margin:0 0 8px;min-height:40px}
 .tl-nav b{font-size:17px}
-.now-card.big{padding:12px 10px 12px 14px}
-.now-card.big b{font-size:18px}
-.now-timer{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin-left:6px}
+.now-card.big{padding:14px 12px 14px 16px}
+.now-card.big b{font-size:19px}
+.now-timer{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;margin-left:6px;letter-spacing:-.01em}
 .srow.up{padding:9px 12px;min-height:40px;font-size:14px}
 .up-time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;flex:none;width:6.2em}
 .srow.up .dot{width:8px;height:8px;flex:none}
@@ -266,3 +271,10 @@ details.group summary{padding:4px;cursor:pointer}
 .help h3:first-child{margin-top:4px}
 .help p,.help li{font-size:14px;line-height:1.6;margin:4px 0}
 .help ul{padding-left:1.2em;margin:0}
+
+/* ---- v0.7: 予定シートの移動調整・長さ変更・余白 ---- */
+.row.resize{margin-top:10px}
+.row.resize .btn.sm{min-width:56px;justify-content:center}
+p.gap{margin-top:14px}
+.sheet .chips.small{margin-top:10px}
+@media (prefers-color-scheme:dark){.btn.primary{box-shadow:none}}

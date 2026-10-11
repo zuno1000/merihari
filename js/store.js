@@ -47,9 +47,11 @@ export function defaultSettings() {
     outingDays: [],          // outingDefault が 'weekday' のとき外出扱いにする曜日(0=日)
     outingMemory: {},        // '曜日:開始分' → 'home'|'out'(予定をタップしたときに覚える)
     outingMinBusyMin: 45,
+    transitMemory: {},       // '曜日:開始分' → 片道の分(予定をタップして移動の長さを変えたときに覚える)
     habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }],
-    eveningRest: { start: '20:00', min: 60 },
     restEvery: { workMin: 90, restMin: 10 },
+    // 長い休憩(v0.7): 時刻固定ではなく、その日の作業が longAfterMin 進んだところ(作業が少ない日は 6 割あたり)に longMin 置く
+    longRest: { min: 60, afterMin: 240 },
     ratio: 0.6,
     categories: defaultCategories(),
     weeklyReviewDay: 0,
@@ -71,7 +73,7 @@ export function defaultData() {
 }
 
 export function defaultLocal() {
-  return { busyCache: null, outingOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
+  return { busyCache: null, outingOverride: {}, transitOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
 }
 
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
@@ -102,18 +104,23 @@ function normalizeSettings(raw) {
   if (isObj(raw.outingMemory)) for (const [k, v] of Object.entries(raw.outingMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && (v === 'home' || v === 'out')) s.outingMemory[k] = v;
   delete s.outingByBusy;
   s.outingMinBusyMin = posInt(raw.outingMinBusyMin, d.outingMinBusyMin);
+  s.transitMemory = {};
+  if (isObj(raw.transitMemory)) for (const [k, v] of Object.entries(raw.transitMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && Number.isFinite(+v) && +v >= 0 && +v <= 300) s.transitMemory[k] = Math.round(+v);
   s.habits = Array.isArray(raw.habits)
     ? raw.habits.filter(isObj).map((h) => ({
         ...h, id: String(h.id || uid()), name: String(h.name || ''), categoryId: String(h.categoryId || 'other'),
         min: posInt(h.min, 30), prefer: ['morning', 'afternoon', 'evening', 'any'].includes(h.prefer) ? h.prefer : 'any',
       }))
     : d.habits;
-  s.eveningRest = isObj(raw.eveningRest) && isHM(raw.eveningRest.start)
-    ? { ...raw.eveningRest, start: raw.eveningRest.start, min: posInt(raw.eveningRest.min, 60) }
-    : d.eveningRest;
   s.restEvery = isObj(raw.restEvery)
-    ? { ...raw.restEvery, workMin: posInt(raw.restEvery.workMin, 90), restMin: posInt(raw.restEvery.restMin, 10) }
+    ? { ...raw.restEvery, workMin: posInt(raw.restEvery.workMin, 90), restMin: Number.isFinite(+raw.restEvery.restMin) && +raw.restEvery.restMin >= 0 ? Math.round(+raw.restEvery.restMin) : 10 }
     : d.restEvery;
+  // v0.6 以前の「夜の休憩(時刻固定)」は長さだけ引き継ぎ、長い休憩(配置は動的)にする
+  const legacyLong = isObj(raw.eveningRest) ? posInt(raw.eveningRest.min, d.longRest.min) : d.longRest.min;
+  s.longRest = isObj(raw.longRest)
+    ? { ...raw.longRest, min: Number.isFinite(+raw.longRest.min) && +raw.longRest.min >= 0 ? Math.round(+raw.longRest.min) : legacyLong, afterMin: posInt(raw.longRest.afterMin, d.longRest.afterMin) }
+    : { min: legacyLong, afterMin: d.longRest.afterMin };
+  delete s.eveningRest;
   s.ratio = typeof raw.ratio === 'number' && raw.ratio >= 0.1 && raw.ratio <= 1 ? raw.ratio : d.ratio;
   s.categories = Array.isArray(raw.categories) && raw.categories.length
     ? raw.categories.filter((c) => isObj(c) && c.id).map((c, i) => ({

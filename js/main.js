@@ -12,8 +12,9 @@ import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.7.0';
 export const NEWS = [
+  { v: '0.7.0', text: '予定(または移動)をタップして移動の長さを変えられます(同じ曜日・時刻で記憶。既定は 設定 › 移動)。休憩は「夜の休憩」の時刻固定をやめ、作業の量と進み具合から理想スケジュールが置きます(作業◯分ごとの短い休憩+1日1回の長めの休憩。設定 › 休憩の方針)。理想ブロックの長さ −15/+15/+30。自動同期: 開いたときに鍵があれば静かに、無ければ最初のタップで同期し、他の端末の記録を取り込んだら画面を描き直します。見た目を整理(やわらかい配色・大きめの主ボタン)。' },
   { v: '0.6.0', text: '画面を 今 / タイムライン / タスク / 設定 の4つに。記録は右下の ＋ から(チップはシートの中)。タイムラインは ‹ › で前後の日(未来は見通し)。カレンダーの予定は原則「在宅」、タイムラインで予定をタップして在宅/外出を選ぶと曜日と時刻で覚えます(設定で 曜日で決める/原則外出 も)。期限までにやることを空いた作業枠に細分化して入れます。タスクは日付と時間で正確に。設定に「使い方」。同期データの検証を強化。' },
   { v: '0.5.2', text: 'パスフレーズやタスク編集の縦書き崩れを修正(レポートの柱グラフと CSS クラス名が衝突)。タスクの見出しを「今日やる分 / 期限まで余裕のある義務 / やりたいこと」にして説明を添えました。' },
   { v: '0.5.1', text: '設定の「平日/土日・曜日ごと」切替が縦に崩れるのを修正(レポートの帯と CSS クラス名が衝突していました)。' },
@@ -88,10 +89,15 @@ go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 
 if (!firstRun) { if (finalizePending()) screens[current](); checkOpenEntry(ctx); }
 
 // Google: 接続済みなら GIS を先読みし、トークンがあれば静かに予定を取り直す(F6-3)。変わったら今日を描き直す
+const redraw = () => { if (store.state.data.meta.setupAt) screens[current](); };
+sync.hooks.onChanged = redraw; // 同期で他の端末の変更を取り込んだら、いまの画面を描き直す
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
   google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
 }
+// 自動同期(v0.7・tangoquest 方式): 開いた直後に鍵があれば静かに。無ければ最初のタップで(ユーザー操作の中なので認証ポップアップが通る)
+if (!firstRun) sync.autoSyncOnOpen();
+document.addEventListener('click', () => { sync.autoSyncOnGesture(); }, { capture: true });
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
 setInterval(() => { if (tickFn) tickFn(); }, 15000);
@@ -102,7 +108,7 @@ document.addEventListener('visibilitychange', () => {
   finalizePending();
   if (!checkOpenEntry(ctx) && (current === 'now' || current === 'timeline')) screens[current]();
   google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
-  sync.autoSync();
+  sync.autoSyncOnOpen();
 });
 
 // Service Worker と更新確認(F8-2)
@@ -131,7 +137,7 @@ window.M = {
   log,
   plan,
   report,
-  sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint },
+  sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

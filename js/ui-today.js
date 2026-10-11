@@ -52,7 +52,7 @@ export function stopRecording(at = null) {
 
 // ---- plan(F2-1 / F2-7) ----
 function planOpts(date, nowMin, extra = {}) {
-  return { settings: S(), date, nowMin, tasks: T(), entries: E(), busy: google.busyForDate(date), overrides: store.state.local.outingOverride?.[date] || {}, ensureMin: report.untouchedNear(T(), E(), date).map((t) => t.id), ...extra };
+  return { settings: S(), date, nowMin, tasks: T(), entries: E(), busy: google.busyForDate(date), overrides: store.state.local.outingOverride?.[date] || {}, transitOverrides: store.state.local.transitOverride?.[date] || {}, ensureMin: report.untouchedNear(T(), E(), date).map((t) => t.id), ...extra };
 }
 function ensurePlan(n) {
   const w = windowFor(S(), n.date);
@@ -219,7 +219,7 @@ function freshLine(n, rerender) {
   } }, [el('span.lbl', busyText + (f.error ? '(前回失敗)' : '')), el('span.grow'), el('span.val', '更新'), el('span.chev', '›')]));
   const local = store.state.local;
   if (local.pendingSync && (!local.lastSyncAt || Date.now() - local.lastSyncAt > 5 * 60000)) rows.push(el('button.srow.fresh', { type: 'button', onclick: async () => {
-    try { toast('同期中…'); const r = await sync.syncDrive({ interactive: true }); toast(r === 'ok' ? '同期しました' : '同期を見送りました'); rerender(); } catch (e) { toast(e.message); }
+    try { toast('同期中…'); const r = await sync.syncDrive({ interactive: true }); toast(r === 'skip' ? '同期を見送りました' : '同期しました'); rerender(); } catch (e) { toast(e.message); }
   } }, [el('span.lbl', '未同期の変更あり'), el('span.grow'), el('span.val', '同期'), el('span.chev', '›')]));
   return rows.length ? el('div.list.freshline', rows) : null;
 }
@@ -314,7 +314,7 @@ function buildHero(n, p, ctx, rerender) {
   if (b && b.type === 'routine') return { node: card(catOf('life').color, `いまは ${b.name}`, `〜${mm(b.end)}`, [btn('生活を記録', () => { startCategory('life'); rerender(); })]), tick, key };
   if (b && b.type === 'rest') {
     const left = el('span', fmtMinJa(b.end - n.min));
-    const node = card(catOf('rest').color, el('span', ['休憩していい時間 あと ', left]), (b.evening ? '夜の休憩。ちゃんと休むのも予定のうち。' : '') + (remain > 0 ? ` 今日の分はあと ${fmtMinJa(remain)}。` : ' 今日の分は終わっています。'), [btn('休憩を記録', () => { startCategory('rest'); rerender(); })]);
+    const node = card(catOf('rest').color, el('span', ['休憩していい時間 あと ', left]), (b.long ? '長い休憩。ちゃんと休むのも予定のうち。' : b.drift ? '' : 'ひと区切り。') + (remain > 0 ? ` 今日の分はあと ${fmtMinJa(remain)}。` : ' 今日の分は終わっています。'), [btn('休憩を記録', () => { startCategory('rest'); rerender(); })]);
     tick = (m) => { left.textContent = fmtMinJa(Math.max(0, b.end - m.min)); };
     return { node, tick, key };
   }
@@ -457,7 +457,6 @@ export function renderTimeline(view, ctx, dateArg = null) {
 }
 
 // ---- タイムライン本体 ----
-const TYPE_LABEL = { busy: '予定', transit: '移動', routine: '生活', habit: '習慣', task: '作業', rest: '休憩' };
 function blockColor(b) {
   if (b.type === 'busy') return accentColor();
   if (b.type === 'transit') return catOf('transit').color;
@@ -484,7 +483,7 @@ function buildTimeline({ date, nowMin, p, entries, isToday, preview }, rerender)
   const planLane = el('div.lane.plan'), logLane = el('div.lane.log');
   const n = nowInfo();
   for (const b of blocks) {
-    const editable = isToday && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy');
+    const editable = isToday && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy' || (b.type === 'transit' && b.busyId));
     planLane.append(block(b.start, b.end, { name: blockName(b), color: blockColor(b), muted: !(b.type === 'task' || b.type === 'habit' || b.type === 'busy'), busy: b.type === 'busy', onclick: editable ? () => planBlockSheet(b, n, rerender) : null }));
   }
   for (const e of entries) {
@@ -519,32 +518,58 @@ function buildTimeline({ date, nowMin, p, entries, isToday, preview }, rerender)
   }
 }
 
-/** 理想ブロックのメニュー(F2-8 の最小版: 今やる / 後ろへ / 今日はやらない) */
+/** 理想ブロックの長さを変える(F2-8)。変えたブロックは pinned にして再計画でも動かさない */
+function resizeBlock(b, n, delta, rerender) {
+  const p = P()[n.date];
+  const blk = p?.blocks.find((x) => x.id === b.id);
+  if (!blk) return;
+  blk.end = Math.max(blk.start + 15, Math.min(1440, blk.end + delta));
+  blk.pinned = true;
+  p.updatedAt = store.nowISO(); store.save();
+  replan(n); rerender();
+  toast(`${blk.name} を ${fmtMinJa(blk.end - blk.start)} に`);
+}
+
+/** 理想ブロックのメニュー(F2-8: 今やる / 後ろへ / 今日はやらない / 長さ変更) */
 function planBlockSheet(b, n0, rerender) {
   const n = nowInfo();
   if (b.type === 'busy') return busyBlockSheet(b, n, rerender);
+  if (b.type === 'transit' && b.busyId) {
+    const busy = (P()[n.date]?.blocks || []).find((x) => x.type === 'busy' && x.busyId === b.busyId);
+    if (busy) return busyBlockSheet(busy, n, rerender);
+  }
   const t = b.taskId ? T()[b.taskId] : null;
+  const future = b.end > n.min;
   sheet((close) => [
     el('h2', `${b.name} ${mm(b.start)}〜${mm(b.end)}`),
     t?.starter ? el('p.muted.small', `とっかかり: ${t.starter}`) : null,
     b.filler ? el('p.muted.small', '余った時間で進める分(期限から見た今日の分とは別)。') : null,
+    future && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto)) ? el('div.row.resize', [
+      el('span.label', '長さ'),
+      el('button.btn.sm', { type: 'button', onclick: () => { close(); resizeBlock(b, n, -15, rerender); } }, '−15'),
+      el('button.btn.sm', { type: 'button', onclick: () => { close(); resizeBlock(b, n, 15, rerender); } }, '+15'),
+      el('button.btn.sm', { type: 'button', onclick: () => { close(); resizeBlock(b, n, 30, rerender); } }, '+30'),
+    ]) : null,
     el('div.col', [
       b.taskId || b.categoryId ? el('button.btn.block.primary', { type: 'button', onclick: () => { close(); if (b.taskId) replan(n, { first: b.taskId }); startCategory(b.categoryId || t?.categoryId || 'other', null, { taskId: b.taskId ?? null, plannedMin: b.end - b.start }); rerender(); } }, '今やる(記録を開始)') : null,
       b.taskId ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n, { last: b.taskId }); rerender(); } }, '後ろへ') : null,
       b.taskId ? el('button.btn.block', { type: 'button', onclick: () => { close(); const prev = P()[n.date]; replan(n, { skipped: [...(prev?.skipped || []), b.taskId] }); rerender(); toast('今日はやらないことにしました'); } }, '今日はやらない') : null,
       b.type === 'rest' ? el('button.btn.block', { type: 'button', onclick: () => { close(); startCategory('rest'); rerender(); } }, '休憩を記録') : null,
       b.type === 'habit' ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n, { deferHabit: b.habitId }); rerender(); } }, '後ろへ') : null,
-      b.type === 'routine' || b.type === 'transit' ? el('p.muted.small', `${TYPE_LABEL[b.type]}の枠です。設定で変えられます。`) : null,
+      b.type === 'routine' ? el('p.muted.small', '生活の枠です。設定で変えられます。') : null,
     ]),
   ]);
 }
 
-/** 予定(busy)の在宅/外出: 当日の上書き(端末ローカル)+ 曜日と時刻の組み合わせを覚える(設定・同期対象) */
+/**
+ * 予定(busy)の在宅/外出と移動の長さ: 当日の上書き(端末ローカル)+ 曜日と時刻の組み合わせを覚える(設定・同期対象)。
+ * 既定(片道の分・原則在宅/外出)は設定の「移動」で変えられる。
+ */
 function busyBlockSheet(b, n, rerender) {
   const local = store.state.local;
   const cur = local.outingOverride?.[n.date]?.[b.busyId];
   const memKey = plan.outingMemoryKey(n.date, b.start);
-  const set = (v) => {
+  const setOut = (v) => {
     local.outingOverride = local.outingOverride || {};
     local.outingOverride[n.date] = { ...(local.outingOverride[n.date] || {}), [b.busyId]: v };
     store.saveLocal();
@@ -552,16 +577,45 @@ function busyBlockSheet(b, n, rerender) {
     store.touchSettings();
     replan(n); rerender();
   };
+  const setTransit = (min) => {
+    local.transitOverride = local.transitOverride || {};
+    local.transitOverride[n.date] = { ...(local.transitOverride[n.date] || {}), [b.busyId]: min };
+    store.saveLocal();
+    S().transitMemory = { ...(S().transitMemory || {}), [memKey]: min };
+    store.touchSettings();
+    replan(n); rerender();
+    toast(min ? `移動は片道 ${min} 分に` : '移動なしに');
+  };
+  const clearAll = () => {
+    if (local.outingOverride?.[n.date]) delete local.outingOverride[n.date][b.busyId];
+    if (local.transitOverride?.[n.date]) delete local.transitOverride[n.date][b.busyId];
+    store.saveLocal();
+    let touched = false;
+    if (S().outingMemory?.[memKey]) { delete S().outingMemory[memKey]; touched = true; }
+    if (S().transitMemory?.[memKey]) { delete S().transitMemory[memKey]; touched = true; }
+    if (touched) store.touchSettings();
+    replan(n); rerender();
+  };
   const src = { override: '今日の指定', memory: '前回の指定を記憶', weekday: '曜日の既定', default: '既定' }[b.outingSource] || '既定';
-  sheet((close) => [
+  const tsrc = { override: '今日の指定', memory: '前回の指定を記憶', default: '設定の既定' }[b.transitSource] || '設定の既定';
+  const tm = Number.isFinite(+b.transitMin) ? +b.transitMin : (+S().transitMin || 0);
+  const tval = el('b', `${tm} 分`);
+  const stepBtn = (label, delta) => el('button.btn.sm', { type: 'button', onclick: () => { close(); setTransit(Math.max(0, Math.min(300, Math.round((tm + delta) / 5) * 5))); } }, label);
+  let close;
+  close = sheet((c) => { close = c; return [
     el('h2', `予定 ${mm(b.start)}〜${mm(b.end)}`),
-    el('p.muted.small', `いまは「${b.out ? '外出' : '在宅'}」扱い(${src})。外出なら前後に移動時間を置きます。選ぶと同じ曜日・時刻の予定を次回から同じ扱いにします。`),
+    el('p.muted.small', `いまは「${b.out ? '外出' : '在宅'}」扱い(${src})。選ぶと同じ曜日・時刻の予定を次回から同じ扱いにします。`),
     el('div.row', [
-      el('button.btn.grow', { type: 'button', class: `btn grow${cur === 'home' ? ' primary' : ''}`, onclick: () => { close(); set('home'); } }, '在宅'),
-      el('button.btn.grow', { type: 'button', class: `btn grow${cur === 'out' ? ' primary' : ''}`, onclick: () => { close(); set('out'); } }, '外出'),
+      el('button.btn.grow', { type: 'button', class: `btn grow${(cur === 'home' || (!cur && !b.out)) ? ' primary' : ''}`, onclick: () => { close(); setOut('home'); } }, '在宅'),
+      el('button.btn.grow', { type: 'button', class: `btn grow${(cur === 'out' || (!cur && b.out)) ? ' primary' : ''}`, onclick: () => { close(); setOut('out'); } }, '外出'),
     ]),
-    cur || S().outingMemory?.[memKey] ? el('div.row', el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); if (local.outingOverride?.[n.date]) delete local.outingOverride[n.date][b.busyId]; store.saveLocal(); if (S().outingMemory?.[memKey]) { delete S().outingMemory[memKey]; store.touchSettings(); } replan(n); rerender(); } }, '指定を消して既定に戻す')) : null,
-  ]);
+    el('p.muted.small.gap', `移動は片道 `, tval, `(${tsrc})。外出のとき前後に置きます。`),
+    el('div.row.wrap', [stepBtn('−15', -15), stepBtn('−5', -5), stepBtn('+5', 5), stepBtn('+15', 15), el('span.grow'),
+      el('button.btn.sm', { type: 'button', onclick: () => { close(); setTransit(0); } }, 'なし')]),
+    el('div.chips.small', [15, 30, 45, 60, 90].map((m) => el('button.chip.sm2', { type: 'button', class: `chip sm2${tm === m ? ' on' : ''}`, onclick: () => { close(); setTransit(m); } }, `${m}分`))),
+    cur || S().outingMemory?.[memKey] || b.transitSource !== 'default' ? el('div.row', el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); clearAll(); } }, '指定を消して既定に戻す')) : null,
+    el('p.muted.small', '片道の既定と、在宅/外出の既定は 設定 › 移動 で変えられます。'),
+  ]; });
 }
 
 // ---- 編集(F1-7) ----
