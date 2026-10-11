@@ -86,12 +86,16 @@ function planFor(date, today) {
 }
 export function replan(n, extra = {}) {
   const prev = P()[n.date] || null;
+  backupPlan(n.date, prev);
   const p = plan.buildPlan(planOpts(n.date, n.min, { prev, ...extra }), LCTX);
   p.confirmedAt = prev?.confirmedAt ?? store.nowISO();
   p.updatedAt = store.nowISO();
   P()[n.date] = p; store.save();
   return p;
 }
+/** 組み直す前の plan を端末に1つだけ控える(v0.12.1: 「今から再計画」で消えたように見えたときに戻せる) */
+function backupPlan(date, prev) { if (!prev || !prev.blocks?.length) return; store.state.local.planBackup = { date, plan: JSON.parse(JSON.stringify(prev)), ts: Date.now() }; store.saveLocal(); }
+function restorePlan(date) { const b = store.state.local.planBackup; if (!b || b.date !== date) return false; const cur = P()[date] || null; P()[date] = { ...b.plan, updatedAt: store.nowISO() }; store.state.local.planBackup = cur && cur.blocks?.length ? { date, plan: cur, ts: Date.now() } : null; store.save(); store.saveLocal(); return true; }
 function confirmPlan(n) { const p = P()[n.date]; if (p) { p.confirmedAt = store.nowISO(); p.updatedAt = p.confirmedAt; store.save(); } }
 
 /** 前日までのレポートを確定(F3-5)し ledger(§6.6)を残す。起動時・復帰時に呼ぶ */
@@ -526,6 +530,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
     el('span.grow'),
     showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(effToday) }, '今日'),
+    p && !preview && (isToday || date < n.date) ? el('button.btn.sm.ghost.tl-menu', { type: 'button', 'aria-label': 'この日の予定の操作', onclick: () => planMenuSheet(date, p, isToday, n, rerender) }, '⋯') : null,
   ]);
   const note = preview ? el('p.muted.small.note', '見通し(仮)') : (!isToday && !p && date < n.date ? el('p.muted.small.note', 'この日の理想スケジュールはありません。') : null);
   const tl = buildTimeline({ date, ds, nowRel, p, pNext, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((e) => hm(e.start) < ds) : [], isToday, showNow, preview, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
@@ -578,7 +583,7 @@ function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, 
   }
   const planLane = el('div.lane.plan'), logLane = el('div.lane.log');
   for (const b of allBlocks) {
-    const editable = isToday && !b.next && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy' || (b.type === 'transit' && b.busyId));
+    const editable = isToday && !b.next && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy' || (b.type === 'transit' && b.busyId) || (b.start < n.min && planBlockCategory(b)));
     planLane.append(block(b.start, b.end, { name: blockName(b), color: blockColor(b), muted: !(b.type === 'task' || b.type === 'habit' || b.type === 'busy'), busy: b.type === 'busy' && !b.categoryId, sleep: b.type === 'sleep', onclick: editable ? () => planBlockSheet(b, n, rerender) : null }));
   }
   for (const x of items) {
@@ -599,13 +604,7 @@ function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, 
   const nowLine = el('div.tl-now', { style: { top: `${y(nm)}px` } }, el('span', mm(nm % 1440)));
   nowLine.hidden = !showNow || nm < lo || nm > hi;
   body.append(planLane, logLane, nowLine);
-  const copyBtn = p && !preview && (isToday || date < n.date) ? el('button.btn.sm.ghost', { type: 'button', onclick: () => copyFromPlan(date, blocks, isToday ? n.min : 1440, rerender) }, '理想どおりだった') : null;
-  const foot = isToday ? el('div.row.tl-foot', [
-    copyBtn,
-    el('span.grow'),
-    el('button.btn.sm.ghost', { type: 'button', onclick: () => { replan(n); rerender(); toast('今から組み直しました'); } }, '今から再計画'),
-    el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('今日の予定を作り直しますか?', '手で動かしたものも含めて、いまの設定とタスクから組み直します。', '作り直す', () => { delete P()[date]; store.save(); rerender(); }) }, '作り直す'),
-  ]) : (copyBtn ? el('div.row.tl-foot', [copyBtn]) : null);
+  const foot = null; // v0.12.1: 操作は右上の「⋯」へ(＋ボタンと重なって押せなかった)
   const node = el('section.timeline', { ontouchstart: (e) => { const t = e.touches[0]; swipe = { x: t.clientX, y: t.clientY, t: Date.now() }; }, ontouchend: (e) => {
     if (!swipe || !onSwipe) return;
     const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
@@ -628,6 +627,20 @@ function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, 
     if (o.note && hgt >= 44) b.append(el('span.blk-note', o.note));
     return b;
   }
+}
+
+/** タイムライン右上の「⋯」: 理想どおりだった / 今から再計画 / 作り直す / 前の予定に戻す(v0.12.1) */
+function planMenuSheet(date, p, isToday, n, rerender) {
+  const bk = store.state.local.planBackup;
+  sheet((close) => [
+    el('h2', `${md(date)} の理想`),
+    el('div.col', [
+      el('button.btn.block', { type: 'button', onclick: () => { close(); copyFromPlan(date, p.blocks, isToday ? n.min : 1440, rerender); } }, '理想どおりだった(記録のない時間に写す)'),
+      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n); rerender(); toast('今から組み直しました。戻すなら ⋯ から'); } }, '今から再計画') : null,
+      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); confirmSheet('今日の予定を作り直しますか?', '手で動かしたものも含めて、いまの設定とタスクから組み直します。', '作り直す', () => { backupPlan(date, P()[date]); delete P()[date]; store.save(); rerender(); }); } }, '作り直す') : null,
+      bk && bk.date === date ? el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); if (restorePlan(date)) { rerender(); toast('前の予定に戻しました'); } } }, '前の予定に戻す') : null,
+    ]),
+  ]);
 }
 
 /** plan ブロック → 記録のカテゴリ(写せないものは null) */

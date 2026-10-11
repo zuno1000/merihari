@@ -365,3 +365,10 @@ p.gap{margin-top:14px}
 .clock-fine-row{justify-content:center;gap:8px;margin-top:8px}
 .clock-fine-row .btn.sm{min-width:52px;font-variant-numeric:tabular-nums}
 .blk.plan-copy{opacity:.85}
+
+/* ---- v0.12.1: タイムラインの ⋯・タスクの ▶ ---- */
+.tl-nav .tl-menu{font-size:20px;min-width:40px}
+.tplay{width:48px;flex:none;border:0;background:none;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.tplay svg{width:28px;height:28px;fill:currentColor}
+.tplay.on{color:var(--danger)}
+.tplay:active{opacity:.6}

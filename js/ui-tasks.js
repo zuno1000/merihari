@@ -1,5 +1,5 @@
 // merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1/F5-2)。かんたん追加(名前+期限チップ+大きさチップ)と一覧。
-import { el, clear, toast, sheet, confirmSheet } from './ui.js';
+import { el, clear, toast, sheet, confirmSheet, svg } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMD } from './time.js';
@@ -117,7 +117,7 @@ export function renderTasks(view, ctx) {
   const done = tasks.filter((t) => t.doneAt).sort((a, b) => (a.doneAt < b.doneAt ? 1 : -1));
 
   const open = log.openEntry(store.state.data.entries);
-  // タップ=ホームに移ってすぐ記録開始(v0.11)。編集は右の「⋯」。完了済みはタップで編集
+  // 行のタップ=編集(v0.12.1: 誤タップを防ぐため戻した)。記録開始は右の ▶
   const begin = (t) => {
     if (open && open.taskId === t.id) { ctx.go('now'); return; }
     const s = shareOf[t.id];
@@ -136,11 +136,11 @@ export function renderTasks(view, ctx) {
     return el('div.trow', [
       el('button.check', { type: 'button', 'aria-label': `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${t.doneAt ? ' on' : ''}`,
         onclick: () => { t.doneAt = t.doneAt ? null : store.nowISO(); saveTask(t); toast(t.doneAt ? '完了' : '戻しました'); rerender(); } }, t.doneAt ? '✓' : ''),
-      el('button.tmain', { type: 'button', 'aria-label': t.doneAt ? `${t.name} を編集` : `${t.name} を始める`, onclick: () => (t.doneAt ? editSheet(t, today, rerender, ctx) : begin(t)) }, [
+      el('button.tmain', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, [
         el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null]),
         el('span.tmeta', { class: `tmeta${overdue ? ' over' : ''}${s?.short ? ' over' : ''}` }, meta.join('・') + (s?.short ? '・このままでは足りません' : '')),
       ]),
-      el('button.tedit', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, '⋯'),
+      t.doneAt ? null : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} を始める`, title: '始める', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
     ]);
   };
   const section = (title, note, list, empty) => el('section.group', [el('h2', title), note ? el('p.muted.small.gnote', note) : null, el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
