@@ -96,8 +96,9 @@ export function clockSheet(value, { onpick, allowEmpty = false, title = null } =
       : Array.from({ length: 12 }, (_, i) => ({ v: i * 5, i, r: RO }));
     const sel = stage === 'h' ? h : mi;
     const cur = items.find((x) => x.v === sel) || items[0];
-    const [hx, hy] = pos(cur.i, cur.r);
+    const [hx, hy] = stage === 'm' ? pos(mi / 5, RO) : pos(cur.i, cur.r); // 分は 1 分刻みの角度(v0.12: なぞると 1 分単位)
     face.append(svg('line', { class: 'clock-hand', x1: C, y1: C, x2: hx, y2: hy }), svg('circle', { class: 'clock-pin', cx: C, cy: C, r: 3 }));
+    if (stage === 'm' && mi % 5) { const [fx, fy] = pos(mi / 5, RO); face.append(svg('circle', { class: 'clock-fine', cx: fx, cy: fy, r: 5 })); }
     for (const it of items) {
       const [x, y] = pos(it.i, it.r);
       face.append(svg('g', { class: `ck${it.v === sel ? ' on' : ''}${it.r === RI ? ' inner' : ''}` }, [svg('circle', { cx: x, cy: y, r: 17 }), svg('text', { x, y: y + 1, 'text-anchor': 'middle', 'dominant-baseline': 'middle' }, stage === 'h' ? String(it.v) : p2(it.v))]));
@@ -108,9 +109,12 @@ export function clockSheet(value, { onpick, allowEmpty = false, title = null } =
     const x = (ev.clientX - r.left) * (SZ / r.width) - C, y = (ev.clientY - r.top) * (SZ / r.height) - C;
     const ang = Math.atan2(y, x) + Math.PI / 2;
     const i = ((Math.round((ang / (Math.PI * 2)) * 12) % 12) + 12) % 12;
-    if (stage === 'h') h = Math.hypot(x, y) < (RO + RI) / 2 ? i : i + 12; else mi = i * 5;
+    if (stage === 'h') h = Math.hypot(x, y) < (RO + RI) / 2 ? i : i + 12;
+    else mi = ev.type === 'pointermove' ? ((Math.round((ang / (Math.PI * 2)) * 60) % 60) + 60) % 60 : i * 5; // タップは 5 分刻み・なぞると 1 分刻み
     draw();
   };
+  const nudge = (d) => { let t = h * 60 + mi + d; t = ((t % 1440) + 1440) % 1440; h = Math.floor(t / 60); mi = t % 60; stage = 'm'; draw(); };
+  const fine = el('div.row.clock-fine-row', [-5, -1, 1, 5].map((d) => el('button.btn.sm', { type: 'button', 'aria-label': `${d > 0 ? '+' : ''}${d} 分`, onclick: () => nudge(d) }, `${d > 0 ? '+' : '−'}${Math.abs(d)}`)));
   let pressed = false, close;
   face.addEventListener('pointerdown', (e) => { pressed = true; face.setPointerCapture(e.pointerId); pick(e); });
   face.addEventListener('pointermove', (e) => { if (pressed) pick(e); });
@@ -120,7 +124,7 @@ export function clockSheet(value, { onpick, allowEmpty = false, title = null } =
   draw();
   close = sheet((c) => { close = c; return [
     title ? el('h2', title) : null,
-    head, face,
+    head, face, fine,
     el('div.row', [
       el('button.btn', { type: 'button', onclick: () => close() }, 'やめる'),
       allowEmpty ? el('button.btn.ghost', { type: 'button', onclick: () => { close(); if (onpick) onpick(''); } }, 'なし') : null,

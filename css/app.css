@@ -357,3 +357,11 @@ p.gap{margin-top:14px}
 .tedit:active{color:var(--accent)}
 .sheet h2 .dot.big{margin-right:8px}
 .sheet .row.field{margin-top:10px}
+
+/* ---- v0.12: レポートの小ボタン(＋の上)・時計の 1 分刻み・すき間 ---- */
+.fab.fab2{width:44px;height:44px;bottom:calc(68px + 68px + env(safe-area-inset-bottom));right:22px;background:var(--card);color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
+.fab.fab2 svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.clock-fine{fill:var(--card);stroke:var(--accent);stroke-width:2}
+.clock-fine-row{justify-content:center;gap:8px;margin-top:8px}
+.clock-fine-row .btn.sm{min-width:52px;font-variant-numeric:tabular-nums}
+.blk.plan-copy{opacity:.85}

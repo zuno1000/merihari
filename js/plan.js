@@ -32,19 +32,37 @@ export function availableUntil(settings, date, deadline, maxDays = 60) {
 }
 
 /**
+ * 残り見積(分)(v0.12・F5-3 改: 自動減算)。task.remainingH は「remainingSetAt 時点の残り」。
+ * そのあとに紐づけて記録した分(閉じた記録・beforeDate より前の日)を自動で引く。beforeDate を省けば全部引く。
+ * 「今日の分」の計算は beforeDate=今日 で呼び(今日の記録は remainingToday 側で引くので二重に引かない)、表示は今日の分も引いて出す。
+ */
+export function remainingMin(t, entries = {}, beforeDate = null) {
+  const base = Math.round((+t.remainingH || 0) * 60);
+  const since = typeof t.remainingSetAt === 'string' ? t.remainingSetAt.slice(0, 16) : '';
+  let done = 0;
+  for (const e of Object.values(entries || {})) {
+    if (!alive(e) || e.taskId !== t.id || e.end == null) continue;
+    if (beforeDate && e.date >= beforeDate) continue;
+    if (since && `${e.date}T${e.end}` <= since) continue;
+    done += Math.max(0, hm(e.end) - hm(e.start));
+  }
+  return Math.max(0, base - done);
+}
+
+/**
  * 今日の分(§6.4 EDF 配分)。義務タスクを期限順に累積し、
  * todayMin = remaining × workable(today) / A(期限までに使える時間)。ρ=累積残り/A ≥ 1 なら前倒し(remaining 全部)。
- * 戻り値は期限順 [{ taskId, todayMin, remainingMin, deadline, ratio, short, minUnit }]
+ * 戻り値は期限順 [{ taskId, todayMin, remainingMin, deadline, ratio, short, minUnit }]。remaining は前日までの記録を自動で引いたもの(v0.12)
  */
-export function todayShare(tasks, date, settings) {
+export function todayShare(tasks, date, settings, entries = {}) {
   const wToday = workableMin(settings, date);
-  const list = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && +t.remainingH > 0)
+  const list = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0)
     .map((t) => ({ t, deadline: deadlineKey(t, date) }))
     .sort((a, b) => (a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : a.t.name.localeCompare(b.t.name));
   const out = [];
   let cumR = 0;
   for (const { t, deadline } of list) {
-    const remMin = Math.round(+t.remainingH * 60);
+    const remMin = remainingMin(t, entries, date);
     const minUnit = +t.minUnit > 0 ? +t.minUnit : 30;
     cumR += remMin;
     if (deadline == null) { out.push({ taskId: t.id, todayMin: 0, remainingMin: remMin, deadline: null, ratio: 0, short: false, minUnit }); continue; }
@@ -257,20 +275,20 @@ export function buildPlan(opts, ctx) {
   const longAfter = +settings.longRest?.afterMin > 0 ? +settings.longRest.afterMin : 240;
   const cats = settings.categories || [];
   const logged = loggedByTask(entries, date, nowMin);
-  let shares = todayShare(tasks, date, settings).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId));
+  let shares = todayShare(tasks, date, settings, entries).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId));
   // F4-3: 期限が近くて未着手の義務タスクは、配分が 0 でも最小単位(30 分以上)だけ入れる
   for (const id of opts.ensureMin || []) {
     if (skipped.includes(id) || shares.some((s) => s.taskId === id)) continue;
     const t = tasks[id];
     if (!alive(t) || t.doneAt) continue;
     const mu = +t.minUnit > 0 ? +t.minUnit : 30;
-    shares.push({ taskId: id, todayMin: Math.max(30, mu), remainingMin: Math.round(+t.remainingH * 60), minUnit: mu, ensured: true });
+    shares.push({ taskId: id, todayMin: Math.max(30, mu), remainingMin: remainingMin(t, entries, date), minUnit: mu, ensured: true });
   }
   if (first) shares = [...shares.filter((s) => s.taskId === first), ...shares.filter((s) => s.taskId !== first)];
   if (last) shares = [...shares.filter((s) => s.taskId !== last), ...shares.filter((s) => s.taskId === last)];
   if (first && !shares.some((s) => s.taskId === first) && tasks[first] && alive(tasks[first]) && !tasks[first].doneAt) {
     const t = tasks[first];
-    shares.unshift({ taskId: first, todayMin: Math.max(30, Math.min(Math.round(+t.remainingH * 60) || 30, workMin)), remainingMin: Math.round(+t.remainingH * 60), minUnit: +t.minUnit > 0 ? +t.minUnit : 30 });
+    shares.unshift({ taskId: first, todayMin: Math.max(30, Math.min(remainingMin(t, entries, date) || 30, workMin)), remainingMin: remainingMin(t, entries, date), minUnit: +t.minUnit > 0 ? +t.minUnit : 30 });
   }
   let budget = Math.max(0, workableMin(settings, date) - Object.values(logged).reduce((a, b) => a + b, 0));
   const keptOf = (taskId) => kept.filter((b) => b.taskId === taskId).reduce((a, b) => a + (b.end - b.start), 0);
@@ -283,13 +301,13 @@ export function buildPlan(opts, ctx) {
     queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0 });
   }
   if (opts.fill !== false) {
-    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && +t.remainingH > 0 && !skipped.includes(t.id))
+    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id))
       .map((t) => ({ t, deadline: deadlineKey(t, date) }))
-      .sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : (+b.t.remainingH) - (+a.t.remainingH)));
+      .sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : remainingMin(b.t, entries, date) - remainingMin(a.t, entries, date)));
     for (const { t } of fillers) {
       const mu = +t.minUnit > 0 ? +t.minUnit : 30;
       const sharePlanned = queue.filter((q) => q.taskId === t.id).reduce((a, q) => a + q.want, 0);
-      const left = Math.round(+t.remainingH * 60) - (logged[t.id] || 0) - keptOf(t.id) - sharePlanned;
+      const left = remainingMin(t, entries, date) - (logged[t.id] || 0) - keptOf(t.id) - sharePlanned;
       if (left < mu) continue;
       queue.push({ t, taskId: t.id, want: left, mu, share: false, placed: 0 });
     }
@@ -389,14 +407,15 @@ export function rollWeekly(tasks, entries, today, ctx) {
       doneMin += Math.max(0, hm(e.end) - hm(e.start));
     }
     const hours = +t.repeat.hours > 0 ? +t.repeat.hours : 5;
-    out[t.id] = { ...t, remainingH: hours, periodEnd: deadlineKey(t, today), lastWeek: { doneMin, hours, end: t.periodEnd }, updatedAt: ctx.nowISO() };
+    const nextEnd = deadlineKey(t, today);
+    out[t.id] = { ...t, remainingH: hours, remainingSetAt: `${addDays(nextEnd, -6)}T00:00:00`, periodEnd: nextEnd, lastWeek: { doneMin, hours, end: t.periodEnd }, updatedAt: ctx.nowISO() };
     rolled.push({ taskId: t.id, doneMin, hours });
   }
   return { tasks: out, rolled };
 }
 
-/** 期限超過かつ残りがある義務タスク(F5-5)。期限順 */
-export function overdueTasks(tasks, today) {
-  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && +t.remainingH > 0)
+/** 期限超過かつ残りがある義務タスク(F5-5)。期限順。残りは記録を自動で引いたもの(v0.12) */
+export function overdueTasks(tasks, today, entries = {}) {
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && remainingMin(t, entries) > 0)
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
 }

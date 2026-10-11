@@ -166,6 +166,47 @@ export function switchFrom(entries, id, at, categoryId, nowMin, ctx) {
   return { entries: out, tailId: tail.id };
 }
 
+/**
+ * 小さなすき間を閉じる(v0.12・F1-11): 同じ日の隣り合う記録の間が 0 < gap ≤ maxGap 分なら、後の記録の開始を前の終わりに合わせる
+ * (水を飲む・トイレ・ちょっとスマホ、の数分は次の作業の一部として数える。時計で直したときの数分のずれも消える)。
+ */
+export function closeSmallGaps(entries, date, maxGap, ctx) {
+  const out = clone(entries);
+  if (!(maxGap > 0)) return out;
+  const list = entriesOf(out, date);
+  for (let i = 1; i < list.length; i++) {
+    const prev = list[i - 1], cur = list[i];
+    if (prev.end == null) continue;
+    const gap = hm(cur.start) - hm(prev.end);
+    if (gap > 0 && gap <= maxGap) { cur.start = prev.end; cur.updatedAt = ctx.nowISO(); }
+  }
+  return out;
+}
+
+/**
+ * 理想どおりだった(v0.12・F1-12): plan のブロックを、記録のない時間だけ実績に写す(既存の記録は触らない)。
+ * blocks は { start, end, type, name, taskId?, categoryId? }、catOf(block) → categoryId | null(null は写さない)。upto より後は写さない。
+ * 戻り値 { entries, added:[entry] }
+ */
+export function fillFromPlan(entries, blocks, date, upto, catOf, ctx) {
+  const out = clone(entries);
+  const added = [];
+  const taken = entriesOf(out, date).map((e) => ({ start: hm(e.start), end: e.end == null ? upto : hm(e.end) }));
+  for (const b of (blocks || []).slice().sort((x, y) => x.start - y.start)) {
+    const cid = catOf(b);
+    if (!cid || b.start >= upto) continue;
+    const hi = Math.min(upto, b.end);
+    let segs = [{ start: b.start, end: hi }];
+    for (const t of taken) segs = segs.flatMap((s) => (t.end <= s.start || t.start >= s.end ? [s] : [s.start < t.start ? { start: s.start, end: t.start } : null, t.end < s.end ? { start: t.end, end: s.end } : null].filter(Boolean)));
+    for (const s of segs) {
+      if (s.end - s.start < 5) continue;
+      const e = { id: ctx.uid(), date, start: mm(s.start), end: mm(s.end), categoryId: cid, taskId: b.taskId || null, note: b.type === 'routine' || b.type === 'habit' ? String(b.name || '') : '', plannedMin: null, fromPlan: true, updatedAt: ctx.nowISO(), deletedAt: null };
+      out[e.id] = e; added.push(e); taken.push({ start: s.start, end: s.end });
+    }
+  }
+  return { entries: out, added };
+}
+
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */
 export function elapsedMin(e, date, nowMin) {
   if (!e) return 0;

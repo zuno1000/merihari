@@ -24,7 +24,8 @@ export function defaultCategories() {
     { id: 'rest', name: '休憩', kind: 'rest', color: DEFAULT_COLORS.rest, order: 7 },
     { id: 'sns', name: 'SNS・動画', kind: 'drift', color: DEFAULT_COLORS.sns, order: 8 },
     { id: 'transit', name: '移動', kind: 'life', color: DEFAULT_COLORS.transit, order: 9 },
-    { id: 'other', name: 'その他', kind: 'work', color: DEFAULT_COLORS.other, order: 10 },
+    { id: 'sleep', name: '睡眠', kind: 'life', color: DEFAULT_COLORS.sleep, order: 10 }, // v0.12: 既定で用意(ワンタップで寝る/起きるを記録)
+    { id: 'other', name: 'その他', kind: 'work', color: DEFAULT_COLORS.other, order: 11 },
   ];
 }
 
@@ -55,6 +56,8 @@ export function defaultSettings() {
     longRest: { min: 60, afterMin: 240 },
     ratio: 0.6,
     dayStart: '00:00',       // タイムラインの1日の始まり(v0.11)。'02:00' なら 2:00〜翌 2:00 を1日として描く(26時に寝る人向け)
+    gapAbsorbMin: 10,        // 記録のすき間(v0.12): この分までの空白は次の記録に含める(0 で無効)
+    catSchema: 2,            // 既定カテゴリの世代(2: 睡眠を追加)。古いデータに1回だけ足すための印
     categories: defaultCategories(),
     weeklyReviewDay: 0,
     settingsUpdatedAt: null,
@@ -127,6 +130,7 @@ function normalizeSettings(raw) {
   delete s.eveningRest;
   s.ratio = typeof raw.ratio === 'number' && raw.ratio >= 0.1 && raw.ratio <= 1 ? raw.ratio : d.ratio;
   s.dayStart = isHM(raw.dayStart) && /^0[0-6]:[0-5]\d$/.test(raw.dayStart) ? raw.dayStart : d.dayStart;
+  s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
   s.categories = Array.isArray(raw.categories) && raw.categories.length
     ? raw.categories.filter((c) => isObj(c) && c.id).map((c, i) => ({
         ...c, id: String(c.id), name: String(c.name || c.id),
@@ -137,6 +141,9 @@ function normalizeSettings(raw) {
         order: Number.isFinite(+c.order) ? +c.order : i + 1,
       }))
     : d.categories;
+  // v0.12: 既定カテゴリに「睡眠」を足す(古いデータには1回だけ。消したら戻さない)
+  s.catSchema = Number.isFinite(+raw.catSchema) ? +raw.catSchema : 1;
+  if (s.catSchema < 2) { if (!s.categories.some((c) => c.id === 'sleep')) s.categories.push({ id: 'sleep', name: '睡眠', kind: 'life', color: DEFAULT_COLORS.sleep, order: s.categories.length + 1 }); s.catSchema = 2; }
   s.weeklyReviewDay = ALL_DAYS.includes(raw.weeklyReviewDay) ? raw.weeklyReviewDay : d.weeklyReviewDay;
   s.settingsUpdatedAt = typeof raw.settingsUpdatedAt === 'string' ? raw.settingsUpdatedAt : null;
   return s;
@@ -170,7 +177,7 @@ export function validateTask(r, id) {
   if (!isObj(r) || typeof r.name !== 'string') return null;
   const rep = isObj(r.repeat) && r.repeat.type === 'weekly' ? { type: 'weekly', hours: num(r.repeat.hours, 0.5, 200, 5), weekEnd: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].includes(r.repeat.weekEnd) ? r.repeat.weekEnd : 'sun' } : null;
   return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0),
-    minUnit: num(r.minUnit, 5, 600, 30), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+    minUnit: num(r.minUnit, 5, 600, 30), remainingSetAt: optStr(r.remainingSetAt, 40) || optStr(r.updatedAt, 40), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 export function validatePlan(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;

@@ -50,7 +50,7 @@ function quickAdd(today, rerender) {
     const nm = name.value.trim();
     if (!nm) { toast('名前を入れてください'); name.focus(); return; }
     const hours = Math.max(0.25, +hoursIn.value || 1);
-    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dateIn.value || null, remainingH: hours, minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
+    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dateIn.value || null, remainingH: hours, remainingSetAt: store.nowISO(), minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
     toast('追加しました');
     rerender();
   };
@@ -76,17 +76,18 @@ export function overdueCheck(ctx, { force = false } = {}) {
   const today = dateKey();
   const local = store.state.local;
   if (!force && local.overdueAsked === today) return false;
-  const list = plan.overdueTasks(T(), today);
+  const list = plan.overdueTasks(T(), today, store.state.data.entries);
   local.overdueAsked = today; store.saveLocal();
   if (!list.length) return false;
   const next = (i) => {
     const t = list[i];
     if (!t) { ctx.go(ctx.current?.() || 'now'); return; }
     const k = t.deadline.slice(0, 10);
-    const plus = (half) => { if (half) t.remainingH = Math.max(0.25, Math.round(t.remainingH * 2) / 4); t.deadline = addDays(today, 7); saveTask(t); };
+    const left = plan.remainingMin(t, store.state.data.entries);
+    const plus = (half) => { t.remainingH = Math.max(0.25, Math.round((half ? left / 2 : left) / 15) * 15 / 60); t.remainingSetAt = store.nowISO(); t.deadline = addDays(today, 7); saveTask(t); };
     sheet((close) => [
       el('h2', `${t.name} は期限(${fmtMD(k)})を過ぎました`),
-      el('p.muted.small', `残り ${fmtH(Math.round(t.remainingH * 60))}`),
+      el('p.muted.small', `残り ${fmtH(left)}`),
       el('div.col', [
         el('button.btn.block.primary', { type: 'button', onclick: () => { close(); plus(false); next(i + 1); } }, '+1週'),
         el('button.btn.block', { type: 'button', onclick: () => { close(); plus(true); next(i + 1); } }, '残りを半分にして +1週'),
@@ -105,7 +106,8 @@ export function renderTasks(view, ctx) {
   const today = dateKey(), nowMin = minuteOfDay();
   const rerender = () => renderTasks(view, ctx);
   const tasks = Object.values(T()).filter(alive);
-  const shares = plan.todayShare(T(), today, S());
+  const E = store.state.data.entries;
+  const shares = plan.todayShare(T(), today, S(), E);
   const logged = plan.loggedByTask(store.state.data.entries, today, nowMin);
   const shareOf = Object.fromEntries(shares.map((s) => [s.taskId, s]));
   const todayList = shares.filter((s) => s.todayMin > 0).map((s) => T()[s.taskId]);
@@ -127,7 +129,7 @@ export function renderTasks(view, ctx) {
     const lg = logged[t.id] || 0;
     const meta = [];
     if (s && s.todayMin > 0) meta.push(`今日 ${fmtH(s.todayMin)}${lg ? `(済 ${fmtH(lg)})` : ''}`);
-    meta.push(`残り ${fmtH(Math.round(t.remainingH * 60))}`);
+    meta.push(`残り ${fmtH(plan.remainingMin(t, E))}`); // 記録した分を自動で引いた残り(v0.12)
     meta.push(t.repeat?.type === 'weekly' ? `毎週 ${t.repeat.hours}h${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)}/${t.lastWeek.hours}h)` : ''}` : fmtDeadline(plan.deadlineKey(t, today), today));
     const overdue = !t.doneAt && t.deadline && t.deadline.slice(0, 10) < today;
     const recording = open && open.taskId === t.id;
@@ -160,7 +162,8 @@ function editSheet(t, today, rerender, ctx) {
   let kind = t.kind || 'duty';
   const kindSeg = el('div.seg', ['duty', 'wish'].map((k) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); } }, k === 'duty' ? '義務' : 'やりたい')));
   const deadline = el('input.date', { type: 'date', value: t.deadline ? t.deadline.slice(0, 10) : '' });
-  const remaining = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.5, min: 0, max: 999, value: t.remainingH });
+  const left0 = Math.round(plan.remainingMin(t, store.state.data.entries) / 15) * 15 / 60; // いまの残り(記録を引いたもの)を見せる。変えなければ触らない
+  const remaining = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.25, min: 0, max: 999, value: left0 });
   const cat = el('select', cats.map((c) => el('option', { value: c.id, selected: c.id === t.categoryId }, c.name)));
   const repeatH = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.5, min: 0.5, max: 100, value: t.repeat?.hours || 5 });
   const repeatOn = el('input', { type: 'checkbox', checked: t.repeat?.type === 'weekly' });
@@ -180,7 +183,8 @@ function editSheet(t, today, rerender, ctx) {
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); return; }
         t.name = nm; t.kind = kind; t.deadline = deadline.value || null;
-        t.remainingH = Math.max(0, +remaining.value || 0); t.categoryId = cat.value;
+        if (+remaining.value !== left0) { t.remainingH = Math.max(0, +remaining.value || 0); t.remainingSetAt = store.nowISO(); }
+        t.categoryId = cat.value;
         t.note = note.value.trim();
         t.repeat = repeatOn.checked ? { type: 'weekly', hours: Math.max(0.5, +repeatH.value || 5), weekEnd: 'sun' } : null;
         saveTask(t); close(); rerender(); toast('保存しました');

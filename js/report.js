@@ -129,8 +129,8 @@ export function dayPie(entries, date, W, nowMin = 1440) {
     if (win && en > s) inWin += Math.max(0, Math.min(en, win.end) - Math.max(s, win.start));
   }
   const unlogged = Math.max(0, winLen - inWin);
-  const sleep = Math.max(0, upto - winLen - (logged - inWin));
-  const rows = Object.entries(actual).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min }));
+  const sleep = Math.max(0, upto - winLen - (logged - inWin)) + (actual.sleep || 0); // 記録した睡眠(v0.12 の既定カテゴリ)は推定分と合わせて1つに
+  const rows = Object.entries(actual).filter(([id, v]) => v > 0 && id !== 'sleep').sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min }));
   if (unlogged > 0) rows.push({ id: 'unlogged', min: unlogged });
   if (sleep > 0) rows.push({ id: 'sleep', min: sleep });
   if (1440 - upto > 0) rows.push({ id: 'future', min: 1440 - upto });

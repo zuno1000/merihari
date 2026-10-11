@@ -70,7 +70,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- store.js ----
     log('\n# store');
     const base = S.migrate(null);
-    ok(base.schema === S.SCHEMA && base.settings.categories.length === 10 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ10件)');
+    ok(base.schema === S.SCHEMA && base.settings.categories.length === 11 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ11件・v0.12 で睡眠を追加)');
     ok(S.defaultSettings().routines !== S.defaultSettings().routines, 'defaultSettings: 呼ぶたびに新しいオブジェクト');
     const broken = S.migrate({ schema: 1, bar: 2, settings: { transitMin: 'abc', ratio: 5, window: { mon: ['bad'] }, routines: [{ id: 'x', start: '9:00' }, { name: 'no start' }], foo: 1 }, entries: 'nope' });
     ok(broken.settings.transitMin === 50 && broken.settings.ratio === 0.6, 'migrate: 壊れたスカラーは既定値へ');
@@ -448,6 +448,32 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(!Rp.dayPie({}, '2026-10-12', null, 1440).some((x) => x.id === 'unlogged') && Rp.dayPie({}, '2026-10-12', null, 1440)[0].min === 1440, 'dayPie: 作業時間帯なしなら全部睡眠扱い');
     const tfEl = M.ui.timeField('09:30', {});
     ok(tfEl.value === '09:30' && tfEl.textContent === '09:30' && (tfEl.set('10:00'), tfEl.value === '10:00' && tfEl.textContent === '10:00') && (tfEl.set(''), tfEl.classList.contains('empty')), 'timeField: value と表示が一致・set で変えられる');
+
+    // ---- v0.12: 残り見積の自動減算・すき間・理想どおりだった・睡眠カテゴリ ----
+    log('\n# v0.12');
+    const rt = { id: 'r', name: 'r', kind: 'duty', deadline: '2026-10-20', remainingH: 5, remainingSetAt: '2026-10-10T12:00:00+09:00', minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
+    const rE = { a: { id: 'a', date: '2026-10-10', start: '09:00', end: '10:00', taskId: 'r', deletedAt: null }, b: { id: 'b', date: '2026-10-11', start: '09:00', end: '10:30', taskId: 'r', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '09:00', end: '09:30', taskId: 'r', deletedAt: null }, d: { id: 'd', date: '2026-10-12', start: '10:00', end: null, taskId: 'r', deletedAt: null }, e: { id: 'e', date: '2026-10-11', start: '12:00', end: '13:00', taskId: 'x', deletedAt: null } };
+    ok(Pn.remainingMin(rt, rE) === 300 - 90 - 30 && Pn.remainingMin(rt, rE, '2026-10-12') === 300 - 90 && Pn.remainingMin(rt, {}) === 300, 'remainingMin: remainingSetAt より後の閉じた記録を引く(beforeDate で今日の分は引かない・記録中は引かない)');
+    ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0 で止まる');
+    const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', ds, rE)[0];
+    ok(ts0 && ts0.remainingMin === 210, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する');
+    ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが 0 なら出さない');
+    const rw = Pn.rollWeekly({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 1, periodEnd: '2026-10-11', deletedAt: null, doneAt: null } }, {}, '2026-10-12', PC);
+    ok(rw.tasks.w.remainingSetAt === '2026-10-12T00:00:00' && rw.tasks.w.remainingH === 5, 'rollWeekly: 新しい週の始まりを remainingSetAt にする');
+    const gE = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
+    const gR = L.closeSmallGaps(gE, '2026-10-12', 10, PC);
+    ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE.b.start === '10:07', 'closeSmallGaps: 10 分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
+    ok(L.closeSmallGaps(gE, '2026-10-12', 0, PC).b.start === '10:07', 'closeSmallGaps: 0 なら何もしない');
+    const fBlocks = [{ type: 'routine', name: '朝食', start: 420, end: 450 }, { type: 'task', name: 't', taskId: 'r', categoryId: 'research', start: 540, end: 660 }, { type: 'busy', name: '予定', start: 660, end: 720, categoryId: null }, { type: 'rest', name: '休憩', start: 720, end: 740 }];
+    const fR = L.fillFromPlan({ x: { id: 'x', date: '2026-10-12', start: '09:30', end: '10:00', categoryId: 'sns', deletedAt: null } }, fBlocks, '2026-10-12', 730, (b) => ({ routine: 'life', task: b.categoryId, rest: 'rest' })[b.type] || null, PC);
+    const fS = fR.added.map((e) => `${e.categoryId} ${e.start}-${e.end}`).sort();
+    ok(eq(fS, ['life 07:00-07:30', 'research 09:00-09:30', 'research 10:00-11:00', 'rest 12:00-12:10']) && fR.added.find((e) => e.categoryId === 'life').note === '朝食' && fR.added.find((e) => e.taskId === 'r') && Object.keys(fR.entries).length === 5, 'fillFromPlan: 記録のない時間だけ写す(既存は避け・予定は写さず・upto で切り・ルーティンはメモに名前)');
+    const pie2 = Rp.dayPie({ a: { id: 'a', date: '2026-10-12', start: '00:00', end: '06:00', categoryId: 'sleep', deletedAt: null } }, '2026-10-12', { start: 420, end: 1410 }, 720);
+    ok(pie2.filter((x) => x.id === 'sleep').length === 1 && pie2.find((x) => x.id === 'sleep').min === 420, 'dayPie: 記録した睡眠と推定の睡眠は1つにまとめる');
+    const mig = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
+    ok(mig.categories.some((c) => c.id === 'sleep') && mig.catSchema === 2 && !S.migrate({ schema: 1, settings: { catSchema: 2, categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings.categories.some((c) => c.id === 'sleep'), 'migrate: 古いデータに睡眠カテゴリを1回だけ足す(消したら戻さない)');
+    ok(S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } }).settings.gapAbsorbMin === 15 && S.migrate({ schema: 1, settings: { gapAbsorbMin: 99 } }).settings.gapAbsorbMin === 10, 'migrate: すき間は 0〜60 分');
+    ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', updatedAt: '2026-10-01T00:00:00+09:00' } } }).tasks.t.remainingSetAt === '2026-10-01T00:00:00+09:00', 'validateTask: remainingSetAt が無ければ updatedAt を使う(過去の記録を急に引かない)');
 
     // ---- 版規約(§9) ----
     log('\n# version');
