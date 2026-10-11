@@ -4,13 +4,15 @@ import * as store from './store.js';
 import * as time from './time.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
+import * as report from './report.js';
 import { toast } from './ui.js';
-import { renderToday, startCategory, stopRecording, checkOpenEntry } from './ui-today.js';
+import { renderToday, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 export const NEWS = [
+  { v: '0.4.0', text: 'Phase 3: 日次レポート(肯定的事実を先頭に・理想/実績/先週平均の横棒・翌朝に確定)、昨日のレポートの1行、朝の一言(手つかずの近い期限)、SNS・動画の「あと何分?」区切り、休憩の時間に今日の分の残り。' },
   { v: '0.3.0', text: 'Phase 2: 朝の理想スケジュール提案(生活ルーティン・習慣・夜の休憩・タスクの今日の分を自動配置)、理想レーン、ヒーローの状態機械(いまやること1つ+始める)、今から再計画、タスクのかんたん追加と「今日の分」。' },
   { v: '0.2.1', text: '今日画面の上部を簡素化(日付と記録中だけ)。「時刻を指定」で事後入力。設定を一覧→項目ごとの編集画面に整理。' },
   { v: '0.2.0', text: 'Phase 1: カテゴリチップで記録(タップ=開始・次のチップで切替・長押しで「さっきから」)、実績レーン、記録の編集(時刻・カテゴリ・メモ・分割・削除)、止め忘れの回収、?log= パラメータ。' },
@@ -74,7 +76,7 @@ function handleParams() {
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'today' : (store.state.local.uiState?.tab || 'today')));
-if (!firstRun) checkOpenEntry(ctx);
+if (!firstRun) { if (finalizePending()) screens[current](); checkOpenEntry(ctx); }
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
 setInterval(() => { if (tickFn) tickFn(); }, 15000);
@@ -82,6 +84,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();
   if (!store.state.data.meta.setupAt) return;
+  finalizePending();
   if (!checkOpenEntry(ctx) && current === 'today') screens.today();
 });
 
@@ -110,5 +113,6 @@ window.M = {
   time,
   log,
   plan,
+  report,
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

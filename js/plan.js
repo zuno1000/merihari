@@ -158,13 +158,21 @@ export function buildPlan(opts, ctx) {
   // 5. 再計画なら過去の task/rest(auto)・pinned を引き継ぐ。最後の 30 分は free(就寝準備)
   const from = Math.max(nowMin, W.start);
   const to = W.end - 30;
-  const kept = (prev?.blocks || []).filter((b) => (b.type === 'task' || (b.type === 'rest' && b.auto)) && (b.end <= from || b.pinned));
+  const kept = (prev?.blocks || []).filter((b) => b.drift || ((b.type === 'task' || (b.type === 'rest' && b.auto)) && (b.end <= from || b.pinned)));
   const blocks = [...fixed, ...kept];
   // 6. タスク: 今日の分を期限順に、最小単位以上・最大 workMin、workMin ごとに休憩 restMin
   const workMin = +settings.restEvery?.workMin > 0 ? +settings.restEvery.workMin : 90;
   const restMin = +settings.restEvery?.restMin >= 0 ? +settings.restEvery.restMin : 10;
   const logged = loggedByTask(entries, date, nowMin);
   let shares = todayShare(tasks, date, settings).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId));
+  // F4-3: 期限が近くて未着手の義務タスクは、配分が 0 でも最小単位(30 分以上)だけ入れる
+  for (const id of opts.ensureMin || []) {
+    if (skipped.includes(id) || shares.some((s) => s.taskId === id)) continue;
+    const t = tasks[id];
+    if (!alive(t) || t.doneAt) continue;
+    const mu = +t.minUnit > 0 ? +t.minUnit : 30;
+    shares.push({ taskId: id, todayMin: Math.max(30, mu), remainingMin: Math.round(+t.remainingH * 60), minUnit: mu, ensured: true });
+  }
   if (first) shares = [...shares.filter((s) => s.taskId === first), ...shares.filter((s) => s.taskId !== first)];
   if (last) shares = [...shares.filter((s) => s.taskId !== last), ...shares.filter((s) => s.taskId === last)];
   if (first && !shares.some((s) => s.taskId === first) && tasks[first] && alive(tasks[first]) && !tasks[first].doneAt) {

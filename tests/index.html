@@ -216,12 +216,54 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Pn.nextWorkBlock(p1.blocks, 400).taskId === undefined || Pn.nextWorkBlock(p1.blocks, 500).taskId === 't1', 'nextWorkBlock: 次の作業ブロック');
     ok(Pn.remainingToday(sh, { t2: 30, t1: 20 }) === 60 && Pn.remainingToday(sh, {}) === 110, 'remainingToday: 今日の分 − 紐づく実績');
 
+    // ---- report.js(F3 / §6.5) ----
+    log('\n# report');
+    const Rp = M.report;
+    const RD = '2026-10-12';
+    const mkE = (date, start, end, categoryId, taskId = null) => ({ id: `${date}${start}${categoryId}`, date, start, end, categoryId, taskId, updatedAt: 'x', deletedAt: null });
+    const toMap = (arr) => Object.fromEntries(arr.map((e) => [e.id, e]));
+    const planR = { blocks: [
+      { type: 'task', start: 540, end: 630, categoryId: 'research' }, { type: 'task', start: 640, end: 730, categoryId: 'research' },
+      { type: 'habit', start: 450, end: 480, categoryId: 'english' }, { type: 'rest', start: 1200, end: 1260, evening: true }, { type: 'routine', start: 720, end: 765 }, { type: 'transit', start: 490, end: 540 }, { type: 'busy', start: 900, end: 960 } ] };
+    ok(eq(Rp.plannedByCategory(planR), { research: 180, english: 30, rest: 60, life: 45, transit: 50 }), 'plannedByCategory: task/habit はカテゴリ、rest/routine/transit は固定カテゴリ、busy は数えない');
+    const entR = toMap([
+      mkE(RD, '09:00', '12:25', 'research'), mkE(RD, '13:00', '13:30', 'sns'), mkE(RD, '20:00', '20:40', 'rest'),
+      mkE('2026-10-11', '10:00', '11:00', 'sns'), mkE('2026-10-11', '11:00', '13:00', 'research'),
+      mkE('2026-10-09', '10:00', '11:00', 'sns'), mkE('2026-10-09', '11:00', '12:00', 'research'),
+    ]);
+    const bl = Rp.baseline(entR, RD);
+    ok(bl.days === 2 && bl.byCategory.sns === 60 && bl.byCategory.research === 90, 'baseline: 直近7日の記録がある日(2日)のカテゴリ別平均');
+    ok(Rp.baseline({}, RD) === null, 'baseline: 記録が無ければ null(比較を省く)');
+    const un = Rp.unlogged(toMap([mkE(RD, '09:00', '10:00', 'a'), mkE(RD, '09:40', '11:40', 'b')]), RD, { start: 420, end: 1410 }, 720);
+    ok(un.loggedMin === 160 && un.unloggedMin === 140 && Math.abs(un.coverage - 160 / 300) < 1e-9, 'unlogged: 作業時間帯の中で now まで・重なりは1回だけ数える');
+    ok(Rp.streak(entR, RD) === 2 && Rp.streak(entR, '2026-10-13') === 2 && Rp.streak(entR, '2026-10-14') === 0, 'streak: 連続記録日数(今日に無ければ昨日から数える)');
+    const agg = Rp.aggregate({ entries: entR, plan: planR, date: RD, nowMin: 1440, settings: ds });
+    ok(agg.byCategory.research.planned === 180 && agg.byCategory.research.actual === 205 && agg.byCategory.sns.baseline === 60, 'aggregate: 理想/実績/ベースライン');
+    ok(agg.workMin === 205 && agg.driftMin === 30 && agg.baselineWorkMin === 90 && agg.restKept === '20:00', 'aggregate: 作業合計・drift 合計・先週の作業平均・休憩が予定どおり');
+    const lines = Rp.reportLines(agg, { tasks: {}, entries: entR, date: RD });
+    ok(lines.positive[0] === 'SNS・動画は先週の平均より 30分 減りました' && lines.positive[1] === '研究は理想より 25分 多く進められました', 'reportLines: 肯定文は優先 1 を Δ の大きい順で先頭(§6.5)');
+    ok(lines.positive.length === 3 && lines.positive[2] === '休憩は予定どおり 20:00 に取れました', 'reportLines: 肯定文は最大 3 文(優先2 の休憩)');
+    ok(lines.improve.includes('英語は今日は入りませんでした') && lines.improve.some((t) => t.startsWith('未記録が ')), 'reportLines: 改善点は事実だけ(入らなかった枠・未記録)');
+    ok(lines.tomorrow === null, 'reportLines: 近い期限の未着手が無ければ明日への一言は無し');
+    const tasksR = { a: { id: 'a', name: '面談資料', kind: 'duty', deadline: '2026-10-14', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: '遠い', kind: 'duty', deadline: '2026-11-01', remainingH: 1 }, c: { id: 'c', name: '済', kind: 'duty', deadline: '2026-10-13', remainingH: 1, doneAt: 'x' } };
+    ok(Rp.untouchedNear(tasksR, entR, RD).map((t) => t.id).join() === 'a', 'untouchedNear: 期限3日以内・未着手・未完了の義務だけ');
+    ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料 は手つかずです(期限 10/14)。明日は最初の5分だけ', 'reportLines: 明日への一言は 1 件');
+    const aggZero = Rp.aggregate({ entries: {}, plan: null, date: RD, nowMin: 1440, settings: ds });
+    ok(Rp.reportLines(aggZero, {}).positive[0].startsWith('今日は記録がありませんでした'), 'reportLines: 記録ゼロでも必ず 1 文');
+    const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), plan: null, date: RD, nowMin: 1440, settings: ds });
+    ok(Rp.reportLines(aggOnly, {}).positive[0] === '記録できた時間 40分。それだけで十分です', 'reportLines: 肯定文が作れない日は記録そのものを認める');
+    const snap = Rp.buildReport({ entries: entR, plan: planR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
+    ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット');
+    ok(eq(Rp.ledgerFor(ds, RD, agg), { usableMin: 750, workMin: 205 }), 'ledgerFor: usableMin と workMin(§6.6 の材料)');
+    const pEns = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { far: { id: 'far', name: '遠い', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30, categoryId: 'other' } }, entries: {}, ensureMin: ['far'] }, PC);
+    ok(pEns.blocks.some((b) => b.taskId === 'far' && b.end - b.start === 30), 'buildPlan: ensureMin(朝の一言)で配分 0 のタスクにも 30 分だけ入れる');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

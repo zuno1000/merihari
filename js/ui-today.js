@@ -3,7 +3,8 @@ import { el, clear, toast, sheet, confirmSheet } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
-import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, DAY_JA, weekday } from './time.js';
+import * as report from './report.js';
+import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, DAY_JA, weekday, addDays } from './time.js';
 
 const LCTX = { uid: store.uid, nowISO: store.nowISO };
 const PX_PER_MIN = 1;
@@ -39,7 +40,7 @@ export function stopRecording(at = null) {
 }
 
 // ---- plan(F2-1 / F2-7) ----
-function planOpts(n, extra = {}) { return { settings: S(), date: n.date, nowMin: n.min, tasks: T(), entries: E(), busy: [], ...extra }; }
+function planOpts(n, extra = {}) { return { settings: S(), date: n.date, nowMin: n.min, tasks: T(), entries: E(), busy: [], ensureMin: report.untouchedNear(T(), E(), n.date).map((t) => t.id), ...extra }; }
 function ensurePlan(n) {
   const w = windowFor(S(), n.date);
   if (!w || n.min < w.start) return P()[n.date] || null;
@@ -60,6 +61,56 @@ export function replan(n, extra = {}) {
   return p;
 }
 function confirmPlan(n) { const p = P()[n.date]; if (p) { p.confirmedAt = store.nowISO(); p.updatedAt = p.confirmedAt; store.save(); } }
+
+/** 前日までのレポートを確定(F3-5)し ledger(§6.6)を残す。起動時・復帰時に呼ぶ */
+export function finalizePending() {
+  const d = store.state.data;
+  const today = dateKey();
+  let changed = false;
+  for (let i = 1; i <= 7; i++) {
+    const date = addDays(today, -i);
+    if (d.reports[date]?.finalizedAt) continue;
+    if (!log.entriesOf(d.entries, date).length && !d.plans[date]) continue;
+    d.reports[date] = report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: 1440, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
+    d.ledger[date] = report.ledgerFor(d.settings, date, report.aggregate({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: 1440, settings: d.settings }));
+    changed = true;
+  }
+  if (changed) store.save();
+  return changed;
+}
+
+/** レポート(F3-4): 文章 → カテゴリ別の横棒(理想/実績/先週平均)→ 詳細 */
+export function reportSheet(date) {
+  const d = store.state.data;
+  const n = nowInfo();
+  const r = d.reports[date]?.finalizedAt ? d.reports[date]
+    : report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: date === n.date ? n.min : 1440, settings: d.settings, tasks: d.tasks });
+  const rows = Object.entries(r.byCategory).map(([id, v]) => ({ id, ...v, c: catOf(id) })).filter((x) => x.planned || x.actual || x.baseline).sort((a, b) => b.actual - a.actual);
+  const max = Math.max(1, ...rows.map((x) => Math.max(x.planned, x.actual, x.baseline || 0)));
+  const bar = (label, min, color, cls = '') => el('div.bar-line', [el('span.bar-k', label), el('div.bar', { class: `bar ${cls}` }, el('i', { style: { width: `${Math.round((min / max) * 100)}%`, background: color } })), el('span.bar-v', min ? fmtMin(min) : '–')]);
+  const title = date === n.date ? '今日のレポート' : `${+date.slice(5, 7)}/${+date.slice(8, 10)} のレポート`;
+  sheet((close) => [
+    el('h2', title),
+    r.finalizedAt ? null : el('p.muted.small', date === n.date ? 'いまの時点の集計です(翌朝に確定します)。' : '未確定の集計です。'),
+    el('div.report-lines', [
+      ...r.positive.map((t, i) => el('p', { class: i === 0 ? 'lead' : '' }, t)),
+      ...r.improve.map((t) => el('p.muted', t)),
+      r.tomorrow ? el('p.tomorrow', r.tomorrow) : null,
+    ]),
+    rows.length ? el('div.bars', rows.map((x) => el('div.bar-row', [
+      el('div.bar-name', [el('span.dot', { style: { background: x.c.color } }), x.name || x.c.name]),
+      bar('理想', x.planned, '#b8bccc'), bar('実績', x.actual, x.c.color), x.baseline != null ? bar('先週', x.baseline, x.c.color, 'faint') : null,
+    ]))) : null,
+    el('details', [el('summary.muted.small', '詳細'), el('div.list', [
+      el('div.srow.plain', [el('span.lbl', '記録できた時間'), el('span.val', fmtMinJa(r.loggedMin))]),
+      el('div.srow.plain', [el('span.lbl', '未記録'), el('span.val', fmtMinJa(r.unloggedMin))]),
+      el('div.srow.plain', [el('span.lbl', '記録カバー率'), el('span.val', `${Math.round(r.coverage * 100)}%`)]),
+      el('div.srow.plain', [el('span.lbl', '作業の合計'), el('span.val', fmtMinJa(r.workMin))]),
+      el('div.srow.plain', [el('span.lbl', '続けて記録した日数'), el('span.val', `${r.streak} 日`)]),
+    ])]),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: close }, '閉じる')),
+  ]);
+}
 
 /** 起動時・復帰時の確認(F1-3 前夜の自動終了 / F1-4 止め忘れ回収)。シートを出したら true */
 export function checkOpenEntry(ctx) {
@@ -125,7 +176,7 @@ export function renderToday(view, ctx) {
   const hero = buildHero(n, p, ctx, rerender);
   const chips = buildChips(n, rerender);
   const tl = buildTimeline(n, p, rerender);
-  view.append(head, hero.node, chips, tl.node);
+  view.append(head, hero.node, yesterdayLine(n, rerender), chips, reportLink(n), tl.node);
   let lastState = hero.key;
   ctx.setTick(() => {
     const m = nowInfo();
@@ -133,6 +184,23 @@ export function renderToday(view, ctx) {
     hero.tick(m); tl.tick(m);
     if (heroKey(m, P()[m.date]) !== lastState) { rerender(); }
   });
+}
+
+/** 翌日の初回起動時に「昨日のレポート」を 1 行(タップで展開・× で消える) */
+function yesterdayLine(n, rerender) {
+  const y = addDays(n.date, -1);
+  const r = store.state.data.reports[y];
+  if (!r || store.state.local.reportSeen === y) return null;
+  return el('div.list.yline', [el('div.srow', [
+    el('button.ybody', { type: 'button', onclick: () => reportSheet(y) }, [el('span.lbl', '昨日'), el('span.val.left', r.positive?.[0] || 'レポートを見る')]),
+    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '閉じる', onclick: () => { store.state.local.reportSeen = y; store.saveLocal(); rerender(); } }, '×'),
+  ])]);
+}
+/** 作業時間帯の終了 30 分前から「今日のレポートを見る」 */
+function reportLink(n) {
+  const w = windowFor(S(), n.date);
+  if (!w || n.min < w.end - 30) return null;
+  return el('div.list.rlink', el('button.srow', { type: 'button', onclick: () => reportSheet(n.date) }, [el('span.lbl', '今日のレポートを見る'), el('span.grow'), el('span.chev', '›')]));
 }
 
 function buildHead(n, rerender) {
@@ -149,7 +217,7 @@ function buildHead(n, rerender) {
 /** ヒーローの状態キー(変わったら描き直す) */
 function heroKey(n, p) {
   const o = log.openEntry(E());
-  if (o) return 'rec:' + o.id;
+  if (o) return 'rec:' + o.id + (o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin ? ':over' : '');
   const w = windowFor(S(), n.date);
   if (!w || n.min < w.start) return 'morning';
   if (n.min >= w.end) return 'end';
@@ -178,14 +246,21 @@ function buildHero(n, p, ctx, rerender) {
     const c = catOf(o.categoryId);
     const t = o.taskId ? T()[o.taskId] : null;
     const elapsed = el('span.elapsed.muted', fmtMinJa(log.elapsedMin(o, n.date, n.min)));
-    const node = el('div.now-card', { style: { borderLeftColor: c.color } }, [
+    const over = o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin;
+    const nextB = p ? plan.nextWorkBlock(p.blocks, n.min) : null;
+    const subText = (m) => {
+      if (!o.plannedMin) return `${t ? c.name + '・' : ''}${o.start} から${o.date !== n.date ? '(前日)' : ''}・タップで直す`;
+      const left = o.plannedMin - log.elapsedMin(o, m.date, m.min);
+      return left > 0 ? `あと ${left} 分で区切り(${mm(hm(o.start) + o.plannedMin)})` : `区切りの時間。次は ${nextB ? nextB.name : 'やること1つ'}`;
+    };
+    const sub = el('span.muted.small.sub', subText(n));
+    const node = el('div.now-card', { class: `now-card${over ? ' behind' : ''}`, style: { borderLeftColor: c.color } }, [
       el('button.now-main', { type: 'button', onclick: () => editEntrySheet(o.id, n, rerender) }, [
-        el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('b', t ? t.name : c.name), ' ', elapsed,
-        el('span.muted.small.sub', `${t ? c.name + '・' : ''}${o.start} から${o.date !== n.date ? '(前日)' : ''}・タップで直す`),
+        el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('b', t ? t.name : c.name), ' ', elapsed, sub,
       ]),
-      el('button.btn.sm', { type: 'button', onclick: () => { stopRecording(); rerender(); } }, '終わる'),
+      el('button.btn.sm', { type: 'button', class: `btn sm${over ? ' primary' : ''}`, onclick: () => { stopRecording(); rerender(); } }, over ? '区切る' : '終わる'),
     ]);
-    tick = (m) => { elapsed.textContent = fmtMinJa(log.elapsedMin(o, m.date, m.min)); };
+    tick = (m) => { elapsed.textContent = fmtMinJa(log.elapsedMin(o, m.date, m.min)); sub.textContent = subText(m); };
     return { node, tick, key };
   }
   if (!w || n.min < w.start) return { node: card(accent, 'おはよう', w ? `作業時間帯は ${mm(w.start)} から。予定はそのとき組みます。` : '今日は作業時間帯の設定がありません。', []), tick, key };
@@ -193,7 +268,9 @@ function buildHero(n, p, ctx, rerender) {
   if (p && !p.confirmedAt) {
     const taskMin = p.blocks.filter((b) => b.type === 'task').reduce((a, b) => a + (b.end - b.start), 0);
     const short = p.shortfall.map((s) => `${T()[s.taskId]?.name || ''} −${fmtMin(s.min)}`).join('・');
-    const sub = (taskMin ? `作業 ${fmtMinJa(taskMin)} を入れました。` : '今日はタスクの枠はありません。') + (short ? ` 全部は入りません(${short})。` : '');
+    let sub = (taskMin ? `作業 ${fmtMinJa(taskMin)} を入れました。` : '今日はタスクの枠はありません。') + (short ? ` 全部は入りません(${short})。` : '');
+    const un = report.untouchedNear(T(), E(), n.date)[0];
+    if (un) { const placed = p.blocks.filter((b) => b.taskId === un.id).reduce((a, b) => a + b.end - b.start, 0); sub += placed ? ` ${un.name}はまだ手つかずです。今日 ${fmtMinJa(placed)} だけ入れました。` : ` ${un.name}はまだ手つかずです。`; }
     return { node: card(accent, '今日の予定を組みました', sub, [
       btn('調整する', () => { confirmPlan(n); rerender(); document.querySelector('.timeline')?.scrollIntoView({ behavior: 'smooth' }); }),
       btn('OK', () => { confirmPlan(n); rerender(); }, true),
@@ -208,7 +285,7 @@ function buildHero(n, p, ctx, rerender) {
   if (b && b.type === 'routine') return { node: card(catOf('life').color, `いまは ${b.name}`, `〜${mm(b.end)}`, [btn('生活を記録', () => { startCategory('life'); rerender(); })]), tick, key };
   if (b && b.type === 'rest') {
     const left = el('span', fmtMinJa(b.end - n.min));
-    const node = card(catOf('rest').color, el('span', ['休憩していい時間 あと ', left]), b.evening ? '夜の休憩。ちゃんと休むのも予定のうち。' : '', [btn('休憩を記録', () => { startCategory('rest'); rerender(); })]);
+    const node = card(catOf('rest').color, el('span', ['休憩していい時間 あと ', left]), (b.evening ? '夜の休憩。ちゃんと休むのも予定のうち。' : '') + (remain > 0 ? ` 今日の分はあと ${fmtMinJa(remain)}。` : ' 今日の分は終わっています。'), [btn('休憩を記録', () => { startCategory('rest'); rerender(); })]);
     tick = (m) => { left.textContent = fmtMinJa(Math.max(0, b.end - m.min)); };
     return { node, tick, key };
   }
@@ -233,12 +310,31 @@ function buildChips(n, rerender) {
   return el('section.chips-wrap', el('div.chips', { role: 'group', 'aria-label': 'カテゴリ' }, cats().map((c) => {
     let timer = null, pressed = false;
     return el('button.chip', { type: 'button', class: `chip${o && o.categoryId === c.id ? ' on' : ''}`, 'aria-pressed': o && o.categoryId === c.id ? 'true' : 'false',
-      onclick: () => { if (pressed) { pressed = false; return; } startCategory(c.id); rerender(); },
+      onclick: () => { if (pressed) { pressed = false; return; } if (c.kind === 'drift' && !(o && o.categoryId === c.id)) { driftSheet(c, n, rerender); return; } startCategory(c.id); rerender(); },
       oncontextmenu: (e) => { e.preventDefault(); backfillSheet(n, c.id, rerender); },
       onpointerdown: (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; clearTimeout(timer); timer = setTimeout(() => { pressed = true; backfillSheet(n, c.id, rerender); }, 500); },
       onpointerup: () => clearTimeout(timer), onpointercancel: () => clearTimeout(timer), onpointerleave: () => clearTimeout(timer),
     }, [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), c.name]);
   })));
+}
+
+/** ダラダラの区切り(F4-5): SNS・動画を記録するとき「あと何分?」を聞き、終了予定を plan の rest ブロックとして置く */
+function driftSheet(c, n0, rerender) {
+  const n = nowInfo();
+  const go = (min) => {
+    startCategory(c.id, null, { plannedMin: min });
+    if (min) {
+      const p = P()[n.date];
+      if (p) { p.blocks.push({ id: store.uid(), type: 'rest', start: n.min, end: Math.min(1440, n.min + min), name: `${c.name}の区切り`, drift: true }); p.blocks.sort((a, b) => a.start - b.start); p.updatedAt = store.nowISO(); store.save(); }
+    }
+    rerender();
+  };
+  sheet((close) => [
+    el('h2', `${c.name}、あと何分?`),
+    el('p.muted.small', '区切りを決めると、時間が来たときにヒーローが教えます(通知はできません)。'),
+    el('div.row.wrap', [10, 20, 30].map((m) => el('button.btn.grow', { type: 'button', onclick: () => { close(); go(m); } }, `${m}分`))),
+    el('div.row', el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); go(null); } }, '決めない')),
+  ]);
 }
 
 /** 事後入力(F1-2): 開始時刻を選んでから開始 */
@@ -304,6 +400,8 @@ function buildTimeline(n, p, rerender) {
     el('div.lane-heads', [el('span'), el('span', '理想'), el('span', '実績')]),
     body,
     el('div.row.tl-foot', [
+      el('button.btn.sm.ghost', { type: 'button', onclick: () => reportSheet(n.date) }, 'レポート'),
+      el('span.grow'),
       el('button.btn.sm.ghost', { type: 'button', onclick: () => { replan(n); rerender(); toast('今から組み直しました'); } }, '今から再計画'),
       el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('今日の予定を作り直しますか?', '手で動かしたものも含めて、いまの設定とタスクから組み直します。', '作り直す', () => { delete P()[n.date]; store.save(); rerender(); }) }, '作り直す'),
     ]),
