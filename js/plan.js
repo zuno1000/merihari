@@ -354,3 +354,45 @@ export function nextWorkBlock(blocks, min) {
 export function remainingToday(shares, logged) {
   return Math.max(0, shares.reduce((a, s) => a + s.todayMin, 0) - shares.reduce((a, s) => a + Math.min(s.todayMin, logged[s.taskId] || 0), 0));
 }
+
+/** 表示用: 同じタスクの連続ブロック(end === 次の start)を1つにまとめる(「この後の予定」の見た目・v0.9)。純関数 */
+export function mergeAdjacent(blocks) {
+  const out = [];
+  for (const b of (blocks || []).slice().sort((a, c) => a.start - c.start)) {
+    const last = out[out.length - 1];
+    if (last && last.type === 'task' && b.type === 'task' && last.taskId === b.taskId && last.end === b.start) { out[out.length - 1] = { ...last, end: b.end, merged: true }; continue; }
+    out.push({ ...b });
+  }
+  return out;
+}
+
+/**
+ * 毎週 X 時間型の自動送り(F5-1 繰り返し・v0.9)。週の終わり(periodEnd)を過ぎていたら、その週の実績を lastWeek に残し、
+ * 残り見積を X に戻して periodEnd を次の週末へ。未消化分は繰り越さない。periodEnd が無ければ今週の終わりを設定するだけ。
+ * 戻り値 { tasks(新しいマップ), rolled:[{taskId, doneMin, hours}] }。純関数(ctx.nowISO)
+ */
+export function rollWeekly(tasks, entries, today, ctx) {
+  const out = { ...tasks };
+  const rolled = [];
+  for (const t of Object.values(tasks || {})) {
+    if (!alive(t) || t.doneAt || t.repeat?.type !== 'weekly') continue;
+    if (!t.periodEnd) { out[t.id] = { ...t, periodEnd: deadlineKey(t, today) }; continue; }
+    if (today <= t.periodEnd) continue;
+    const start = addDays(t.periodEnd, -6);
+    let doneMin = 0;
+    for (const e of Object.values(entries || {})) {
+      if (!alive(e) || e.taskId !== t.id || e.date < start || e.date > t.periodEnd || e.end == null) continue;
+      doneMin += Math.max(0, hm(e.end) - hm(e.start));
+    }
+    const hours = +t.repeat.hours > 0 ? +t.repeat.hours : 5;
+    out[t.id] = { ...t, remainingH: hours, periodEnd: deadlineKey(t, today), lastWeek: { doneMin, hours, end: t.periodEnd }, updatedAt: ctx.nowISO() };
+    rolled.push({ taskId: t.id, doneMin, hours });
+  }
+  return { tasks: out, rolled };
+}
+
+/** 期限超過かつ残りがある義務タスク(F5-5)。期限順 */
+export function overdueTasks(tasks, today) {
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && +t.remainingH > 0)
+    .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
+}

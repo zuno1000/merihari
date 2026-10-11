@@ -166,3 +166,37 @@ export function buildReport(opts) {
   return { date: opts.date, byCategory, workMin: agg.workMin, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, finalizedAt: opts.finalizedAt || null };
 }
+
+/**
+ * 「作業に回せる割合」の校正提案(F2-10・§6.6・v0.9)。直近 days 日の ledger(usableMin>0 かつ workMin>0 の日)が minDays 以上あれば、
+ * Σwork/Σusable を 5% 刻みに丸めて提案。いまの ratio との差が threshold 未満なら null。純関数
+ */
+export function calibrationProposal(ledger, settings, date, { days = 7, minDays = 4, threshold = 0.1 } = {}) {
+  let work = 0, usable = 0, n = 0;
+  for (let i = 1; i <= days; i++) {
+    const r = ledger?.[addDays(date, -i)];
+    if (!r || !(r.usableMin > 0) || !(r.workMin > 0)) continue;
+    work += r.workMin; usable += r.usableMin; n++;
+  }
+  if (n < minDays || !usable) return null;
+  const current = typeof settings?.ratio === 'number' ? settings.ratio : 0.6;
+  const proposed = Math.max(0.2, Math.min(1, Math.round((work / usable) / 0.05) * 0.05));
+  if (Math.abs(proposed - current) < threshold) return null;
+  return { current, proposed: Math.round(proposed * 100) / 100, days: n, avgWorkMin: Math.round(work / n) };
+}
+
+/** 週のまとめ(F3-6・v0.9): date を含む直近 7 日と、その前の 7 日の作業・ダラダラの合計(分)と記録日数。純関数 */
+export function weekSummary(entries, settings, date) {
+  const categories = settings?.categories || [];
+  const sum = (from) => {
+    let workMin = 0, driftMin = 0, days = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(from, -i);
+      const t = totalsByCategory(entries, d, 1440);
+      if (Object.keys(t).length) days++;
+      for (const [id, m] of Object.entries(t)) { const k = kindOf(categories, id); if (k === 'work') workMin += m; else if (k === 'drift') driftMin += m; }
+    }
+    return { workMin, driftMin, days };
+  };
+  return { week: sum(date), prev: sum(addDays(date, -7)) };
+}

@@ -68,6 +68,38 @@ function defaultCategory() {
   return c ? c.id : 'other';
 }
 
+/**
+ * 期限超過の出口(F5-5): 期限を過ぎて残りがある義務タスクを、1日1回・順に処理するシート。[+1週][残りを半分にして +1週][完了][消す]。
+ * 赤を出し続けるのではなく、処理させて赤を消す。
+ */
+export function overdueCheck(ctx, { force = false } = {}) {
+  const today = dateKey();
+  const local = store.state.local;
+  if (!force && local.overdueAsked === today) return false;
+  const list = plan.overdueTasks(T(), today);
+  local.overdueAsked = today; store.saveLocal();
+  if (!list.length) return false;
+  const next = (i) => {
+    const t = list[i];
+    if (!t) { ctx.go(ctx.current?.() || 'now'); return; }
+    const k = t.deadline.slice(0, 10);
+    const plus = (half) => { if (half) t.remainingH = Math.max(0.25, Math.round(t.remainingH * 2) / 4); t.deadline = addDays(today, 7); saveTask(t); };
+    sheet((close) => [
+      el('h2', `${t.name} は期限(${+k.slice(5, 7)}/${+k.slice(8, 10)})を過ぎました`),
+      el('p.muted.small', `残り ${fmtH(Math.round(t.remainingH * 60))}。どうしますか?(あとで変えられます)`),
+      el('div.col', [
+        el('button.btn.block.primary', { type: 'button', onclick: () => { close(); plus(false); next(i + 1); } }, '+1週'),
+        el('button.btn.block', { type: 'button', onclick: () => { close(); plus(true); next(i + 1); } }, '残りを半分にして +1週'),
+        el('button.btn.block', { type: 'button', onclick: () => { close(); t.doneAt = store.nowISO(); saveTask(t); next(i + 1); } }, '完了にする'),
+        el('button.btn.block.danger', { type: 'button', onclick: () => { close(); t.deletedAt = store.nowISO(); saveTask(t); next(i + 1); } }, '消す'),
+        el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); next(i + 1); } }, 'そのまま'),
+      ]),
+    ], () => {});
+  };
+  next(0);
+  return true;
+}
+
 export function renderTasks(view, ctx) {
   clear(view);
   const today = dateKey(), nowMin = minuteOfDay();
@@ -88,7 +120,7 @@ export function renderTasks(view, ctx) {
     const meta = [];
     if (s && s.todayMin > 0) meta.push(`今日 ${fmtH(s.todayMin)}${lg ? `(済 ${fmtH(lg)})` : ''}`);
     meta.push(`残 ${fmtH(Math.round(t.remainingH * 60))}`);
-    meta.push(t.repeat?.type === 'weekly' ? `毎週 ${t.repeat.hours}h` : fmtDeadline(plan.deadlineKey(t, today)));
+    meta.push(t.repeat?.type === 'weekly' ? `毎週 ${t.repeat.hours}h${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)}/${t.lastWeek.hours}h)` : ''}` : fmtDeadline(plan.deadlineKey(t, today)));
     const overdue = !t.doneAt && t.deadline && t.deadline.slice(0, 10) < today;
     return el('div.trow', [
       el('button.check', { type: 'button', 'aria-label': `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${t.doneAt ? ' on' : ''}`,

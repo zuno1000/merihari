@@ -34,6 +34,42 @@ export function append(node, children) {
 
 export function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); return node; }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+/** svg('circle', {cx:..}, ...children): SVG 名前空間の要素(リング・ピクトグラム用)。属性はすべて setAttribute */
+export function svg(tag, attrs = {}, ...children) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (v == null || v === false) continue; if (k === 'class') node.setAttribute('class', v); else node.setAttribute(k, v === true ? '' : v); }
+  append(node, children);
+  return node;
+}
+
+/**
+ * 進み具合のリング(bondavi 風: 中央に主役1つ)。pct 0〜1。中身は children(DOM)。
+ * 戻り値 { node, set(pct) }。set は stroke-dashoffset だけを触る(毎秒 innerHTML しない)
+ */
+export function ring(pct, children, { size = 240, stroke = 12 } = {}) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const arc = svg('circle', { class: 'ring-arc', cx: size / 2, cy: size / 2, r, 'stroke-width': stroke, 'stroke-dasharray': c.toFixed(1), 'stroke-dashoffset': (c * (1 - Math.max(0, Math.min(1, pct || 0)))).toFixed(1) });
+  const node = el('div.ring', { style: { width: `${size}px`, height: `${size}px` } }, [
+    svg('svg', { class: 'ring-svg', viewBox: `0 0 ${size} ${size}`, width: size, height: size, 'aria-hidden': 'true' }, [
+      svg('circle', { class: 'ring-track', cx: size / 2, cy: size / 2, r, 'stroke-width': stroke }), arc,
+    ]),
+    el('div.ring-in', children),
+  ]);
+  return { node, set: (p) => arc.setAttribute('stroke-dashoffset', (c * (1 - Math.max(0, Math.min(1, p || 0)))).toFixed(1)) };
+}
+
+/** 青いピクトグラム(bondavi 風の人型)。kind: 'stand' | 'sit' | 'rest' | 'walk' */
+export function picto(kind = 'stand') {
+  const body = {
+    stand: ['M22 10a4 4 0 1 1 0 .1', 'M18 18h8v16h-3v12h-2V34h-2v12h-3V34h-1'],
+    sit: ['M26 10a4 4 0 1 1 0 .1', 'M20 18h10v12h12v3H30v2h-6v10h-3V33h-1'],
+    rest: ['M10 30a4 4 0 1 1 0 .1', 'M16 28h26v4H16zM40 32h4v8h-4zM14 32h4v8h-4z'],
+    walk: ['M24 10a4 4 0 1 1 0 .1', 'M20 18h8l6 8-2 2-5-6v12l6 10-3 2-7-10-5 10-3-2 5-12V18'],
+  }[kind] || [];
+  return svg('svg', { class: 'picto', viewBox: '0 0 48 48', width: 48, height: 48, 'aria-hidden': 'true' }, body.map((d) => svg('path', { d })));
+}
+
 let toastTimer = null;
 export function toast(msg) {
   const t = document.getElementById('toast');

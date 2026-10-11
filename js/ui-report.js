@@ -52,6 +52,7 @@ export function reportSheet(date) {
     bullets(r),
     words(r),
     el('details.rep-details', [el('summary.muted.small', 'くわしく'),
+      weekBox(date),
       tiles(r, baseDrift),
       dayStrip(plan, entries, W, nowMin, isToday),
       trend(days, date),
@@ -72,6 +73,16 @@ function delta(cur, base, upGood) {
 }
 function heroFigure(r, baseWork) {
   return el('section.kpis', el('div.kpi.hero-figure', [el('span.kpi-label', '作業の合計'), el('b.kpi-value.big', fmtMin(r.workMin) || '0m'), delta(r.workMin, baseWork, true)]));
+}
+// ---- 週のまとめ(F3-6) ----
+function weekBox(date) {
+  const ws = report.weekSummary(store.state.data.entries, S(), date);
+  const d = ws.week.workMin - ws.prev.workMin;
+  const cmp = ws.prev.days ? (Math.abs(d) < 15 ? '前の7日と同じくらい' : `前の7日より ${fmtMin(Math.abs(d))} ${d > 0 ? '多い' : '少ない'}`) : '前の7日の記録なし';
+  return el('div.list', { style: { margin: '0 0 12px' } }, [
+    el('div.srow.plain', [el('span.lbl', 'この7日の作業'), el('span.val', `${fmtMin(ws.week.workMin)}(記録 ${ws.week.days} 日)・${cmp}`)]),
+    el('div.srow.plain', [el('span.lbl', 'この7日の SNS・動画'), el('span.val', fmtMin(ws.week.driftMin))]),
+  ]);
 }
 // ---- タイル(くわしく) ----
 function tiles(r, baseDrift) {

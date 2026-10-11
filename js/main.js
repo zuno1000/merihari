@@ -10,11 +10,12 @@ import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import { toast } from './ui.js';
 import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
-import { renderTasks } from './ui-tasks.js';
+import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.9.0';
 export const NEWS = [
+  { v: '0.9.0', text: '「今」を bondavi(継続する技術)風に: 中央の大きなリング1つに いまやること、下に主ボタン、ピクトグラムのひとこと。背景はほぼ白・枠線と影なし・タブはアイコン。ver.1 に向けて: 期限超過の出口(+1週/半分にして+1週/完了/消す)、毎週X時間型の自動送り(先週 x/yh)、記録を終えたときの残り見積の減算提案、作業に回せる割合の校正提案(週1回)、レポートに週のまとめ、「この後の予定」で同じタスクの連続枠を1行に。' },
   { v: '0.8.0', text: '外出を選んだ予定は長さや時間帯に関係なく前後に移動を置くように修正(既定の片道で。長さは予定をタップして調整)。予定をタップして「この予定は?」をテンプレ(カテゴリ)から選ぶと色と名前が付き、同じ曜日・時刻で記憶、「今」ではそのカテゴリをワンタップで記録。同期のパスフレーズを 顔認証 / パスキー で開ける(任意・設定 › Google)。レポートを簡素化(一言・作業の合計・カテゴリ別だけ。帯や推移は「くわしく」へ)。確定後のレポートを再計算。タイムラインの未記録に「この時間は?」。' },
   { v: '0.7.0', text: '予定(または移動)をタップして移動の長さを変えられます(同じ曜日・時刻で記憶。既定は 設定 › 移動)。休憩は「夜の休憩」の時刻固定をやめ、作業の量と進み具合から理想スケジュールが置きます(作業◯分ごとの短い休憩+1日1回の長めの休憩。設定 › 休憩の方針)。理想ブロックの長さ −15/+15/+30。自動同期: 開いたときに鍵があれば静かに、無ければ最初のタップで同期し、他の端末の記録を取り込んだら画面を描き直します。見た目を整理(やわらかい配色・大きめの主ボタン)。' },
   { v: '0.6.0', text: '画面を 今 / タイムライン / タスク / 設定 の4つに。記録は右下の ＋ から(チップはシートの中)。タイムラインは ‹ › で前後の日(未来は見通し)。カレンダーの予定は原則「在宅」、タイムラインで予定をタップして在宅/外出を選ぶと曜日と時刻で覚えます(設定で 曜日で決める/原則外出 も)。期限までにやることを空いた作業枠に細分化して入れます。タスクは日付と時間で正確に。設定に「使い方」。同期データの検証を強化。' },
@@ -37,7 +38,7 @@ store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
 store.init();
 
 let tickFn = null;
-const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; } };
+const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current };
 const screens = { now: () => renderNow(view, ctx), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
 let current = 'now';
 
@@ -88,7 +89,7 @@ function handleParams() {
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
-if (!firstRun) { if (finalizePending()) screens[current](); checkOpenEntry(ctx); }
+if (!firstRun) { if (finalizePending()) screens[current](); if (!checkOpenEntry(ctx)) overdueCheck(ctx); }
 
 // Google: 接続済みなら GIS を先読みし、トークンがあれば静かに予定を取り直す(F6-3)。変わったら今日を描き直す
 const redraw = () => { if (store.state.data.meta.setupAt) screens[current](); };
