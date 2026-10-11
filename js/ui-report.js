@@ -138,7 +138,9 @@ function dayStrip(plan, entries, W, nowMin, isToday) {
   const pct = (m) => ((m - lo) / span) * 100;
   const caption = el('p.strip-caption.muted.small', 'タップすると時間が出ます');
   const segs = [];
-  const seg = (start, end, color, label, cls = '') => {
+  const seg = (start0, end0, color, label, cls = '') => {
+    const start = Math.max(lo, start0), end = Math.min(hi, end0);
+    if (end <= start) return null;
     const s = el('button.sseg', { type: 'button', class: `sseg ${cls}`, title: `${mm(start)}〜${mm(end)} ${label}`,
       style: { left: `calc(${pct(start)}% + 1px)`, width: `calc(${pct(end) - pct(start)}% - 2px)`, background: color },
       onclick: () => { caption.textContent = `${mm(start)}〜${mm(end)} ${label}(${fmtMin(end - start)})`; segs.forEach((x) => x.classList.toggle('lit', x === s)); } });

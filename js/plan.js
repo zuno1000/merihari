@@ -240,7 +240,10 @@ export function buildPlan(opts, ctx) {
   const catName = (id) => (settings.categories || []).find((c) => c.id === id)?.name || null;
   for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: (b.categoryId && catName(b.categoryId)) || '予定', busyId: b.id, out: b.out, outingSource: b.outingSource, transitMin: b.transitMin, transitSource: b.transitSource, categoryId: b.categoryId || null, labelSource: b.labelSource });
   // 1b. 睡眠(v0.10): 作業時間帯の外側を睡眠として置く。予定と重なる分は予定を優先して削る
-  for (const iv of subtractIntervals([{ start: 0, end: W.start }, { start: W.end, end: 1440 }], busy)) {
+  //    前の日の作業時間帯が深夜にまたぐ(v0.12.2: 07:00〜01:00 など)なら、その分は前の日の作業なので睡眠は 1:00 から
+  const Wp = windowFor(settings, addDays(date, -1));
+  const sleepFrom = Wp && Wp.end > 1440 ? Math.min(W.start, Wp.end - 1440) : 0;
+  for (const iv of subtractIntervals([{ start: sleepFrom, end: W.start }, { start: W.end, end: 1440 }], busy)) {
     if (iv.end - iv.start >= 15) fixed.push({ id: uid(), type: 'sleep', start: iv.start, end: iv.end, name: '睡眠' });
   }
   // 2. transit(外出グループの前後。長さは予定ごと: 当日の指定 > 記憶 > 設定の片道)

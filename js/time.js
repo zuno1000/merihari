@@ -55,13 +55,30 @@ export function minuteOfDay(d = new Date()) {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-/** 作業時間帯 {start,end}(分)。設定が無い・壊れている・休みなら null */
+/**
+ * 作業時間帯 {start,end}(分)。設定が無い・壊れている・休みなら null。
+ * v0.12.2: 終わりが始まりより早く 6:00 以前なら翌日の深夜として扱う(例 07:00〜01:00 → end 1500・crosses:true)。26時に寝る人向け。
+ */
 export function windowFor(settings, key) {
   const w = settings?.window?.[dayKeyOf(key)];
   if (!Array.isArray(w)) return null;
   const s = hm(w[0]), e = hm(w[1]);
-  if (s == null || e == null || e <= s) return null;
+  if (s == null || e == null) return null;
+  if (e <= s) { if (e <= 360 && s > 360) return { start: s, end: e + 1440, crosses: true }; return null; }
   return { start: s, end: e };
+}
+
+/** その日のタイムラインの「切れ目」(分): 1日の始まりの設定と、その日の作業時間帯が翌日にまたぐ分の大きいほう */
+export function dayCut(settings, key) {
+  const W = windowFor(settings, key);
+  return Math.max(dayStartMin(settings), W && W.end > 1440 ? W.end - 1440 : 0);
+}
+
+/** いま(date, min)が属する「実効の日」。前の日の切れ目より前なら前の日(min は +1440)。*/
+export function effectiveDay(settings, date, min) {
+  const prev = addDays(date, -1);
+  const cut = dayCut(settings, prev);
+  return min < cut ? { date: prev, min: min + 1440, shifted: true } : { date, min, shifted: false };
 }
 
 /** その日の生活ルーティンを区間 [{id,name,start,end}] で返す(開始順) */

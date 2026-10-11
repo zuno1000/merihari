@@ -11,7 +11,7 @@ import { displayColor } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
 export { reportSheet };
-import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayStartMin, compressY } from './time.js';
+import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY } from './time.js';
 
 const LCTX = { uid: store.uid, nowISO: store.nowISO };
 const PX_PER_MIN = 1;
@@ -22,6 +22,8 @@ const E = () => store.state.data.entries;
 const T = () => store.state.data.tasks;
 const P = () => store.state.data.plans;
 const nowInfo = () => ({ date: dateKey(), min: minuteOfDay() });
+/** 実効の「いま」(v0.12.2): 前の日の作業時間帯が深夜にまたいでいる間(07:00〜01:00 の 0:30 など)は前の日の plan を見る(date=前の日・min は +1440) */
+const effNow = () => { const n = nowInfo(); return effectiveDay(S(), n.date, n.min); };
 const windowEndOf = (date) => windowFor(S(), date)?.end ?? null;
 const cats = () => S().categories.slice().sort((a, b) => a.order - b.order);
 const md = (key) => fmtMD(key, true);
@@ -126,6 +128,11 @@ export function checkOpenEntry(ctx) {
   const n = nowInfo();
   const local = store.state.local;
   if (o.date !== n.date) {
+    if (effectiveDay(S(), n.date, n.min).date === o.date) { // 前の日の作業時間帯がまだ続いている(v0.12.2) → 0:00 で切って同じ記録を続ける(シートは出さない)
+      const r0 = log.closeOpen(E(), { date: n.date, at: n.min, windowEndOf }, LCTX);
+      if (!r0.dropped) { const s0 = log.start(r0.entries, { date: n.date, nowMin: n.min, startMin: 0, categoryId: o.categoryId, windowEndOf, taskId: o.taskId ?? null, plannedMin: o.plannedMin ? Math.max(0, o.plannedMin - (1440 - hm(o.start))) || null : null }, LCTX); commit(s0.entries); } else commit(r0.entries);
+      return false;
+    }
     const r = log.closeOpen(E(), { date: n.date, at: n.min, windowEndOf }, LCTX);
     commit(r.entries);
     const c = r.closed;
@@ -177,26 +184,28 @@ export function renderNow(view, ctx) {
   ctx.setTick(null);
   if (!store.state.data.meta.setupAt) return setupGate(view, ctx);
   const n = nowInfo();
-  const p = ensurePlan(n);
+  const e = effNow();
+  const p = ensurePlan(e);
   const rerender = () => renderNow(view, ctx);
-  const hero = buildHero(n, p, ctx, rerender);
+  const hero = buildHero(e, p, ctx, rerender, n);
   view.append(...[
-    buildHead(n), hero.node, afterStopLine(n, rerender), freshLine(n, rerender), yesterdayLine(n, rerender), calibLine(n, rerender),
-    upcoming(n, p, ctx, rerender), reportFab(n.date), fab(n, rerender),
+    buildHead(e, n), hero.node, afterStopLine(n, rerender), freshLine(e, rerender), yesterdayLine(e, rerender), calibLine(n, rerender),
+    upcoming(e, p, ctx, rerender), reportFab(e.date), fab(n, rerender),
   ].filter(Boolean));
   const lastState = hero.key;
   ctx.setTick(() => {
     const m = nowInfo();
-    if (m.date !== n.date) { rerender(); return; }
-    hero.tick(m);
-    if (heroKey(m, P()[m.date]) !== lastState) rerender();
+    const em = effectiveDay(S(), m.date, m.min);
+    if (m.date !== n.date || em.date !== e.date) { rerender(); return; }
+    hero.tick(m, em);
+    if (heroKey(em, P()[em.date], m) !== lastState) rerender();
   });
 }
 
-function buildHead(n) {
-  const totals = log.totalsByCategory(E(), n.date, n.min);
-  const total = Object.values(totals).reduce((a, b) => a + b, 0);
-  return el('div.today-head', [el('b', md(n.date)), el('span.muted.small', total ? `記録 ${fmtMin(total)}` : '')]);
+function buildHead(e, n) {
+  const sum = (t) => Object.values(t).reduce((a, b) => a + b, 0);
+  const total = sum(log.totalsByCategory(E(), e.date, e.shifted ? 1440 : e.min)) + (e.shifted ? sum(log.totalsByCategory(E(), n.date, n.min)) : 0);
+  return el('div.today-head', [el('b', md(e.date)), el('span.muted.small', total ? `記録 ${fmtMin(total)}` : '')]);
 }
 
 /** 次の予定(いま以降の理想ブロックを最大 4 つ) */
@@ -250,9 +259,9 @@ function reportFab(date) {
 }
 
 /** ヒーローの状態キー(変わったら描き直す) */
-function heroKey(n, p) {
+function heroKey(n, p, real = n) {
   const o = log.openEntry(E());
-  if (o) return 'rec:' + o.id + (o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin ? ':over' : '');
+  if (o) return 'rec:' + o.id + (o.plannedMin && log.elapsedMin(o, real.date, real.min) >= o.plannedMin ? ':over' : '');
   const w = windowFor(S(), n.date);
   if (!w || n.min < w.start) return 'morning';
   if (n.min >= w.end) return 'end';
@@ -307,14 +316,16 @@ function calibLine(n, rerender) {
  * ヒーロー(§6.7)。bondavi 風: 中央の大きなリング1つに主役(いまやること)を入れ、下に副文と主ボタン、ピクトグラムのひとこと。
  * リングはその日の作業の進み具合(記録中で区切りがあれば区切りまで、休憩なら残り)。描き直しは状態キーが変わったときだけ、秒の更新は textContent と stroke-dashoffset のみ。
  */
-function buildHero(n, p, ctx, rerender) {
-  const key = heroKey(n, p);
+function buildHero(n, p, ctx, rerender, real = n) {
+  // n は実効の日(plan 用・深夜は前の日で min が 1440 超)、real は時計どおりの今(記録用)
+  const key = heroKey(n, p, real);
   const o = log.openEntry(E());
   const w = windowFor(S(), n.date);
-  const totals = log.totalsByCategory(E(), n.date, n.min);
+  const totals = log.totalsByCategory(E(), real.date, real.min);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const shares = plan.todayShare(T(), n.date, S(), E()).filter((s) => !(p?.skipped || []).includes(s.taskId));
-  const logged = plan.loggedByTask(E(), n.date, n.min);
+  const logged = plan.loggedByTask(E(), n.date, n.shifted ? 1440 : n.min);
+  if (n.shifted) for (const [k, v] of Object.entries(plan.loggedByTask(E(), real.date, real.min))) logged[k] = (logged[k] || 0) + v;
   const remain = plan.remainingToday(shares, logged);
   const dayTotal = shares.reduce((a, s) => a + s.todayMin, 0);
   const dayPct = dayTotal ? (dayTotal - remain) / dayTotal : 0;
@@ -334,11 +345,11 @@ function buildHero(n, p, ctx, rerender) {
   if (o) {
     const c = catOf(o.categoryId);
     const t = o.taskId ? T()[o.taskId] : null;
-    const elapsed = el('b.ring-v', fmtMinJa(log.elapsedMin(o, n.date, n.min)));
-    const over = o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin;
+    const elapsed = el('b.ring-v', fmtMinJa(log.elapsedMin(o, real.date, real.min)));
+    const over = o.plannedMin && log.elapsedMin(o, real.date, real.min) >= o.plannedMin;
     const nextB = p ? plan.nextWorkBlock(p.blocks, n.min) : null;
     const innerText = (m) => {
-      if (!o.plannedMin) return `${o.start} から${o.date !== n.date ? '(前日)' : ''}`;
+      if (!o.plannedMin) return `${o.start} から${o.date !== real.date ? '(前日)' : ''}`;
       const left = o.plannedMin - log.elapsedMin(o, m.date, m.min);
       return left > 0 ? `あと ${left} 分で区切り(${mm(hm(o.start) + o.plannedMin)})` : `区切りの時間。次は ${nextB ? nextB.name : 'やること1つ'}`;
     };
@@ -377,7 +388,7 @@ function buildHero(n, p, ctx, rerender) {
     const len = Math.max(1, b.end - b.start);
     const h = build({ kicker: '休憩していい時間', title: b.long ? '長い休憩' : (b.drift ? b.name : '休憩'), value: left, inner: 'あと', pct: (b.end - n.min) / len, color: catOf('rest').color, sub: remainText || null,
       buttons: [btn('休憩を記録', () => { startCategory('rest'); rerender(); }, true)] });
-    tick = (m) => { left.textContent = fmtMinJa(Math.max(0, b.end - m.min)); h.ring.set(Math.max(0, b.end - m.min) / len); };
+    tick = (m, em = m) => { left.textContent = fmtMinJa(Math.max(0, b.end - em.min)); h.ring.set(Math.max(0, b.end - em.min) / len); };
     return { node: h.node, tick, key };
   }
   if (b && (b.type === 'task' || b.type === 'habit')) {
@@ -508,19 +519,19 @@ export function renderTimeline(view, ctx, dateArg = null) {
   ctx.setTick(null);
   if (!store.state.data.meta.setupAt) return setupGate(view, ctx);
   const n = nowInfo();
-  const ds = dayStartMin(S());
-  // 1日の始まり(v0.11): 例 2:00 なら 1:30 はまだ「前の日」のタイムラインに描く(26時に寝る人向け)
-  const effToday = n.min < ds ? addDays(n.date, -1) : n.date;
-  const date = typeof dateArg === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateArg) ? dateArg : effToday;
-  const isToday = date === n.date;   // 今日の plan(編集できる)
-  const showNow = date === effToday; // 現在線を出す
-  const nowRel = showNow ? (isToday ? n.min : n.min + 1440) : null; // date の 0:00 からの分(翌日の早朝は 1440 超)
+  const e = effNow();
+  // 1日の切れ目(v0.11/0.12.2): 「1日の始まり」の設定か、作業時間帯が深夜にまたぐ分。例 2:00 なら 1:30 はまだ「前の日」のタイムラインに描く
+  const date = typeof dateArg === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateArg) ? dateArg : e.date;
+  const ds = dayCut(S(), date);
+  const isToday = date === n.date;
+  const showNow = date === e.date; // 現在線を出す・plan を触れる
+  const nowRel = showNow ? e.min : null; // date の 0:00 からの分(翌日の早朝は 1440 超)
   const rerender = () => renderTimeline(view, ctx, date);
   const goDate = (d) => ctx.go('timeline', d);
   let p, preview = false;
-  if (isToday) p = ensurePlan(n); else ({ p, preview } = planFor(date, n.date));
+  if (showNow) p = ensurePlan(e); else if (isToday) p = P()[date] || null; else ({ p, preview } = planFor(date, n.date));
   const next = addDays(date, 1);
-  const pNext = ds > 0 ? (next === n.date ? ensurePlan(n) : planFor(next, n.date).p) : null;
+  const pNext = ds > 0 ? planFor(next, n.date).p : null;
   const totals = log.totalsByCategory(E(), date, isToday ? n.min : 1440);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const nav = el('div.tl-nav', [
@@ -529,14 +540,14 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
     el('span.grow'),
-    showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(effToday) }, '今日'),
-    p && !preview && (isToday || date < n.date) ? el('button.btn.sm.ghost.tl-menu', { type: 'button', 'aria-label': 'この日の予定の操作', onclick: () => planMenuSheet(date, p, isToday, n, rerender) }, '⋯') : null,
+    showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
+    p && !preview && (showNow || date < e.date) ? el('button.btn.sm.ghost.tl-menu', { type: 'button', 'aria-label': 'この日の予定の操作', onclick: () => planMenuSheet(date, p, showNow, e, rerender) }, '⋯') : null,
   ]);
   const note = preview ? el('p.muted.small.note', '見通し(仮)') : (!isToday && !p && date < n.date ? el('p.muted.small.note', 'この日の理想スケジュールはありません。') : null);
-  const tl = buildTimeline({ date, ds, nowRel, p, pNext, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((e) => hm(e.start) < ds) : [], isToday, showNow, preview, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
-  view.append(...[nav, note, tl.node, reportFab(date), fab(n, rerender, date)].filter(Boolean));
+  const tl = buildTimeline({ date, ds, nowRel, p, pNext, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], isToday: showNow, showNow, preview, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
+  view.append(...[nav, note, tl.node, reportFab(date), fab(n, rerender, showNow ? null : date)].filter(Boolean));
   if (showNow) {
-    ctx.setTick(() => { const m = nowInfo(); const eff = m.min < ds ? addDays(m.date, -1) : m.date; if (eff !== date) { ctx.go('timeline'); return; } tl.tick(m.date === date ? m.min : m.min + 1440); });
+    ctx.setTick(() => { const m = nowInfo(); const em = effectiveDay(S(), m.date, m.min); if (em.date !== date) { ctx.go('timeline'); return; } tl.tick(em.min); });
     // 開いたら現在時刻が見えるところへ(v0.11)。main.js の go() が先頭に戻したあとに動かす
     requestAnimationFrame(() => { const top = tl.nowTop(); if (top != null) window.scrollTo({ top: Math.max(0, top - Math.round(window.innerHeight * 0.4)) }); });
   }
@@ -560,7 +571,7 @@ function blockName(b) { return b.type === 'busy' ? `${b.categoryId ? b.name : '�
 function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, nextEntries = [], isToday, showNow, preview, onSwipe = null }, rerender) {
   let swipe = null;
   const w = windowFor(S(), date);
-  const n = nowInfo();
+  const n = effNow();
   const lo = ds, hi = ds + 1440;
   const nm = nowRel == null ? 1440 : nowRel;
   const blocks = (p ? p.blocks : []).filter((b) => b.end > lo && b.start < hi);
@@ -636,9 +647,9 @@ function planMenuSheet(date, p, isToday, n, rerender) {
     el('h2', `${md(date)} の理想`),
     el('div.col', [
       el('button.btn.block', { type: 'button', onclick: () => { close(); copyFromPlan(date, p.blocks, isToday ? n.min : 1440, rerender); } }, '理想どおりだった(記録のない時間に写す)'),
-      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n); rerender(); toast('今から組み直しました。戻すなら ⋯ から'); } }, '今から再計画') : null,
-      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); confirmSheet('今日の予定を作り直しますか?', '手で動かしたものも含めて、いまの設定とタスクから組み直します。', '作り直す', () => { backupPlan(date, P()[date]); delete P()[date]; store.save(); rerender(); }); } }, '作り直す') : null,
-      bk && bk.date === date ? el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); if (restorePlan(date)) { rerender(); toast('前の予定に戻しました'); } } }, '前の予定に戻す') : null,
+      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n); rerender(); toast('いま以降を組み直しました'); } }, 'いま以降を組み直す(済んだ分はそのまま)') : null,
+      isToday ? el('button.btn.block', { type: 'button', onclick: () => { close(); confirmSheet('1日ぜんぶ組み直しますか?', '手で動かした分も含めて、いまの設定とタスクから最初から組み直します。', '組み直す', () => { backupPlan(date, P()[date]); delete P()[date]; store.save(); rerender(); }); } }, '1日ぜんぶ組み直す') : null,
+      bk && bk.date === date ? el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); if (restorePlan(date)) { rerender(); toast('組み直す前に戻しました'); } } }, '組み直す前に戻す') : null,
     ]),
   ]);
 }
@@ -656,7 +667,7 @@ function planBlockCategory(b) {
 }
 /** 理想どおりだった(v0.12・F1-12): 記録のない時間にだけ plan を写す。upto より後は写さない */
 function copyFromPlan(date, blocks, upto, rerender, single = false) {
-  const r = log.fillFromPlan(E(), blocks, date, upto, planBlockCategory, LCTX);
+  const r = log.fillFromPlan(E(), blocks, date, Math.min(1440, upto), planBlockCategory, LCTX);
   if (!r.added.length) { toast(single ? 'この時間はもう記録があります' : '写せる時間がありません(記録済み)'); return; }
   const apply = () => { commitTidy(r.entries, date); sync.autoSync(); rerender(); toast(`${r.added.length} 件を実績に写しました`); };
   if (single || r.added.length <= 2) { apply(); return; }
@@ -678,7 +689,7 @@ function resizeBlock(b, n, delta, rerender) {
 
 /** 理想ブロックのメニュー(F2-8: 今やる / 後ろへ / 今日はやらない / 長さ変更) */
 function planBlockSheet(b, n0, rerender) {
-  const n = nowInfo();
+  const n = effNow();
   if (b.type === 'busy') return busyBlockSheet(b, n, rerender);
   if (b.type === 'transit' && b.busyId) {
     const busy = (P()[n.date]?.blocks || []).find((x) => x.type === 'busy' && x.busyId === b.busyId);

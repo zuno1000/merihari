@@ -372,3 +372,6 @@ p.gap{margin-top:14px}
 .tplay svg{width:28px;height:28px;fill:currentColor}
 .tplay.on{color:var(--danger)}
 .tplay:active{opacity:.6}
+
+/* ---- v0.12.2: 選んだ候補の強調(さっきから) ---- */
+.btn.on,.tfield.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}

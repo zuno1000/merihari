@@ -53,7 +53,10 @@ export function baseline(entries, date, days = 7) {
 
 /** 作業時間帯の中で記録が無い分(未記録)とカバー率。today なら nowMin までを対象にする */
 export function unlogged(entries, date, W, nowMin = 1440) {
-  if (!W) return { unloggedMin: 0, coverage: 1, loggedMin: 0, spanMin: 0 };
+  if (!W) { // 作業時間帯が無い日でも「記録した時間」は数える(v0.12.2: 記録があるのに「記録なし」と言わない)
+    const ivs = entriesOf(entries, date).map((e) => ({ start: hm(e.start), end: Math.min(nowMin, e.end == null ? nowMin : hm(e.end)) })).filter((x) => x.end > x.start);
+    return { unloggedMin: 0, coverage: 1, loggedMin: sumMin(mergeIntervals(ivs)), spanMin: 0 };
+  }
   const end = Math.min(W.end, nowMin);
   const span = Math.max(0, end - W.start);
   const ivs = entriesOf(entries, date).map((e) => ({ start: Math.max(W.start, hm(e.start)), end: Math.min(end, e.end == null ? nowMin : hm(e.end)) })).filter((x) => x.end > x.start);
@@ -152,30 +155,31 @@ export function untouchedNear(tasks, entries, date, near = 3) {
 export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   const pos = [];
   const by = agg.byCategory;
+  // 文体(v0.12.2): 短く・事実を言い切る・持ち上げない(bondavi「継続する技術」の調子)。「〜できました」「それでも大丈夫」のような説明口調は使わない
   for (const [id, r] of Object.entries(by)) {
-    if (agg.hasPlan && r.kind === 'work' && r.actual - r.planned >= 15 && r.actual > 0) pos.push({ pri: 1, d: r.actual - r.planned, text: `${r.name}は理想より ${fmtMinJa(r.actual - r.planned)} 多く進められました` });
-    if (r.kind === 'drift' && r.baseline != null && r.baseline - r.actual >= 15) pos.push({ pri: 1, d: r.baseline - r.actual, text: `${r.name}は先週の平均より ${fmtMinJa(r.baseline - r.actual)} 減りました` });
-    if (agg.hasPlan && r.planned >= 30 && Math.abs(r.actual - r.planned) < 15 && r.kind !== 'rest') pos.push({ pri: 2, d: r.planned, text: `${r.name}は理想どおりできました` });
+    if (agg.hasPlan && r.kind === 'work' && r.actual - r.planned >= 15 && r.actual > 0) pos.push({ pri: 1, d: r.actual - r.planned, text: `${r.name}、理想より ${fmtMinJa(r.actual - r.planned)} 多め。` });
+    if (r.kind === 'drift' && r.baseline != null && r.baseline - r.actual >= 15) pos.push({ pri: 1, d: r.baseline - r.actual, text: `${r.name}は先週より ${fmtMinJa(r.baseline - r.actual)} 少なめ。` });
+    if (agg.hasPlan && r.planned >= 30 && Math.abs(r.actual - r.planned) < 15 && r.kind !== 'rest') pos.push({ pri: 2, d: r.planned, text: `${r.name}、理想どおり。` });
   }
-  if (agg.restKept) pos.push({ pri: 2, d: 0, text: `休憩は予定どおり ${agg.restKept} に取れました` });
-  if (agg.baselineWorkMin != null && agg.workMin > 0 && agg.workMin >= agg.baselineWorkMin) pos.push({ pri: 3, d: agg.workMin, text: `作業は合計 ${fmtMinJa(agg.workMin)} でした(先週平均 ${fmtMinJa(agg.baselineWorkMin)})` });
-  if (agg.streak >= 2) pos.push({ pri: 4, d: agg.streak, text: `${agg.streak} 日続けて記録できています` });
+  if (agg.restKept) pos.push({ pri: 2, d: 0, text: `休憩は ${agg.restKept} に取れています。` });
+  if (agg.workMin > 0) pos.push({ pri: 3, d: agg.workMin, text: agg.baselineWorkMin != null ? `作業 ${fmtMinJa(agg.workMin)}。先週の平均は ${fmtMinJa(agg.baselineWorkMin)}。` : `作業 ${fmtMinJa(agg.workMin)}。` });
+  if (agg.streak >= 2) pos.push({ pri: 4, d: agg.streak, text: `${agg.streak} 日つづけて記録。` });
   pos.sort((a, b) => a.pri - b.pri || b.d - a.d);
   let positive = pos.slice(0, 3).map((p) => p.text);
-  if (!positive.length) positive = [agg.loggedMin > 0 ? `記録できた時間 ${fmtMinJa(agg.loggedMin)}。それだけで十分です` : '今日は記録がありませんでした。それでも大丈夫、明日1つだけ'];
+  if (!positive.length) positive = [agg.loggedMin > 0 ? `きょうの記録は ${fmtMinJa(agg.loggedMin)}。` : 'きょうは記録なし。'];
 
   const imp = [];
   for (const [, r] of Object.entries(by)) {
-    if (agg.hasPlan && r.planned - (r.busyPlanned || 0) >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}は今日は入りませんでした` });
-    if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} でした(先週平均 ${fmtMinJa(r.baseline)})` });
+    if (agg.hasPlan && r.planned - (r.busyPlanned || 0) >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}は入りませんでした。` });
+    if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name} ${fmtMinJa(r.actual)}。先週は ${fmtMinJa(r.baseline)}。` });
   }
-  if (agg.dayDone && agg.unloggedMin >= 60 && agg.coverage < 0.8) imp.push({ d: 0, text: `未記録が ${fmtMinJa(agg.unloggedMin)} ありました` }); // 途中経過では言わない(v0.10)
+  if (agg.dayDone && agg.unloggedMin >= 60 && agg.coverage < 0.8) imp.push({ d: 0, text: `記録のない時間が ${fmtMinJa(agg.unloggedMin)}。` }); // 途中経過では言わない(v0.10)
   imp.sort((a, b) => b.d - a.d);
   const improve = imp.slice(0, 2).map((x) => x.text);
 
   let tomorrow = null;
   const un = untouchedNear(tasks, entries, date || agg.date);
-  if (un.length) { const t = un[0]; const k = t.deadline.slice(0, 10); tomorrow = `${t.name} は手つかずです(期限 ${+k.slice(5, 7)}/${+k.slice(8, 10)})。明日は最初の5分だけ`; }
+  if (un.length) { const t = un[0]; const k = t.deadline.slice(0, 10); tomorrow = `${t.name}、まだ手つかず(期限 ${+k.slice(5, 7)}月${+k.slice(8, 10)}日)。あしたは 5 分だけ。`; }
   return { positive, improve, tomorrow, lines: [...positive, ...improve, ...(tomorrow ? [tomorrow] : [])] };
 }
 
