@@ -3,20 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:; style-src 'self'">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="メリハリ">
 <meta name="theme-color" content="#2b6cb0">
 <title>メリハリ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<main id="view"></main>
-<nav id="tabs">
-  <button data-tab="today" class="on">今日</button>
-  <button data-tab="tasks">タスク</button>
-  <button data-tab="settings">設定</button>
+<main id="view" aria-live="polite"></main>
+<nav id="tabs" aria-label="画面">
+  <button type="button" data-tab="today" class="on">今日</button>
+  <button type="button" data-tab="tasks">タスク</button>
+  <button type="button" data-tab="settings">設定</button>
 </nav>
+<div id="toast" role="status"></div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

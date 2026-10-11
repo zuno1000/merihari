@@ -1,15 +1,114 @@
-<!doctype html><meta charset="utf-8"><title>merihari tests</title>
-<pre id="out"></pre>
-<iframe id="app" src="../index.html" style="width:390px;height:600px"></iframe>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>merihari tests</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:16px;display:flex;gap:16px;flex-wrap:wrap}
+pre{flex:1;min-width:320px;white-space:pre-wrap;font-size:13px;margin:0}
+iframe{width:390px;height:720px;border:1px solid #ccc;flex:none}
+.sum{font-weight:700}
+</style>
+</head>
+<body>
+<pre id="out">loading…</pre>
+<iframe id="app" src="../index.html" title="app under test"></iframe>
 <script>
-if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) document.body.textContent = 'localhost でのみ実行';
-const out = document.getElementById('out'); let fails = 0;
-function ok(cond, msg) { out.textContent += (cond ? 'ok   ' : 'FAIL ') + msg + '\n'; if (!cond) fails++; }
-document.getElementById('app').addEventListener('load', () => {
-  const M = document.getElementById('app').contentWindow.M;
+// 仕様書 §9: iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件。
+// 純関数だけを検証し、アプリの localStorage には触らない。
+if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+  document.body.textContent = 'localhost でのみ実行(python -m http.server 8000 → http://localhost:8000/tests/)';
+  throw new Error('not localhost');
+}
+const out = document.getElementById('out');
+let fails = 0, total = 0;
+const log = (s) => { out.textContent += s + '\n'; };
+function ok(cond, msg) { total++; if (!cond) fails++; log((cond ? 'ok   ' : 'FAIL ') + msg); }
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const throws = (fn) => { try { fn(); return false; } catch { return true; } };
+
+document.getElementById('app').addEventListener('load', async () => {
+  out.textContent = '';
+  const W = document.getElementById('app').contentWindow;
+  const M = W.M;
   try {
     ok(M && typeof M === 'object', 'window.M が公開されている');
+    const { time: T, store: S } = M;
+
+    // ---- time.js ----
+    log('\n# time');
+    ok(T.hm('07:30') === 450 && T.hm('7:05') === 425, 'hm: HH:MM → 分');
+    ok(T.hm('x') === null && T.hm('25:00') === null && T.hm(null) === null, 'hm: 壊れた値は null');
+    ok(T.mm(450) === '07:30' && T.mm(0) === '00:00', 'mm: 分 → HH:MM');
+    ok(T.dateKey(new Date(2026, 9, 11)) === '2026-10-11', 'dateKey: ローカル YYYY-MM-DD');
+    ok(T.dateKey(T.parseDateKey('2026-02-03')) === '2026-02-03', 'parseDateKey ↔ dateKey が往復する');
+    ok(T.addDays('2026-10-31', 1) === '2026-11-01' && T.addDays('2026-01-01', -1) === '2025-12-31', 'addDays: 月またぎ・年またぎ');
+    ok(T.weekday('2026-10-11') === 0 && T.dayKeyOf('2026-10-12') === 'mon', 'weekday / dayKeyOf');
+    const d = S.defaultSettings();
+    ok(eq(T.windowFor(d, '2026-10-11'), { start: 480, end: 1380 }), 'windowFor: 日曜は 08:00〜23:00');
+    ok(eq(T.windowFor(d, '2026-10-12'), { start: 420, end: 1410 }), 'windowFor: 月曜は 07:00〜23:30');
+    ok(T.windowFor({ window: { mon: ['23:00', '07:00'] } }, '2026-10-12') === null, 'windowFor: 終了≦開始は null');
+    const rs = T.routinesFor(d, '2026-10-12');
+    ok(rs.length === 4 && rs[0].name === '朝食' && rs[3].end === 1380, 'routinesFor: 既定4件が開始順・end=start+min');
+    const dd = S.defaultSettings(); dd.routines[0].days = [1, 2, 3, 4, 5];
+    ok(T.routinesFor(dd, '2026-10-11').length === 3, 'routinesFor: 曜日指定で除外される');
+    dd.routines[1].off = true;
+    ok(T.routinesFor(dd, '2026-10-12').length === 3, 'routinesFor: off は除外される');
+    ok(eq(T.mergeIntervals([{ start: 10, end: 20 }, { start: 15, end: 30 }, { start: 40, end: 50 }, { start: 5, end: 5 }]),
+      [{ start: 10, end: 30 }, { start: 40, end: 50 }]), 'mergeIntervals: 重なりをまとめ空区間を捨てる');
+    ok(eq(T.subtractIntervals([{ start: 0, end: 100 }], [{ start: 10, end: 20 }, { start: 90, end: 120 }]),
+      [{ start: 0, end: 10 }, { start: 20, end: 90 }]), 'subtractIntervals: 中抜き・端欠け');
+    ok(T.sumMin([{ start: 0, end: 10 }, { start: 20, end: 25 }]) === 15, 'sumMin');
+    ok(T.usableMin(d, '2026-10-12') === 750, 'usableMin 月曜: 990−150(ルーティン)−60(夜休憩)−30(習慣)=750');
+    ok(T.usableMin(d, '2026-10-11') === 690, 'usableMin 日曜: 朝食は時間帯の外なので引かれない → 690');
+    ok(T.workableMin(d, '2026-10-12') === 450, 'workableMin = usable × 0.6');
+    ok(T.usableMin(d, '2026-10-12', [{ start: 600, end: 720 }]) === 630, 'usableMin: busy 等の追加区間を引く(昼食と重なる分は二重に引かない)');
+    ok(T.usableMin({ window: {} }, '2026-10-12') === 0, 'usableMin: 時間帯が無ければ 0');
+    ok(T.fmtMin(80) === '1h20m' && T.fmtMin(45) === '45m' && T.fmtMin(120) === '2h' && T.fmtMin(0) === '0m', 'fmtMin');
+    ok(T.fmtMinJa(80) === '1時間20分' && T.fmtMinJa(60) === '1時間', 'fmtMinJa');
+
+    // ---- store.js ----
+    log('\n# store');
+    const base = S.migrate(null);
+    ok(base.schema === S.SCHEMA && base.settings.categories.length === 10 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ10件)');
+    ok(S.defaultSettings().routines !== S.defaultSettings().routines, 'defaultSettings: 呼ぶたびに新しいオブジェクト');
+    const broken = S.migrate({ schema: 1, bar: 2, settings: { transitMin: 'abc', ratio: 5, window: { mon: ['bad'] }, routines: [{ id: 'x', start: '9:00' }, { name: 'no start' }], foo: 1 }, entries: 'nope' });
+    ok(broken.settings.transitMin === 50 && broken.settings.ratio === 0.6, 'migrate: 壊れたスカラーは既定値へ');
+    ok(eq(broken.settings.window.mon, ['07:00', '23:30']) && eq(broken.settings.window.sat, ['08:00', '23:00']), 'migrate: 壊れた曜日だけ既定値へ');
+    ok(broken.settings.routines.length === 1 && broken.settings.routines[0].min === 30 && eq(broken.settings.routines[0].days, [0, 1, 2, 3, 4, 5, 6]), 'migrate: ルーティンは start 必須・min/days を補完');
+    ok(broken.settings.foo === 1 && broken.bar === 2, 'migrate: 未知キーを保持(前方互換)');
+    ok(eq(broken.entries, {}) && eq(broken.meta.resetAt, null), 'migrate: entries/meta を補完');
+    const once = S.migrate({ schema: 1, settings: { transitMin: 40 } });
+    ok(eq(S.migrate(once), once), 'migrate: 冪等');
+    ok(once.settings.transitMin === 40, 'migrate: 正しい値は保持');
+    ok(throws(() => S.validateImport({})) && throws(() => S.validateImport([1])) && throws(() => S.validateImport('x')), 'validateImport: merihari 以外は拒否');
+    ok(throws(() => S.validateImport({ schema: 99, settings: {} })), 'validateImport: 新しい schema は拒否');
+    ok(S.validateImport({ schema: 1, settings: {} }).schema === 1, 'validateImport: 通れば migrate 済みを返す');
+
+    // ---- 版規約(§9) ----
+    log('\n# version');
+    const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
+    ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
+    ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
+    for (const f of ['main', 'store', 'time', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+
+    // ---- 画面(骨組み) ----
+    log('\n# ui');
+    const doc = W.document;
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 3, 'タブは3つだけ(今日/タスク/設定)');
+    ok(!!doc.querySelector('#view h1'), '画面に見出しが描かれている');
+    ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
-  } finally { out.textContent += `\n${fails} failed`; }
+  } catch (e) {
+    fails++; log('EXCEPTION ' + (e && e.stack || e));
+  } finally {
+    const line = `\n${total} tests, ${fails} failed(ネガティブコントロール1件を含む。期待値は 1 failed)`;
+    log(line);
+    const s = document.createElement('div'); s.className = 'sum'; s.id = 'summary'; s.textContent = line.trim(); document.body.prepend(s);
+    document.title = `${fails === 1 ? 'PASS' : 'FAIL'} merihari tests`;
+  }
 });
 </script>
+</body>
+</html>
