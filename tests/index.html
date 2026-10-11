@@ -499,6 +499,10 @@ document.getElementById('app').addEventListener('load', async () => {
     const prx = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [] }, PC);
     ok(!pv.blocks.some((b) => b.taskId === 'z') && pv.blocks.some((b) => b.taskId === 'y') && prx.blocks.some((b) => b.taskId === 'z'), 'buildPlan(preview): 明日以降の見通しでは、その日より前が期限のタスクは終わっている前提で入れない(当日の plan には入る)');
 
+    // ---- v0.13 ----
+    log('\n# v0.13');
+    ok(S.migrate({ schema: 1, settings: { startFromLast: true } }).settings.startFromLast === true && S.migrate({ schema: 1, settings: { startFromLast: 'yes' } }).settings.startFromLast === false && S.defaultSettings().startFromLast === false, 'settings.startFromLast: 真偽値だけ・既定オフ');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

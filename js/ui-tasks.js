@@ -2,8 +2,8 @@
 import { el, clear, toast, sheet, confirmSheet, svg } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
-import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMD } from './time.js';
-import { startCategory, catOf } from './ui-today.js';
+import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMD, effectiveDay } from './time.js';
+import { startCategory, catOf, replanForTasks } from './ui-today.js';
 import * as log from './log.js';
 import { autoSync } from './sync.js';
 
@@ -19,7 +19,8 @@ export function fmtH(min) {
 }
 const fmtDeadline = (key, today) => (!key ? '期限なし' : key === today ? '期限 今日' : key === addDays(today, 1) ? '期限 明日' : `期限 ${fmtMD(key)}`);
 
-function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); autoSync(); }
+function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); replanForTasks(); autoSync(); }
+const effToday = () => effectiveDay(S(), dateKey(), minuteOfDay()).date;
 
 function deadlineOptions(today) {
   const dow = weekday(today);
@@ -73,7 +74,7 @@ function defaultCategory() {
  * 赤を出し続けるのではなく、処理させて赤を消す。
  */
 export function overdueCheck(ctx, { force = false } = {}) {
-  const today = dateKey();
+  const today = effToday();
   const local = store.state.local;
   if (!force && local.overdueAsked === today) return false;
   const list = plan.overdueTasks(T(), today, store.state.data.entries);
@@ -103,7 +104,7 @@ export function overdueCheck(ctx, { force = false } = {}) {
 
 export function renderTasks(view, ctx) {
   clear(view);
-  const today = dateKey(), nowMin = minuteOfDay();
+  const today = effToday(), nowMin = minuteOfDay();
   const rerender = () => renderTasks(view, ctx);
   const tasks = Object.values(T()).filter(alive);
   const E = store.state.data.entries;

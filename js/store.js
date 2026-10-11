@@ -56,7 +56,8 @@ export function defaultSettings() {
     longRest: { min: 60, afterMin: 240 },
     ratio: 0.6,
     dayStart: '00:00',       // タイムラインの1日の始まり(v0.11)。'02:00' なら 2:00〜翌 2:00 を1日として描く(26時に寝る人向け)
-    gapAbsorbMin: 10,        // 記録のすき間(v0.12): この分までの空白は次の記録に含める(0 で無効)
+    gapAbsorbMin: 10,
+    startFromLast: false,    // 記録を始めるとき最後の記録の終わりから数える(v0.13)        // 記録のすき間(v0.12): この分までの空白は次の記録に含める(0 で無効)
     catSchema: 2,            // 既定カテゴリの世代(2: 睡眠を追加)。古いデータに1回だけ足すための印
     categories: defaultCategories(),
     weeklyReviewDay: 0,
@@ -130,6 +131,7 @@ function normalizeSettings(raw) {
   delete s.eveningRest;
   s.ratio = typeof raw.ratio === 'number' && raw.ratio >= 0.1 && raw.ratio <= 1 ? raw.ratio : d.ratio;
   s.dayStart = isHM(raw.dayStart) && /^0[0-6]:[0-5]\d$/.test(raw.dayStart) ? raw.dayStart : d.dayStart;
+  s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
   s.categories = Array.isArray(raw.categories) && raw.categories.length
     ? raw.categories.filter((c) => isObj(c) && c.id).map((c, i) => ({

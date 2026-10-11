@@ -37,6 +37,11 @@ const accentColor = () => getComputedStyle(document.documentElement).getProperty
 // ---- 記録操作(UI・URL から呼ぶ) ----
 export function startCategory(categoryId, startMin = null, extra = {}) {
   const n = nowInfo();
+  // v0.13: 設定「最後の記録の終わりから数える」が有効なら、開始時刻を指定していないとき今日の最後の記録の終わりから(記録中のものがあればいまから切り替え)
+  if (startMin == null && S().startFromLast && !log.openEntry(E())) {
+    const last = log.entriesOf(E(), n.date).filter((x) => x.end != null && hm(x.end) < n.min).pop();
+    if (last) startMin = hm(last.end);
+  }
   const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null }, LCTX);
   if (r.ignored) { toast(`${catOf(categoryId).name} を記録中です`); return r; }
   commit(log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX)); // v0.12: 直前の記録との数分のすき間は次の記録に含める
@@ -95,6 +100,17 @@ export function replan(n, extra = {}) {
   P()[n.date] = p; store.save();
   return p;
 }
+/** タスクの追加・編集・完了のあと(v0.13): きょうの理想が作成済みなら、いま以降を静かに組み直して期限の変更などを反映する */
+export function replanForTasks() {
+  const e = effNow();
+  const w = windowFor(S(), e.date);
+  if (!w || !P()[e.date] || e.min >= w.end) return false;
+  const prev = P()[e.date];
+  const p = plan.buildPlan(planOpts(e.date, e.min, { prev }), LCTX);
+  p.confirmedAt = prev.confirmedAt ?? null; p.updatedAt = store.nowISO();
+  P()[e.date] = p; store.save();
+  return true;
+}
 /** 組み直す前の plan を端末に1つだけ控える(v0.12.1: 「今から再計画」で消えたように見えたときに戻せる) */
 function backupPlan(date, prev) { if (!prev || !prev.blocks?.length) return; store.state.local.planBackup = { date, plan: JSON.parse(JSON.stringify(prev)), ts: Date.now() }; store.saveLocal(); }
 function restorePlan(date) { const b = store.state.local.planBackup; if (!b || b.date !== date) return false; const cur = P()[date] || null; P()[date] = { ...b.plan, updatedAt: store.nowISO() }; store.state.local.planBackup = cur && cur.blocks?.length ? { date, plan: cur, ts: Date.now() } : null; store.save(); store.saveLocal(); return true; }
@@ -103,7 +119,7 @@ function confirmPlan(n) { const p = P()[n.date]; if (p) { p.confirmedAt = store.
 /** 前日までのレポートを確定(F3-5)し ledger(§6.6)を残す。起動時・復帰時に呼ぶ */
 export function finalizePending() {
   const d = store.state.data;
-  const today = dateKey();
+  const today = effNow().date; // 切れ目(2:00 など)の前はまだ前の日(v0.13: 0:10 に前の日を確定してしまっていた)
   let changed = false;
   // 毎週 X 時間型の自動送り(v0.9): 週の終わりを過ぎていたら残り見積を戻し「先週 x/yh」を残す
   const rw = plan.rollWeekly(d.tasks, d.entries, today, LCTX);
