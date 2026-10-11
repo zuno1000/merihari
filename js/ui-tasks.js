@@ -106,7 +106,8 @@ export function overdueCheck(ctx, { force = false } = {}) {
 
 export function renderTasks(view, ctx) {
   clear(view);
-  const today = effToday(), nowMin = minuteOfDay();
+  const eff = effectiveDay(S(), dateKey(), minuteOfDay());
+  const today = eff.date, nowMin = eff.min;
   const rerender = () => renderTasks(view, ctx);
   const tasks = Object.values(T()).filter(alive);
   const E = store.state.data.entries;

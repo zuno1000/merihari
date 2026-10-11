@@ -6,13 +6,13 @@ export const DAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
-/** 'HH:MM' → 分。壊れていれば null */
+/** 'HH:MM' → 分。'24:10' のような翌日の深夜(30:00 まで)も受ける。壊れていれば null */
 export function hm(str) {
   if (typeof str !== 'string') return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(str.trim());
   if (!m) return null;
   const h = +m[1], mi = +m[2];
-  if (h > 24 || mi > 59) return null;
+  if (h > 30 || mi > 59) return null; // 24:10 や 25:00 は「その日の深夜」(v0.13.4: 記録は実効の日に属する)
   return h * 60 + mi;
 }
 

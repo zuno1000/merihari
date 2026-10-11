@@ -6,7 +6,7 @@ import * as store from './store.js';
 import * as log from './log.js';
 import * as report from './report.js';
 import { displayColor, statusColor } from './palette.js';
-import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, DAY_JA, weekday } from './time.js';
+import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, DAY_JA, weekday, effectiveDay, dayCut } from './time.js';
 
 const S = () => store.state.data.settings;
 function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : id, color: null, kind: 'work' }; }
@@ -25,9 +25,10 @@ function daySummary(date, nowMin) {
 
 export function reportSheet(date) {
   const d = store.state.data;
-  const today = dateKey();
+  const eff = effectiveDay(d.settings, dateKey(), minuteOfDay());
+  const today = eff.date;
   const isToday = date === today;
-  const nowMin = isToday ? minuteOfDay() : 1440;
+  const nowMin = isToday ? eff.min : 1440 + dayCut(d.settings, date); // 記録は実効の日に属する(v0.13.4)
   const r = d.reports[date]?.finalizedAt ? d.reports[date]
     : report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin, settings: d.settings, tasks: d.tasks });
   const plan = d.plans[date] || null;
@@ -36,7 +37,7 @@ export function reportSheet(date) {
   const base = report.baseline(d.entries, date);
   const baseWork = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'work').reduce((a, [, v]) => a + v, 0) : null;
   const baseDrift = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'drift').reduce((a, [, v]) => a + v, 0) : null;
-  const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, ...daySummary(k, k === today ? nowMin : 1440) }));
+  const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
 
   const title = isToday ? '今日のレポート' : `${fmtMD(date, true)}のレポート`;
   let close;

@@ -65,7 +65,7 @@ export function closeOpen(entries, { date, at, windowEndOf }, ctx) {
   if (e.date === date) end = at;
   else {
     const we = windowEndOf ? windowEndOf(e.date) : null;
-    end = Math.min(1440, we != null && we > hm(e.start) ? we : 1440);
+    end = Math.min(1800, we != null && we > hm(e.start) ? we : 1440); // 作業時間帯が翌日の深夜までなら そこまで(v0.13.4)
   }
   if (end <= hm(e.start)) { e.deletedAt = ctx.nowISO(); e.updatedAt = e.deletedAt; return { entries: out, closed: e, dropped: true }; }
   e.end = mm(end); e.updatedAt = ctx.nowISO();
@@ -80,7 +80,7 @@ export function closeOpen(entries, { date, at, windowEndOf }, ctx) {
  */
 export function start(entries, opts, ctx) {
   const { date, nowMin, categoryId } = opts;
-  const startMin = Math.max(0, Math.min(1440, opts.startMin ?? nowMin));
+  const startMin = Math.max(0, Math.min(1800, opts.startMin ?? nowMin)); // 24:00 超は実効の日の深夜(v0.13.4)
   const o = openEntry(entries);
   if (o && o.date === date && o.categoryId === categoryId && opts.startMin == null) return { entries: clone(entries), ignored: true, entry: o };
   let { entries: out } = closeOpen(entries, { date, at: startMin, windowEndOf: opts.windowEndOf }, ctx);
@@ -94,12 +94,13 @@ export function start(entries, opts, ctx) {
 }
 
 /** 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める */
-export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '' }, ctx) {
+export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '' }, ctx, dayEnd = 1440) {
   if (startMin == null || endMin == null) throw new Error('終了は開始より後にしてください');
-  if (endMin <= startMin) { // 日付をまたぐ(v0.13.2): 終了が 6:00 以前なら翌日として 24:00 で分けて入れる
+  if (endMin <= startMin) { // 日付をまたぐ(v0.13.2/0.13.4): 終了が翌日の深夜なら、切れ目(dayEnd)までは同じ日の記録(end '24:10')、無ければ 24:00 で分ける
     if (!(endMin <= 360 && startMin > 360)) throw new Error('終了は開始より後にしてください');
-    let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note }, ctx);
-    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note }, ctx);
+    if (endMin + 1440 <= dayEnd) return addEntry(entries, { date, startMin, endMin: endMin + 1440, categoryId, taskId, note }, ctx, dayEnd);
+    let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note }, ctx, dayEnd);
+    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note }, ctx, dayEnd);
     return out;
   }
   const out = clone(entries);
@@ -114,15 +115,16 @@ export function stop(entries, { date, nowMin, at, windowEndOf }, ctx) {
 }
 
 /** 時刻の編集(F1-7)。end は null のままにできる(記録中)。隣は詰める */
-export function setTimes(entries, id, { start, end }, nowMin, ctx) {
+export function setTimes(entries, id, { start, end }, nowMin, ctx, dayEnd = 1440) {
   const out = clone(entries);
   const e = out[id];
   if (!alive(e)) return out;
   const s = hm(start);
   const en = end == null ? null : hm(end);
   if (s == null) throw new Error('終了は開始より後にしてください');
-  if (en != null && en <= s) { // 日付をまたぐ(v0.13.2): 23:30〜翌 0:10 は 23:30〜24:00 と 翌日 0:00〜0:10 に分ける
+  if (en != null && en <= s) { // 日付をまたぐ(v0.13.2/0.13.4): 切れ目(dayEnd)までは同じ日の記録(23:40〜24:10)、無ければ 24:00 で分ける
     if (!(en <= 360 && s > 360)) throw new Error('終了は開始より後にしてください');
+    if (en + 1440 <= dayEnd) { e.start = mm(s); e.end = mm(en + 1440); e.updatedAt = ctx.nowISO(); return resolveOverlap(out, id, nowMin, ctx); }
     e.start = mm(s); e.end = '24:00'; e.updatedAt = ctx.nowISO();
     let res = resolveOverlap(out, id, nowMin, ctx);
     if (en > 0) res = addEntry(res, { date: addDays(e.date, 1), startMin: 0, endMin: en, categoryId: e.categoryId, taskId: e.taskId, note: e.note }, ctx);

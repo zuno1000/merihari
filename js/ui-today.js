@@ -24,6 +24,8 @@ const P = () => store.state.data.plans;
 const nowInfo = () => ({ date: dateKey(), min: minuteOfDay() });
 /** 実効の「いま」(v0.12.2): 前の日の作業時間帯が深夜にまたいでいる間(07:00〜01:00 の 0:30 など)は前の日の plan を見る(date=前の日・min は +1440) */
 const effNow = () => { const n = nowInfo(); return effectiveDay(S(), n.date, n.min); };
+/** その日の記録の終わり(分): 24:00 + 切れ目。setTimes/addEntry の dayEnd に渡す(v0.13.4) */
+const dayEndOf = (date) => 1440 + dayCut(S(), date);
 const windowEndOf = (date) => windowFor(S(), date)?.end ?? null;
 const cats = () => S().categories.slice().sort((a, b) => a.order - b.order);
 const md = (key) => fmtMD(key, true);
@@ -36,7 +38,7 @@ const accentColor = () => getComputedStyle(document.documentElement).getProperty
 
 // ---- 記録操作(UI・URL から呼ぶ) ----
 export function startCategory(categoryId, startMin = null, extra = {}) {
-  const n = nowInfo();
+  const n = effNow(); // 深夜(切れ目の前)は前の日の 24:xx として記録(v0.13.4)
   // v0.13: 設定「最後の記録の終わりから数える」が有効なら、開始時刻を指定していないとき今日の最後の記録の終わりから(記録中のものがあればいまから切り替え)
   if (startMin == null && S().startFromLast && !log.openEntry(E())) {
     const last = log.entriesOf(E(), n.date).filter((x) => x.end != null && hm(x.end) < n.min).pop();
@@ -53,7 +55,7 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
 }
 /** 「終わる」。止めたあとは「ホーム」に 直す/減らす の1行を出す(v0.11: シートで止めない。直したいときだけ触る) */
 export function stopRecording(at = null) {
-  const n = nowInfo();
+  const n = effNow();
   const r = log.stop(E(), { date: n.date, nowMin: n.min, at, windowEndOf }, LCTX);
   if (!r.closed) { toast('記録中のものはありません'); return r; }
   commit(r.entries);
@@ -129,8 +131,9 @@ export function finalizePending() {
     const date = addDays(today, -i);
     if (d.reports[date]?.finalizedAt) continue;
     if (!log.entriesOf(d.entries, date).length && !d.plans[date]) continue;
-    d.reports[date] = report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: 1440, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
-    d.ledger[date] = report.ledgerFor(d.settings, date, report.aggregate({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: 1440, settings: d.settings }));
+    const endMin = 1440 + dayCut(d.settings, date);
+    d.reports[date] = report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: endMin, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
+    d.ledger[date] = report.ledgerFor(d.settings, date, report.aggregate({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: endMin, settings: d.settings }));
     changed = true;
   }
   if (changed) store.save();
@@ -141,14 +144,9 @@ export function finalizePending() {
 export function checkOpenEntry(ctx) {
   const o = log.openEntry(E());
   if (!o) return false;
-  const n = nowInfo();
+  const n = effNow(); // 実効の日(切れ目の前は前の日)。記録中のものは切れ目まで同じ日の記録として続く(v0.13.4)
   const local = store.state.local;
   if (o.date !== n.date) {
-    if (effectiveDay(S(), n.date, n.min).date === o.date) { // 前の日の作業時間帯がまだ続いている(v0.12.2) → 0:00 で切って同じ記録を続ける(シートは出さない)
-      const r0 = log.closeOpen(E(), { date: n.date, at: n.min, windowEndOf }, LCTX);
-      if (!r0.dropped) { const s0 = log.start(r0.entries, { date: n.date, nowMin: n.min, startMin: 0, categoryId: o.categoryId, windowEndOf, taskId: o.taskId ?? null, plannedMin: o.plannedMin ? Math.max(0, o.plannedMin - (1440 - hm(o.start))) || null : null }, LCTX); commit(s0.entries); } else commit(r0.entries);
-      return false;
-    }
     const r = log.closeOpen(E(), { date: n.date, at: n.min, windowEndOf }, LCTX);
     commit(r.entries);
     const c = r.closed;
@@ -166,7 +164,8 @@ export function checkOpenEntry(ctx) {
   if (log.isStale(o, n.date, n.min, STALE_MIN) && local.staleAsked !== o.id) {
     local.staleAsked = o.id; store.saveLocal();
     const name = catOf(o.categoryId).name, s = hm(o.start);
-    const la = local.lastActive;
+    const la0 = local.lastActive;
+    const la = la0 ? effectiveDay(S(), la0.date, la0.min) : null;
     const lastMin = la && la.date === n.date && la.min > s && la.min < n.min ? la.min : null;
     let close;
     const fin = (at) => { stopRecording(at); close(); ctx.go('now'); };
@@ -203,9 +202,9 @@ export function renderNow(view, ctx) {
   const e = effNow();
   const p = ensurePlan(e);
   const rerender = () => renderNow(view, ctx);
-  const hero = buildHero(e, p, ctx, rerender, n);
+  const hero = buildHero(e, p, ctx, rerender);
   view.append(...[
-    buildHead(e, n), hero.node, afterStopLine(n, rerender), freshLine(e, rerender), yesterdayLine(e, rerender), calibLine(n, rerender),
+    buildHead(e, n), hero.node, afterStopLine(e, rerender), freshLine(e, rerender), yesterdayLine(e, rerender), calibLine(n, rerender),
     upcoming(e, p, ctx, rerender), reportFab(e.date), fab(n, rerender),
   ].filter(Boolean));
   const lastState = hero.key;
@@ -213,14 +212,14 @@ export function renderNow(view, ctx) {
     const m = nowInfo();
     const em = effectiveDay(S(), m.date, m.min);
     if (m.date !== n.date || em.date !== e.date) { rerender(); return; }
-    hero.tick(m, em);
-    if (heroKey(em, P()[em.date], m) !== lastState) rerender();
+    hero.tick(em);
+    if (heroKey(em, P()[em.date]) !== lastState) rerender();
   });
 }
 
 function buildHead(e, n) {
   const sum = (t) => Object.values(t).reduce((a, b) => a + b, 0);
-  const total = sum(log.totalsByCategory(E(), e.date, e.shifted ? 1440 : e.min)) + (e.shifted ? sum(log.totalsByCategory(E(), n.date, n.min)) : 0);
+  const total = sum(log.totalsByCategory(E(), e.date, e.min)) + (e.shifted ? sum(log.totalsByCategory(E(), n.date, n.min)) : 0); // 後半は旧版の暦日の記録(v0.13.4 以前)
   return el('div.today-head', [el('b', md(e.date)), el('span.muted.small', total ? `記録 ${fmtMin(total)}` : '')]);
 }
 
@@ -275,9 +274,9 @@ function reportFab(date) {
 }
 
 /** ヒーローの状態キー(変わったら描き直す) */
-function heroKey(n, p, real = n) {
+function heroKey(n, p) {
   const o = log.openEntry(E());
-  if (o) return 'rec:' + o.id + (o.plannedMin && log.elapsedMin(o, real.date, real.min) >= o.plannedMin ? ':over' : '');
+  if (o) return 'rec:' + o.id + (o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin ? ':over' : '');
   const w = windowFor(S(), n.date);
   if (!w || n.min < w.start) return 'morning';
   if (n.min >= w.end) return 'end';
@@ -332,19 +331,18 @@ function calibLine(n, rerender) {
  * ヒーロー(§6.7)。bondavi 風: 中央の大きなリング1つに主役(いまやること)を入れ、下に副文と主ボタン、ピクトグラムのひとこと。
  * リングはその日の作業の進み具合(記録中で区切りがあれば区切りまで、休憩なら残り)。描き直しは状態キーが変わったときだけ、秒の更新は textContent と stroke-dashoffset のみ。
  */
-function buildHero(n, p, ctx, rerender, real = n) {
-  // n は実効の日(plan 用・深夜は前の日で min が 1440 超)、real は時計どおりの今(記録用)
-  const key = heroKey(n, p, real);
+function buildHero(n, p, ctx, rerender) {
+  // n は実効の日(深夜は前の日で min が 1440 超)。記録も実効の日に属する(v0.13.4)
+  const key = heroKey(n, p);
   const o = log.openEntry(E());
   const w = windowFor(S(), n.date);
-  const totals = log.totalsByCategory(E(), real.date, real.min);
+  const totals = log.totalsByCategory(E(), n.date, n.min);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const shares = plan.todayShare(T(), n.date, S(), E()).filter((s) => !(p?.skipped || []).includes(s.taskId));
-  const logged = plan.loggedByTask(E(), n.date, n.shifted ? 1440 : n.min);
-  if (n.shifted) for (const [k, v] of Object.entries(plan.loggedByTask(E(), real.date, real.min))) logged[k] = (logged[k] || 0) + v;
+  const logged = plan.loggedByTask(E(), n.date, n.min);
   // リングと副文(v0.12.3): 「きょうの作業 ◯ / 理想 ◯」。作業=作業種別の記録の合計、理想=その日の plan の作業枠(task+habit)の合計
   const workKinds = new Set(S().categories.filter((c) => c.kind === 'work').map((c) => c.id));
-  const doneWork = Object.entries(totals).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) + (n.shifted ? Object.entries(log.totalsByCategory(E(), n.date, 1440)).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) : 0);
+  const doneWork = Object.entries(totals).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) + (n.shifted ? Object.entries(log.totalsByCategory(E(), addDays(n.date, 1), n.min - 1440)).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) : 0); // 旧版の暦日の記録
   const idealWork = (p?.blocks || []).filter((b) => b.type === 'task' || b.type === 'habit').reduce((a, b) => a + (b.end - b.start), 0);
   const remain = Math.max(0, idealWork - doneWork);
   const dayPct = idealWork ? Math.min(1, doneWork / idealWork) : 0;
@@ -364,11 +362,11 @@ function buildHero(n, p, ctx, rerender, real = n) {
   if (o) {
     const c = catOf(o.categoryId);
     const t = o.taskId ? T()[o.taskId] : null;
-    const elapsed = el('b.ring-v', fmtMinJa(log.elapsedMin(o, real.date, real.min)));
-    const over = o.plannedMin && log.elapsedMin(o, real.date, real.min) >= o.plannedMin;
+    const elapsed = el('b.ring-v', fmtMinJa(log.elapsedMin(o, n.date, n.min)));
+    const over = o.plannedMin && log.elapsedMin(o, n.date, n.min) >= o.plannedMin;
     const nextB = p ? plan.nextWorkBlock(p.blocks, n.min) : null;
     const innerText = (m) => {
-      if (!o.plannedMin) return `${o.start} から${o.date !== real.date ? '(前日)' : ''}`;
+      if (!o.plannedMin) return `${o.start} から${o.date !== n.date ? '(前日)' : ''}`;
       const left = o.plannedMin - log.elapsedMin(o, m.date, m.min);
       return left > 0 ? `あと ${left} 分で区切り(${mm(hm(o.start) + o.plannedMin)})` : `区切りの時間。次は ${nextB ? nextB.name : 'やること1つ'}`;
     };
@@ -407,7 +405,7 @@ function buildHero(n, p, ctx, rerender, real = n) {
     const len = Math.max(1, b.end - b.start);
     const h = build({ kicker: '休憩していい時間', title: b.long ? '長い休憩' : (b.drift ? b.name : '休憩'), value: left, inner: 'あと', pct: (b.end - n.min) / len, color: catOf('rest').color, sub: remainText || null,
       buttons: [btn('休憩を記録', () => { startCategory('rest'); rerender(); }, true)] });
-    tick = (m, em = m) => { left.textContent = fmtMinJa(Math.max(0, b.end - em.min)); h.ring.set(Math.max(0, b.end - em.min) / len); };
+    tick = (m) => { left.textContent = fmtMinJa(Math.max(0, b.end - m.min)); h.ring.set(Math.max(0, b.end - m.min) / len); };
     return { node: h.node, tick, key };
   }
   if (b && (b.type === 'task' || b.type === 'habit')) {
@@ -434,7 +432,7 @@ function fab(n, rerender, date = null) {
 
 /** いま何してる? のシート(カテゴリのチップ: タップ=開始・長押し=時刻を指定) */
 function chipsSheet(n0, rerender) {
-  const n = nowInfo();
+  const n = effNow();
   const o = log.openEntry(E());
   let close;
   const done = () => { close(); rerender(); };
@@ -464,7 +462,7 @@ function chipsSheet(n0, rerender) {
 
 /** ダラダラの区切り(F4-5) */
 function driftSheet(c, n0, rerender) {
-  const n = nowInfo();
+  const n = effNow();
   const go = (min) => {
     startCategory(c.id, null, { plannedMin: min });
     if (min) {
@@ -488,7 +486,7 @@ function catChipPicker(initial, onPick) {
 
 /** 事後入力(F1-2): 開始時刻を選んでから開始(そのまま記録中になる) */
 function backfillSheet(n0, categoryId, rerender) {
-  const n = nowInfo();
+  const n = effNow();
   let cid = categoryId || log.openEntry(E())?.categoryId || cats()[0]?.id;
   let startMin = null;
   const cands = log.backfillCandidates(E(), n.date, n.min);
@@ -527,7 +525,7 @@ function addEntrySheet(date, rerender, gap = null) {
     el('div.row.field', [el('span.label', '開始'), st, el('span', '〜'), en]),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
-        try { commitTidy(log.addEntry(E(), { date, startMin: hm(st.value), endMin: hm(en.value), categoryId: cid }, LCTX), date); close(); rerender(); sync.autoSync(); } catch (err) { toast(err.message); }
+        try { commitTidy(log.addEntry(E(), { date, startMin: hm(st.value), endMin: hm(en.value), categoryId: cid }, LCTX, dayEndOf(date)), date); close(); rerender(); sync.autoSync(); } catch (err) { toast(err.message); }
       } }, '追加')]),
   ]);
 }
@@ -687,7 +685,7 @@ function planBlockCategory(b) {
 }
 /** 理想どおりだった(v0.12・F1-12): 記録のない時間にだけ plan を写す。upto より後は写さない */
 function copyFromPlan(date, blocks, upto, rerender, single = false) {
-  const r = log.fillFromPlan(E(), blocks, date, Math.min(1440, upto), planBlockCategory, LCTX);
+  const r = log.fillFromPlan(E(), blocks, date, Math.min(dayEndOf(date), upto), planBlockCategory, LCTX);
   if (!r.added.length) { toast(single ? 'この時間はもう記録があります' : '写せる時間がありません(記録済み)'); return; }
   const apply = () => { commitTidy(r.entries, date); sync.autoSync(); rerender(); toast(`${r.added.length} 件を実績に写しました`); };
   if (single || r.added.length <= 2) { apply(); return; }
@@ -817,7 +815,7 @@ function busyBlockSheet(b, n, rerender) {
  * (授業に切り替えていた・止め忘れたまま SNS に移った、を後から切り出せる)。記録中のものも同じシートで直せる。
  */
 function editEntrySheet(id, n0, rerender) {
-  const n = nowInfo();
+  const n = effNow();
   const e = E()[id];
   if (!e || e.deletedAt) return;
   const c = catOf(e.categoryId);
@@ -825,8 +823,8 @@ function editEntrySheet(id, n0, rerender) {
   const title = `${t ? t.name : c.name} ${e.start}〜${e.end ?? ''}`;
   let close;
   const save = (fn) => { try { fn(); close(); rerender(); sync.autoSync(); } catch (err) { toast(err.message); } };
-  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: v, end: e.end }, n.min, LCTX), e.date)) });
-  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: v || null }, n.min, LCTX), e.date)) });
+  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: v, end: e.end }, n.min, LCTX, dayEndOf(e.date)), e.date)) });
+  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: v || null }, n.min, LCTX, dayEndOf(e.date)), e.date)) });
   const switchChips = el('div.chips.small', cats().filter((x) => x.id !== e.categoryId).map((x) => el('button.chip.sm2', { type: 'button', onclick: () => { close(); switchSheet(e, x, n, rerender); } }, [el('span.dot', { style: { background: x.color } }), x.name])));
   close = sheet((cl) => { close = cl; return [
     el('h2', [el('i.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' }), title]),

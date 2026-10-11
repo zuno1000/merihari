@@ -38,7 +38,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- time.js ----
     log('\n# time');
     ok(T.hm('07:30') === 450 && T.hm('7:05') === 425, 'hm: HH:MM → 分');
-    ok(T.hm('x') === null && T.hm('25:00') === null && T.hm(null) === null, 'hm: 壊れた値は null');
+    ok(T.hm('x') === null && T.hm('31:00') === null && T.hm(null) === null && T.hm('25:00') === 1500 && T.hm('24:10') === 1450, 'hm: 壊れた値は null・翌日の深夜(30:00 まで)は 24 時間超の分');
     ok(T.mm(450) === '07:30' && T.mm(0) === '00:00', 'mm: 分 → HH:MM');
     ok(T.dateKey(new Date(2026, 9, 11)) === '2026-10-11', 'dateKey: ローカル YYYY-MM-DD');
     ok(T.dateKey(T.parseDateKey('2026-02-03')) === '2026-02-03', 'parseDateKey ↔ dateKey が往復する');
@@ -539,6 +539,21 @@ document.getElementById('app').addEventListener('load', async () => {
     const kids = pk1.blocks.filter((b) => b.type === 'task').map((b) => b.id);
     ok(!kids.includes('b1') && kids.includes('b2') && kids.includes('b3') && !kids.includes('b4'), 'buildPlan(再計画): 消したタスクの過去の枠と、終えたタスクの pinned は引き継がない。生きているタスクの過去の枠と pinned は残す');
     ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5 で扱う)');
+
+    // ---- v0.13.4: 記録は実効の日に属する(切れ目があれば 24:xx の 1 つの記録) ----
+    log('\n# v0.13.4');
+    const yE = { a: { id: 'a', date: '2026-10-12', start: '23:40', end: '23:50', categoryId: 'research', taskId: null, note: '', plannedMin: null, deletedAt: null } };
+    const yR = L.setTimes(yE, 'a', { start: '23:40', end: '00:10' }, 1440, PC, 1560);
+    ok(Object.keys(yR).length === 1 && yR.a.end === '24:10' && L.totalsByCategory(yR, '2026-10-12', 1560).research === 30, 'setTimes(dayEnd=26:00): 23:40〜翌 0:10 は同じ日の 1 つの記録(24:10)になる');
+    ok(Object.keys(L.setTimes(yE, 'a', { start: '23:40', end: '00:10' }, 1440, PC)).length === 2, 'setTimes(切れ目なし): 24:00 で分ける(従来)');
+    const yA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC, 1560);
+    ok(Object.keys(yA).length === 1 && Object.values(yA)[0].end === '24:20', 'addEntry(dayEnd): 1 つの記録として追加');
+    const yS = L.start({}, { date: '2026-10-12', nowMin: 1470, categoryId: 'research' }, PC);
+    ok(yS.entry.start === '24:30' && yS.entry.date === '2026-10-12' && L.elapsedMin(yS.entry, '2026-10-12', 1500) === 30, 'start: 深夜(実効の日の 24:30)から記録でき、経過も数える');
+    const yC = L.closeOpen(yS.entries, { date: '2026-10-13', at: 600, windowEndOf: () => 1500 }, PC);
+    ok(yC.closed.end === '25:00', 'closeOpen: 日が変わっていたら作業時間帯の終わり(翌 1:00=25:00)で閉じる');
+    const yPie = Rp.dayPie(yR, '2026-10-12', { start: 420, end: 1500 }, 1560);
+    ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24 時間超の nowMin でも合計は 1440');
 
     // ---- 版規約(§9) ----
     log('\n# version');
