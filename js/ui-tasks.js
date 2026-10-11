@@ -95,14 +95,14 @@ export function renderTasks(view, ctx) {
       ]),
     ]);
   };
-  const section = (title, list, empty) => el('section.group', [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
+  const section = (title, note, list, empty) => el('section.group', [el('h2', title), note ? el('p.muted.small.gnote', note) : null, el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
 
   view.append(
     el('h1', 'タスク'),
     quickAdd(today, rerender),
-    section('今日の分', todayList, '今日やるべき分はありません。'),
-    section('その他の義務', duties, 'なし'),
-    section('やりたい', wishes, 'なし'),
+    section('今日やる分', '期限から逆算して、今日やっておくべき量があるもの。理想スケジュールに入ります。', todayList, '今日やるべき分はありません。'),
+    section('期限まで余裕のある義務', '今日は配分なし。期限が近づくと自動で「今日やる分」に上がります(期限なしの義務もここ)。', duties, 'なし'),
+    section('やりたいこと', '義務ではないもの。予定には入れず、空いた時間に。', wishes, 'なし'),
     el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
   );
 }

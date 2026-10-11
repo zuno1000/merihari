@@ -150,7 +150,7 @@ function trend(days, date) {
         const v = x[key];
         return el('div.col-slot', { title: `${md(x.key)} ${fmtMin(v)}` }, [
           isLast && v ? el('span.col-val', fmtMin(v)) : null,
-          el('i.col', { style: { height: `${Math.max(v ? 3 : 1, (v / max) * 100)}%`, background: isLast ? color : 'var(--deemph)' } }),
+          el('i.tcol', { style: { height: `${Math.max(v ? 3 : 1, (v / max) * 100)}%`, background: isLast ? color : 'var(--deemph)' } }),
           el('span.col-x', { class: `col-x${isLast ? ' on' : ''}` }, isLast ? (x.key === dateKey() ? '今日' : md(x.key)) : DAY_JA[weekday(x.key)]),
         ]);
       })),
