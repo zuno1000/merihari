@@ -3,13 +3,15 @@
 import * as store from './store.js';
 import * as time from './time.js';
 import * as log from './log.js';
+import * as plan from './plan.js';
 import { toast } from './ui.js';
 import { renderToday, startCategory, stopRecording, checkOpenEntry } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.2.1';
+export const APP_VERSION = '0.3.0';
 export const NEWS = [
+  { v: '0.3.0', text: 'Phase 2: 朝の理想スケジュール提案(生活ルーティン・習慣・夜の休憩・タスクの今日の分を自動配置)、理想レーン、ヒーローの状態機械(いまやること1つ+始める)、今から再計画、タスクのかんたん追加と「今日の分」。' },
   { v: '0.2.1', text: '今日画面の上部を簡素化(日付と記録中だけ)。「時刻を指定」で事後入力。設定を一覧→項目ごとの編集画面に整理。' },
   { v: '0.2.0', text: 'Phase 1: カテゴリチップで記録(タップ=開始・次のチップで切替・長押しで「さっきから」)、実績レーン、記録の編集(時刻・カテゴリ・メモ・分割・削除)、止め忘れの回収、?log= パラメータ。' },
   { v: '0.1.1', text: 'Phase 0: 3タブの骨組み・はじめの設定(3ステップ)・設定画面・データの書き出し/読み込み・テスト基盤。' },
@@ -107,5 +109,6 @@ window.M = {
   NEWS,
   time,
   log,
+  plan,
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

@@ -144,12 +144,84 @@ document.getElementById('app').addEventListener('load', async () => {
     const rm = L.remove(es, engId, C);
     ok(rm[engId].deletedAt && !es[engId].deletedAt && L.entriesOf(rm, D).length === 2, 'remove: tombstone・元は変更しない・entriesOf から消える');
 
+    // ---- plan.js(F2 / F5-2) ----
+    log('\n# plan');
+    const Pn = M.plan;
+    let pseq = 0;
+    const PC = { uid: () => 'b' + (++pseq), nowISO: () => '2026-10-12T07:00:00+09:00' };
+    const MON = '2026-10-12'; // 月曜(作業 07:00〜23:30・workable 450)
+    const ds = S.defaultSettings();
+    const noOverlap = (bs) => { const x = bs.slice().sort((a, b) => a.start - b.start); return x.every((b, i) => i === 0 || b.start >= x[i - 1].end); };
+    const tasksA = {
+      t1: { id: 't1', name: '修論', kind: 'duty', deadline: '2026-10-20T23:59', remainingH: 12, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null },
+      t2: { id: 't2', name: '面談資料', kind: 'duty', deadline: '2026-10-13', remainingH: 1, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null },
+      w1: { id: 'w1', name: 'Blender', kind: 'wish', deadline: null, remainingH: 5, minUnit: 30, categoryId: 'other', deletedAt: null, doneAt: null },
+      d1: { id: 'd1', name: '済み', kind: 'duty', deadline: '2026-10-12', remainingH: 2, minUnit: 30, categoryId: 'other', deletedAt: null, doneAt: 'x' },
+    };
+    ok(Pn.deadlineKey({ deadline: '2026-10-20T23:59' }) === '2026-10-20' && Pn.deadlineKey({ deadline: null }) === null, 'deadlineKey: 日付部分だけ');
+    ok(Pn.deadlineKey({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON) === '2026-10-18', 'deadlineKey: 毎週型は今週の日曜');
+    ok(Pn.availableUntil(ds, MON, MON) === 450 && Pn.availableUntil(ds, MON, '2026-10-13') === 900, 'availableUntil: 期限まで(両端含む)の workable 合計');
+    const sh = Pn.todayShare(tasksA, MON, ds);
+    ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 義務だけを期限順(やりたい・完了は除く)');
+    ok(sh[0].todayMin === 30 && sh[1].todayMin === 80, 'todayShare: EDF 配分(面談 60×450/900=30, 修論 720×450/3978≈80)');
+    const late = Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10, minUnit: 30 } }, MON, ds);
+    ok(late[0].todayMin === 600 && late[0].short === true, 'todayShare: 期限超過は残り全部を前倒しし short=true');
+    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30 } }, MON, ds)[0].todayMin === 0, 'todayShare: 配分が最小単位の半分未満なら今日は 0');
+    ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
+    const WM = T.windowFor(ds, MON);
+    const busyA = [{ id: 'A', start: 540, end: 630 }, { id: 'B', start: 660, end: 720 }, { id: 'C', start: 960, end: 990 }, { id: 'D', start: 1140, end: 1200 }];
+    const g = Pn.groupOuting(busyA, ds, WM);
+    ok(g.length === 1 && g[0].start === 540 && g[0].end === 720 && eq(g[0].ids, ['A', 'B']), 'groupOuting: 45分以上・日中の busy を片道×2 未満の間隔でまとめる(30分の予定と18時以降は除外)');
+    ok(Pn.groupOuting(busyA.map((b) => (b.id === 'A' ? { ...b, home: true } : b)), ds, WM)[0].start === 660, 'groupOuting: 在宅の上書きは除外');
+    ok(Pn.groupOuting(busyA, { ...ds, outingByBusy: false }, WM).length === 0, 'groupOuting: 設定 OFF なら空');
+    ok(eq(Pn.placeOrShift({ start: 720, end: 765 }, [{ start: 690, end: 750 }], WM), { start: 750, end: 795, shifted: true }), 'placeOrShift: 重なれば直後の空きへ 15 分刻み');
+    ok(Pn.placeOrShift({ start: 1380, end: 1440 }, [{ start: 1380, end: 1410 }], WM) === null, 'placeOrShift: 入らなければ null');
+    ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]), 'freeSlots');
+    const p0 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {} }, PC);
+    const types = (p) => p.blocks.map((b) => b.type);
+    ok(types(p0).filter((t) => t === 'routine').length === 4 && p0.blocks.some((b) => b.type === 'rest' && b.evening && b.start === 1200), 'buildPlan: ルーティン4件と夜の休憩 20:00');
+    const hb = p0.blocks.find((b) => b.type === 'habit');
+    ok(hb && hb.start === 450 && hb.end === 480 && hb.name === '英語', 'buildPlan: 朝の習慣は朝食直後の空き(07:30〜08:00)');
+    ok(noOverlap(p0.blocks) && !types(p0).includes('task'), 'buildPlan: 重なり無し・タスク無しなら task ブロック無し');
+    const p1 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {} }, PC);
+    const tb = p1.blocks.filter((b) => b.type === 'task');
+    ok(tb.length === 1 && tb[0].start === 540 && tb[0].end === 620 && tb[0].taskId === 't1' && tb[0].categoryId === 'research', 'buildPlan: 今日の分 80 分を now(09:00) から 1 ブロックで置く');
+    ok(p1.shortfall.length === 0 && noOverlap(p1.blocks), 'buildPlan: 入り切れば shortfall 無し');
+    const bigT = { x: { id: 'x', name: '大物', kind: 'duty', deadline: '2026-10-12', remainingH: 10, minUnit: 30, categoryId: 'research' } };
+    const p2 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigT, entries: {} }, PC);
+    const tb2 = p2.blocks.filter((b) => b.type === 'task'), rb2 = p2.blocks.filter((b) => b.type === 'rest' && b.auto);
+    const total2 = tb2.reduce((a, b) => a + b.end - b.start, 0);
+    ok(tb2.every((b) => b.end - b.start >= 30 && b.end - b.start <= 90) && noOverlap(p2.blocks), 'buildPlan: task ブロックは最小単位以上・最大 90 分・重なり無し');
+    ok(tb2.every((b) => b.end <= WM.end - 30) && tb2[0].start === 540, 'buildPlan: 最後の 30 分には置かない');
+    ok(rb2.length >= 3 && rb2.every((r) => tb2.some((b) => b.end === r.start && b.end - b.start === 90)), 'buildPlan: 90 分の作業の直後に休憩 10 分');
+    ok(total2 <= 480 && total2 >= 450 && p2.shortfall[0]?.taskId === 'x' && p2.shortfall[0].min === 600 - total2, 'buildPlan: 作業に回せる割合(workable 450)が上限・入り切らない分は shortfall');
+    const p3 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 600, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1 }, PC);
+    const tb3 = p3.blocks.filter((b) => b.type === 'task');
+    ok(tb3.length === 1 && tb3[0].start === 600 && p3.confirmedAt === null, '再計画: now(10:00) にまたがる task は now から置き直す');
+    const p4 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 660, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1 }, PC);
+    ok(p4.blocks.filter((b) => b.type === 'task').length === 1 && p4.blocks.find((b) => b.type === 'task').end === 620, '再計画: 過去の task ブロックは引き継ぎ、今日の分は満たしているので追加しない');
+    const p5 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, first: 't1' }, PC);
+    ok(p5.blocks.filter((b) => b.type === 'task')[0].taskId === 't1', 'buildPlan: first で先頭に置く(今やる)');
+    const p6 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, last: 't2' }, PC);
+    ok(p6.blocks.filter((b) => b.type === 'task').pop().taskId === 't2', 'buildPlan: last で最後に置く(後ろへ)');
+    const p7 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, skipped: ['t1'] }, PC);
+    ok(!p7.blocks.some((b) => b.taskId === 't1') && eq(p7.skipped, ['t1']), 'buildPlan: skipped は置かない(今日はやらない)');
+    const p8 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: { a: { date: MON, start: '08:00', end: '09:30', taskId: 't1', categoryId: 'research' } } }, PC);
+    ok(!p8.blocks.some((b) => b.type === 'task'), 'buildPlan: 紐づく実績が今日の分を満たしていれば置かない');
+    const p9 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }] }, PC);
+    const tr = p9.blocks.filter((b) => b.type === 'transit');
+    ok(tr.length === 2 && tr[0].start === 490 && tr[0].end === 540 && tr[1].start === 720 && tr[1].end === 770, 'buildPlan: 外出 busy の前後に片道 50 分の移動');
+    ok(p9.blocks.find((b) => b.type === 'routine' && b.name === '昼食').start === 780, 'buildPlan: 移動と重なる昼食は直後(13:00)へずらす');
+    ok(Pn.blockAt(p0.blocks, 455).type === 'habit' && Pn.blockAt(p0.blocks, 1000) === null, 'blockAt: その時刻のブロック / 無ければ null');
+    ok(Pn.nextWorkBlock(p1.blocks, 400).taskId === undefined || Pn.nextWorkBlock(p1.blocks, 500).taskId === 't1', 'nextWorkBlock: 次の作業ブロック');
+    ok(Pn.remainingToday(sh, { t2: 30, t1: 20 }) === 60 && Pn.remainingToday(sh, {}) === 110, 'remainingToday: 今日の分 − 紐づく実績');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

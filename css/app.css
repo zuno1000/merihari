@@ -135,3 +135,31 @@ button.srow:active{background:var(--accent-bg)}
 .now-main{flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:0;background:none;color:var(--fg);font-family:inherit;font-size:16px;text-align:left;padding:4px 0;cursor:pointer}
 .now-main .sub{width:100%;font-size:12px}
 .note{margin:0 2px 8px}
+
+/* ---- ヒーロー(状態機械)・タスク ---- */
+.hero-card{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-left:4px solid;border-radius:14px;padding:10px 12px;margin:0 0 10px;box-shadow:var(--shadow)}
+.hero-card.behind{background:#fff8ec}
+@media (prefers-color-scheme:dark){.hero-card.behind{background:#2a2416}}
+.hero-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hero-title{font-size:16px;line-height:1.4}
+.hero-btns{justify-content:flex-end}
+.tl-foot{justify-content:flex-end;margin-top:6px}
+.chips.small{margin-top:0;gap:6px}
+.chip.sm2{min-height:34px;padding:4px 12px;font-size:13px}
+.quick{padding:12px}
+.quick .row.field{margin:8px 0 0}
+.trow{display:flex;align-items:stretch;border-top:1px solid var(--line)}
+.trow:first-child{border-top:0}
+.check{width:48px;flex:none;border:0;background:none;color:var(--accent);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.check::before{content:"";width:22px;height:22px;border:2px solid var(--line);border-radius:7px;position:absolute}
+.check{position:relative}
+.check.on::before{background:var(--accent);border-color:var(--accent)}
+.check.on{color:#fff}
+.tmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:10px 12px 10px 0;border:0;background:none;color:var(--fg);font-family:inherit;text-align:left;cursor:pointer}
+.tname{font-size:15px}
+.tname.done{text-decoration:line-through;color:var(--muted)}
+.tmeta{font-size:12px;color:var(--muted)}
+.tmeta.over{color:var(--danger)}
+.pad{padding:12px 14px;margin:0}
+input.date{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);padding:8px 10px;min-height:44px;flex:1;min-width:0}
+details.group summary{padding:4px;cursor:pointer}
