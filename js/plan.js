@@ -83,9 +83,10 @@ export function outingMemoryKey(date, startMin) {
  * 移動: 当日の上書き(transitOverrides) > 記憶(settings.transitMemory) > 設定の片道(transitMin)。
  * 戻り値は busy に { out, outingSource, transitMin, transitSource } を足したもの。
  */
-export function decideOuting(busy, settings, date, overrides = {}, transitOverrides = {}) {
+export function decideOuting(busy, settings, date, overrides = {}, transitOverrides = {}, labelOverrides = {}) {
   const mem = settings.outingMemory || {};
   const tmem = settings.transitMemory || {};
+  const lmem = settings.busyMemory || {};
   const mode = settings.outingDefault || 'home';
   const dow = new Date(date + 'T00:00').getDay();
   const days = Array.isArray(settings.outingDays) ? settings.outingDays : [];
@@ -104,12 +105,17 @@ export function decideOuting(busy, settings, date, overrides = {}, transitOverri
     if (tov != null && Number.isFinite(+tov)) t = { transitMin: Math.max(0, +tov), transitSource: 'override' };
     else if (tmem[key] != null && Number.isFinite(+tmem[key])) t = { transitMin: Math.max(0, +tmem[key]), transitSource: 'memory' };
     else t = { transitMin: dflt, transitSource: 'default' };
-    return { ...b, ...o, ...t };
+    // 予定のラベル(v0.8): 内容は読めないので、ユーザーがテンプレ(カテゴリ)から選んだものを当日の指定 > 記憶 で当てる
+    const lov = labelOverrides[b.id];
+    const lab = typeof lov === 'string' ? { categoryId: lov || null, labelSource: 'override' } : typeof lmem[key] === 'string' ? { categoryId: lmem[key] || null, labelSource: 'memory' } : { categoryId: null, labelSource: 'none' };
+    return { ...b, ...o, ...t, ...lab };
   });
 }
 
 /**
- * 外出判定(§6.3)。busy: [{id,start,end,out,transitMin}]。out=true で、日中(作業開始+1h〜18:00)にある outingMinBusyMin 分以上の busy が候補。
+ * 外出判定(§6.3)。busy: [{id,start,end,out,outingSource,transitMin}]。
+ * 既定・曜日で外出になった予定は「日中(作業開始+1h〜18:00)にある outingMinBusyMin 分以上」だけを候補にする(通知だけの短い予定を外出にしない)。
+ * ユーザーが選んだ外出(当日の指定・記憶)は長さ・時間帯に関係なく必ず候補(v0.8: 「外出を選んでも移動が出ない」の修正)。
  * 候補同士の間隔が 片道×2 未満なら同じグループ(間に帰らない)。グループの前の移動は最初の予定の片道、後の移動は最後の予定の片道。
  */
 export function groupOuting(busy, settings, W) {
@@ -118,7 +124,8 @@ export function groupOuting(busy, settings, W) {
   const minLen = +settings.outingMinBusyMin > 0 ? +settings.outingMinBusyMin : 45;
   const dflt = +settings.transitMin > 0 ? +settings.transitMin : 0;
   const tmOf = (b) => (b.transitMin != null && Number.isFinite(+b.transitMin) ? Math.max(0, +b.transitMin) : dflt);
-  const cands = (busy || []).filter((b) => b.out === true && b.end - b.start >= minLen && b.start < dayEnd && b.end > dayStart).sort((a, b) => a.start - b.start);
+  const explicit = (b) => b.outingSource === 'override' || b.outingSource === 'memory';
+  const cands = (busy || []).filter((b) => b.out === true && (explicit(b) || (b.end - b.start >= minLen && b.start < dayEnd && b.end > dayStart))).sort((a, b) => a.start - b.start);
   const groups = [];
   for (const b of cands) {
     const g = groups[groups.length - 1];
@@ -203,6 +210,7 @@ export function buildPlan(opts, ctx) {
   const skipped = opts.skipped || prev?.skipped || [];
   const overrides = opts.overrides || {};
   const transitOverrides = opts.transitOverrides || {};
+  const labelOverrides = opts.labelOverrides || {};
   const W = windowFor(settings, date);
   const out = { date, generatedAt: ctx.nowISO(), confirmedAt: prev?.confirmedAt ?? null, blocks: [], shortfall: [], skipped: skipped.slice() };
   if (!W) return out;
@@ -210,8 +218,9 @@ export function buildPlan(opts, ctx) {
   const uid = () => ctx.uid();
   const fixed = [];
   // 1. busy(在宅/外出・片道の判定つき)
-  const busy = decideOuting((opts.busy || []).filter((b) => b.end > b.start), settings, date, overrides, transitOverrides);
-  for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: '予定', busyId: b.id, out: b.out, outingSource: b.outingSource, transitMin: b.transitMin, transitSource: b.transitSource });
+  const busy = decideOuting((opts.busy || []).filter((b) => b.end > b.start), settings, date, overrides, transitOverrides, labelOverrides);
+  const catName = (id) => (settings.categories || []).find((c) => c.id === id)?.name || null;
+  for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: (b.categoryId && catName(b.categoryId)) || '予定', busyId: b.id, out: b.out, outingSource: b.outingSource, transitMin: b.transitMin, transitSource: b.transitSource, categoryId: b.categoryId || null, labelSource: b.labelSource });
   // 2. transit(外出グループの前後。長さは予定ごと: 当日の指定 > 記憶 > 設定の片道)
   for (const g of groupOuting(busy, settings, W)) {
     if (g.before > 0) fixed.push({ id: uid(), type: 'transit', start: Math.max(0, g.start - g.before), end: g.start, name: '移動', busyId: g.firstId, groupIds: g.ids });

@@ -6,11 +6,20 @@ const alive = (x) => x && !x.deletedAt;
 const kindOf = (categories, id) => (categories || []).find((c) => c.id === id)?.kind || (id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' ? 'life' : 'work');
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
 
-/** plan のブロックをカテゴリ別の分に(task/habit→categoryId、rest→rest、routine→life、transit→transit。busy は数えない) */
+/** plan のブロックが属するカテゴリ(task/habit→categoryId、rest→rest、routine→life、transit→transit、busy はラベルがあればそのカテゴリ、無ければ null) */
+export function blockCategory(b) {
+  if (b.type === 'task' || b.type === 'habit') return b.categoryId || 'other';
+  if (b.type === 'rest') return 'rest';
+  if (b.type === 'routine') return 'life';
+  if (b.type === 'transit') return 'transit';
+  if (b.type === 'busy') return b.categoryId || null;
+  return null;
+}
+/** plan のブロックをカテゴリ別の分に(ラベルの無い busy は数えない) */
 export function plannedByCategory(plan) {
   const out = {};
   for (const b of plan?.blocks || []) {
-    const id = b.type === 'task' || b.type === 'habit' ? (b.categoryId || 'other') : b.type === 'rest' ? 'rest' : b.type === 'routine' ? 'life' : b.type === 'transit' ? 'transit' : null;
+    const id = blockCategory(b);
     if (!id) continue;
     out[id] = (out[id] || 0) + (b.end - b.start);
   }
@@ -81,13 +90,14 @@ function restOverlap(plan, entries, date, categories, nowMin) {
 export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
   const categories = settings?.categories || [];
   const planned = plannedByCategory(plan);
+  const busyPlanned = plannedByCategory({ blocks: (plan?.blocks || []).filter((b) => b.type === 'busy') }); // ラベル付きの予定の分(入らなくても責めない)
   const actual = totalsByCategory(entries, date, nowMin);
   const base = baseline(entries, date);
   const ids = new Set([...Object.keys(planned), ...Object.keys(actual), ...Object.keys(base?.byCategory || {})]);
   const by = {};
   let workMin = 0, driftMin = 0, restMin = 0, baselineWorkMin = 0;
   for (const id of ids) {
-    const row = { planned: planned[id] || 0, actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: kindOf(categories, id), name: nameOf(categories, id) };
+    const row = { planned: planned[id] || 0, busyPlanned: busyPlanned[id] || 0, actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: kindOf(categories, id), name: nameOf(categories, id) };
     by[id] = row;
     if (row.kind === 'work') { workMin += row.actual; baselineWorkMin += row.baseline || 0; }
     if (row.kind === 'drift') driftMin += row.actual;
@@ -129,7 +139,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
 
   const imp = [];
   for (const [, r] of Object.entries(by)) {
-    if (agg.hasPlan && r.planned >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}は今日は入りませんでした` });
+    if (agg.hasPlan && r.planned - (r.busyPlanned || 0) >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}は今日は入りませんでした` });
     if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} でした(先週平均 ${fmtMinJa(r.baseline)})` });
   }
   if (agg.unloggedMin >= 60) imp.push({ d: 0, text: `未記録が ${fmtMinJa(agg.unloggedMin)} ありました` });

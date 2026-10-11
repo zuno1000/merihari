@@ -3,6 +3,7 @@
 import * as store from './store.js';
 import { gfetch, getToken, isConnected, savedToken, loadGis } from './google.js';
 import { el, sheet, toast } from './ui.js';
+import * as passkey from './passkey.js';
 
 export const DRIVE_FILE = 'merihari.enc';
 const PASS_KEY = 'merihari.pass';
@@ -113,16 +114,19 @@ function askPass({ hint = '', isNew = false } = {}) {
   return new Promise((res, rej) => {
     const inp = el('input.text', { type: 'password', autocomplete: 'off', placeholder: '8文字以上' });
     const hintIn = isNew ? el('input.text', { type: 'text', autocomplete: 'off', placeholder: '例: いつもの合言葉', maxlength: 80 }) : null;
+    const pk = passkey.supported() && !passkey.enrolled() ? el('input', { type: 'checkbox', checked: true }) : null;
     let done = false;
     sheet((close) => [
       el('h2', isNew ? '同期用のパスフレーズを決める' : '同期用のパスフレーズ'),
-      el('p.muted.small', isNew ? 'Drive に置く前に端末内で暗号化します。忘れると復元できません。このセッションの間だけ記憶します。' : 'このセッションの間だけ記憶します(閉じれば消えます)。'),
+      el('p.muted.small', isNew ? 'Drive に置く前に端末内で暗号化します。忘れると復元できません。' : 'このセッションの間だけ記憶します(閉じれば消えます)。'),
       hint && !isNew ? el('p.small', `ヒント: ${hint}`) : null,
-      el('div.col', [el('label.field.col', [el('span.label', 'パスフレーズ'), inp]), hintIn ? el('label.field.col', [el('span.label', 'ヒント(平文で保存・秘密は書かない)'), hintIn]) : null]),
+      el('div.col', [el('label.field.col', [el('span.label', 'パスフレーズ'), inp]), hintIn ? el('label.field.col', [el('span.label', 'ヒント(平文で保存・秘密は書かない)'), hintIn]) : null,
+        pk ? el('label.row.field', [pk, el('span.small', '次回からこの端末では 顔認証 / パスキー で開く(パスキーの中の秘密で包んで保存)')]) : null]),
       el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
-        el('button.btn.primary.grow', { type: 'button', onclick: () => {
+        el('button.btn.primary.grow', { type: 'button', onclick: async () => {
           const v = inp.value;
           if (v.length < 8) { toast('8文字以上にしてください'); return; }
+          if (pk?.checked) { try { if (!(await passkey.enroll(v))) toast('このブラウザのパスキーは対応していません(今回は手入力のみ)'); } catch (e) { toast(e.name === 'NotAllowedError' ? 'パスキーは登録しませんでした' : e.message); } }
           done = true; setPass(v); close(); res({ pass: v, hint: hintIn ? hintIn.value.trim() : hint });
         } }, '続ける')]),
     ], () => { if (!done) rej(new Error('パスフレーズの入力をやめました')); });
@@ -174,6 +178,10 @@ export async function syncDrive({ interactive = false } = {}) {
     let remoteTxt = null, hint = '';
     if (file) { remoteTxt = await download(file.id, interactive); hint = readHint(remoteTxt); }
     let pass = getPass();
+    if (!pass && interactive && passkey.enrolled()) {
+      // v0.8: 顔認証/パスキーで包んだパスフレーズをほどく(ユーザー操作の中)。キャンセルや失敗なら手入力へ
+      try { pass = await passkey.unlock(); if (pass) setPass(pass); } catch (e) { console.warn('passkey unlock', e); toast(e.name === 'NotAllowedError' ? 'パスキーをキャンセルしました。手入力へ' : e.message); }
+    }
     if (!pass) {
       if (!interactive) return 'skip';
       ({ pass, hint } = await askPass({ hint, isNew: !file }));

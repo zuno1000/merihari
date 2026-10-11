@@ -278,3 +278,8 @@ details.group summary{padding:4px;cursor:pointer}
 p.gap{margin-top:14px}
 .sheet .chips.small{margin-top:10px}
 @media (prefers-color-scheme:dark){.btn.primary{box-shadow:none}}
+
+/* ---- v0.8: ギャップ「この時間は?」・予定のラベル ---- */
+.blk.gap{background:none;border:1px dashed var(--line);border-left:1px dashed var(--line);color:var(--muted);align-items:center;justify-content:center;z-index:0}
+.blk.gap .blk-name{font-weight:500;font-size:12px}
+.blk.gap:active{background:var(--accent-bg)}

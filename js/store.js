@@ -48,6 +48,7 @@ export function defaultSettings() {
     outingMemory: {},        // '曜日:開始分' → 'home'|'out'(予定をタップしたときに覚える)
     outingMinBusyMin: 45,
     transitMemory: {},       // '曜日:開始分' → 片道の分(予定をタップして移動の長さを変えたときに覚える)
+    busyMemory: {},          // '曜日:開始分' → categoryId(予定が何かをテンプレから選んだときに覚える。'' は指定なし)
     habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }],
     restEvery: { workMin: 90, restMin: 10 },
     // 長い休憩(v0.7): 時刻固定ではなく、その日の作業が longAfterMin 進んだところ(作業が少ない日は 6 割あたり)に longMin 置く
@@ -73,7 +74,7 @@ export function defaultData() {
 }
 
 export function defaultLocal() {
-  return { busyCache: null, outingOverride: {}, transitOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
+  return { busyCache: null, outingOverride: {}, transitOverride: {}, busyLabelOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
 }
 
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
@@ -104,6 +105,8 @@ function normalizeSettings(raw) {
   if (isObj(raw.outingMemory)) for (const [k, v] of Object.entries(raw.outingMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && (v === 'home' || v === 'out')) s.outingMemory[k] = v;
   delete s.outingByBusy;
   s.outingMinBusyMin = posInt(raw.outingMinBusyMin, d.outingMinBusyMin);
+  s.busyMemory = {};
+  if (isObj(raw.busyMemory)) for (const [k, v] of Object.entries(raw.busyMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && typeof v === 'string' && v.length <= 40) s.busyMemory[k] = v;
   s.transitMemory = {};
   if (isObj(raw.transitMemory)) for (const [k, v] of Object.entries(raw.transitMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && Number.isFinite(+v) && +v >= 0 && +v <= 300) s.transitMemory[k] = Math.round(+v);
   s.habits = Array.isArray(raw.habits)

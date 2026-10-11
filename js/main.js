@@ -7,13 +7,15 @@ import * as plan from './plan.js';
 import * as report from './report.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
+import * as passkey from './passkey.js';
 import { toast } from './ui.js';
 import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.8.0';
 export const NEWS = [
+  { v: '0.8.0', text: '外出を選んだ予定は長さや時間帯に関係なく前後に移動を置くように修正(既定の片道で。長さは予定をタップして調整)。予定をタップして「この予定は?」をテンプレ(カテゴリ)から選ぶと色と名前が付き、同じ曜日・時刻で記憶、「今」ではそのカテゴリをワンタップで記録。同期のパスフレーズを 顔認証 / パスキー で開ける(任意・設定 › Google)。レポートを簡素化(一言・作業の合計・カテゴリ別だけ。帯や推移は「くわしく」へ)。確定後のレポートを再計算。タイムラインの未記録に「この時間は?」。' },
   { v: '0.7.0', text: '予定(または移動)をタップして移動の長さを変えられます(同じ曜日・時刻で記憶。既定は 設定 › 移動)。休憩は「夜の休憩」の時刻固定をやめ、作業の量と進み具合から理想スケジュールが置きます(作業◯分ごとの短い休憩+1日1回の長めの休憩。設定 › 休憩の方針)。理想ブロックの長さ −15/+15/+30。自動同期: 開いたときに鍵があれば静かに、無ければ最初のタップで同期し、他の端末の記録を取り込んだら画面を描き直します。見た目を整理(やわらかい配色・大きめの主ボタン)。' },
   { v: '0.6.0', text: '画面を 今 / タイムライン / タスク / 設定 の4つに。記録は右下の ＋ から(チップはシートの中)。タイムラインは ‹ › で前後の日(未来は見通し)。カレンダーの予定は原則「在宅」、タイムラインで予定をタップして在宅/外出を選ぶと曜日と時刻で覚えます(設定で 曜日で決める/原則外出 も)。期限までにやることを空いた作業枠に細分化して入れます。タスクは日付と時間で正確に。設定に「使い方」。同期データの検証を強化。' },
   { v: '0.5.2', text: 'パスフレーズやタスク編集の縦書き崩れを修正(レポートの柱グラフと CSS クラス名が衝突)。タスクの見出しを「今日やる分 / 期限まで余裕のある義務 / やりたいこと」にして説明を添えました。' },
@@ -139,5 +141,6 @@ window.M = {
   report,
   sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
+  passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

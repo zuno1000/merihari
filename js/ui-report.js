@@ -1,7 +1,7 @@
-// merihari ─ ui-report.js: 日次レポートの画面(F3-4 を図中心に)。
-// 構成: 一言 → ヒーロー数字(作業)+タイル → 1日の帯(理想/実績)→ カテゴリ別ブレット → 7日間の推移 → ことば → 詳細(表)
+// merihari ─ ui-report.js: 日次レポートの画面(F3-4)。v0.8 で簡素化。
+// 構成: 一言 → 作業の合計(先週比)→ カテゴリ別ブレット → ことば → 「くわしく」(タイル・1日の帯・7日間の推移・表・再計算)
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
-import { el, sheet } from './ui.js';
+import { el, sheet, toast } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as report from './report.js';
@@ -39,20 +39,30 @@ export function reportSheet(date) {
   const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, ...daySummary(k, k === today ? nowMin : 1440) }));
 
   const title = isToday ? '今日のレポート' : `${md(date)}(${DAY_JA[weekday(date)]})のレポート`;
-  sheet((close) => [
+  let close;
+  const recompute = () => {
+    d.reports[date] = report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
+    d.ledger[date] = report.ledgerFor(d.settings, date, report.aggregate({ entries: d.entries, plan: d.plans[date] || null, date, nowMin, settings: d.settings }));
+    store.save(); toast('いまの記録で計算し直しました'); close(); reportSheet(date);
+  };
+  close = sheet((c) => { close = c; return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点・翌朝に確定' : '未確定')]),
     el('p.rep-lead', r.positive[0]),
-    kpis(r, baseWork, baseDrift),
-    dayStrip(plan, entries, W, nowMin, isToday),
+    heroFigure(r, baseWork),
     bullets(r),
-    trend(days, date),
     words(r),
-    details(r, days),
-    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: close }, '閉じる')),
-  ]);
+    el('details.rep-details', [el('summary.muted.small', 'くわしく'),
+      tiles(r, baseDrift),
+      dayStrip(plan, entries, W, nowMin, isToday),
+      trend(days, date),
+      tables(r, days),
+      r.finalizedAt ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: recompute }, 'いまの記録で再計算')) : null,
+    ]),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]; });
 }
 
-// ---- KPI: ヒーロー数字 + タイル ----
+// ---- 作業の合計(ヒーロー数字)と先週比 ----
 function delta(cur, base, upGood) {
   if (base == null) return el('span.kpi-delta.muted', '先週の記録なし');
   const diff = cur - base;
@@ -60,17 +70,18 @@ function delta(cur, base, upGood) {
   const good = upGood ? diff > 0 : diff < 0;
   return el('span.kpi-delta', { style: { color: statusColor(good ? 'good' : 'bad') } }, `${diff > 0 ? '▲' : '▼'} ${fmtMin(Math.abs(diff))} 先週平均比`);
 }
-function kpis(r, baseWork, baseDrift) {
+function heroFigure(r, baseWork) {
+  return el('section.kpis', el('div.kpi.hero-figure', [el('span.kpi-label', '作業の合計'), el('b.kpi-value.big', fmtMin(r.workMin) || '0m'), delta(r.workMin, baseWork, true)]));
+}
+// ---- タイル(くわしく) ----
+function tiles(r, baseDrift) {
   const cov = Math.round((r.coverage || 0) * 100);
-  return el('section.kpis', [
-    el('div.kpi.hero-figure', [el('span.kpi-label', '作業の合計'), el('b.kpi-value.big', fmtMin(r.workMin) || '0m'), delta(r.workMin, baseWork, true)]),
-    el('div.kpi-row', [
-      el('div.kpi', [el('span.kpi-label', 'SNS・動画'), el('b.kpi-value', fmtMin(r.driftMin)), delta(r.driftMin, baseDrift, false)]),
-      el('div.kpi', [el('span.kpi-label', '記録カバー率'), el('b.kpi-value', `${cov}%`),
-        el('div.meter', { role: 'img', 'aria-label': `記録カバー率 ${cov}%` }, el('i', { style: { width: `${cov}%` } })),
-        el('span.kpi-delta.muted', `未記録 ${fmtMin(r.unloggedMin)}`)]),
-      el('div.kpi', [el('span.kpi-label', '続けて記録'), el('b.kpi-value', [String(r.streak), el('small', ' 日')]), el('span.kpi-delta.muted', r.streak >= 2 ? '続いています' : '今日から')]),
-    ]),
+  return el('div.kpi-row', [
+    el('div.kpi', [el('span.kpi-label', 'SNS・動画'), el('b.kpi-value', fmtMin(r.driftMin)), delta(r.driftMin, baseDrift, false)]),
+    el('div.kpi', [el('span.kpi-label', '記録カバー率'), el('b.kpi-value', `${cov}%`),
+      el('div.meter', { role: 'img', 'aria-label': `記録カバー率 ${cov}%` }, el('i', { style: { width: `${cov}%` } })),
+      el('span.kpi-delta.muted', `未記録 ${fmtMin(r.unloggedMin)}`)]),
+    el('div.kpi', [el('span.kpi-label', '続けて記録'), el('b.kpi-value', [String(r.streak), el('small', ' 日')]), el('span.kpi-delta.muted', r.streak >= 2 ? '続いています' : '今日から')]),
   ]);
 }
 
@@ -84,7 +95,7 @@ function dayStrip(plan, entries, W, nowMin, isToday) {
   lo = Math.floor(lo / 60) * 60; hi = Math.min(1440, Math.ceil(hi / 60) * 60);
   const span = Math.max(60, hi - lo);
   const pct = (m) => ((m - lo) / span) * 100;
-  const caption = el('p.strip-caption.muted.small', isToday ? 'セグメントをタップすると時間が出ます' : 'セグメントをタップすると時間が出ます');
+  const caption = el('p.strip-caption.muted.small', 'タップすると時間が出ます');
   const segs = [];
   const seg = (start, end, color, label, cls = '') => {
     const s = el('button.sseg', { type: 'button', class: `sseg ${cls}`, title: `${mm(start)}〜${mm(end)} ${label}`,
@@ -94,7 +105,7 @@ function dayStrip(plan, entries, W, nowMin, isToday) {
     return s;
   };
   const planRow = el('div.strip-track', blocks.map((b) => {
-    const id = b.type === 'task' || b.type === 'habit' ? (b.categoryId || 'other') : b.type === 'rest' ? 'rest' : b.type === 'routine' ? 'life' : b.type === 'transit' ? 'transit' : null;
+    const id = report.blockCategory(b);
     return seg(b.start, b.end, id ? colorOf(id) : '#9aa0b4', b.name || (id ? catOf(id).name : '予定'), b.type === 'busy' || b.type === 'routine' || b.type === 'transit' ? 'faint' : '');
   }));
   const logRow = el('div.strip-track', entries.map((e) => seg(hm(e.start), endOf(e), colorOf(e.categoryId), catOf(e.categoryId).name + (e.note ? `・${e.note}` : ''))));
@@ -103,7 +114,7 @@ function dayStrip(plan, entries, W, nowMin, isToday) {
   let lastTick = lo;
   for (let h = lo; h <= hi; h += 180) { ticks.push(el('span', { style: { left: `${pct(h)}%` } }, mm(h))); lastTick = h; }
   if (hi - lastTick >= 120) ticks.push(el('span', { style: { left: '100%' } }, mm(hi)));
-  const used = new Set([...blocks.map((b) => (b.type === 'task' || b.type === 'habit' ? b.categoryId || 'other' : b.type === 'rest' ? 'rest' : b.type === 'routine' ? 'life' : b.type === 'transit' ? 'transit' : null)).filter(Boolean), ...entries.map((e) => e.categoryId)]);
+  const used = new Set([...blocks.map(report.blockCategory).filter(Boolean), ...entries.map((e) => e.categoryId)]);
   const order = S().categories.slice().sort((a, b) => a.order - b.order).map((c) => c.id).filter((id) => used.has(id));
   for (const id of used) if (!order.includes(id)) order.push(id);
   return el('figure.fig', [
@@ -125,7 +136,7 @@ function bullets(r) {
   const max = Math.max(30, ...rows.map((x) => Math.max(x.planned, x.actual, x.baseline || 0))) * 1.08;
   const w = (m) => `${Math.min(100, (m / max) * 100)}%`;
   return el('figure.fig', [
-    el('figcaption', 'カテゴリ別 ─ 実績と理想、先週の平均'),
+    el('figcaption', 'カテゴリ別'),
     el('div.bullets', rows.map((x) => el('div.bullet', { title: `${catOf(x.id).name}: 実績 ${fmtMin(x.actual)} / 理想 ${fmtMin(x.planned)}${x.baseline != null ? ` / 先週 ${fmtMin(x.baseline)}` : ''}` }, [
       el('span.bullet-name', [el('i.dot', { style: { background: colorOf(x.id) } }), catOf(x.id).name]),
       el('div.bullet-track', [
@@ -156,10 +167,10 @@ function trend(days, date) {
       })),
     ]);
   };
-  const workColor = displayColor(S().categories.find((c) => c.kind === 'work')?.color) ;
+  const workColor = displayColor(S().categories.find((c) => c.kind === 'work')?.color);
   const driftColor = displayColor(S().categories.find((c) => c.kind === 'drift')?.color);
   return el('figure.fig', [
-    el('figcaption', '7日間の推移 ─ この日を色で強調'),
+    el('figcaption', '7日間の推移'),
     el('div.trends', [chart('作業', 'workMin', workColor || 'var(--accent)'), chart('SNS・動画', 'driftMin', driftColor || 'var(--danger)')]),
   ]);
 }
@@ -175,11 +186,11 @@ function words(r) {
   ]);
 }
 
-// ---- 詳細(表: 図の双子) ----
-function details(r, days) {
+// ---- 表(図の双子) ----
+function tables(r, days) {
   const rows = Object.entries(r.byCategory).map(([id, v]) => ({ id, ...v })).filter((x) => x.planned || x.actual || x.baseline).sort((a, b) => b.actual - a.actual);
   const cell = (t, cls = '') => el('span', { class: `td ${cls}` }, t);
-  return el('details.rep-details', [el('summary.muted.small', '数字で見る(表)'),
+  return el('div', [
     el('div.table', [
       el('div.tr.th', [cell('カテゴリ'), cell('理想', 'num'), cell('実績', 'num'), cell('先週', 'num')]),
       ...rows.map((x) => el('div.tr', [cell(catOf(x.id).name), cell(x.planned ? fmtMin(x.planned) : '–', 'num'), cell(x.actual ? fmtMin(x.actual) : '–', 'num'), cell(x.baseline ? fmtMin(x.baseline) : '–', 'num')])),
@@ -191,7 +202,6 @@ function details(r, days) {
     el('div.list', [
       el('div.srow.plain', [el('span.lbl', '記録できた時間'), el('span.val', fmtMinJa(r.loggedMin))]),
       el('div.srow.plain', [el('span.lbl', '未記録'), el('span.val', fmtMinJa(r.unloggedMin))]),
-      el('div.srow.plain', [el('span.lbl', '記録カバー率'), el('span.val', `${Math.round(r.coverage * 100)}%`)]),
     ]),
   ]);
 }
