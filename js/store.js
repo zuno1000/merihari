@@ -69,7 +69,7 @@ export function defaultData() {
 }
 
 export function defaultLocal() {
-  return { busyCache: null, outingOverride: {}, uiState: { tab: 'today' }, pendingSync: false };
+  return { busyCache: null, outingOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
 }
 
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
@@ -168,7 +168,10 @@ export function init() {
 }
 
 export function save() {
-  try { writeJSON(KEY, state.data); } catch (e) { state.onSaveError?.(e); }
+  try {
+    writeJSON(KEY, state.data);
+    if (state.local && !state.local.pendingSync) { state.local.pendingSync = true; writeJSON(LOCAL_KEY, state.local); }
+  } catch (e) { state.onSaveError?.(e); }
 }
 export function saveLocal() {
   try { writeJSON(LOCAL_KEY, state.local); } catch (e) { state.onSaveError?.(e); }

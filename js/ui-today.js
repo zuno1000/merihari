@@ -6,6 +6,8 @@ import * as plan from './plan.js';
 import * as report from './report.js';
 import { reportSheet } from './ui-report.js';
 import { displayColor } from './palette.js';
+import * as google from './google.js';
+import * as sync from './sync.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, DAY_JA, weekday, addDays } from './time.js';
 
@@ -31,6 +33,7 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   commit(r.entries);
   const nm = extra.taskId && T()[extra.taskId] ? T()[extra.taskId].name : catOf(categoryId).name;
   toast(startMin == null ? `${nm} を開始` : `${mm(startMin)} から ${nm}`);
+  sync.autoSync();
   return r;
 }
 export function stopRecording(at = null) {
@@ -39,16 +42,20 @@ export function stopRecording(at = null) {
   if (!r.closed) { toast('記録中のものはありません'); return r; }
   commit(r.entries);
   toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} を終了`);
+  sync.autoSync();
   return r;
 }
 
 // ---- plan(F2-1 / F2-7) ----
-function planOpts(n, extra = {}) { return { settings: S(), date: n.date, nowMin: n.min, tasks: T(), entries: E(), busy: [], ensureMin: report.untouchedNear(T(), E(), n.date).map((t) => t.id), ...extra }; }
+function planOpts(n, extra = {}) { return { settings: S(), date: n.date, nowMin: n.min, tasks: T(), entries: E(), busy: google.busyForDate(n.date), overrides: store.state.local.outingOverride?.[n.date] || {}, ensureMin: report.untouchedNear(T(), E(), n.date).map((t) => t.id), ...extra }; }
 function ensurePlan(n) {
   const w = windowFor(S(), n.date);
   if (!w || n.min < w.start) return P()[n.date] || null;
   let p = P()[n.date];
-  if (!p) {
+  // 未確認の提案は、あとから届いた予定(busy)で組み直す(F6-3: 朝の plan 生成時に静かに取得)
+  const fetchedAt = store.state.local.busyCache?.fetchedAt || 0;
+  const stale = p && !p.confirmedAt && fetchedAt && p.generatedAt && new Date(p.generatedAt).getTime() < fetchedAt;
+  if (!p || stale) {
     p = plan.buildPlan(planOpts(n), LCTX);
     p.updatedAt = store.nowISO();
     P()[n.date] = p; store.save();
@@ -146,7 +153,7 @@ export function renderToday(view, ctx) {
   const hero = buildHero(n, p, ctx, rerender);
   const chips = buildChips(n, rerender);
   const tl = buildTimeline(n, p, rerender);
-  view.append(head, hero.node, yesterdayLine(n, rerender), chips, reportLink(n), tl.node);
+  view.append(...[head, hero.node, freshLine(n, rerender), yesterdayLine(n, rerender), chips, reportLink(n), tl.node].filter(Boolean));
   let lastState = hero.key;
   ctx.setTick(() => {
     const m = nowInfo();
@@ -154,6 +161,23 @@ export function renderToday(view, ctx) {
     hero.tick(m); tl.tick(m);
     if (heroKey(m, P()[m.date]) !== lastState) { rerender(); }
   });
+}
+
+/** 鮮度と同期の1行(§4.1): 「予定は 6時間前のもの → 更新」「未同期の変更あり → 同期」。タップ=ユーザー操作なので認証ポップアップが通る */
+function freshLine(n, rerender) {
+  if (!google.isConnected()) return null;
+  const rows = [];
+  const f = google.freshness();
+  const w = windowFor(S(), n.date);
+  const busyText = !f.fetchedAt ? '予定は未取得' : f.ageMin >= 60 ? `予定は ${Math.floor(f.ageMin / 60)}時間前のもの` : null;
+  if (busyText && (!w || n.min < w.end)) rows.push(el('button.srow.fresh', { type: 'button', onclick: async () => {
+    try { toast('予定を取得中…'); await google.fetchBusy({ force: true, interactive: true }); toast('予定を更新しました'); rerender(); } catch (e) { toast(e.message); }
+  } }, [el('span.lbl', busyText + (f.error ? '(前回失敗)' : '')), el('span.grow'), el('span.val', '更新'), el('span.chev', '›')]));
+  const local = store.state.local;
+  if (local.pendingSync && (!local.lastSyncAt || Date.now() - local.lastSyncAt > 5 * 60000)) rows.push(el('button.srow.fresh', { type: 'button', onclick: async () => {
+    try { toast('同期中…'); const r = await sync.syncDrive({ interactive: true }); toast(r === 'ok' ? '同期しました' : '同期を見送りました'); rerender(); } catch (e) { toast(e.message); }
+  } }, [el('span.lbl', '未同期の変更あり'), el('span.grow'), el('span.val', '同期'), el('span.chev', '›')]));
+  return rows.length ? el('div.list.freshline', rows) : null;
 }
 
 /** 翌日の初回起動時に「昨日のレポート」を 1 行(タップで展開・× で消える) */
@@ -355,7 +379,7 @@ function buildTimeline(n, p, rerender) {
   for (let h = lo; h <= hi; h += 60) body.append(el('div.tl-hour', { style: { top: `${y(h)}px` } }, el('span', mm(h))));
   const planLane = el('div.lane.plan'), logLane = el('div.lane.log');
   for (const b of blocks) {
-    const editable = b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto);
+    const editable = b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy';
     planLane.append(block(b.start, b.end, { name: b.name, color: blockColor(b), muted: !(b.type === 'task' || b.type === 'habit'), onclick: editable ? () => planBlockSheet(b, n, rerender) : null, tag: TYPE_LABEL[b.type] }));
   }
   for (const e of entries) {
@@ -393,6 +417,7 @@ function buildTimeline(n, p, rerender) {
 /** 理想ブロックのメニュー(F2-8 の最小版: 今やる / 後ろへ / 今日はやらない) */
 function planBlockSheet(b, n0, rerender) {
   const n = nowInfo();
+  if (b.type === 'busy') return busyBlockSheet(b, n, rerender);
   const t = b.taskId ? T()[b.taskId] : null;
   sheet((close) => [
     el('h2', `${b.name} ${mm(b.start)}〜${mm(b.end)}`),
@@ -404,6 +429,27 @@ function planBlockSheet(b, n0, rerender) {
       b.type === 'rest' ? el('button.btn.block', { type: 'button', onclick: () => { close(); startCategory('rest'); rerender(); } }, '休憩を記録') : null,
       b.type === 'habit' ? el('button.btn.block', { type: 'button', onclick: () => { close(); replan(n, { deferHabit: b.habitId }); rerender(); } }, '後ろへ') : null,
     ]),
+  ]);
+}
+
+/** 予定(busy)の在宅/外出を当日だけ上書き(§6.3・端末ローカル) */
+function busyBlockSheet(b, n, rerender) {
+  const local = store.state.local;
+  const cur = local.outingOverride?.[n.date]?.[b.busyId];
+  const set = (v) => {
+    local.outingOverride = local.outingOverride || {};
+    local.outingOverride[n.date] = { ...(local.outingOverride[n.date] || {}), [b.busyId]: v };
+    store.saveLocal();
+    replan(n); rerender();
+  };
+  sheet((close) => [
+    el('h2', `予定 ${mm(b.start)}〜${mm(b.end)}`),
+    el('p.muted.small', 'カレンダーの予定(内容は読んでいません)。外出なら前後に移動時間を置きます。今日だけの切り替えです。'),
+    el('div.row', [
+      el('button.btn.grow', { type: 'button', class: `btn grow${cur === 'home' ? ' primary' : ''}`, onclick: () => { close(); set('home'); } }, '在宅'),
+      el('button.btn.grow', { type: 'button', class: `btn grow${cur === 'out' ? ' primary' : ''}`, onclick: () => { close(); set('out'); } }, '外出'),
+    ]),
+    cur ? el('div.row', el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); delete local.outingOverride[n.date][b.busyId]; store.saveLocal(); replan(n); rerender(); } }, '自動判定に戻す')) : null,
   ]);
 }
 

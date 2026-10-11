@@ -45,9 +45,10 @@ export function toast(msg) {
 }
 
 /** 下から出るシート。build(close) が返す要素を中に入れる。背景タップで閉じる */
-export function sheet(build) {
+export function sheet(build, onClose = null) {
   const ov = el('div.overlay', { role: 'dialog', 'aria-modal': 'true' });
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);

@@ -241,3 +241,9 @@ details.group summary{padding:4px;cursor:pointer}
 .tr{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:6px;padding:5px 0;border-top:1px solid var(--grid)}
 .tr.th{border-top:0;color:var(--muted);font-size:12px}
 .td.num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---- 鮮度と同期の1行 ---- */
+.freshline{margin:0 0 10px}
+.freshline .srow{padding:8px 10px 8px 14px;min-height:40px;font-size:14px}
+.freshline .lbl{color:var(--muted)}
+.freshline .val{flex:none;color:var(--accent);font-weight:600;font-size:14px}

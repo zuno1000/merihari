@@ -4,6 +4,8 @@ import { el, clear, toast, confirmSheet, DAY_JA } from './ui.js';
 import * as store from './store.js';
 import { hm } from './time.js';
 import { EXTRA_COLORS } from './palette.js';
+import * as google from './google.js';
+import * as sync from './sync.js';
 
 const S = () => store.state.data.settings;
 const DAYS7 = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -158,6 +160,33 @@ function sectionCategories(rerender) {
     }));
 }
 
+const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+function sectionGoogle(rerender) {
+  const local = store.state.local;
+  const connected = google.isConnected();
+  const f = google.freshness();
+  const run = async (label, fn) => { try { toast(label); await fn(); rerender(); } catch (e) { toast(e.message); rerender(); } };
+  google.loadGis().catch(() => {});
+  const cid = el('input.text', { type: 'text', value: local.clientIdOverride || '', placeholder: google.CLIENT_ID, autocomplete: 'off', onchange: (e) => { local.clientIdOverride = e.target.value.trim(); store.saveLocal(); } });
+  return card('Google', 'カレンダーは「予定の有無(free/busy)」だけを読み、タイトルや場所は取得しません。Drive はアプリ専用領域に端末で暗号化してから保存します。',
+    el('div.list', [
+      el('div.srow.plain', [el('span.lbl', '状態'), el('span.val', connected ? (google.savedToken() ? '接続済み(このセッション有効)' : '接続済み(次の操作で再認証)') : '未接続')]),
+      el('div.srow.plain', [el('span.lbl', '予定(busy)'), el('span.val', f.fetchedAt ? `${fmtTs(f.fetchedAt)} 取得・${local.busyCache.busy.length}件${f.error ? '・前回失敗' : ''}` : '未取得')]),
+      el('div.srow.plain', [el('span.lbl', '最終同期'), el('span.val', fmtTs(local.lastSyncAt) + (local.pendingSync ? '・未同期の変更あり' : ''))]),
+    ]),
+    el('div.row.wrap', { style: { marginTop: '10px' } }, connected ? [
+      el('button.btn', { type: 'button', onclick: () => run('予定を取得中…', async () => { await google.fetchBusy({ force: true, interactive: true }); toast('予定を取得しました'); }) }, '予定を取得'),
+      el('button.btn.primary', { type: 'button', onclick: () => run('同期中…', async () => { const r = await sync.syncDrive({ interactive: true }); toast(r === 'ok' ? '同期しました' : '同期を見送りました'); }) }, 'Drive と同期'),
+      el('button.btn.ghost', { type: 'button', onclick: () => confirmSheet('Google との接続を解除しますか?', 'この端末のトークンと予定のキャッシュを消します。Drive 上の暗号化ファイルは残ります。', '解除', () => { google.disconnect(); sync.forgetPass(); toast('解除しました'); rerender(); }, true) }, '接続を解除'),
+    ] : [
+      el('button.btn.primary.grow', { type: 'button', onclick: () => run('Google に接続中…', async () => { await google.getToken({ interactive: true }); try { await google.fetchBusy({ force: true, interactive: true }); } catch (e) { console.warn(e); } toast('接続しました'); }) }, '接続する'),
+    ]),
+    connected ? el('details', [el('summary.muted.small', 'パスフレーズ'),
+      el('p.muted.small', sync.getPass() ? 'このセッションでは記憶しています。' : 'まだ入力していません(同期のときに聞きます)。'),
+      el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => { sync.forgetPass(); toast('忘れました'); rerender(); } }, 'このセッションから忘れる')])]) : null,
+    el('details', [el('summary.muted.small', 'クライアント ID を上書き(通常は不要)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]));
+}
+
 const SECTIONS = {
   window: { title: '作業時間帯', build: () => sectionWindow() },
   routines: { title: '生活ルーティン', build: (re) => sectionRoutines(re) },
@@ -165,6 +194,7 @@ const SECTIONS = {
   rest: { title: '休憩の方針', build: () => sectionRest() },
   transit: { title: '移動', build: () => sectionTransit() },
   categories: { title: 'カテゴリ', build: (re) => sectionCategories(re) },
+  google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
 // ---- 一覧の行 ----
@@ -221,6 +251,19 @@ function renderSection(view, ctx, key) {
   draw();
 }
 
+function wipeSheet() {
+  const connected = google.isConnected();
+  sheet((close) => [
+    el('h2', 'データを消しますか?'),
+    el('p.muted', '設定・記録・タスクをすべて消します。書き出していなければ戻せません。'),
+    el('div.col', [
+      el('button.btn.block.danger', { type: 'button', onclick: () => { close(); store.wipe(); location.reload(); } }, connected ? 'この端末だけ消す(Drive は残す)' : '消す'),
+      connected ? el('button.btn.block.danger', { type: 'button', onclick: async () => { close(); try { toast('全端末に反映中…'); await sync.resetEverywhere(); store.wipe(); location.reload(); } catch (e) { toast('反映できませんでした: ' + e.message); } } }, 'Drive と全端末からも消す') : null,
+      el('button.btn.block.ghost', { type: 'button', onclick: close }, 'やめる'),
+    ]),
+  ]);
+}
+
 // ---- 設定の一覧 ----
 export function renderSettings(view, ctx, section = null) {
   view.classList.remove('section-view');
@@ -248,7 +291,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('移動', summary.transit(), open('transit')),
     ]),
     group('記録', [srow('カテゴリ', summary.categories(), open('categories'))]),
-    group('Google', [srow('カレンダー・Drive', '未接続(v0.5 で対応)')]),
+    group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', null, () => {
         const b = new Blob([store.exportJSON()], { type: 'application/json' });
@@ -256,7 +299,7 @@ export function renderSettings(view, ctx, section = null) {
         document.body.appendChild(a); a.click(); a.remove();
       }),
       srow('読み込み(JSON)', null, () => fileInput.click()), fileInput,
-      srow('この端末のデータを消す', null, () => confirmSheet('この端末のデータを消しますか?', '設定・記録・タスクをすべて消します。書き出していなければ戻せません。', '消す', () => { store.wipe(); location.reload(); }, true), { danger: true }),
+      srow('この端末のデータを消す', null, () => wipeSheet(), { danger: true }),
     ]),
     group('アプリ', [
       srow('バージョン', `v${ctx.version}・タップで更新を確認`, () => ctx.checkUpdate()),

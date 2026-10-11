@@ -5,13 +5,16 @@ import * as time from './time.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
 import * as report from './report.js';
+import * as google from './google.js';
+import * as sync from './sync.js';
 import { toast } from './ui.js';
 import { renderToday, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.4.1';
+export const APP_VERSION = '0.5.0';
 export const NEWS = [
+  { v: '0.5.0', text: 'Phase 4: Google 連携。カレンダーの予定あり/なし(free/busy)だけを読んで理想スケジュールに busy と移動を自動配置、予定をタップで在宅/外出の切替、鮮度の1行。Drive(appDataFolder)に端末側で暗号化して同期(パスフレーズはこのセッションだけ)、記録やタブ切替に乗せて静かに同期。' },
   { v: '0.4.1', text: 'レポートを図中心に(作業の合計と先週比・SNS・カバー率・連続日数のタイル、1日の帯で理想と実績を並べる、カテゴリ別ブレット、7日間の推移、表)。カテゴリの既定色を色覚でも見分けやすい組み合わせに更新(ダークモード対応)。' },
   { v: '0.4.0', text: 'Phase 3: 日次レポート(肯定的事実を先頭に・理想/実績/先週平均の横棒・翌朝に確定)、昨日のレポートの1行、朝の一言(手つかずの近い期限)、SNS・動画の「あと何分?」区切り、休憩の時間に今日の分の残り。' },
   { v: '0.3.0', text: 'Phase 2: 朝の理想スケジュール提案(生活ルーティン・習慣・夜の休憩・タスクの今日の分を自動配置)、理想レーン、ヒーローの状態機械(いまやること1つ+始める)、今から再計画、タスクのかんたん追加と「今日の分」。' },
@@ -40,6 +43,7 @@ function go(tab, arg) {
   store.saveLocal();
   screens[tab](arg);
   window.scrollTo(0, 0);
+  sync.autoSync();
 }
 tabs.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
@@ -79,6 +83,12 @@ const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'today' : (store.state.local.uiState?.tab || 'today')));
 if (!firstRun) { if (finalizePending()) screens[current](); checkOpenEntry(ctx); }
 
+// Google: 接続済みなら GIS を先読みし、トークンがあれば静かに予定を取り直す(F6-3)。変わったら今日を描き直す
+if (google.isConnected()) {
+  google.loadGis().catch(() => {});
+  google.fetchBusy().then((changed) => { if (changed && current === 'today') screens.today(); }).catch(() => {});
+}
+
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
 setInterval(() => { if (tickFn) tickFn(); }, 15000);
 document.addEventListener('visibilitychange', () => {
@@ -87,6 +97,8 @@ document.addEventListener('visibilitychange', () => {
   if (!store.state.data.meta.setupAt) return;
   finalizePending();
   if (!checkOpenEntry(ctx) && current === 'today') screens.today();
+  google.fetchBusy().then((changed) => { if (changed && current === 'today') screens.today(); }).catch(() => {});
+  sync.autoSync();
 });
 
 // Service Worker と更新確認(F8-2)
@@ -115,5 +127,7 @@ window.M = {
   log,
   plan,
   report,
+  sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint },
+  google: { busyIntervalsForDate: google.busyIntervalsForDate },
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

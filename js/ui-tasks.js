@@ -4,6 +4,7 @@ import * as store from './store.js';
 import * as plan from './plan.js';
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin } from './time.js';
 import { startCategory } from './ui-today.js';
+import { autoSync } from './sync.js';
 
 const T = () => store.state.data.tasks;
 const S = () => store.state.data.settings;
@@ -17,7 +18,7 @@ export function fmtH(min) {
 }
 const fmtDeadline = (key) => (key ? `${+key.slice(5, 7)}/${+key.slice(8, 10)}` : '期限なし');
 
-function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); }
+function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); autoSync(); }
 
 function deadlineOptions(today) {
   const dow = weekday(today);

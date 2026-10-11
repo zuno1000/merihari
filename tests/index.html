@@ -260,12 +260,55 @@ document.getElementById('app').addEventListener('load', async () => {
     const pEns = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { far: { id: 'far', name: '遠い', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30, categoryId: 'other' } }, entries: {}, ensureMin: ['far'] }, PC);
     ok(pEns.blocks.some((b) => b.taskId === 'far' && b.end - b.start === 30), 'buildPlan: ensureMin(朝の一言)で配分 0 のタスクにも 30 分だけ入れる');
 
+    // ---- sync.js(F7-4 マージ・暗号化)/ google.js(busy の切り出し) ----
+    log('\n# sync');
+    const Sy = M.sync, G = M.google;
+    const dA = { schema: 1, settings: { transitMin: 40, settingsUpdatedAt: '2026-10-11T10:00:00+09:00' },
+      entries: { e1: { id: 'e1', date: '2026-10-11', start: '09:00', end: '10:00', categoryId: 'research', updatedAt: '2026-10-11T10:00:00+09:00', deletedAt: null },
+                 e2: { id: 'e2', date: '2026-10-11', start: '10:00', end: '11:00', categoryId: 'sns', updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null } },
+      tasks: { t1: { id: 't1', name: 'A', updatedAt: '2026-10-11T09:00:00+09:00', deletedAt: null } },
+      plans: {}, reports: { '2026-10-10': { date: '2026-10-10', lines: ['a'], finalizedAt: null } }, ledger: { '2026-10-10': { usableMin: 500, workMin: 100 } },
+      meta: { resetAt: null, lastSyncAt: '2026-10-11T09:00:00+09:00', setupAt: '2026-10-11T08:00:00+09:00', appVersion: '0.5.0' }, extra: { x: 1 } };
+    const dB = { schema: 1, settings: { transitMin: 55, settingsUpdatedAt: '2026-10-11T12:00:00+09:00' },
+      entries: { e1: { id: 'e1', date: '2026-10-11', start: '09:00', end: '10:30', categoryId: 'research', updatedAt: '2026-10-11T10:30:00+09:00', deletedAt: null },
+                 e2: { id: 'e2', date: '2026-10-11', start: '10:00', end: '11:00', categoryId: 'sns', updatedAt: '2026-10-11T11:30:00+09:00', deletedAt: '2026-10-11T11:30:00+09:00' },
+                 e3: { id: 'e3', date: '2026-10-11', start: '12:00', end: '12:30', categoryId: 'rest', updatedAt: '2026-10-11T12:30:00+09:00', deletedAt: null } },
+      tasks: {}, plans: {}, reports: { '2026-10-10': { date: '2026-10-10', lines: ['b'], finalizedAt: '2026-10-11T07:00:00+09:00' } }, ledger: { '2026-10-10': { usableMin: 500, workMin: 120 } },
+      meta: { resetAt: null, lastSyncAt: '2026-10-11T12:00:00+09:00', setupAt: '2026-10-11T08:30:00+09:00', appVersion: '0.4.1' }, other: 2 };
+    const mAB = Sy.merge(dA, dB), mBA = Sy.merge(dB, dA);
+    ok(eq(mAB, mBA), 'merge: 対称 merge(a,b) == merge(b,a)');
+    ok(mAB.entries.e1.end === '10:30' && mAB.entries.e2.deletedAt && mAB.entries.e3 && mAB.tasks.t1, 'merge: id ごとに updatedAt の LWW・tombstone は残る・片側だけのものは残る');
+    ok(mAB.settings.transitMin === 55 && mAB.extra.x === 1 && mAB.other === 2, 'merge: settings は settingsUpdatedAt・未知キーは保持');
+    ok(mAB.reports['2026-10-10'].finalizedAt && mAB.ledger['2026-10-10'].workMin === 120, 'merge: reports は確定済み優先・ledger は決定的');
+    ok(mAB.meta.setupAt === '2026-10-11T08:00:00+09:00' && mAB.meta.lastSyncAt === '2026-10-11T12:00:00+09:00' && mAB.meta.appVersion === '0.5.0', 'merge: meta は setupAt 最古・lastSyncAt/appVersion 最新');
+    const tieA = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'a' } } }, tieB = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'b' } } };
+    ok(eq(Sy.merge(tieA, tieB), Sy.merge(tieB, tieA)) && Sy.merge(tieA, tieB).entries.e1.note === 'b', 'merge: updatedAt 同点は内容で決定的に選ぶ');
+    const resetB = { ...dB, meta: { ...dB.meta, resetAt: '2026-10-11T11:00:00+09:00' } };
+    const mR = Sy.merge(dA, resetB);
+    ok(!mR.entries.e1 && mR.entries.e2 && mR.entries.e3 && !mR.tasks.t1 && mR.meta.resetAt === '2026-10-11T11:00:00+09:00', 'merge: resetAt より古いレコードは全端末から消える(世代)');
+    ok(eq(Sy.merge(resetB, dA), mR), 'merge: resetAt を含めても対称');
+    const pr = Sy.pruneTombstones({ entries: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: { deletedAt: '2026-10-01T00:00:00+09:00' }, c: {} }, tasks: {} }, '2026-10-11T00:00:00+09:00');
+    ok(!pr.entries.a && pr.entries.b && pr.entries.c, 'pruneTombstones: 60 日より前の削除だけ掃除');
+    const enc = await Sy.encrypt({ hello: 'メリハリ', n: 1 }, 'correct horse battery', 'ヒント文', { iterations: 1000 }); // テストは軽い反復回数(本番は 310,000)
+    const encObj = JSON.parse(enc);
+    ok(encObj.v === 1 && encObj.kdf === 'PBKDF2-SHA256-1000' && encObj.iv && encObj.salt && !enc.includes('メリハリ'), 'encrypt: 平文を含まない・IV/salt 付き・kdf に反復回数');
+    ok(Sy.readHint(enc) === 'ヒント文', 'readHint: 平文ヒントだけ読める');
+    ok(eq(await Sy.decrypt(enc, 'correct horse battery'), { hello: 'メリハリ', n: 1 }), 'decrypt: 往復できる');
+    let bad = false; try { await Sy.decrypt(enc, 'wrong passphrase!'); } catch (e) { bad = /復号/.test(e.message); }
+    ok(bad, 'decrypt: 違うパスフレーズは失敗する');
+    const enc2 = await Sy.encrypt({ a: 1 }, 'correct horse battery', '', { iterations: 1000 });
+    ok(JSON.parse(enc2).iv !== encObj.iv, 'encrypt: IV は毎回ランダム');
+    const bz = G.busyIntervalsForDate([{ start: '2026-10-12T09:00:00+09:00', end: '2026-10-12T10:30:00+09:00' }, { start: '2026-10-11T23:00:00+09:00', end: '2026-10-12T01:00:00+09:00' }, { start: '2026-10-13T09:00:00+09:00', end: '2026-10-13T10:00:00+09:00' }], '2026-10-12');
+    ok(bz.length === 2 && bz[0].start === 0 && bz[0].end === 60 && bz[1].start === 540 && bz[1].end === 630, 'busyIntervalsForDate: その日の分だけ・日またぎは切り出す(ローカル時刻)');
+    const pB = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }], overrides: { A: 'home' } }, PC);
+    ok(!pB.blocks.some((b) => b.type === 'transit') && pB.blocks.some((b) => b.type === 'busy'), 'buildPlan: 在宅の上書きで移動を置かない(busy は残る)');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');
