@@ -1,4 +1,4 @@
-:root{--bg:#fbfaf7;--fg:#1f1f1c;--muted:#6b6b64;--line:#e4e1d8;--card:#fff;--accent:#2b6cb0;--accent-bg:#e8f0fa;--danger:#c53030;--danger-bg:#fdeaea;--shadow:0 1px 2px rgba(0,0,0,.06)}
+:root{--bg:#f5f6f9;--fg:#1f2130;--muted:#747a90;--line:#e6e8f0;--card:#fff;--accent:#2b6cb0;--accent-bg:#e8f0fa;--danger:#c53030;--danger-bg:#fdeaea;--shadow:0 2px 10px rgba(30,40,80,.06)}
 @media (prefers-color-scheme:dark){:root{--bg:#171716;--fg:#ecebe6;--muted:#a09f97;--line:#2e2e2b;--card:#1f1f1d;--accent:#7fb0e8;--accent-bg:#1c2a3a;--danger:#fc8181;--danger-bg:#3a1c1c;--shadow:none}}
 *{box-sizing:border-box;touch-action:manipulation}
 html{-webkit-text-size-adjust:100%}
@@ -17,7 +17,7 @@ p{margin:4px 0}
 #tabs button.on{color:var(--accent);font-weight:600}
 
 /* カード・ヒーロー */
-.card,.hero{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px;box-shadow:var(--shadow)}
+.card,.hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 12px;box-shadow:var(--shadow)}
 .hero{border-color:var(--accent-bg);background:linear-gradient(180deg,var(--accent-bg),var(--card) 90%)}
 .hero h1{margin:4px 0 6px}
 .wizard-head{margin:4px 0 12px}
@@ -57,8 +57,8 @@ summary{cursor:pointer;list-style-position:inside}
 .btn.block{display:block;width:100%;margin-top:10px}
 .btn:disabled{opacity:.45;cursor:default}
 .days{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:8px 14px;min-height:44px;cursor:pointer}
-.chip.sm{min-height:36px;min-width:36px;padding:4px 0;font-size:14px;width:36px;text-align:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:8px 14px;min-height:44px;cursor:pointer;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.chip.sm{min-height:36px;min-width:36px;padding:0;font-size:14px;width:36px;justify-content:center}
 .chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
 .dot{width:12px;height:12px;border-radius:50%;flex:none}
 
@@ -86,7 +86,6 @@ ul.news{margin:6px 0 0;padding-left:1.2em;font-size:13px;color:var(--muted)}
 .chips-wrap{margin:0 0 12px}
 .chips-wrap h2{margin:0}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.chip{display:inline-flex;align-items:center;gap:6px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .timeline{margin-top:4px}
 .lane-heads{display:grid;grid-template-columns:3.2em 1fr 1fr;gap:6px;font-size:13px;color:var(--muted);padding:0 0 4px}
 .lane-heads span:nth-child(3){color:var(--accent);font-weight:600}
@@ -104,3 +103,35 @@ button.blk{cursor:pointer}
 .blk-dur,.blk-note{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tl-now{position:absolute;left:3.2em;right:0;border-top:2px solid var(--danger);pointer-events:none;z-index:2}
 .tl-now span{position:absolute;right:0;top:-18px;font-size:11px;color:var(--danger);background:var(--bg);padding:0 4px;font-variant-numeric:tabular-nums}
+
+/* ---- 設定: 一覧(ラベル左/値右)と項目画面 ---- */
+.group{margin:0 0 16px}
+.group h2{font-size:12px;color:var(--muted);font-weight:600;margin:0 4px 6px;letter-spacing:.02em}
+.list{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+.srow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:none;color:var(--fg);font-family:inherit;font-size:15px;text-align:left;min-height:48px}
+.srow:first-child{border-top:0}
+button.srow{cursor:pointer}
+button.srow:active{background:var(--accent-bg)}
+.srow .lbl{flex:none;max-width:48%}
+.srow .val{flex:1;text-align:right;color:var(--muted);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .val.left{text-align:left;white-space:normal}
+.srow .chev{color:var(--muted);font-size:20px;line-height:1;flex:none}
+.srow.danger{color:var(--danger)}
+.srow.plain{font-size:13px}
+.news-box{margin:0;border-radius:0;box-shadow:none;border-left:0;border-right:0}
+.subhead{margin:4px 0 12px}
+.subhead h1{margin:0}
+.btn.back{padding-left:4px;font-size:15px}
+.section-view .card>h2{display:none}
+.seg{display:flex;background:var(--bg);border-radius:12px;padding:3px;margin:4px 0 10px}
+.seg button{flex:1;border:0;background:none;border-radius:10px;padding:8px 0;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;min-height:36px;font-family:inherit}
+.seg button.active{background:var(--card);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.label.w3{width:2.6em}
+
+/* ---- 今日: 上部の1行と記録中カード ---- */
+.today-head{display:flex;align-items:center;gap:10px;min-height:40px;margin:0 0 6px}
+.today-head b{font-size:17px}
+.now-card{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-left:4px solid;border-radius:14px;padding:6px 8px 6px 12px;margin:0 0 10px;box-shadow:var(--shadow)}
+.now-main{flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:0;background:none;color:var(--fg);font-family:inherit;font-size:16px;text-align:left;padding:4px 0;cursor:pointer}
+.now-main .sub{width:100%;font-size:12px}
+.note{margin:0 2px 8px}

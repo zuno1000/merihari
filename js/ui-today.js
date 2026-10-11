@@ -106,56 +106,49 @@ export function renderToday(view, ctx) {
 }
 
 function buildHero(n, ctx, rerender) {
+  // 上部は「日付 + 今日の合計 + 時刻を指定」の1行だけ。記録中のときだけ小さなカードを足す(タイムラインの場所を奪わない)
   const o = log.openEntry(E());
   const w = windowFor(S(), n.date);
   const totals = log.totalsByCategory(E(), n.date, n.min);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
-  const kicker = el('p.kicker', `${n.date.slice(5).replace('-', '/')}(${DAY_JA[weekday(n.date)]})`);
+  const head = el('div.today-head', [
+    el('b', `${n.date.slice(5).replace('-', '/')}(${DAY_JA[weekday(n.date)]})`),
+    el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
+    el('span.grow'),
+    el('button.btn.sm.ghost', { type: 'button', onclick: () => backfillSheet(n, null, rerender) }, '時刻を指定'),
+  ]);
   let tick = () => {};
-  let node;
+  const parts = [head];
   if (o) {
     const c = catOf(o.categoryId);
-    const elapsed = el('span.elapsed', fmtMinJa(log.elapsedMin(o, n.date, n.min)));
-    node = el('section.hero.recording', [
-      kicker,
-      el('h1', [el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' }), `${c.name} `, elapsed]),
-      el('p.muted', `${o.start} から記録中${o.date !== n.date ? '(前日から)' : ''}。別のことを始めるなら下のチップをタップ。`),
-      el('div.row', [
-        el('button.btn.grow', { type: 'button', onclick: () => { stopRecording(); rerender(); } }, '終わる'),
-        el('button.btn.ghost', { type: 'button', onclick: () => editEntrySheet(o.id, n, rerender) }, '時刻を直す'),
+    const elapsed = el('span.elapsed.muted', fmtMinJa(log.elapsedMin(o, n.date, n.min)));
+    parts.push(el('div.now-card', { style: { borderLeftColor: c.color } }, [
+      el('button.now-main', { type: 'button', onclick: () => editEntrySheet(o.id, n, rerender) }, [
+        el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('b', c.name), ' ', elapsed,
+        el('span.muted.small.sub', `${o.start} から${o.date !== n.date ? '(前日)' : ''}・タップで直す`),
       ]),
-    ]);
+      el('button.btn.sm', { type: 'button', onclick: () => { stopRecording(); rerender(); } }, '終わる'),
+    ]));
     tick = (m) => { elapsed.textContent = fmtMinJa(log.elapsedMin(o, m.date, m.min)); };
   } else if (w && n.min >= w.end) {
-    node = el('section.hero', [kicker, el('h1', '今日はおしまい'),
-      el('p.muted', total ? `今日の記録は合計 ${fmtMinJa(total)}。おつかれさまでした。` : '今日は記録がありませんでした。それでも大丈夫。'),
-      el('p.muted.small', '日次レポートは v0.4 で届きます。')]);
+    parts.push(el('p.muted.small.note', total ? `今日はおしまい。記録は合計 ${fmtMinJa(total)}。おつかれさまでした。` : '今日はおしまい。記録がなくても大丈夫。'));
   } else if (w && n.min < w.start) {
-    node = el('section.hero', [kicker, el('h1', 'おはよう'), el('p.muted', `作業時間帯は ${mm(w.start)} から。始めたら下のチップをタップ。`)]);
-  } else {
-    node = el('section.hero', [kicker, el('h1', 'いま何してる?'),
-      el('p.muted', 'チップをタップで記録が始まります。長押しで「さっきから」。'),
-      total ? el('p.muted.small', `今日の記録 ${fmtMinJa(total)}`) : null]);
+    parts.push(el('p.muted.small.note', `作業時間帯は ${mm(w.start)} から。`));
   }
-  return { node, tick };
+  return { node: el('div', parts), tick };
 }
 
 function buildChips(n, rerender) {
   const o = log.openEntry(E());
-  const row = el('div.chips', { role: 'group', 'aria-label': 'カテゴリ' }, cats().map((c) => {
+  return el('section.chips-wrap', el('div.chips', { role: 'group', 'aria-label': 'カテゴリ' }, cats().map((c) => {
     let timer = null, pressed = false;
-    const chip = el('button.chip', { type: 'button', class: `chip${o && o.categoryId === c.id ? ' on' : ''}`, 'aria-pressed': o && o.categoryId === c.id ? 'true' : 'false',
+    return el('button.chip', { type: 'button', class: `chip${o && o.categoryId === c.id ? ' on' : ''}`, 'aria-pressed': o && o.categoryId === c.id ? 'true' : 'false',
       onclick: () => { if (pressed) { pressed = false; return; } startCategory(c.id); rerender(); },
       oncontextmenu: (e) => { e.preventDefault(); backfillSheet(n, c.id, rerender); },
       onpointerdown: (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; clearTimeout(timer); timer = setTimeout(() => { pressed = true; backfillSheet(n, c.id, rerender); }, 500); },
       onpointerup: () => clearTimeout(timer), onpointercancel: () => clearTimeout(timer), onpointerleave: () => clearTimeout(timer),
     }, [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), c.name]);
-    return chip;
-  }));
-  return el('section.chips-wrap', [
-    el('div.row.between', [el('h2', 'いま何してる?'), el('button.btn.sm.ghost', { type: 'button', onclick: () => backfillSheet(n, null, rerender) }, 'さっきから…')]),
-    row,
-  ]);
+  })));
 }
 
 /** 事後入力(F1-2): 開始時刻を選んでから開始 */
@@ -169,8 +162,8 @@ function backfillSheet(n0, categoryId, rerender) {
   const pick = (m, btn) => { startMin = m; picks.forEach((b) => b.classList.toggle('on', b === btn)); };
   const catChips = el('div.chips', cats().map((c) => el('button.chip', { type: 'button', class: `chip${c.id === cid ? ' on' : ''}`, onclick: (e) => { cid = c.id; catChips.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: c.color } }), c.name])));
   sheet((close) => [
-    el('h2', 'さっきから'),
-    el('p.muted.small', '何を・いつから始めていた?(記録はそのまま続きます)'),
+    el('h2', '開始時刻を指定して記録'),
+    el('p.muted.small', '何を・いつから?(そのまま記録中になります)'),
     catChips,
     el('div.col', [
       ...cands.map((c) => { const b = el('button.btn.block', { type: 'button', onclick: (e) => pick(c.min, e.currentTarget) }, c.label); picks.push(b); return b; }),

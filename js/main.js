@@ -8,8 +8,9 @@ import { renderToday, startCategory, stopRecording, checkOpenEntry } from './ui-
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.2.1';
 export const NEWS = [
+  { v: '0.2.1', text: '今日画面の上部を簡素化(日付と記録中だけ)。「時刻を指定」で事後入力。設定を一覧→項目ごとの編集画面に整理。' },
   { v: '0.2.0', text: 'Phase 1: カテゴリチップで記録(タップ=開始・次のチップで切替・長押しで「さっきから」)、実績レーン、記録の編集(時刻・カテゴリ・メモ・分割・削除)、止め忘れの回収、?log= パラメータ。' },
   { v: '0.1.1', text: 'Phase 0: 3タブの骨組み・はじめの設定(3ステップ)・設定画面・データの書き出し/読み込み・テスト基盤。' },
   { v: '0.1.0', text: '雛形を作成。' },
@@ -23,16 +24,16 @@ store.init();
 
 let tickFn = null;
 const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; } };
-const screens = { today: () => renderToday(view, ctx), tasks: () => renderTasks(view, ctx), settings: () => renderSettings(view, ctx) };
+const screens = { today: () => renderToday(view, ctx), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
 let current = 'today';
 
-function go(tab) {
+function go(tab, arg) {
   if (!screens[tab]) tab = 'today';
   current = tab;
   tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   store.state.local.uiState = Object.assign({}, store.state.local.uiState, { tab });
   store.saveLocal();
-  screens[tab]();
+  screens[tab](arg);
   window.scrollTo(0, 0);
 }
 tabs.addEventListener('click', (e) => {
