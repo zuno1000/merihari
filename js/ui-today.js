@@ -82,7 +82,7 @@ function planFor(date, today) {
   if (date > today) {
     const w = windowFor(S(), date);
     if (!w) return { p: null, preview: true };
-    return { p: plan.buildPlan(planOpts(date, w.start), LCTX), preview: true };
+    return { p: plan.buildPlan(planOpts(date, w.start, { preview: true }), LCTX), preview: true };
   }
   return { p: null, preview: false };
 }
@@ -326,10 +326,13 @@ function buildHero(n, p, ctx, rerender, real = n) {
   const shares = plan.todayShare(T(), n.date, S(), E()).filter((s) => !(p?.skipped || []).includes(s.taskId));
   const logged = plan.loggedByTask(E(), n.date, n.shifted ? 1440 : n.min);
   if (n.shifted) for (const [k, v] of Object.entries(plan.loggedByTask(E(), real.date, real.min))) logged[k] = (logged[k] || 0) + v;
-  const remain = plan.remainingToday(shares, logged);
-  const dayTotal = shares.reduce((a, s) => a + s.todayMin, 0);
-  const dayPct = dayTotal ? (dayTotal - remain) / dayTotal : 0;
-  const remainText = remain > 0 ? `今日の分はあと ${fmtMinJa(remain)}` : (shares.length ? '今日の分は終わっています' : '');
+  // リングと副文(v0.12.3): 「きょうの作業 ◯ / 理想 ◯」。作業=作業種別の記録の合計、理想=その日の plan の作業枠(task+habit)の合計
+  const workKinds = new Set(S().categories.filter((c) => c.kind === 'work').map((c) => c.id));
+  const doneWork = Object.entries(totals).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) + (n.shifted ? Object.entries(log.totalsByCategory(E(), n.date, 1440)).filter(([id]) => workKinds.has(id)).reduce((a, [, v]) => a + v, 0) : 0);
+  const idealWork = (p?.blocks || []).filter((b) => b.type === 'task' || b.type === 'habit').reduce((a, b) => a + (b.end - b.start), 0);
+  const remain = Math.max(0, idealWork - doneWork);
+  const dayPct = idealWork ? Math.min(1, doneWork / idealWork) : 0;
+  const remainText = idealWork ? `きょうの作業 ${fmtMinJa(doneWork)} / 理想 ${fmtMinJa(idealWork)}` : (doneWork ? `きょうの作業 ${fmtMinJa(doneWork)}` : '');
   let tick = () => {};
   const btn = (label, onclick, primary = false) => el(`button.btn${primary ? '.primary' : '.ghost'}`, { type: 'button', onclick }, label);
   const begin = (b) => () => { const t = b.taskId ? T()[b.taskId] : null; startCategory(b.categoryId || (t ? t.categoryId : 'other'), null, { taskId: b.taskId ?? null, plannedMin: b.end - b.start }); rerender(); };
@@ -400,10 +403,10 @@ function buildHero(n, p, ctx, rerender, real = n) {
   }
   const next = p ? plan.nextWorkBlock(p.blocks, n.min) : null;
   if (remain > 0) {
-    return { node: build({ kicker: 'あと', title: `${fmtMinJa(remain)} やれば今日はおしまい`, inner: next ? `次は ${mm(next.start)} から ${next.name}` : '枠が足りません。入れられる分だけで大丈夫',
+    return { node: build({ kicker: '理想まで', title: `あと ${fmtMinJa(remain)}`, inner: next ? `次は ${mm(next.start)} から ${next.name}` : '空いた時間に', sub: remainText,
       buttons: next ? [btn('今から再計画', () => { replan(n); rerender(); }), btn(`${next.name} を始める`, begin(next), true)] : [btn('今から再計画', () => { replan(n); rerender(); }, true)] }).node, tick, key };
   }
-  return { node: build({ kicker: shares.length ? '今日の分は終わり' : '自由時間', title: shares.length ? '休んで大丈夫' : 'タスクを入れると提案します', pct: shares.length ? 1 : 0, color: catOf('rest').color,
+  return { node: build({ kicker: idealWork ? '理想の作業はおしまい' : '自由時間', title: idealWork ? '休んで大丈夫' : 'タスクを入れると提案します', pct: idealWork ? 1 : 0, color: catOf('rest').color, sub: remainText || null,
     buttons: next ? [btn(`${next.name} を始める`, begin(next))] : [] }).node, tick, key };
 }
 
@@ -529,9 +532,10 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const rerender = () => renderTimeline(view, ctx, date);
   const goDate = (d) => ctx.go('timeline', d);
   let p, preview = false;
-  if (showNow) p = ensurePlan(e); else if (isToday) p = P()[date] || null; else ({ p, preview } = planFor(date, n.date));
+  if (showNow) p = ensurePlan(e); else ({ p, preview } = planFor(date, e.date));
+  const gapUpto = date > e.date ? null : (showNow ? e.min : 1440); // 「この時間は?」は過ぎた時間だけ(v0.12.3: 切れ目前の暦日の今日に出ていた)
   const next = addDays(date, 1);
-  const pNext = ds > 0 ? planFor(next, n.date).p : null;
+  const pNext = ds > 0 ? planFor(next, e.date).p : null;
   const totals = log.totalsByCategory(E(), date, isToday ? n.min : 1440);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const nav = el('div.tl-nav', [
@@ -544,7 +548,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     p && !preview && (showNow || date < e.date) ? el('button.btn.sm.ghost.tl-menu', { type: 'button', 'aria-label': 'この日の予定の操作', onclick: () => planMenuSheet(date, p, showNow, e, rerender) }, '⋯') : null,
   ]);
   const note = preview ? el('p.muted.small.note', '見通し(仮)') : (!isToday && !p && date < n.date ? el('p.muted.small.note', 'この日の理想スケジュールはありません。') : null);
-  const tl = buildTimeline({ date, ds, nowRel, p, pNext, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], isToday: showNow, showNow, preview, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
+  const tl = buildTimeline({ date, ds, nowRel, p, pNext, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], isToday: showNow, showNow, preview, gapUpto, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
   view.append(...[nav, note, tl.node, reportFab(date), fab(n, rerender, showNow ? null : date)].filter(Boolean));
   if (showNow) {
     ctx.setTick(() => { const m = nowInfo(); const em = effectiveDay(S(), m.date, m.min); if (em.date !== date) { ctx.go('timeline'); return; } tl.tick(em.min); });
@@ -568,7 +572,7 @@ function blockName(b) { return b.type === 'busy' ? `${b.categoryId ? b.name : '�
  * 座標は「date の 0:00 からの分」。表示は ds〜ds+1440(ds = 1日の始まり)。翌日の早朝の記録と plan は +1440 で続けて描く。
  * 睡眠帯は 1/4 に圧縮するが、予定や記録と重なる部分は圧縮しない(v0.11)。
  */
-function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, nextEntries = [], isToday, showNow, preview, onSwipe = null }, rerender) {
+function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, nextEntries = [], isToday, showNow, preview, gapUpto = null, onSwipe = null }, rerender) {
   let swipe = null;
   const w = windowFor(S(), date);
   const n = effNow();
@@ -603,8 +607,8 @@ function buildTimeline({ date, ds = 0, nowRel = null, p, pNext = null, entries, 
     logLane.append(block(x.start, x.end, { name: t ? t.name : c.name, color: c.color, open: x.e.end == null, note: x.e.note, onclick: () => editEntrySheet(x.e.id, { date: x.date, min: n.min }, rerender) }));
   }
   // F1-5 ギャップ埋め: 作業時間帯の中で記録が無い 15 分以上の区間(過去の分だけ)に「この時間は?」
-  if (w && !preview) {
-    const upto = Math.min(w.end, nm);
+  if (w && !preview && gapUpto != null) {
+    const upto = Math.min(w.end, gapUpto);
     for (const g of plan.freeSlots(items.map((x) => ({ start: x.start, end: x.end })), w.start, upto)) {
       if (g.end - g.start < 15) continue;
       const gb = el('button.blk.gap', { type: 'button', style: { top: `${y(g.start)}px`, height: `${Math.max(4, y(g.end) - y(g.start))}px` }, title: `${mm(g.start)}〜${mm(g.end)} 未記録`, onclick: () => addEntrySheet(date, rerender, { start: g.start, end: g.end }) });

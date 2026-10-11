@@ -278,7 +278,10 @@ export function buildPlan(opts, ctx) {
   const longAfter = +settings.longRest?.afterMin > 0 ? +settings.longRest.afterMin : 240;
   const cats = settings.categories || [];
   const logged = loggedByTask(entries, date, nowMin);
-  let shares = todayShare(tasks, date, settings, entries).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId));
+  // 見通し(preview: 明日以降の仮の plan)では、その日より前が期限のタスクは「それまでに終わっている」前提で入れない(v0.12.3: 期限切れが先の日を埋めていた)
+  const preview = opts.preview === true;
+  const assumed = (t, dl) => preview && typeof dl === 'string' && dl < date;
+  let shares = todayShare(tasks, date, settings, entries).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId) && !assumed(tasks[s.taskId], s.deadline));
   // F4-3: 期限が近くて未着手の義務タスクは、配分が 0 でも最小単位(30 分以上)だけ入れる
   for (const id of opts.ensureMin || []) {
     if (skipped.includes(id) || shares.some((s) => s.taskId === id)) continue;
@@ -304,7 +307,7 @@ export function buildPlan(opts, ctx) {
     queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0 });
   }
   if (opts.fill !== false) {
-    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id))
+    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id) && !assumed(t, deadlineKey(t, date)))
       .map((t) => ({ t, deadline: deadlineKey(t, date) }))
       .sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : remainingMin(b.t, entries, date) - remainingMin(a.t, entries, date)));
     for (const { t } of fillers) {

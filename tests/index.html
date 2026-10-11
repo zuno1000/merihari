@@ -281,7 +281,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(Rp.plannedByCategory({ blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }] }), { class: 90 }) && Rp.blockCategory({ type: 'busy' }) === null, 'plannedByCategory: ラベルのある busy はそのカテゴリに数える(v0.8)');
     const aggB = Rp.aggregate({ entries: {}, plan: { blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }, { type: 'task', start: 700, end: 760, categoryId: 'research' }] }, date: RD, nowMin: 1440, settings: ds });
     const linesB = Rp.reportLines(aggB, { tasks: {}, entries: {}, date: RD });
-    ok(linesB.improve.some((t) => t.startsWith('研究は入りませんでした')) && !linesB.improve.some((t) => t.startsWith('授業')), 'reportLines: ラベル付きの予定だけの理想は「入りませんでした」にしない(予定は責めない)');
+    ok(linesB.improve.some((t) => t.startsWith('研究の枠は使われませんでした')) && !linesB.improve.some((t) => t.startsWith('授業')), 'reportLines: ラベル付きの予定だけの理想は「入りませんでした」にしない(予定は責めない)');
     const entR = toMap([
       mkE(RD, '09:00', '12:25', 'research'), mkE(RD, '13:00', '13:30', 'sns'), mkE(RD, '20:00', '20:40', 'rest'),
       mkE('2026-10-11', '10:00', '11:00', 'sns'), mkE('2026-10-11', '11:00', '13:00', 'research'),
@@ -297,17 +297,17 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(agg.byCategory.research.planned === 180 && agg.byCategory.research.actual === 205 && agg.byCategory.sns.baseline === 60, 'aggregate: 理想/実績/ベースライン');
     ok(agg.workMin === 205 && agg.driftMin === 30 && agg.baselineWorkMin === 90 && agg.restKept === '20:00', 'aggregate: 作業合計・drift 合計・先週の作業平均・休憩が予定どおり');
     const lines = Rp.reportLines(agg, { tasks: {}, entries: entR, date: RD });
-    ok(lines.positive[0] === 'SNS・動画は先週より 30分 少なめ。' && lines.positive[1] === '研究、理想より 25分 多め。', 'reportLines: 肯定文は優先 1 を Δ の大きい順で先頭(§6.5)');
-    ok(lines.positive.length === 3 && lines.positive[2] === '休憩は 20:00 に取れています。', 'reportLines: 肯定文は最大 3 文(優先2 の休憩)');
-    ok(lines.improve.includes('英語は入りませんでした。') && lines.improve.some((t) => t.startsWith('記録のない時間が ')), 'reportLines: 改善点は事実だけ(入らなかった枠・未記録)');
+    ok(lines.positive[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && lines.positive[1] === '研究は理想より 25分 多く進みました。', 'reportLines: 肯定文は優先 1 を Δ の大きい順で先頭(§6.5)');
+    ok(lines.positive.length === 3 && lines.positive[2] === '休憩は 20:00 に取れました。', 'reportLines: 肯定文は最大 3 文(優先2 の休憩)');
+    ok(lines.improve.includes('英語の枠は使われませんでした。') && lines.improve.some((t) => t.startsWith('記録のない時間が ')), 'reportLines: 改善点は事実だけ(入らなかった枠・未記録)');
     ok(lines.tomorrow === null, 'reportLines: 近い期限の未着手が無ければ明日への一言は無し');
     const tasksR = { a: { id: 'a', name: '面談資料', kind: 'duty', deadline: '2026-10-14', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: '遠い', kind: 'duty', deadline: '2026-11-01', remainingH: 1 }, c: { id: 'c', name: '済', kind: 'duty', deadline: '2026-10-13', remainingH: 1, doneAt: 'x' } };
     ok(Rp.untouchedNear(tasksR, entR, RD).map((t) => t.id).join() === 'a', 'untouchedNear: 期限3日以内・未着手・未完了の義務だけ');
-    ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料、まだ手つかず(期限 10月14日)。あしたは 5 分だけ。', 'reportLines: 明日への一言は 1 件');
+    ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料はまだ手つかずです(期限 10月14日)。明日、まず 5 分だけ。', 'reportLines: 明日への一言は 1 件');
     const aggZero = Rp.aggregate({ entries: {}, plan: null, date: RD, nowMin: 1440, settings: ds });
-    ok(Rp.reportLines(aggZero, {}).positive[0] === 'きょうは記録なし。', 'reportLines: 記録ゼロでも必ず 1 文');
+    ok(Rp.reportLines(aggZero, {}).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロでも必ず 1 文');
     const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), plan: null, date: RD, nowMin: 1440, settings: ds });
-    ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業 40分。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
+    ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業は合計 40分 でした。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
     const snap = Rp.buildReport({ entries: entR, plan: planR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
     ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット');
     ok(eq(Rp.ledgerFor(ds, RD, agg), { usableMin: 750, workMin: 205 }), 'ledgerFor: usableMin と workMin(§6.6 の材料)');
@@ -489,8 +489,15 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(ul.loggedMin === 90 && ul.unloggedMin === 0, 'unlogged: 作業時間帯が無い日でも記録した時間は数える');
     const agx = Rp.aggregate({ entries: { a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, plan: null, date: '2026-10-14', nowMin: 1440, settings: ds });
     const lx = Rp.reportLines(agx, { date: '2026-10-14' });
-    ok(lx.positive[0] === '作業 1時間30分。' && !lx.positive.some((t) => /記録なし/.test(t)), 'reportLines: 記録があれば「作業 ◯」と言い切る(「記録なし」とは言わない)');
-    ok(Rp.reportLines(Rp.aggregate({ entries: {}, plan: null, date: '2026-10-14', nowMin: 1440, settings: ds }), { date: '2026-10-14' }).positive[0] === 'きょうは記録なし。', 'reportLines: 記録ゼロの日の文');
+    ok(lx.positive[0] === '作業は合計 1時間30分 でした。' && !lx.positive.some((t) => /記録がありません/.test(t)), 'reportLines: 記録があれば作業の合計を言う(「記録なし」とは言わない)');
+    ok(Rp.reportLines(Rp.aggregate({ entries: {}, plan: null, date: '2026-10-14', nowMin: 1440, settings: ds }), { date: '2026-10-14' }).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロの日の文');
+
+    // ---- v0.12.3: 見通しでは期限切れを入れない ----
+    log('\n# v0.12.3');
+    const ovT = { z: { id: 'z', name: 'ゼミ準備', kind: 'duty', deadline: '2026-10-12', remainingH: 8, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null }, y: { id: 'y', name: 'y', kind: 'duty', deadline: '2026-10-20', remainingH: 2, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
+    const pv = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [], preview: true }, PC);
+    const prx = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [] }, PC);
+    ok(!pv.blocks.some((b) => b.taskId === 'z') && pv.blocks.some((b) => b.taskId === 'y') && prx.blocks.some((b) => b.taskId === 'z'), 'buildPlan(preview): 明日以降の見通しでは、その日より前が期限のタスクは終わっている前提で入れない(当日の plan には入る)');
 
     // ---- 版規約(§9) ----
     log('\n# version');
