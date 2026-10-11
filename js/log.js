@@ -2,7 +2,7 @@
 // すべて純関数: entries(id → entry)を受け取り、新しい entries を返す(引数は変更しない)。
 // entry = { id, date:'YYYY-MM-DD', start:'HH:MM', end:'HH:MM'|null, categoryId, taskId, note, plannedMin, updatedAt, deletedAt }
 // ctx = { uid(), nowISO() }  … id と更新時刻の生成を外から渡す(テストで固定するため)
-import { hm, mm } from './time.js';
+import { hm, mm, addDays } from './time.js';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const alive = (e) => e && !e.deletedAt;
@@ -95,7 +95,13 @@ export function start(entries, opts, ctx) {
 
 /** 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める */
 export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '' }, ctx) {
-  if (startMin == null || endMin == null || endMin <= startMin) throw new Error('終了は開始より後にしてください');
+  if (startMin == null || endMin == null) throw new Error('終了は開始より後にしてください');
+  if (endMin <= startMin) { // 日付をまたぐ(v0.13.2): 終了が 6:00 以前なら翌日として 24:00 で分けて入れる
+    if (!(endMin <= 360 && startMin > 360)) throw new Error('終了は開始より後にしてください');
+    let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note }, ctx);
+    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note }, ctx);
+    return out;
+  }
   const out = clone(entries);
   const e = { id: ctx.uid(), date, start: mm(startMin), end: mm(endMin), categoryId, taskId, note, plannedMin: null, updatedAt: ctx.nowISO(), deletedAt: null };
   out[e.id] = e;
@@ -114,7 +120,14 @@ export function setTimes(entries, id, { start, end }, nowMin, ctx) {
   if (!alive(e)) return out;
   const s = hm(start);
   const en = end == null ? null : hm(end);
-  if (s == null || (en != null && en <= s)) throw new Error('終了は開始より後にしてください');
+  if (s == null) throw new Error('終了は開始より後にしてください');
+  if (en != null && en <= s) { // 日付をまたぐ(v0.13.2): 23:30〜翌 0:10 は 23:30〜24:00 と 翌日 0:00〜0:10 に分ける
+    if (!(en <= 360 && s > 360)) throw new Error('終了は開始より後にしてください');
+    e.start = mm(s); e.end = '24:00'; e.updatedAt = ctx.nowISO();
+    let res = resolveOverlap(out, id, nowMin, ctx);
+    if (en > 0) res = addEntry(res, { date: addDays(e.date, 1), startMin: 0, endMin: en, categoryId: e.categoryId, taskId: e.taskId, note: e.note }, ctx);
+    return res;
+  }
   e.start = mm(s); e.end = en == null ? null : mm(en); e.updatedAt = ctx.nowISO();
   return resolveOverlap(out, id, nowMin, ctx);
 }

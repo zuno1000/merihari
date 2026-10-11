@@ -514,6 +514,18 @@ document.getElementById('app').addEventListener('load', async () => {
     const dueBlocks = pdue.blocks.filter((b) => b.taskId === 'a');
     ok(dueBlocks.length && dueBlocks.every((b) => b.end <= 600) && pdue.shortfall.some((x) => x.taskId === 'a'), 'buildPlan: 期限の時刻より前にしか置かず、入らない分は shortfall');
 
+    // ---- v0.13.2: 日付をまたぐ終了時刻・大きさ 0.5 ----
+    log('\n# v0.13.2');
+    const xE = { a: { id: 'a', date: '2026-10-12', start: '23:30', end: '23:50', categoryId: 'research', taskId: 't', note: 'n', plannedMin: null, deletedAt: null } };
+    const xR = L.setTimes(xE, 'a', { start: '23:30', end: '00:10' }, 1440, PC);
+    const xT = Object.values(xR).find((e) => e.id !== 'a');
+    ok(xR.a.end === '24:00' && xT && xT.date === '2026-10-13' && xT.start === '00:00' && xT.end === '00:10' && xT.categoryId === 'research' && xT.taskId === 't', 'setTimes: 終了が翌日の深夜なら 24:00 で分けて翌日の記録を作る');
+    ok(throws(() => L.setTimes(xE, 'a', { start: '23:30', end: '12:00' }, 1440, PC)), 'setTimes: 6:00 より後の「前の時刻」は従来どおり拒否');
+    const xA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC);
+    ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も 2 つに分ける');
+    ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00 終了の記録は 30 分・翌日分は 10 分と数える');
+    ok(Pn.remainingMin({ id: 'h', remainingH: 0.5 }, {}) === 30 && Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: '2026-10-12', remainingH: 0.5, minUnit: 15, categoryId: 'research', deletedAt: null, doneAt: null } }, '2026-10-12', ds)[0].todayMin === 30, '大きさ 0.5 時間は 30 分として配分される');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

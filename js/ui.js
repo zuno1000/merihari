@@ -118,7 +118,7 @@ export function clockSheet(value, { onpick, allowEmpty = false, title = null } =
   let pressed = false, close;
   face.addEventListener('pointerdown', (e) => { pressed = true; face.setPointerCapture(e.pointerId); pick(e); });
   face.addEventListener('pointermove', (e) => { if (pressed) pick(e); });
-  const finish = () => { if (stage === 'h') { stage = 'm'; draw(); return; } close(); if (onpick) onpick(`${p2(h)}:${p2(mi)}`); };
+  const finish = () => { if (stage === 'h') { stage = 'm'; draw(); return; } setTimeout(() => { close(); if (onpick) onpick(`${p2(h)}:${p2(mi)}`); }, 0); };
   face.addEventListener('pointerup', () => { if (!pressed) return; pressed = false; finish(); });
   face.addEventListener('pointercancel', () => { pressed = false; });
   draw();
