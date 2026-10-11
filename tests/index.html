@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>merihari tests</title>
+<pre id="out"></pre>
+<iframe id="app" src="../index.html" style="width:390px;height:600px"></iframe>
+<script>
+if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) document.body.textContent = 'localhost でのみ実行';
+const out = document.getElementById('out'); let fails = 0;
+function ok(cond, msg) { out.textContent += (cond ? 'ok   ' : 'FAIL ') + msg + '\n'; if (!cond) fails++; }
+document.getElementById('app').addEventListener('load', () => {
+  const M = document.getElementById('app').contentWindow.M;
+  try {
+    ok(M && typeof M === 'object', 'window.M が公開されている');
+    ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
+  } finally { out.textContent += `\n${fails} failed`; }
+});
+</script>

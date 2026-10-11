@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>merihari 仕様書 v0.1</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1f1f1c;--muted:#6b6b64;--line:#e4e1d8;--card:#ffffff;
+  --accent:#2b6cb0;--accent-bg:#e8f0fa;--ok:#2f855a;--ok-bg:#e6f4ec;--warn:#b7791f;--warn-bg:#fbf1dc;--bad:#c53030;--bad-bg:#fbe9e9;
+  --code:#f1efe8;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#171716;--fg:#ecebe6;--muted:#a09f97;--line:#2e2e2b;--card:#1f1f1d;
+  --accent:#7fb0e8;--accent-bg:#1c2a3a;--ok:#7ac89a;--ok-bg:#16291f;--warn:#e0b45c;--warn-bg:#332a14;--bad:#f08a8a;--bad-bg:#3a1c1c;--code:#242422;}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif;line-height:1.75;font-size:15px}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px}
+header.top{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:24px}
+header.top h1{margin:0 0 6px;font-size:26px;letter-spacing:.02em}
+header.top .meta{color:var(--muted);font-size:13px}
+header.top .meta span{margin-right:14px}
+h2{font-size:20px;margin:48px 0 12px;padding-top:12px;border-top:2px solid var(--line)}
+h3{font-size:16.5px;margin:28px 0 8px}
+h4{font-size:15px;margin:20px 0 6px;color:var(--muted)}
+p{margin:8px 0}
+ul,ol{padding-left:1.4em;margin:6px 0}
+li{margin:3px 0}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
+th,td{border:1px solid var(--line);padding:7px 9px;vertical-align:top;text-align:left}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code{font-family:var(--mono);background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow:auto;font-size:13px;line-height:1.55}
+pre code{background:none;padding:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.note{border-left:4px solid var(--accent);background:var(--accent-bg);padding:10px 14px;border-radius:0 8px 8px 0;margin:12px 0}
+.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+.ok{border-left-color:var(--ok);background:var(--ok-bg)}
+.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);background:var(--card);margin-right:4px;color:var(--muted)}
+.tag.must{color:var(--bad);border-color:var(--bad)}
+.tag.should{color:var(--warn);border-color:var(--warn)}
+.tag.may{color:var(--ok);border-color:var(--ok)}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 18px;font-size:14px}
+nav.toc ol{columns:2;column-gap:28px;margin:0;padding-left:1.3em}
+nav.toc li{break-inside:avoid}
+nav.toc a{color:var(--accent);text-decoration:none}
+a{color:var(--accent)}
+/* wireframes */
+.wf{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:14px 0}
+.phone{border:2px solid var(--line);border-radius:22px;padding:14px 12px;background:var(--card);font-size:12.5px;min-height:420px;position:relative}
+.phone .ttl{font-weight:700;font-size:13px;color:var(--muted);text-align:center;margin-bottom:8px}
+.phone .box{border:1px dashed var(--line);border-radius:8px;padding:6px 8px;margin:6px 0}
+.phone .hero{border:2px solid var(--accent);background:var(--accent-bg);border-radius:10px;padding:8px 10px;margin:6px 0}
+.phone .hero b{font-size:14px}
+.phone .btn{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:1px 9px;margin:2px 2px 0 0;font-size:11.5px}
+.phone .btn.pri{background:var(--accent);color:#fff}
+.phone .tl{display:grid;grid-template-columns:34px 1fr 1fr;gap:3px;font-size:11px}
+.phone .tl .h{color:var(--muted);text-align:right;padding-right:4px}
+.phone .tl .i{background:var(--accent-bg);border-radius:4px;padding:1px 5px}
+.phone .tl .a{background:var(--ok-bg);border-radius:4px;padding:1px 5px}
+.phone .tl .a.sns{background:var(--warn-bg)}
+.phone .tl .gap{background:var(--code);border-radius:4px;padding:1px 5px;color:var(--muted)}
+.phone .tabs{position:absolute;left:12px;right:12px;bottom:12px;display:flex;border-top:1px solid var(--line);padding-top:6px;justify-content:space-around;color:var(--muted)}
+.phone .tabs b{color:var(--accent)}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+small{color:var(--muted)}
+.chk{list-style:none;padding-left:0}
+.chk li::before{content:"☐ ";color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>merihari(メリハリ)仕様書</h1>
+  <div class="meta">
+    <span>版: v0.1(初版)</span><span>作成: 2026-10-11</span><span>作成者: 水野 + Claude(Cowork)</span><span>状態: ドラフト(実装前)</span>
+  </div>
+  <p>「記録するのはワンタップ、考えるのはアプリ」── 1日の理想スケジュールを提案し、実際に何をしたかをワンタップで記録し、夜に「前より良くなった」を言葉で返す個人用の時間管理 PWA。<br>
+  <b>残り時間(nokorijikan)v0.1 試作の後継</b>として、設計の芯(free/busy のみ・Drive 端末側暗号化・ルールベース・画面3つ)を引き継ぎ、主役を「タスクの残り時間」から「今日一日のタイムライン」へ移す。</p>
+</header>
+
+<nav class="toc">
+<b>目次</b>
+<ol>
+<li><a href="#s1">目的と位置づけ</a></li>
+<li><a href="#s2">設計方針(変えない約束)</a></li>
+<li><a href="#s3">用語</a></li>
+<li><a href="#s4">画面仕様(3画面)</a></li>
+<li><a href="#s5">機能仕様 F1〜F8</a></li>
+<li><a href="#s6">アルゴリズム仕様</a></li>
+<li><a href="#s7">データモデル</a></li>
+<li><a href="#s8">Google 連携・同期・セキュリティ</a></li>
+<li><a href="#s9">非機能要件・技術構成</a></li>
+<li><a href="#s10">ファイル構成と開発ルール</a></li>
+<li><a href="#s11">ロードマップ</a></li>
+<li><a href="#s12">見送り・やらないこと</a></li>
+<li><a href="#s13">未決事項(実装前に決める)</a></li>
+<li><a href="#s14">nokorijikan からの引き継ぎ対応表</a></li>
+</ol>
+</nav>
+
+<p><span class="tag must">MUST</span>無いと成り立たない <span class="tag should">SHOULD</span>v1.0 までに入れる <span class="tag may">MAY</span>余裕があれば。要件 ID(F1-1 など)はロードマップとテストから参照する。</p>
+
+<!-- ============================================================ -->
+<h2 id="s1">1. 目的と位置づけ</h2>
+
+<h3>1.1 解決したいこと(ユーザー定義の4目的)</h3>
+<table>
+<tr><th>#</th><th>目的</th><th>本アプリでの実現手段(要約)</th><th>対応機能</th></tr>
+<tr><td>①</td><td>YouTube/SNS を「ただ見てしまう」時間を減らし、休憩は休憩・作業は作業とメリハリをつける</td><td>休憩を理想スケジュールの中に<b>予定として置く</b>(後ろめたさを消す)。SNS/動画を記録するときは「あと何分?」を聞き終了予定を置く。日次レポートで減少を言葉で返す</td><td>F1, F2, F3, F4</td></tr>
+<tr><td>②</td><td>1日の理想スケジュールを可視化し、時間配分と今日やるべきことを明確にする</td><td>朝(初回起動時)に今日の理想スケジュールを<b>自動生成</b>し、タイムラインの左レーンに表示。右レーンに実績が積まれる</td><td>F2, F5</td></tr>
+<tr><td>③</td><td>先延ばし癖の解消</td><td>「いま」の理想スロットを主役として1つだけ表示し、「始める」=記録開始。とっかかり(最初の5分)・最小単位・未着手の朝の一言・記録ギャップの回収</td><td>F4, F5</td></tr>
+<tr><td>④</td><td>既存アプリの煩雑さを無くし、アプリを使うこと自体を先延ばししない</td><td>画面3つ・毎日の操作は全てワンタップ(カテゴリチップ)・設定は初回だけ・記録が抜けても責めない</td><td>§2 全体</td></tr>
+</table>
+
+<h3>1.2 nokorijikan との関係</h3>
+<div class="note">
+<b>後継として新リポジトリ <code>zuno1000/merihari</code> で作り直す。</b> nokorijikan v0.1(<code>PersonalVault/Projects/nokorijikan/nokorijikan/ptm/</code>)は<b>参照用の資産</b>として残し、以下を流用する:
+<ul>
+<li>流用する部品: Google Identity Services の取り回し / freeBusy 取得 / Drive appDataFolder + WebCrypto 暗号化往復 / マージ規則 / 使える時間の計算(<code>freeMs</code>) / 休憩判定(EDF)/ LLM 貼り戻し解析 <code>parseLLM</code>(将来用)</li>
+<li>捨てる考え方: 「真実の値は残り見積1つ・作業記録は裏機能」→ merihari は<b>実績タイムラインが主役</b>。ただし「記録を頑張らせない」姿勢は維持する(ワンタップ・ギャップ回収・未記録は責めない)</li>
+<li>nokorijikan ノートの「評価 A〜E」「ロードマップ」「tangoquest の知見」は本仕様の §11・§14 に取り込み済み</li>
+</ul>
+</div>
+
+<h3>1.3 想定ユーザー・端末</h3>
+<ul>
+<li>ユーザーは本人1人(大学院生: 研究・授業・バイト・就活・英語学習が混在)。公開は GitHub Pages だが他人向けの機能(アカウント、共有)は作らない。</li>
+<li>主端末: iPhone Safari → ホーム画面に追加した PWA。副端末: PC(Windows)の Chrome/Edge。両者を Google Drive で同期。</li>
+<li>利用シーン: 朝に開いて今日の提案を確認(30秒)/作業の切り替わりにカテゴリをタップ(3秒)/夜にレポートを見る(1分)。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s2">2. 設計方針(変えない約束)</h2>
+<ol>
+<li><b>画面は「今日」「タスク」「設定」の3つだけ。</b>新機能は既存画面の既定動作に溶かすか折りたたみの奥に置く。4つ目のタブは作らない。</li>
+<li><b>毎日の操作は全部ワンタップで終わる。</b>カテゴリチップ→記録開始。記録の終了は次のチップを押すだけ(連続記録)。時刻入力はフォールバック。</li>
+<li><b>主役は1つ。</b>「今日」画面の上部ヒーローは「いまの理想スロット」か「いま記録中のもの」のどちらか1つを言葉で言い切る。%・分数などの数字は副文か折りたたみへ。</li>
+<li><b>記録を頑張らせない・責めない。</b>記録の抜け(ギャップ)は「この時間は?」とワンタップで埋めるか放置できる。レポートは肯定的事実から書き、悪い数字は事実だけ述べる。</li>
+<li><b>Google カレンダーは free/busy のみ。</b>タイトル・場所・参加者は取得しない(スコープ <code>calendar.freebusy</code>)。書き込み権限は要求しない。取得した busy 時間帯は端末内のみに置き、Drive へ送らない。</li>
+<li><b>Drive 同期は端末側でパスフレーズ暗号化。</b>appDataFolder に <code>merihari.enc</code> 1ファイル。パスフレーズは sessionStorage のみ。</li>
+<li><b>提案・レポートはルールベース。</b>LLM・ML・外部 API は使わない(完全オフラインで動く)。賢さは「移動時間の自動確保」「生活ルーティンの自動除外」「busy の前後配置」「過去7日との比較」などの規則で出す。</li>
+<li><b>完全無料・サーバー無し。</b>GitHub Pages(Public リポジトリ)+ localStorage + Drive appDataFolder のみ。</li>
+<li><b>実機 FB 駆動・小刻みリリース。</b>1フェーズ=1〜2セッション、各版を iPhone で数日使ってから次へ(tangoquest/nokorijikan の流儀)。</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="s3">3. 用語</h2>
+<table>
+<tr><th>用語</th><th>意味</th></tr>
+<tr><td>カテゴリ</td><td>記録・集計の単位。既定: 研究 / 授業 / 英語 / バイト / 就活 / 生活 / 休憩 / SNS・動画 / 移動 / その他。種別として <code>work</code>(作業)・<code>life</code>(生活)・<code>rest</code>(休憩)・<code>drift</code>(ダラダラ: SNS・動画)を持つ。編集可。</td></tr>
+<tr><td>記録(entry)</td><td>「HH:MM〜HH:MM にカテゴリ X(任意でタスク・メモ)」1件。実績レーンに積まれる。</td></tr>
+<tr><td>理想スケジュール(plan)</td><td>その日のブロック列。アプリが生成し、ユーザーがタップで微調整する。理想レーンに表示。</td></tr>
+<tr><td>ブロック(block)</td><td>plan の1要素。種別: <code>busy</code>(カレンダー)/ <code>transit</code>(移動)/ <code>routine</code>(生活)/ <code>habit</code>(毎日の習慣: 英語など)/ <code>task</code>(ToDo の今日の分)/ <code>rest</code>(休憩)/ <code>free</code>(自由)。</td></tr>
+<tr><td>作業時間帯</td><td>曜日ごとの「起きていて作業できる時間帯」(例: 7:00〜23:30)。外側は睡眠として自動除外。</td></tr>
+<tr><td>生活ルーティン</td><td>毎日の固定時間(朝食・昼食・夕食・入浴など)。曜日指定可。plan に routine ブロックとして置かれ、使える時間から引かれる。</td></tr>
+<tr><td>移動時間</td><td>設定した「外出時の片道移動分」(例: 大学 50分)。外出とみなした busy の前後に transit ブロックを自動で置く。</td></tr>
+<tr><td>今日の分</td><td>各 ToDo について「期限までに間に合わせるには今日何時間やるべきか」(EDF 累積から配分)。task ブロックの大きさの元になる。</td></tr>
+<tr><td>ギャップ</td><td>作業時間帯内で記録が無い連続区間(15分以上)。</td></tr>
+<tr><td>ベースライン</td><td>レポートの比較対象。直近7日(今日を除く)のカテゴリ別平均。無ければ比較を省く。</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s4">4. 画面仕様(3画面)</h2>
+
+<div class="wf">
+<div class="phone">
+  <div class="ttl">今日(Today)</div>
+  <div class="hero"><small>いま 14:30〜16:00 の予定</small><br><b>研究(修論 実験3)</b><br><small>とっかかり: 昨日のログを開いて1行書く</small><br><span class="btn pri">始める</span><span class="btn">別のことを記録</span><span class="btn">後ろへ</span></div>
+  <div class="box"><small>いま何してる?</small><br><span class="btn">研究</span><span class="btn">授業</span><span class="btn">英語</span><span class="btn">生活</span><span class="btn">休憩</span><span class="btn">SNS・動画</span><span class="btn">移動</span><span class="btn">+</span></div>
+  <div class="box">
+    <div class="tl">
+      <div class="h"></div><div style="color:var(--muted)">理想</div><div style="color:var(--muted)">実績</div>
+      <div class="h">7:00</div><div class="i">起床・朝食</div><div class="a">生活</div>
+      <div class="h">7:30</div><div class="i">英語</div><div class="a sns">SNS 25m</div>
+      <div class="h">8:00</div><div class="i">移動 50m</div><div class="a">移動</div>
+      <div class="h">9:00</div><div class="i">予定(授業)</div><div class="a">授業</div>
+      <div class="h">12:00</div><div class="i">昼食</div><div class="gap">この時間は?</div>
+      <div class="h">13:00</div><div class="i">研究 90m</div><div class="a">研究 ▶</div>
+      <div class="h">14:30</div><div class="i">休憩 10m</div><div></div>
+      <div class="h">…</div><div class="i">20:00 休憩 60m</div><div></div>
+    </div>
+  </div>
+  <div class="box">今日のレポートを見る ▸ <small>(21:30 以降)</small></div>
+  <div class="tabs"><b>今日</b><span>タスク</span><span>設定</span></div>
+</div>
+
+<div class="phone">
+  <div class="ttl">タスク(ToDo)</div>
+  <div class="box"><span class="btn pri">+ 追加</span> <small>名前 + 期限チップ + 大きさチップ</small></div>
+  <div class="box"><b>今日の分</b><br>☐ 修論 実験3 <small>今日 1.5h / 残 12h / 10/20</small><br>☐ 面談資料 <small>今日 30m / 残 1h / 10/13</small></div>
+  <div class="box"><b>その他の義務</b><br>☐ 英検申込 <small>10/31</small></div>
+  <div class="box"><b>やりたい</b><br>☐ Blender チュートリアル</div>
+  <div class="box"><small>完了 (今週 3件) ▸</small></div>
+  <div class="tabs"><span>今日</span><b>タスク</b><span>設定</span></div>
+</div>
+
+<div class="phone">
+  <div class="ttl">設定</div>
+  <div class="box">作業時間帯 <small>平日 7:00–23:30 / 土日 8:00–23:00</small></div>
+  <div class="box">生活ルーティン <small>朝食 7:00 30m・昼食・夕食・入浴 …</small></div>
+  <div class="box">移動 <small>外出時 片道 50分 / 予定がある日は外出扱い</small></div>
+  <div class="box">毎日の習慣 <small>英語 30m(朝)</small></div>
+  <div class="box">休憩の方針 <small>作業90分ごとに10分 / 夜 20:00 に 60分</small></div>
+  <div class="box">カテゴリ <small>並び替え・追加・種別</small></div>
+  <div class="box">Google <small>接続する(カレンダー free/busy・Drive)</small></div>
+  <div class="box">同期 <small>最終同期 今日 9:12 / パスフレーズ</small></div>
+  <div class="box"><small>データ: 書き出し / 読み込み / 消去 ・ バージョン・更新確認</small></div>
+  <div class="tabs"><span>今日</span><span>タスク</span><b>設定</b></div>
+</div>
+</div>
+
+<h3>4.1 「今日」画面</h3>
+<dl class="kv">
+<dt>ヒーロー(主役)</dt><dd>状態により1つだけ表示(§6.4 の状態機械)。<b>記録中</b>: 「研究 32分経過」+[終わる][別のことへ]。<b>理想スロット進行中で未記録</b>: 「いま 14:30〜16:00 は 研究」+[始める](=記録開始)[別のことを記録][後ろへ](plan を再配置)。<b>休憩時間</b>: 「休憩していい時間 あと 18分」+[休憩を記録]。<b>生活の時間</b>: 「いまは夕食」。<b>移動中</b>: 「移動中 スマホでできること: ○○」。<b>作業時間外</b>: 「今日はおしまい」+レポート導線。<b>朝の初回</b>: 「今日の予定を組みました」+[OK][調整する]。</dd>
+<dt>カテゴリチップ列</dt><dd>常時表示。タップで「いまからそのカテゴリ」の記録を開始し、直前の記録中エントリを現在時刻で閉じる。長押し(PC は右クリック)で「さっきから」= 開始時刻を 15 分刻みで選ぶシート。SNS・動画(drift 種別)のチップは押下時に「あと何分?」(10/20/30/決めない)を聞き、終了予定を plan の rest ブロックとして置く(F4-5)。</dd>
+<dt>タイムライン</dt><dd>縦スクロール、左=理想、右=実績の2レーン。時刻軸は作業時間帯のみ(外側は畳む)。現在時刻に横線。理想ブロックのタップ→[今やる][後ろへ][今日はやらない][長さ変更]。実績エントリのタップ→[時刻を直す][カテゴリ変更][タスクを紐づけ][メモ][削除]。ギャップは「この時間は?」のチップで埋める(候補は時間帯から推定: 昼→生活、夜→休憩/SNS)。</dd>
+<dt>レポート導線</dt><dd>作業時間帯の終了 30 分前から「今日のレポートを見る」を表示。翌日の初回起動時は「昨日のレポート」をヒーローの直下に1行で出す(タップで展開、閉じれば消える)。</dd>
+<dt>鮮度と同期の1行</dt><dd>「予定は 6時間前のもの → 更新」「未同期の変更あり → 同期」をヒーロー下に1行で出す(nokorijikan A1/B2 の反省)。タップ=ユーザー操作なので認証ポップアップが通る。</dd>
+</dl>
+
+<h3>4.2 「タスク」画面</h3>
+<dl class="kv">
+<dt>かんたん追加</dt><dd>名前 + 期限チップ(今日/明日/今週末/来週/2週間後/なし)+ 大きさチップ(30m/1h/3h/8h/20h)の3項目で保存。義務/やりたいは既定「義務」。詳細(最小単位・とっかかり・カテゴリ・繰り返し・メモ)は編集画面。</dd>
+<dt>一覧</dt><dd>「今日の分」(今日やるべき量が正のもの、期限順)→「その他の義務」→「やりたい」→「完了(折りたたみ)」。各行に 今日 Xh / 残 Yh / 期限。チェック=完了。スワイプ無し(iOS で誤操作しやすい)、行タップで詳細。</dd>
+<dt>期限超過の出口</dt><dd>起動時に期限超過かつ残りが正のタスクがあればシートで順に処理: [+1週][残りを半分にして +1週][完了][消す]。処理するまで赤を続けるのではなく、処理させて赤を消す。</dd>
+<dt>繰り返し</dt><dd>「毎週 X 時間」型(終わりのない勉強用)。期限は週の終わりに自動で送り、残り見積を X に戻す。未消化分は繰り越さず「先週 3/5h」と記録だけ残す。</dd>
+</dl>
+
+<h3>4.3 「設定」画面</h3>
+<p>初回セットアップ(作業時間帯・生活ルーティン・移動・習慣)は<b>3ステップのウィザード</b>で既定値入りの画面を順に確認するだけにする(すべて既定値で「次へ」を3回押せば終わる)。以降は上記ワイヤの項目。Google 連携は「接続する」1ボタン(スコープ2つを一度に同意)。クライアント ID はコードに直書き(上書き欄は折りたたみ内)。</p>
+
+<!-- ============================================================ -->
+<h2 id="s5">5. 機能仕様</h2>
+
+<h3>F1. 実績の簡易記録 <span class="tag must">MUST</span></h3>
+<table>
+<tr><th>ID</th><th>要件</th><th>優先</th></tr>
+<tr><td>F1-1</td><td>カテゴリチップをタップすると、現在時刻を開始とする記録中エントリを作る。直前に記録中のエントリがあれば現在時刻で閉じる(連続記録)。同じカテゴリの連打は無視(重複を作らない)。</td><td>MUST</td></tr>
+<tr><td>F1-2</td><td>事後入力: チップ長押し(PC: 右クリック)または「さっきから」ボタンで開始時刻を選ぶ。候補は「直前の記録の終わり」「15分前」「30分前」「1時間前」「時刻を指定(15分刻み)」。例: 14:30〜16:00 研究 を 16:05 に入力できる。</td><td>MUST</td></tr>
+<tr><td>F1-3</td><td>記録中エントリは1件まで。終了は次のチップ/「終わる」/作業時間帯の終了(自動で閉じ、翌朝「昨夜 23:30 まで研究?」で確認)。</td><td>MUST</td></tr>
+<tr><td>F1-4</td><td>止め忘れ回収: 記録中のまま 3 時間以上経過して起動したら「実際は?」シート(今まで/最後に触った時刻/1時間/捨てる)。</td><td>MUST</td></tr>
+<tr><td>F1-5</td><td>ギャップ埋め: 作業時間帯内の 15 分以上の未記録区間に「この時間は?」チップ(候補 3 つ+その他)。放置してもよい(レポートは「未記録 1h20m」と事実だけ書く)。</td><td>SHOULD</td></tr>
+<tr><td>F1-6</td><td>任意でタスク(ToDo)とメモを紐づけ。理想スロットの [始める] から開始した記録には自動で紐づく。</td><td>SHOULD</td></tr>
+<tr><td>F1-7</td><td>エントリの編集(時刻・カテゴリ・分割・削除)。時刻編集で隣と重なる場合は隣を詰める(重なりは許さない)。</td><td>MUST</td></tr>
+<tr><td>F1-8</td><td>URL パラメータ <code>?log=研究</code> でそのカテゴリの記録を開始、<code>?log=stop</code> で終了(iOS ショートカット/オートメーション用)。<code>?ctx=transit</code>(移動中)・<code>?ctx=home</code> も受ける。</td><td>MAY</td></tr>
+</table>
+
+<h3>F2. 今日の理想スケジュール提案 <span class="tag must">MUST</span></h3>
+<table>
+<tr><th>ID</th><th>要件</th><th>優先</th></tr>
+<tr><td>F2-1</td><td>その日の初回起動時(作業時間帯の開始以降)に plan を自動生成し、「今日の予定を組みました」として提示。[OK] で確定、[調整する] でタイムラインの編集モード。手動生成ボタンも「今日」画面の折りたたみに置く。</td><td>MUST</td></tr>
+<tr><td>F2-2</td><td>生成順序(§6.2): 作業時間帯 → カレンダー busy → 外出判定に基づく移動ブロック → 生活ルーティン → 毎日の習慣 → 休憩方針 → ToDo の今日の分 → 残りは free。固定要素が先、可変要素が後。</td><td>MUST</td></tr>
+<tr><td>F2-3</td><td>移動時間の自動確保: 「外出」とみなした busy の<b>連続グループの最初の前</b>と<b>最後の後</b>にだけ transit ブロック(設定の片道分)を置く。外出判定は §6.3。ユーザーは busy ブロックのタップで「在宅/外出」を上書きできる(その日だけ記憶)。</td><td>MUST</td></tr>
+<tr><td>F2-4</td><td>生活ルーティンが busy と重なる場合(例: 授業中の昼食)は、ルーティンを busy 直後の空きに 15 分刻みでずらす(ずらせなければ省く)。</td><td>SHOULD</td></tr>
+<tr><td>F2-5</td><td>task ブロックの配置: 「今日の分」が正の義務タスクを期限順に、各タスクの最小単位以上・最大連続 90 分で分割し、作業に向く枠(desk 可の時間)に前から詰める。90 分ごとに休憩 10 分を挟む。入り切らない分は切り捨て、ヒーロー副文で「今日は全部は入りません(修論 −1h)」と事実だけ言う。</td><td>MUST</td></tr>
+<tr><td>F2-6</td><td>休憩方針: 設定の「夜の休憩」(既定 20:00〜21:00)を rest ブロックとして<b>必ず</b>置く(メリハリ=休憩も予定)。作業時間帯の最後 30 分は free(就寝準備)。</td><td>MUST</td></tr>
+<tr><td>F2-7</td><td>再計画: 「今から再計画」で、現在時刻以降のブロックだけを同じ規則で再配置(過去と記録中は触らない)。実績が理想から 30 分以上遅れたらヒーローに「後ろへ(再計画)」を出す。</td><td>MUST</td></tr>
+<tr><td>F2-8</td><td>ブロック編集: [今やる](現在時刻へ移動)[後ろへ](次の空きへ)[今日はやらない][長さ変更(−15/+15/+30)]。ドラッグは実装しない(iOS で誤操作しやすい)。</td><td>SHOULD</td></tr>
+<tr><td>F2-9</td><td>予定(busy)が無い日・カレンダー未接続でも動く(busy なし=在宅として生成)。</td><td>MUST</td></tr>
+<tr><td>F2-10</td><td>「作業に回せる割合」(既定 60%)を task 配置の総量上限に適用し、日次レポートの実績(作業種別の合計 ÷ 使える時間)で週1回だけ校正提案する(§6.6)。</td><td>SHOULD</td></tr>
+</table>
+
+<h3>F3. 日次レポート <span class="tag must">MUST</span></h3>
+<table>
+<tr><th>ID</th><th>要件</th><th>優先</th></tr>
+<tr><td>F3-1</td><td>集計: カテゴリ別の実績分数、理想との差、ベースライン(直近7日平均)との差、作業種別合計、drift 種別合計、未記録分数、記録カバー率。</td><td>MUST</td></tr>
+<tr><td>F3-2</td><td>文章生成(§6.5): <b>必ず肯定的事実を先頭</b>に最大 3 文。例「研究は理想より 25 分多く進められました」「SNS・動画は先週の平均より 30 分減りました」「休憩は予定どおり 20:00 に取れました」。次に改善点を事実だけ 1〜2 文(「英語は今日は入りませんでした」)。最後に明日への一言(未着手で期限が近いタスクがあれば 1 件だけ)。責める語(「サボり」「無駄」)は使わない。</td><td>MUST</td></tr>
+<tr><td>F3-3</td><td>肯定文が1つも作れない日は「記録できた時間 6h40m。それだけで十分です」のような記録そのものを認める文を出す(ストリークの材料=「記録した日」)。</td><td>MUST</td></tr>
+<tr><td>F3-4</td><td>表示: 文章 → カテゴリ別の横棒(理想/実績/先週平均の3本)→ 詳細(折りたたみ)。数値より文章が先。</td><td>SHOULD</td></tr>
+<tr><td>F3-5</td><td>生成タイミング: いつでも閲覧可。確定は翌日の作業時間帯開始時(その時点のエントリでスナップショットを <code>reports[date]</code> に保存、後の編集で再計算可)。</td><td>MUST</td></tr>
+<tr><td>F3-6</td><td>週次サマリ(折りたたみ): 7日分のカテゴリ別合計と前週比、記録日数、理想どおりだった割合。日曜(または設定曜日)の初回起動で1行誘導。</td><td>MAY</td></tr>
+</table>
+
+<h3>F4. 先延ばし防止 <span class="tag should">SHOULD</span></h3>
+<table>
+<tr><th>ID</th><th>仕組み</th><th>優先</th></tr>
+<tr><td>F4-1</td><td><b>いま1つ</b>: ヒーローは常に「いまやること」1つ+[始める]。始める=記録開始=コミット。迷う余地を画面から消す。</td><td>MUST</td></tr>
+<tr><td>F4-2</td><td><b>とっかかり</b>: タスクに「最初の5分でやること」を持たせ、ヒーロー副文に表示。無ければ「まず 5 分だけ」を既定文にする。</td><td>SHOULD</td></tr>
+<tr><td>F4-3</td><td><b>朝の一言</b>: 期限 3 日以内で未着手(紐づく記録ゼロ)の義務タスクがあれば、朝の提案に「○○はまだ手つかずです。今日 30 分だけ入れました」と 1 件だけ。</td><td>SHOULD</td></tr>
+<tr><td>F4-4</td><td><b>ギャップの回収</b>(F1-5): 未記録を見える化し、「何もしていなかった時間」に気づかせる。ただし責めない。</td><td>SHOULD</td></tr>
+<tr><td>F4-5</td><td><b>ダラダラの区切り</b>: SNS・動画(drift)を記録するとき「あと何分?」を聞き、終了予定を置く。時間が来たらヒーローが「休憩おわり → 次は 研究」に変わる(通知は不可、開いたときに分かる)。</td><td>MUST</td></tr>
+<tr><td>F4-6</td><td><b>休憩の許可</b>(nokorijikan の EDF 判定を流用): 今日の分が終わっていれば「今日はおしまい、休んで大丈夫」と言い切る。終わっていなければ「あと 1h20m やれば今日は終わり」。</td><td>SHOULD</td></tr>
+<tr><td>F4-7</td><td><b>続けた日数</b>: 「記録した日」の連続日数を <code>entries</code> から導出(保存しない)。今日まだ記録が無くても途切れ扱いにしない。</td><td>MAY</td></tr>
+<tr><td>F4-8</td><td><b>最小単位</b>: task ブロックはタスクの最小単位(既定 30 分)未満にしない。小さすぎる枠は free にする。</td><td>SHOULD</td></tr>
+</table>
+
+<h3>F5. タスク管理(ToDo) <span class="tag must">MUST</span></h3>
+<table>
+<tr><th>ID</th><th>要件</th><th>優先</th></tr>
+<tr><td>F5-1</td><td>項目: 名前 / 義務orやりたい / 期限(日付+任意の時刻)/ 残り見積(時間)/ 最小単位(15〜120分)/ カテゴリ / とっかかり / 繰り返し(なし・毎週X時間)/ メモ。</td><td>MUST</td></tr>
+<tr><td>F5-2</td><td>「今日の分」の算出(§6.4): EDF の累積で「期限までに使える時間」と「残り見積」から今日必要な時間をタスクごとに配分。</td><td>MUST</td></tr>
+<tr><td>F5-3</td><td>進捗: 紐づく記録の合計を残り見積から引く提案(「研究 1h30m 記録 → 残りを 10.5h にする?」ワンタップ)。直接編集も可(半分/1.5倍/直接入力)。</td><td>SHOULD</td></tr>
+<tr><td>F5-4</td><td>完了・削除は tombstone(<code>deletedAt</code>)で持ち 60 日で掃除(同期のため)。</td><td>MUST</td></tr>
+<tr><td>F5-5</td><td>期限超過の出口シート(§4.2)。</td><td>SHOULD</td></tr>
+</table>
+
+<h3>F6. Google カレンダー(free/busy) <span class="tag should">SHOULD</span></h3>
+<ul>
+<li>F6-1 スコープ <code>https://www.googleapis.com/auth/calendar.freebusy</code> のみ。<code>freeBusy.query</code> で primary カレンダーの busy 区間を今日〜7日先まで取得(plan には今日分だけ使う。先読みは「今日の分」計算用)。</li>
+<li>F6-2 トークンは GIS(token model・リダイレクト無し)で取得し sessionStorage に保持(リロードをまたぐ・ブラウザを閉じると消える)。ユーザー操作のないタイミングで認証ポップアップを出さない。</li>
+<li>F6-3 取得は「朝の plan 生成時にトークンがあれば静かに」「鮮度の1行タップ時」「設定の接続時」。30 分以内の再取得はしない。</li>
+<li>F6-4 busy は localStorage の <code>busyCache</code> に置き、Drive には送らない。</li>
+<li>F6-5 未接続・取得失敗時は前回の busy(当日分があれば)か busy なしで生成し、1行で「予定は未取得」と出す。</li>
+</ul>
+
+<h3>F7. Drive 同期 <span class="tag should">SHOULD</span></h3>
+<ul>
+<li>F7-1 スコープ <code>drive.appdata</code>。<code>appDataFolder</code> に <code>merihari.enc</code>(1ファイル)。</li>
+<li>F7-2 暗号化: PBKDF2(SHA-256, 310,000 回)でパスフレーズから鍵、AES-256-GCM(12 byte IV 毎回ランダム)。パスフレーズは sessionStorage のみ。ファイルに平文の<b>ヒント</b>(秘密でない短文)を併置。</li>
+<li>F7-3 同期は自然なタップに乗せる: 記録開始/終了・タスク保存・タブ切替時に、トークンがあり前回から 5 分以上経っていれば静かに実行。手動ボタンは設定にも置く。</li>
+<li>F7-4 マージ: entries/tasks/plans は id ごとに <code>updatedAt</code> の LWW(同点は id の文字列比較で決定的)。削除は tombstone。settings は <code>settingsUpdatedAt</code>。未知キーは保持(前方互換 <code>Object.assign({}, remote, local)</code>)。端末データ消去は世代 <code>resetAt</code> で全端末に伝播。<code>merge(a,b)==merge(b,a)</code> をテストで固定。</li>
+<li>F7-5 同期対象外(端末ローカル): busyCache、トークン、パスフレーズ、UI 状態、当日の外出/在宅上書き。</li>
+</ul>
+
+<h3>F8. PWA・オフライン・端末連携 <span class="tag must">MUST</span></h3>
+<ul>
+<li>F8-1 manifest + Service Worker(ネットワーク優先・キャッシュ名 <code>merihari-vN</code>)。オフラインでも記録・plan 生成・レポートが動く(Google 連携だけ不可)。</li>
+<li>F8-2 設定に「アップデートを確認」(ホーム画面起動は SW 更新が届きにくい)。<code>APP_VERSION</code>・NEWS・キャッシュ名を同時更新する規約(§10)。</li>
+<li>F8-3 iOS: <code>*{touch-action:manipulation}</code>、スタンドアロン表示、ダークモード対応。振動 API・定時通知は無い前提(ショートカット/時計で代替し README に明記)。</li>
+<li>F8-4 データの書き出し/読み込み(JSON)、端末データ消去。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s6">6. アルゴリズム仕様</h2>
+
+<h3>6.1 使える時間(nokorijikan <code>freeMs</code> を継承)</h3>
+<pre><code>usable(day) = window(day)                       // 作業時間帯(曜日別)
+            − Σ routine(day)                     // 生活ルーティン
+            − Σ busy(day)  − Σ transit(day)      // 予定と移動
+            − Σ habit(day) − rest(evening)       // 習慣と夜の休憩
+workable(day) = usable(day) × ratio               // 作業に回せる割合(既定 0.6)</code></pre>
+
+<h3>6.2 plan 生成(擬似コード)</h3>
+<pre><code>function buildPlan(date, now, settings, busy, tasks, habits) {
+  const W = window(date);                           // [start, end]
+  let blocks = [];
+  // 1. 固定: busy
+  for (const b of busy.filter(inDay(date))) blocks.push({type:'busy', ...b});
+  // 2. 移動: 外出グループの前後(§6.3)
+  for (const g of groupOuting(blocks, settings)) {
+    blocks.push({type:'transit', start: g.start - settings.transitMin, end: g.start});
+    blocks.push({type:'transit', start: g.end, end: g.end + settings.transitMin});
+  }
+  // 3. 生活ルーティン(重なれば直後の空きへ 15 分刻みでずらす・無理なら省く)
+  for (const r of routines(date)) blocks.push(placeOrShift({type:'routine', ...r}, blocks));
+  // 4. 夜の休憩(必ず)・毎日の習慣(希望時間帯に、重なれば近い空きへ)
+  blocks.push(placeOrShift({type:'rest', ...settings.eveningRest}, blocks));
+  for (const h of habits) blocks.push(placeOrShift({type:'habit', ...h}, blocks));
+  // 5. タスク: 今日の分(§6.4)を期限順に、最小単位以上・最大 90 分、90 分ごとに休憩 10 分
+  let budget = workable(date) − Σ(habit);
+  for (const t of todayShare(tasks, date).sort(byDeadline)) {
+    let need = min(t.todayMin, budget);
+    for (const slot of freeSlots(blocks, W, from = max(now, W.start))) {
+      if (need < t.minUnit) break;
+      const len = min(need, 90, slot.len);
+      if (len < t.minUnit) continue;
+      blocks.push({type:'task', taskId:t.id, start:slot.start, end:slot.start+len});
+      if (len === 90) blocks.push({type:'rest', start:slot.start+90, end:slot.start+100});
+      need −= len; budget −= len;
+    }
+    t.unplacedMin = need;                             // ヒーロー副文で事実だけ言う
+  }
+  // 6. 残りは free。作業時間帯の最後 30 分は free 固定
+  return fillFree(blocks, W);
+}</code></pre>
+<p><small>再計画(F2-7)は <code>from = now</code> として 5〜6 だけやり直す。1〜4 は当日中は固定(ユーザーの手動編集は <code>pinned</code> フラグで保護)。</small></p>
+
+<h3>6.3 外出判定(busy にタイトルが無い前提での規則)</h3>
+<ol>
+<li>設定「予定がある日は外出扱い」(既定 ON)。ON のとき、日中(作業時間帯の開始+1h 〜 18:00)にある 45 分以上の busy は外出候補。</li>
+<li>外出候補同士の間隔が「片道移動 × 2」未満なら同じグループ(間に帰らない)。グループの最初の前・最後の後にのみ transit。</li>
+<li>ユーザーがその日の busy をタップして「在宅」にすれば、そのグループから除外(当日限りの上書き <code>outingOverride[date][busyId]</code>、端末ローカル)。</li>
+<li>将来: 曜日ごとの既定(「月・水は大学」)を設定に足せるようにしておく(MAY)。</li>
+</ol>
+
+<h3>6.4 今日の分(EDF 配分・nokorijikan から継承)</h3>
+<pre><code>義務タスクを期限順に並べ、累積で
+  A_i = Σ_{d ≤ deadline_i} workable(d)      // 期限までに使える時間
+  R_i = Σ_{j ≤ i} remaining_j               // 期限までに終えるべき残り
+  需要 ρ_i = R_i / A_i
+今日の分: todayMin_i = remaining_i × workable(today) / A_i を基本に、
+  ρ_i ≥ 1 のタスクは切り捨てず前倒し(足りない分は「このままでは足りません」と赤で事実だけ)。
+休憩判定(F4-6): Σ todayMin − Σ 今日の紐づき実績 ≤ 0 → 「今日はおしまい」。</code></pre>
+
+<h3>6.5 レポート文の生成規則</h3>
+<table>
+<tr><th>候補文(肯定)</th><th>条件</th><th>優先度</th></tr>
+<tr><td>「{カテゴリ}は理想より {Δ} 多く進められました」</td><td>work 種別で 実績 − 理想 ≥ 15 分</td><td>1(Δ 大きい順)</td></tr>
+<tr><td>「{drift カテゴリ}は先週の平均より {Δ} 減りました」</td><td>drift 種別で ベースライン − 実績 ≥ 15 分</td><td>1</td></tr>
+<tr><td>「{カテゴリ}は理想どおりできました」</td><td>|実績 − 理想| &lt; 15 分 かつ 理想 ≥ 30 分</td><td>2</td></tr>
+<tr><td>「休憩は予定どおり {時刻} に取れました」</td><td>rest ブロックと rest エントリが 30 分以上重なる</td><td>2</td></tr>
+<tr><td>「作業は合計 {h} でした(先週平均 {h'})」</td><td>work 合計 ≥ ベースライン</td><td>3</td></tr>
+<tr><td>「{n} 日続けて記録できています」</td><td>連続日数 ≥ 2</td><td>4</td></tr>
+<tr><td>「記録できた時間 {h}。それだけで十分です」</td><td>上のどれも無いとき(必ず 1 文は出す)</td><td>フォールバック</td></tr>
+</table>
+<p>改善点(最大 2 文・事実だけ): 「{カテゴリ}は今日は入りませんでした」(理想 ≥ 30 分で実績 0)/「{drift}は {h} でした(先週平均 {h'})」(増えたとき)/「未記録が {h} ありました」(≥ 1h)。明日への一言: 期限 3 日以内の未着手タスクを 1 件だけ。</p>
+
+<h3>6.6 作業に回せる割合の校正(週1回)</h3>
+<p>毎日 <code>ledger[date] = {usableMin, workMin}</code> を自動記録(入力不要)。週に1回(日曜または設定曜日)の初回起動で、直近 7 日の <code>Σ workMin / Σ usableMin</code> が設定 ratio と 10 ポイント以上ずれていれば「先週は使える時間の 42% が作業でした。割合を 60%→45% にしますか?」をワンタップ提案。理想のスケジュールで終わらないための唯一の自動校正。</p>
+
+<h3>6.7 ヒーローの状態機械</h3>
+<table>
+<tr><th>優先</th><th>状態</th><th>条件</th><th>表示・ボタン</th></tr>
+<tr><td>1</td><td>記録中</td><td>open entry あり</td><td>「{カテゴリ} {経過}」[終わる][別のことへ]。drift で終了予定があれば「あと {n} 分」</td></tr>
+<tr><td>2</td><td>朝の提案</td><td>今日の plan 未確認</td><td>「今日の予定を組みました」[OK][調整する]+朝の一言(F4-3)</td></tr>
+<tr><td>3</td><td>移動中</td><td>transit ブロック中 or ?ctx=transit</td><td>「移動中」+スマホ可タスク/休憩</td></tr>
+<tr><td>4</td><td>生活の時間</td><td>routine ブロック中</td><td>「いまは {ルーティン}」[記録する]</td></tr>
+<tr><td>5</td><td>休憩の時間</td><td>rest ブロック中</td><td>「休憩していい時間 あと {n} 分」[休憩を記録]</td></tr>
+<tr><td>6</td><td>やる時間</td><td>task/habit ブロック中</td><td>「いま {時間帯} は {タスク}」+とっかかり [始める][別のことを記録][後ろへ]</td></tr>
+<tr><td>7</td><td>自由時間</td><td>free ブロック中</td><td>今日の分が残っていれば「あと {h} やれば今日はおしまい」[始める]、無ければ「今日の分は終わり。休んで大丈夫」</td></tr>
+<tr><td>8</td><td>作業時間外</td><td>window の外</td><td>「今日はおしまい」+レポート導線 / 朝なら「おはよう」</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s7">7. データモデル</h2>
+<p>localStorage キー <code>merihari.v1</code> に 1 つの JSON。時刻は ISO 8601(ローカル)で持ち、分単位に丸める。id は <code>crypto.randomUUID()</code>。</p>
+<pre><code>{
+  "schema": 1,
+  "settings": {
+    "window":   { "mon":["07:00","23:30"], "...":"", "sun":["08:00","23:00"] },
+    "routines": [ {"id":"r1","name":"朝食","start":"07:00","min":30,"days":[1,2,3,4,5,6,0]},
+                  {"id":"r2","name":"昼食","start":"12:00","min":45,"days":[...]},
+                  {"id":"r3","name":"夕食","start":"19:00","min":45,"days":[...]},
+                  {"id":"r4","name":"入浴","start":"22:30","min":30,"days":[...]} ],
+    "transitMin": 50, "outingByBusy": true, "outingMinBusyMin": 45,
+    "habits":   [ {"id":"h1","name":"英語","categoryId":"english","min":30,"prefer":"morning"} ],
+    "eveningRest": { "start":"20:00","min":60 },
+    "restEvery": { "workMin":90, "restMin":10 },
+    "ratio": 0.6,
+    "categories": [ {"id":"research","name":"研究","kind":"work","color":"#2b6cb0","order":1},
+                    {"id":"class","name":"授業","kind":"work"}, {"id":"english","name":"英語","kind":"work"},
+                    {"id":"job","name":"バイト","kind":"work"}, {"id":"hunt","name":"就活","kind":"work"},
+                    {"id":"life","name":"生活","kind":"life"}, {"id":"rest","name":"休憩","kind":"rest"},
+                    {"id":"sns","name":"SNS・動画","kind":"drift"}, {"id":"transit","name":"移動","kind":"life"},
+                    {"id":"other","name":"その他","kind":"work"} ],
+    "weeklyReviewDay": 0,
+    "settingsUpdatedAt": "2026-10-11T09:00:00+09:00"
+  },
+  "entries": { "&lt;id&gt;": { "id":"…","date":"2026-10-11","start":"14:30","end":"16:00"|null,
+                         "categoryId":"research","taskId":"t1"|null,"note":"",
+                         "plannedMin":null, "updatedAt":"…","deletedAt":null } },
+  "tasks":   { "&lt;id&gt;": { "id":"t1","name":"修論 実験3","kind":"duty"|"wish","deadline":"2026-10-20T23:59",
+                         "remainingH":12,"minUnit":30,"categoryId":"research","starter":"昨日のログを開いて1行書く",
+                         "repeat":null|{"type":"weekly","hours":5,"weekEnd":"sun"},
+                         "note":"","doneAt":null,"updatedAt":"…","deletedAt":null } },
+  "plans":   { "2026-10-11": { "date":"…","confirmedAt":"…","generatedAt":"…",
+                 "blocks":[ {"id":"b1","type":"task","taskId":"t1","start":"13:00","end":"14:30","pinned":false}, … ],
+                 "updatedAt":"…" } },
+  "reports": { "2026-10-10": { "byCategory":{"research":{"planned":180,"actual":205,"baseline":150}, …},
+                 "unloggedMin":80,"coverage":0.87,"lines":["研究は理想より 25 分多く…", …],"finalizedAt":"…" } },
+  "ledger":  { "2026-10-10": {"usableMin":540,"workMin":230} },
+  "meta":    { "resetAt": null, "lastSyncAt": null, "appVersion":"0.1.0" }
+}
+// 端末ローカル(同期しない・別キー merihari.local): busyCache, outingOverride, uiState, pendingSync
+// sessionStorage: gisToken, passphrase</code></pre>
+<p>派生値(保存しない): 連続記録日数、今日の分、ベースライン、カバー率。「端末ごとに計算する数字は材料を同期する」。</p>
+
+<!-- ============================================================ -->
+<h2 id="s8">8. Google 連携・同期・セキュリティ</h2>
+<h3>8.1 Google Cloud(10 分・nokorijikan README の手順を継承)</h3>
+<ol>
+<li>tangoquest で作成済みの GCP プロジェクトに Calendar API・Drive API を有効化(相乗りでよいかは §13-1)。</li>
+<li>OAuth 同意画面: 外部・テスト状態・テストユーザーに自分。スコープ <code>calendar.freebusy</code> と <code>drive.appdata</code>。</li>
+<li>OAuth クライアント(ウェブ)2本: 本番 <code>https://zuno1000.github.io</code>、開発 <code>http://localhost:8000</code>。リダイレクト URI 不要。クライアント ID はコードに直書き(公開前提の識別子・生成元制限で担保)。</li>
+</ol>
+<h3>8.2 脅威と対策</h3>
+<table>
+<tr><th>懸念</th><th>対策</th></tr>
+<tr><td>カレンダーの内容漏えい</td><td>free/busy のみ。タイトル等を取得できるスコープを要求しない。busy は端末内のみ・Drive へ送らない。</td></tr>
+<tr><td>Drive 上のデータ閲覧(Google 側・端末紛失)</td><td>端末側で AES-256-GCM 暗号化。鍵は PBKDF2(310k 回)で導出しパスフレーズは sessionStorage のみ(閉じれば消える)。</td></tr>
+<tr><td>トークン漏えい</td><td>sessionStorage(タブ単位・閉じれば消える)。localStorage には置かない。スコープ最小。リダイレクト無し(token model)。</td></tr>
+<tr><td>XSS(自由入力: タスク名・メモ・LLM 貼り戻し)</td><td>描画は <code>textContent</code>/テンプレート要素のみ。<code>innerHTML</code> にユーザー文字列を入れない。JSON 読み込みはスキーマ検証。CSP は meta で <code>default-src 'self'; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com</code> を基本に実機で調整。</td></tr>
+<tr><td>公開リポジトリ</td><td>データはコードに含まれない(端末+暗号化 Drive のみ)。クライアント ID 以外の秘密は無い。コミット前に個人情報(氏名・予定)が入らないよう、サンプルデータは架空にする。</td></tr>
+<tr><td>依存ライブラリ</td><td>GIS(<code>accounts.google.com/gsi/client</code>)以外の外部スクリプトを使わない。npm 依存ゼロ。</td></tr>
+<tr><td>多端末の競合</td><td>LWW+tombstone+決定的同点規則。マージの対称性をテストで固定。</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s9">9. 非機能要件・技術構成</h2>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>技術</td><td>素の HTML/CSS/JS(ES2020+)、ビルド無し、フレームワーク無し、npm 依存ゼロ。PWA(manifest + sw.js)。</td></tr>
+<tr><td>配信</td><td>GitHub Pages(<code>main</code> / root、<code>.nojekyll</code>)。公開 URL <code>https://zuno1000.github.io/merihari/</code>。</td></tr>
+<tr><td>対応環境</td><td>iOS 17+ Safari(スタンドアロン)、Windows Chrome/Edge 最新。幅 390px で崩れない(最長文字列で確認)。</td></tr>
+<tr><td>性能</td><td>起動 1 秒以内(キャッシュ後)。タイムラインの描画は状態が変わったときだけ全置換、経過時間の秒表示は <code>textContent</code> 更新のみ(毎秒 innerHTML しない)。</td></tr>
+<tr><td>オフライン</td><td>Google 連携以外はすべて動く。</td></tr>
+<tr><td>アクセシビリティ</td><td>チップは 44px 以上のタップ領域。色だけで意味を伝えない(種別はラベルでも示す)。ダーク/ライト両対応。</td></tr>
+<tr><td>テスト</td><td><code>tests/index.html</code>(iframe 方式・localhost ガード・<code>ok()</code> の後片付けは try/finally・ネガティブコントロール 1 件)。純関数を <code>window.M</code> に載せる: buildPlan / groupOuting / todayShare / usable / reportLines / merge / encrypt↔decrypt / entry 重なり解消。</td></tr>
+<tr><td>版管理</td><td><code>APP_VERSION</code>(semver)・設定内 NEWS・SW キャッシュ名を 1 コミットで同時更新。</td></tr>
+<tr><td>ログ</td><td>サーバー無し。エラーは console のみ。解析・トラッキング無し。</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s10">10. ファイル構成と開発ルール</h2>
+<pre><code>~/personal/merihari/            (GitHub: zuno1000/merihari, Public, Pages main/root)
+├── index.html                  画面の骨組み(3タブ・テンプレート要素)
+├── css/app.css
+├── js/
+│   ├── main.js                 起動・ルーティング・URL パラメータ・状態機械
+│   ├── store.js                localStorage 読み書き・スキーマ検証・移行
+│   ├── time.js                 window / routines / usable / 日付ユーティリティ
+│   ├── plan.js                 buildPlan / groupOuting / todayShare / replan
+│   ├── log.js                  entries(開始・終了・事後入力・ギャップ・重なり解消)
+│   ├── report.js               集計・ベースライン・reportLines・ledger
+│   ├── ui-today.js / ui-tasks.js / ui-settings.js
+│   ├── google.js               GIS・freeBusy
+│   └── sync.js                 crypto・Drive appDataFolder・merge
+├── sw.js / manifest.webmanifest / icon.svg / .nojekyll
+├── tests/index.html
+├── docs/仕様書.html            ← 本書(Vault と同じもの)
+├── README.md                   Google Cloud 手順・iOS ショートカット・版の上げ方
+└── CLAUDE.md                   Claude CLI 用の作業ルール(Vault ノートの場所・テスト・版規約)</code></pre>
+<p><b>開発ルール:</b> 1 フェーズ=1〜2 セッション。各版は push → タブを完全に閉じて開き直して実機確認 → 数日使う → FB を Vault ノートの進捗ログへ。「機能を増やさず既定を賢く」。ユーザー自身が書いた文言(とっかかり・メモ)は自動処理で上書きしない。</p>
+
+<!-- ============================================================ -->
+<h2 id="s11">11. ロードマップ</h2>
+<table>
+<tr><th>Phase</th><th>版</th><th>内容</th><th>完了条件</th></tr>
+<tr><td>0 土台</td><td>v0.1</td><td>リポジトリ作成・Pages 有効化・3 タブの骨組み・store/time・設定ウィザード(既定値)・テスト基盤・版規約・<code>touch-action</code></td><td>公開 URL で開き、設定が保存される</td></tr>
+<tr><td>1 記録</td><td>v0.2</td><td>F1-1〜F1-4, F1-7(チップ記録・事後入力・止め忘れ回収・編集)・実績レーンの描画・URL <code>?log=</code></td><td>iPhone で 3 日間、記録だけで使える</td></tr>
+<tr><td>2 提案</td><td>v0.3</td><td>F2-1〜F2-3, F2-5〜F2-7, F2-9(plan 生成・移動自動確保・休憩・再計画)・理想レーン・ヒーロー状態機械・F5-1/F5-2(タスクと今日の分)</td><td>朝の提案に従って 1 日過ごせる(カレンダー未接続でも)</td></tr>
+<tr><td>3 レポート</td><td>v0.4</td><td>F3-1〜F3-5・ledger・F4-3/F4-5/F4-6(朝の一言・ダラダラの区切り・休憩の許可)</td><td>夜のレポートを 1 週間読んで「前より良い」が実感できる</td></tr>
+<tr><td>4 Google</td><td>v0.5</td><td>F6(free/busy)・外出判定の上書き・鮮度の 1 行・F7(Drive 暗号化同期・マージ)</td><td>iPhone と PC で同じデータが見える・授業日の移動が自動で入る</td></tr>
+<tr><td>5 磨き</td><td>v0.6〜</td><td>F1-5 ギャップ埋め・F2-4/F2-8/F2-10・F3-6 週次・F4-7 連続日数・F5-3/F5-5・期限超過シート・校正提案</td><td>1 か月使って離脱しない</td></tr>
+</table>
+<div class="note ok">Phase 1 を先にして「記録だけで価値がある」状態を早く作る(提案より記録のほうが日々の習慣化に効くため)。Google 連携は Phase 4 まで後回しにし、それまでは busy なし・在宅として plan を組む。</div>
+
+<!-- ============================================================ -->
+<h2 id="s12">12. 見送り・やらないこと(理由つき)</h2>
+<ul>
+<li><b>SNS/動画の自動計測</b>: Web アプリからスクリーンタイムは取れない。自己申告(チップ)+ギャップ回収で代替。iOS ショートカット「YouTube を開いたら <code>?log=sns</code> を開く」を README に案内(MAY)。</li>
+<li><b>定時プッシュ通知</b>: サーバー無しの iOS PWA では不可。ショートカット/時計で代替。</li>
+<li><b>カレンダーのタイトル取得・書き込み</b>: プライバシー方針。</li>
+<li><b>LLM/ML による提案</b>: ルールベースで足りる・説明可能性・コスト。将来 nokorijikan のコピペ方式を足す余地だけ残す(<code>parseLLM</code> を流用可能)。</li>
+<li><b>ドラッグ&ドロップでの plan 編集</b>: iOS で誤操作しやすい。タップのメニューで足りる。</li>
+<li><b>4 つ目のタブ・統計ダッシュボード</b>: 画面が増えると「どれで何をするか」が分からなくなる。レポートは「今日」画面の中。</li>
+<li><b>複数ユーザー・共有・アカウント</b>: 個人用。</li>
+<li><b>リポジトリの private 化</b>: GH Pages 無料枠は Public 限定。データはコードに含まれない。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s13">13. 未決事項(実装前・Phase 0 の冒頭で決める)</h2>
+<ol>
+<li>Google Cloud は tangoquest のプロジェクトに相乗りでよいか(nokorijikan からの持ち越し)。</li>
+<li>カテゴリの初期セット(研究/授業/英語/バイト/就活/生活/休憩/SNS・動画/移動/その他)でよいか。「授業」は busy で自動記録(外出グループ中に記録が無ければ「授業」で埋める提案)にするか。</li>
+<li>移動の片道分の既定値(50 分?)と、「予定がある日は外出扱い」で始めてよいか(曜日既定は後回し)。</li>
+<li>夜の休憩の既定(20:00〜21:00)と、作業 90 分ごとに休憩 10 分でよいか。</li>
+<li>plan の「今日の分」が入り切らないときの扱い: 切り捨てて事実だけ言う(本書の案)か、夜の休憩を削って入れるか。</li>
+<li>レポート確定のタイミング: 翌日の作業時間帯開始時(本書の案)か、就寝時刻か。</li>
+<li>nokorijikan の Vault 内 <code>ptm/</code> と zip はそのまま残すか、<code>_archive/</code> へ移すか。</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="s14">14. nokorijikan からの引き継ぎ対応表</h2>
+<table>
+<tr><th>nokorijikan の評価項目</th><th>merihari での扱い</th></tr>
+<tr><td>A1 カレンダーが更新されない</td><td>トークンを sessionStorage に・鮮度の 1 行・朝の plan 生成時に静かに取得(F6-2/F6-3)</td></tr>
+<tr><td>A2 作業時間の二重引き</td><td>真実の値を「実績エントリ」に一本化。残り見積の減算は提案(F5-3)としてワンタップ承認制</td></tr>
+<tr><td>A3 割合 60% が学習しない</td><td>ledger と週 1 回の校正提案(§6.6)</td></tr>
+<tr><td>A4 元気度・キャップが永続</td><td>元気度・キャップは採用しない(状態は plan と記録から決まる)</td></tr>
+<tr><td>A5/A6 終わりのないタスク・期限超過の出口</td><td>毎週 X 時間型(F5-1)・期限超過シート(F5-5)</td></tr>
+<tr><td>B1 追加フォーム 9 項目</td><td>かんたん追加 3 項目(§4.2)</td></tr>
+<tr><td>B2 同期が設定の奥</td><td>自然なタップに乗せる同期(F7-3)+鮮度/同期の 1 行</td></tr>
+<tr><td>B4 クライアント ID を貼らせる</td><td>コード直書き(§8.1)</td></tr>
+<tr><td>C1〜C4 分かりやすさ</td><td>主役 1 つの状態機械(§6.7)・設定ウィザード・数字は副文へ</td></tr>
+<tr><td>D1〜D3 使い続ける</td><td>日次レポートの肯定文(F3-2)・連続日数は導出(F4-7)・通知は諦めショートカットで代替</td></tr>
+<tr><td>E1〜E6 技術的負債</td><td>最初から js/ 分割・テスト基盤・版規約・textContent 更新・前方互換マージ・リポジトリ化(Phase 0)</td></tr>
+</table>
+
+<p style="margin-top:40px;color:var(--muted);font-size:13px">本書の置き場所: <code>PersonalVault/Projects/merihari/docs/仕様書.html</code>(Obsidian からは Projects/merihari のノート経由)。実装後はリポジトリの <code>docs/仕様書.html</code> にも同じものを置き、変更は両方に反映する。</p>
+
+</div>
+</body>
+</html>
