@@ -172,10 +172,10 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
     const WM = T.windowFor(ds, MON);
     const busyA = [{ id: 'A', start: 540, end: 630 }, { id: 'B', start: 660, end: 720 }, { id: 'C', start: 960, end: 990 }, { id: 'D', start: 1140, end: 1200 }];
-    const g = Pn.groupOuting(busyA, ds, WM);
+    const g = Pn.groupOuting(busyA.map((b) => ({ ...b, out: true })), ds, WM);
     ok(g.length === 1 && g[0].start === 540 && g[0].end === 720 && eq(g[0].ids, ['A', 'B']), 'groupOuting: 45分以上・日中の busy を片道×2 未満の間隔でまとめる(30分の予定と18時以降は除外)');
-    ok(Pn.groupOuting(busyA.map((b) => (b.id === 'A' ? { ...b, home: true } : b)), ds, WM)[0].start === 660, 'groupOuting: 在宅の上書きは除外');
-    ok(Pn.groupOuting(busyA, { ...ds, outingByBusy: false }, WM).length === 0, 'groupOuting: 設定 OFF なら空');
+    ok(Pn.groupOuting(busyA.map((b) => ({ ...b, out: b.id !== 'A' })), ds, WM)[0].start === 660, 'groupOuting: 在宅(out=false)の予定は除外');
+    ok(Pn.groupOuting(Pn.decideOuting(busyA, ds, MON, {}), ds, WM).length === 0, 'groupOuting: 既定(原則在宅)では空');
     ok(eq(Pn.placeOrShift({ start: 720, end: 765 }, [{ start: 690, end: 750 }], WM), { start: 750, end: 795, shifted: true }), 'placeOrShift: 重なれば直後の空きへ 15 分刻み');
     ok(Pn.placeOrShift({ start: 1380, end: 1440 }, [{ start: 1380, end: 1410 }], WM) === null, 'placeOrShift: 入らなければ null');
     ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]), 'freeSlots');
@@ -185,7 +185,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const hb = p0.blocks.find((b) => b.type === 'habit');
     ok(hb && hb.start === 450 && hb.end === 480 && hb.name === '英語', 'buildPlan: 朝の習慣は朝食直後の空き(07:30〜08:00)');
     ok(noOverlap(p0.blocks) && !types(p0).includes('task'), 'buildPlan: 重なり無し・タスク無しなら task ブロック無し');
-    const p1 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {} }, PC);
+    const p1 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, fill: false }, PC);
     const tb = p1.blocks.filter((b) => b.type === 'task');
     ok(tb.length === 1 && tb[0].start === 540 && tb[0].end === 620 && tb[0].taskId === 't1' && tb[0].categoryId === 'research', 'buildPlan: 今日の分 80 分を now(09:00) から 1 ブロックで置く');
     ok(p1.shortfall.length === 0 && noOverlap(p1.blocks), 'buildPlan: 入り切れば shortfall 無し');
@@ -196,21 +196,21 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(tb2.every((b) => b.end - b.start >= 30 && b.end - b.start <= 90) && noOverlap(p2.blocks), 'buildPlan: task ブロックは最小単位以上・最大 90 分・重なり無し');
     ok(tb2.every((b) => b.end <= WM.end - 30) && tb2[0].start === 540, 'buildPlan: 最後の 30 分には置かない');
     ok(rb2.length >= 3 && rb2.every((r) => tb2.some((b) => b.end === r.start && b.end - b.start === 90)), 'buildPlan: 90 分の作業の直後に休憩 10 分');
-    ok(total2 <= 480 && total2 >= 450 && p2.shortfall[0]?.taskId === 'x' && p2.shortfall[0].min === 600 - total2, 'buildPlan: 作業に回せる割合(workable 450)が上限・入り切らない分は shortfall');
-    const p3 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 600, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1 }, PC);
+    ok(total2 <= 450 && total2 >= 420 && p2.shortfall[0]?.taskId === 'x' && p2.shortfall[0].min === 600 - total2, 'buildPlan: 作業に回せる割合(workable 450)が上限・入り切らない分は shortfall');
+    const p3 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 600, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1, fill: false }, PC);
     const tb3 = p3.blocks.filter((b) => b.type === 'task');
     ok(tb3.length === 1 && tb3[0].start === 600 && p3.confirmedAt === null, '再計画: now(10:00) にまたがる task は now から置き直す');
-    const p4 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 660, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1 }, PC);
+    const p4 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 660, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1, fill: false }, PC);
     ok(p4.blocks.filter((b) => b.type === 'task').length === 1 && p4.blocks.find((b) => b.type === 'task').end === 620, '再計画: 過去の task ブロックは引き継ぎ、今日の分は満たしているので追加しない');
     const p5 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, first: 't1' }, PC);
     ok(p5.blocks.filter((b) => b.type === 'task')[0].taskId === 't1', 'buildPlan: first で先頭に置く(今やる)');
-    const p6 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, last: 't2' }, PC);
+    const p6 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, last: 't2', fill: false }, PC);
     ok(p6.blocks.filter((b) => b.type === 'task').pop().taskId === 't2', 'buildPlan: last で最後に置く(後ろへ)');
     const p7 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, skipped: ['t1'] }, PC);
     ok(!p7.blocks.some((b) => b.taskId === 't1') && eq(p7.skipped, ['t1']), 'buildPlan: skipped は置かない(今日はやらない)');
-    const p8 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: { a: { date: MON, start: '08:00', end: '09:30', taskId: 't1', categoryId: 'research' } } }, PC);
+    const p8 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: { a: { date: MON, start: '08:00', end: '09:30', taskId: 't1', categoryId: 'research' } }, fill: false }, PC);
     ok(!p8.blocks.some((b) => b.type === 'task'), 'buildPlan: 紐づく実績が今日の分を満たしていれば置かない');
-    const p9 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }] }, PC);
+    const p9 = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out' }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }] }, PC);
     const tr = p9.blocks.filter((b) => b.type === 'transit');
     ok(tr.length === 2 && tr[0].start === 490 && tr[0].end === 540 && tr[1].start === 720 && tr[1].end === 770, 'buildPlan: 外出 busy の前後に片道 50 分の移動');
     ok(p9.blocks.find((b) => b.type === 'routine' && b.name === '昼食').start === 780, 'buildPlan: 移動と重なる昼食は直後(13:00)へずらす');
@@ -300,8 +300,48 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(JSON.parse(enc2).iv !== encObj.iv, 'encrypt: IV は毎回ランダム');
     const bz = G.busyIntervalsForDate([{ start: '2026-10-12T09:00:00+09:00', end: '2026-10-12T10:30:00+09:00' }, { start: '2026-10-11T23:00:00+09:00', end: '2026-10-12T01:00:00+09:00' }, { start: '2026-10-13T09:00:00+09:00', end: '2026-10-13T10:00:00+09:00' }], '2026-10-12');
     ok(bz.length === 2 && bz[0].start === 0 && bz[0].end === 60 && bz[1].start === 540 && bz[1].end === 630, 'busyIntervalsForDate: その日の分だけ・日またぎは切り出す(ローカル時刻)');
-    const pB = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }], overrides: { A: 'home' } }, PC);
+    const pB = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out' }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }], overrides: { A: 'home' } }, PC);
     ok(!pB.blocks.some((b) => b.type === 'transit') && pB.blocks.some((b) => b.type === 'busy'), 'buildPlan: 在宅の上書きで移動を置かない(busy は残る)');
+
+    // ---- v0.6: 外出判定・空き時間への配分・記録の追加・同期データの検証 ----
+    log('\n# v0.6');
+    const busyM = [{ id: 'A', start: 600, end: 720 }, { id: 'B', start: 900, end: 960 }];
+    const dHome = Pn.decideOuting(busyM, ds, MON, {});
+    ok(dHome.every((b) => b.out === false && b.outingSource === 'default'), 'decideOuting: 既定は原則在宅');
+    ok(Pn.decideOuting(busyM, { ...ds, outingDefault: 'out' }, MON, {}).every((b) => b.out === true), 'decideOuting: 原則外出');
+    ok(Pn.decideOuting(busyM, { ...ds, outingDefault: 'weekday', outingDays: [1, 3] }, MON, {})[0].out === true && Pn.decideOuting(busyM, { ...ds, outingDefault: 'weekday', outingDays: [2] }, MON, {})[0].out === false, 'decideOuting: 曜日で決める(月曜)');
+    ok(Pn.outingMemoryKey(MON, 607) === '1:600', 'outingMemoryKey: 曜日:開始(15分丸め)');
+    const dMem = Pn.decideOuting(busyM, { ...ds, outingMemory: { '1:600': 'out' } }, MON, {});
+    ok(dMem[0].out === true && dMem[0].outingSource === 'memory' && dMem[1].out === false, 'decideOuting: 同じ曜日・時刻の記憶を使う');
+    const dOv = Pn.decideOuting(busyM, { ...ds, outingMemory: { '1:600': 'out' } }, MON, { A: 'home', B: 'out' });
+    ok(dOv[0].out === false && dOv[0].outingSource === 'override' && dOv[1].out === true, 'decideOuting: 当日の上書きが最優先');
+    const pHome = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: busyM }, PC);
+    ok(!pHome.blocks.some((b) => b.type === 'transit') && pHome.blocks.filter((b) => b.type === 'busy').length === 2, 'buildPlan: 原則在宅なら予定だけで移動は置かない');
+    const pOut = Pn.buildPlan({ settings: { ...ds, outingMemory: { '1:600': 'out' } }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: busyM }, PC);
+    ok(pOut.blocks.filter((b) => b.type === 'transit').length === 2 && pOut.blocks.find((b) => b.type === 'busy').out === true, 'buildPlan: 記憶で外出になった予定の前後に移動');
+    const bigNoDl = { big: { id: 'big', name: '大物', kind: 'duty', deadline: null, remainingH: 20, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
+    ok(Pn.todayShare(bigNoDl, MON, ds)[0].todayMin === 0, 'todayShare: 期限なしの義務は今日の分 0');
+    const pFill = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigNoDl, entries: {} }, PC);
+    const fb = pFill.blocks.filter((b) => b.type === 'task');
+    const fillMin = fb.reduce((a, b) => a + b.end - b.start, 0);
+    ok(fb.length >= 3 && fb.every((b) => b.filler && b.taskId === 'big' && b.end - b.start >= 30 && b.end - b.start <= 90) && fillMin >= 420 && fillMin <= 450, 'buildPlan: 期限なしの大物を余った作業枠(workable 450)に 90 分以下で細分化して入れる');
+    ok(noOverlap(pFill.blocks) && pFill.blocks.filter((b) => b.type === 'rest' && b.auto).length >= 2, 'buildPlan: 細分化した枠も重ならず・90 分ごとに休憩');
+    ok(!Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigNoDl, entries: {}, fill: false }, PC).blocks.some((b) => b.type === 'task'), 'buildPlan: fill:false なら空き配分をしない');
+    const pMix = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { ...tasksA, ...bigNoDl }, entries: {} }, PC);
+    const order = pMix.blocks.filter((b) => b.type === 'task').map((b) => b.taskId);
+    ok(order[0] === 't2' && order[1] === 't1' && pMix.blocks.some((b) => b.filler) && !order.includes('w1'), 'buildPlan: 今日の分(期限順)が先・余りは期限順に細分化・やりたいは入れない');
+    const added = L.addEntry({ x: { id: 'x', date: D, start: '09:00', end: '12:00', categoryId: 'life', updatedAt: 'x', deletedAt: null } }, { date: D, startMin: 600, endMin: 660, categoryId: 'research' }, C);
+    ok(eq(alive(added), ['life 09:00-10:00', 'research 10:00-11:00', 'life 11:00-12:00']), 'addEntry: 閉じた記録を追加し隣を詰める(分割)');
+    ok(throws(() => L.addEntry({}, { date: D, startMin: 660, endMin: 600, categoryId: 'a' }, C)), 'addEntry: 終了≦開始は拒否');
+    const dirty = S.migrate({ schema: 1, settings: {}, entries: { ok1: { id: 'ok1', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research' }, bad1: { id: 'bad1', date: 'x', start: '09:00' }, bad2: 'str', '__proto__': { id: 'p', date: '2026-10-12', start: '09:00', end: null } }, tasks: { t: { id: 't', name: 'n', remainingH: 'abc', minUnit: 9999, kind: 'weird', repeat: { type: 'weekly', hours: 'x' } }, nope: { noName: 1 } }, plans: { '2026-10-12': { blocks: [{ type: 'task', start: 540, end: 600 }, { type: 'evil', start: 0, end: 10 }, { type: 'busy', start: 'a' }] } }, reports: { '2026-10-11': { lines: ['a', 1, 'b'], coverage: 7 } }, ledger: { '2026-10-11': { usableMin: 'x', workMin: 100 } } });
+    ok(Object.keys(dirty.entries).join() === 'ok1' && !('id' in dirty.entries), 'migrate: 壊れた記録は捨て、__proto__ キーは無視(prototype を汚さない)');
+    ok(dirty.tasks.t.remainingH === 0 && dirty.tasks.t.minUnit === 30 && dirty.tasks.t.kind === 'duty' && dirty.tasks.t.repeat.hours === 5 && !dirty.tasks.nope, 'migrate: タスクの型を正規化・名前の無いものは捨てる');
+    ok(dirty.plans['2026-10-12'].blocks.length === 1 && dirty.reports['2026-10-11'].lines.length === 2 && dirty.reports['2026-10-11'].coverage === 0 && dirty.ledger['2026-10-11'].usableMin === 0, 'migrate: plan/report/ledger の壊れた要素を落とす');
+    ok(S.migrate({ schema: 1, settings: { outingByBusy: true } }).settings.outingDefault === 'home' && S.migrate({ schema: 1, settings: { outingDefault: 'weekday', outingDays: [1, 9], outingMemory: { '1:600': 'out', 'x': 'out', '2:630': 'maybe' } } }).settings.outingDays.join() === '1' , 'migrate: 外出設定(旧 outingByBusy は原則在宅へ・曜日と記憶を検証)');
+    let badFile = false; try { await Sy.decrypt(JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256-10', salt: 'AA==', iv: 'AA==', ct: 'AA==' }), 'x'); } catch (e) { badFile = /不正/.test(e.message); }
+    ok(badFile, 'decrypt: 反復回数が異常なファイルは拒否');
+    let badJson = false; try { await Sy.decrypt('{not json', 'x'); } catch (e) { badJson = /不正/.test(e.message); }
+    ok(badJson, 'decrypt: 壊れた JSON は拒否');
 
     // ---- 版規約(§9) ----
     log('\n# version');
@@ -313,7 +353,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- 画面(骨組み) ----
     log('\n# ui');
     const doc = W.document;
-    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 3, 'タブは3つだけ(今日/タスク/設定)');
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4, 'タブは4つ(今/タイムライン/タスク/設定)');
     ok(!!doc.querySelector('#view h1'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');
 

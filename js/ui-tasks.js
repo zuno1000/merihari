@@ -44,19 +44,23 @@ function chipRow(options, value, onpick, keyOf = (o) => o.value) {
 
 function quickAdd(today, rerender) {
   const name = el('input.text', { type: 'text', placeholder: 'タスク名', autocomplete: 'off', maxlength: 100 });
-  let deadline = deadlineOptions(today)[2].value, hours = 1;
+  const dateIn = el('input.date', { type: 'date', value: deadlineOptions(today)[2].value, min: today });
+  const hoursIn = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.5, min: 0.25, max: 999, value: 1, 'aria-label': '時間' });
   const submit = () => {
     const nm = name.value.trim();
     if (!nm) { toast('名前を入れてください'); name.focus(); return; }
-    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline, remainingH: hours, minUnit: 30, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
+    const hours = Math.max(0.25, +hoursIn.value || 1);
+    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dateIn.value || null, remainingH: hours, minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
     toast('追加しました');
     rerender();
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   return el('section.card.quick', [
     el('div.row', [name, el('button.btn.primary', { type: 'button', onclick: submit }, '追加')]),
-    el('div.row.field', [el('span.label', '期限'), chipRow(deadlineOptions(today), deadline, (o) => { deadline = o.value; })]),
-    el('div.row.field', [el('span.label', '大きさ'), chipRow(SIZES, hours, (o) => { hours = o.h; }, (o) => o.h)]),
+    el('div.row.field', [el('span.label', '期限'), dateIn]),
+    chipRow(deadlineOptions(today), dateIn.value, (o) => { dateIn.value = o.value || ''; }),
+    el('div.row.field', [el('span.label', '大きさ'), hoursIn, el('span.unit', '時間')]),
+    chipRow(SIZES, 1, (o) => { hoursIn.value = o.h; }, (o) => o.h),
   ]);
 }
 function defaultCategory() {
@@ -100,9 +104,9 @@ export function renderTasks(view, ctx) {
   view.append(
     el('h1', 'タスク'),
     quickAdd(today, rerender),
-    section('今日やる分', '期限から逆算して、今日やっておくべき量があるもの。理想スケジュールに入ります。', todayList, '今日やるべき分はありません。'),
-    section('期限まで余裕のある義務', '今日は配分なし。期限が近づくと自動で「今日やる分」に上がります(期限なしの義務もここ)。', duties, 'なし'),
-    section('やりたいこと', '義務ではないもの。予定には入れず、空いた時間に。', wishes, 'なし'),
+    section('今日やること', null, todayList, '今日やるべき分はありません。'),
+    section('期限までにやること', null, duties, 'なし'),
+    section('やりたいこと', null, wishes, 'なし'),
     el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
   );
 }

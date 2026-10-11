@@ -43,7 +43,9 @@ export function defaultSettings() {
       { id: 'r4', name: '入浴', start: '22:30', min: 30, days: ALL_DAYS.slice(), off: false },
     ],
     transitMin: 50,
-    outingByBusy: true,
+    outingDefault: 'home',   // 予定は原則 在宅('home')/ 外出('out')/ 曜日で決める('weekday')
+    outingDays: [],          // outingDefault が 'weekday' のとき外出扱いにする曜日(0=日)
+    outingMemory: {},        // '曜日:開始分' → 'home'|'out'(予定をタップしたときに覚える)
     outingMinBusyMin: 45,
     habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }],
     eveningRest: { start: '20:00', min: 60 },
@@ -79,7 +81,7 @@ const posInt = (v, dflt) => (Number.isFinite(+v) && +v > 0 ? Math.round(+v) : df
 function normalizeSettings(raw) {
   const d = defaultSettings();
   if (!isObj(raw)) return d;
-  const s = Object.assign({}, raw); // 未知キーは保持(前方互換)
+  const s = {}; for (const k of Object.keys(raw)) if (!UNSAFE_KEYS.has(k)) s[k] = raw[k]; // 未知キーは保持(前方互換)・危険なキーは捨てる
   // window: 曜日ごとに ['HH:MM','HH:MM'] でなければ既定
   const w = {};
   for (const k of Object.keys(d.window)) {
@@ -94,7 +96,11 @@ function normalizeSettings(raw) {
       }))
     : d.routines;
   s.transitMin = posInt(raw.transitMin, d.transitMin);
-  s.outingByBusy = typeof raw.outingByBusy === 'boolean' ? raw.outingByBusy : d.outingByBusy;
+  s.outingDefault = ['home', 'out', 'weekday'].includes(raw.outingDefault) ? raw.outingDefault : d.outingDefault;
+  s.outingDays = Array.isArray(raw.outingDays) ? raw.outingDays.filter((x) => ALL_DAYS.includes(x)) : [];
+  s.outingMemory = {};
+  if (isObj(raw.outingMemory)) for (const [k, v] of Object.entries(raw.outingMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && (v === 'home' || v === 'out')) s.outingMemory[k] = v;
+  delete s.outingByBusy;
   s.outingMinBusyMin = posInt(raw.outingMinBusyMin, d.outingMinBusyMin);
   s.habits = Array.isArray(raw.habits)
     ? raw.habits.filter(isObj).map((h) => ({
@@ -124,15 +130,67 @@ function normalizeSettings(raw) {
   return s;
 }
 
-/** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数) */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const safeKey = (k) => typeof k === 'string' && k.length <= 120 && !UNSAFE_KEYS.has(k);
+const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const optStr = (v, max) => (typeof v === 'string' ? v.slice(0, max) : v == null ? null : null);
+const str = (v, max, dflt = '') => (typeof v === 'string' ? v.slice(0, max) : dflt);
+const num = (v, min, max, dflt) => (Number.isFinite(+v) && +v >= min && +v <= max ? +v : dflt);
+const BLOCK_TYPES = new Set(['busy', 'transit', 'routine', 'habit', 'task', 'rest']);
+/** id → record のマップを検証しながら作り直す。validate が null を返したレコードは捨てる */
+function cleanMap(raw, validate) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of Object.keys(raw)) {
+    if (!safeKey(k)) continue;
+    const v = validate(raw[k], k);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+function stripUnsafe(rec) { const o = {}; for (const k of Object.keys(rec)) if (safeKey(k)) o[k] = rec[k]; return o; }
+export function validateEntry(r, id) {
+  if (!isObj(r) || !isDate(r.date) || !isHM(r.start) || (r.end != null && !isHM(r.end))) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, start: r.start, end: r.end == null ? null : r.end, categoryId: str(r.categoryId, 40, 'other'), taskId: optStr(r.taskId, 80), note: str(r.note, 500),
+    plannedMin: r.plannedMin == null ? null : num(r.plannedMin, 0, 1440, null), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
+export function validateTask(r, id) {
+  if (!isObj(r) || typeof r.name !== 'string') return null;
+  const rep = isObj(r.repeat) && r.repeat.type === 'weekly' ? { type: 'weekly', hours: num(r.repeat.hours, 0.5, 200, 5), weekEnd: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].includes(r.repeat.weekEnd) ? r.repeat.weekEnd : 'sun' } : null;
+  return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0),
+    minUnit: num(r.minUnit, 5, 600, 30), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
+export function validatePlan(r, id) {
+  if (!isObj(r) || !isDate(r.date || id)) return null;
+  const blocks = (Array.isArray(r.blocks) ? r.blocks : []).filter((b) => isObj(b) && BLOCK_TYPES.has(b.type) && Number.isFinite(+b.start) && Number.isFinite(+b.end) && +b.end > +b.start)
+    .map((b) => ({ ...stripUnsafe(b), id: str(b.id, 80, ''), type: b.type, start: Math.max(0, Math.min(1440, +b.start)), end: Math.max(0, Math.min(1440, +b.end)), name: str(b.name, 200) }));
+  return { ...stripUnsafe(r), date: r.date || id, blocks, skipped: (Array.isArray(r.skipped) ? r.skipped : []).filter((x) => typeof x === 'string').slice(0, 200),
+    shortfall: (Array.isArray(r.shortfall) ? r.shortfall : []).filter((x) => isObj(x) && typeof x.taskId === 'string').map((x) => ({ taskId: x.taskId, min: num(x.min, 0, 1440, 0) })),
+    generatedAt: optStr(r.generatedAt, 40), confirmedAt: optStr(r.confirmedAt, 40), updatedAt: optStr(r.updatedAt, 40) };
+}
+export function validateReport(r, id) {
+  if (!isObj(r)) return null;
+  const strs = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string').map((x) => x.slice(0, 300)).slice(0, 10) : []);
+  const by = {};
+  if (isObj(r.byCategory)) for (const k of Object.keys(r.byCategory)) if (safeKey(k) && isObj(r.byCategory[k])) by[k] = { planned: num(r.byCategory[k].planned, 0, 1440, 0), actual: num(r.byCategory[k].actual, 0, 1440, 0), baseline: r.byCategory[k].baseline == null ? null : num(r.byCategory[k].baseline, 0, 1440, null) };
+  return { ...stripUnsafe(r), date: r.date || id, byCategory: by, lines: strs(r.lines), positive: strs(r.positive), improve: strs(r.improve), tomorrow: optStr(r.tomorrow, 300),
+    workMin: num(r.workMin, 0, 1440, 0), driftMin: num(r.driftMin, 0, 1440, 0), unloggedMin: num(r.unloggedMin, 0, 1440, 0), coverage: num(r.coverage, 0, 1, 0), loggedMin: num(r.loggedMin, 0, 1440, 0), streak: num(r.streak, 0, 100000, 0), finalizedAt: optStr(r.finalizedAt, 40) };
+}
+export function validateLedger(r) { return isObj(r) ? { usableMin: num(r.usableMin, 0, 1440, 0), workMin: num(r.workMin, 0, 1440, 0) } : null; }
+
+/** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数)。レコードは型を検証する */
 export function migrate(raw) {
   const d = defaultData();
   if (!isObj(raw)) return d;
-  const out = Object.assign({}, raw);
+  const out = stripUnsafe(raw);
   out.schema = SCHEMA;
   out.settings = normalizeSettings(raw.settings);
-  for (const k of ['entries', 'tasks', 'plans', 'reports', 'ledger']) out[k] = isObj(raw[k]) ? raw[k] : {};
-  out.meta = Object.assign({}, d.meta, isObj(raw.meta) ? raw.meta : {});
+  out.entries = cleanMap(raw.entries, validateEntry);
+  out.tasks = cleanMap(raw.tasks, validateTask);
+  out.plans = cleanMap(raw.plans, validatePlan);
+  out.reports = cleanMap(raw.reports, validateReport);
+  out.ledger = cleanMap(raw.ledger, validateLedger);
+  out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };
   return out;
 }
 

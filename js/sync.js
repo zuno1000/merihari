@@ -24,16 +24,21 @@ export async function encrypt(obj, pass, hint = '', { iterations = ITERATIONS } 
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
   return JSON.stringify({ v: 1, app: 'merihari', kdf: `PBKDF2-SHA256-${iterations}`, hint: String(hint || '').slice(0, 80), salt: b64(salt), iv: b64(iv), ct: b64(new Uint8Array(ct)) });
 }
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 export async function decrypt(txt, pass) {
-  const o = JSON.parse(txt);
-  const iterations = +(/PBKDF2-SHA256-(\d+)/.exec(o.kdf || '')?.[1]) || ITERATIONS;
+  if (typeof txt !== 'string' || txt.length > MAX_FILE_BYTES) throw new Error('同期ファイルが大きすぎます');
+  let o;
+  try { o = JSON.parse(txt); } catch { throw new Error('同期ファイルの形式が不正です'); }
+  if (!o || o.v !== 1 || typeof o.salt !== 'string' || typeof o.iv !== 'string' || typeof o.ct !== 'string') throw new Error('同期ファイルの形式が不正です');
+  const iterations = +(/^PBKDF2-SHA256-(\d+)$/.exec(o.kdf || '')?.[1]) || ITERATIONS;
+  if (iterations < 1000 || iterations > 5000000) throw new Error('同期ファイルの形式が不正です');
   const key = await deriveKey(pass, unb64(o.salt), iterations);
   try {
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct));
     return JSON.parse(new TextDecoder().decode(pt));
   } catch { throw new Error('復号できません。パスフレーズが違う可能性があります'); }
 }
-export function readHint(txt) { try { return String(JSON.parse(txt).hint || ''); } catch { return ''; } }
+export function readHint(txt) { try { const h = JSON.parse(txt).hint; return typeof h === 'string' ? h.slice(0, 80) : ''; } catch { return ''; } }
 
 // ---- マージ(純関数・対称) ----
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
@@ -49,7 +54,7 @@ function pick(a, b, keyOf) {
 }
 function mergeById(ca, cb, keyOf, fresh) {
   const out = {};
-  for (const id of [...new Set([...Object.keys(ca || {}), ...Object.keys(cb || {})])].sort()) {
+  for (const id of [...new Set([...Object.keys(ca || {}), ...Object.keys(cb || {})])].filter((k) => !['__proto__', 'constructor', 'prototype'].includes(k)).sort()) {
     const a = fresh(ca?.[id]) ? ca[id] : null, b = fresh(cb?.[id]) ? cb[id] : null;
     const p = pick(a, b, keyOf);
     if (p != null) out[id] = p;

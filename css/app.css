@@ -249,3 +249,20 @@ details.group summary{padding:4px;cursor:pointer}
 .freshline .val{flex:none;color:var(--accent);font-weight:600;font-size:14px}
 
 .gnote{margin:-2px 4px 6px}
+
+/* ---- v0.6: ＋ボタン・タイムラインの日付・予定の色・使い方 ---- */
+.fab{position:fixed;right:16px;bottom:calc(68px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:28px;line-height:56px;text-align:center;box-shadow:0 4px 14px rgba(43,108,176,.35);cursor:pointer;z-index:6;padding:0;font-family:inherit}
+.fab.rec{background:var(--danger);box-shadow:0 4px 14px rgba(197,48,48,.35);font-size:18px}
+.tl-nav{display:flex;align-items:center;gap:6px;margin:0 0 8px;min-height:40px}
+.tl-nav b{font-size:17px}
+.now-card.big{padding:12px 10px 12px 14px}
+.now-card.big b{font-size:18px}
+.now-timer{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin-left:6px}
+.srow.up{padding:9px 12px;min-height:40px;font-size:14px}
+.up-time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;flex:none;width:6.2em}
+.srow.up .dot{width:8px;height:8px;flex:none}
+.blk.busy{background:repeating-linear-gradient(135deg,var(--accent-bg) 0 6px,transparent 6px 10px);border-left-style:solid;color:var(--fg)}
+.help h3{font-size:14px;margin:14px 0 4px}
+.help h3:first-child{margin-top:4px}
+.help p,.help li{font-size:14px;line-height:1.6;margin:4px 0}
+.help ul{padding-left:1.2em;margin:0}

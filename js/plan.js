@@ -71,15 +71,40 @@ export function loggedByTask(entries, date, nowMin) {
   return t;
 }
 
+/** 外出の記憶キー: 曜日 + 開始時刻(15 分丸め)。予定の内容は使わない */
+export function outingMemoryKey(date, startMin) {
+  const d = new Date(date + 'T00:00');
+  return `${d.getDay()}:${Math.round(startMin / 15) * 15}`;
+}
+
 /**
- * 外出判定(§6.3)。busy: [{id,start,end,home?}]。日中(作業開始+1h〜18:00)にある outingMinBusyMin 分以上の busy が候補。
- * 候補同士の間隔が 片道×2 未満なら同じグループ。home:true(当日上書き)は除外。
+ * 予定ごとに外出かどうかを決める(§6.3 改)。優先: 当日の上書き > 記憶(同じ曜日・時刻に前回選んだもの) > 曜日の既定 > 設定の既定(在宅/外出)。
+ * 戻り値は busy に { out, outingSource } を足したもの。
+ */
+export function decideOuting(busy, settings, date, overrides = {}) {
+  const mem = settings.outingMemory || {};
+  const mode = settings.outingDefault || 'home';
+  const dow = new Date(date + 'T00:00').getDay();
+  const days = Array.isArray(settings.outingDays) ? settings.outingDays : [];
+  return (busy || []).map((b) => {
+    const ov = overrides[b.id];
+    if (ov === 'home' || ov === 'out') return { ...b, out: ov === 'out', outingSource: 'override' };
+    const m = mem[outingMemoryKey(date, b.start)];
+    if (m === 'home' || m === 'out') return { ...b, out: m === 'out', outingSource: 'memory' };
+    if (mode === 'weekday') return { ...b, out: days.includes(dow), outingSource: 'weekday' };
+    return { ...b, out: mode === 'out', outingSource: 'default' };
+  });
+}
+
+/**
+ * 外出判定(§6.3)。busy: [{id,start,end,out}]。out=true で、日中(作業開始+1h〜18:00)にある outingMinBusyMin 分以上の busy が候補。
+ * 候補同士の間隔が 片道×2 未満なら同じグループ(間に帰らない)。
  */
 export function groupOuting(busy, settings, W) {
-  if (!settings.outingByBusy || !W) return [];
+  if (!W) return [];
   const dayStart = W.start + 60, dayEnd = 18 * 60;
   const minLen = +settings.outingMinBusyMin > 0 ? +settings.outingMinBusyMin : 45;
-  const cands = (busy || []).filter((b) => !b.home && b.end - b.start >= minLen && b.start < dayEnd && b.end > dayStart).sort((a, b) => a.start - b.start);
+  const cands = (busy || []).filter((b) => b.out === true && b.end - b.start >= minLen && b.start < dayEnd && b.end > dayStart).sort((a, b) => a.start - b.start);
   const groups = [];
   for (const b of cands) {
     const g = groups[groups.length - 1];
@@ -127,9 +152,9 @@ export function buildPlan(opts, ctx) {
   const nowMin = opts.nowMin == null ? W.start : opts.nowMin;
   const uid = () => ctx.uid();
   const fixed = [];
-  // 1. busy
-  const busy = (opts.busy || []).filter((b) => b.end > b.start).map((b) => ({ ...b, home: overrides[b.id] === 'home' ? true : overrides[b.id] === 'out' ? false : !!b.home }));
-  for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: '予定', busyId: b.id });
+  // 1. busy(在宅/外出の判定つき)
+  const busy = decideOuting((opts.busy || []).filter((b) => b.end > b.start), settings, date, overrides);
+  for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: '予定', busyId: b.id, out: b.out, outingSource: b.outingSource });
   // 2. transit(外出グループの前後)
   const tm = +settings.transitMin > 0 ? +settings.transitMin : 0;
   if (tm) for (const g of groupOuting(busy, settings, W)) {
@@ -180,20 +205,16 @@ export function buildPlan(opts, ctx) {
     shares.unshift({ taskId: first, todayMin: Math.max(30, Math.min(Math.round(+t.remainingH * 60) || 30, workMin)), remainingMin: Math.round(+t.remainingH * 60), minUnit: +t.minUnit > 0 ? +t.minUnit : 30 });
   }
   let budget = Math.max(0, workableMin(settings, date) - Object.values(logged).reduce((a, b) => a + b, 0));
-  for (const sh of shares) {
-    const t = tasks[sh.taskId];
-    const already = (logged[sh.taskId] || 0) + kept.filter((b) => b.taskId === sh.taskId).reduce((a, b) => a + (b.end - b.start), 0);
-    let need = sh.todayMin - already;
-    if (need <= 0) continue;
-    need = Math.max(need, sh.minUnit);
-    need = Math.min(need, Math.max(budget, sh.minUnit));
+  const placedOf = (taskId) => blocks.filter((b) => b.type === 'task' && b.taskId === taskId).reduce((a, b) => a + (b.end - b.start), 0);
+  /** 空きに need 分を置く(最小単位以上・最大 workMin・workMin ごとに休憩)。置けた分を返す */
+  const place = (t, taskId, need, mu, extra = {}) => {
     let placed = 0;
     for (const slot of freeSlots(blocks, from, to)) {
       let cursor = slot.start;
-      while (need > 0 && slot.end - cursor >= sh.minUnit) {
-        const chunk = Math.min(need < sh.minUnit ? sh.minUnit : need, workMin, slot.end - cursor);
-        if (chunk < sh.minUnit) break;
-        blocks.push({ id: uid(), type: 'task', start: cursor, end: cursor + chunk, name: t?.name || '', taskId: sh.taskId, categoryId: t?.categoryId || 'other' });
+      while (need >= mu && slot.end - cursor >= mu) {
+        const chunk = Math.min(need, workMin, slot.end - cursor);
+        if (chunk < mu) break;
+        blocks.push({ id: uid(), type: 'task', start: cursor, end: cursor + chunk, name: t?.name || '', taskId, categoryId: t?.categoryId || 'other', ...extra });
         cursor += chunk; need -= chunk; budget -= chunk; placed += chunk;
         if (need > 0 && chunk >= workMin && restMin > 0 && slot.end - cursor >= restMin) {
           blocks.push({ id: uid(), type: 'rest', start: cursor, end: cursor + restMin, name: '休憩', auto: true });
@@ -202,8 +223,32 @@ export function buildPlan(opts, ctx) {
       }
       if (need <= 0) break;
     }
+    return placed;
+  };
+  // 6a. 今日の分(期限から逆算)
+  for (const sh of shares) {
+    const t = tasks[sh.taskId];
+    const already = (logged[sh.taskId] || 0) + kept.filter((b) => b.taskId === sh.taskId).reduce((a, b) => a + (b.end - b.start), 0);
+    let need = sh.todayMin - already;
+    if (need <= 0) continue;
+    need = Math.max(need, sh.minUnit);
+    need = Math.min(need, Math.max(budget, sh.minUnit));
+    const placed = place(t, sh.taskId, need, sh.minUnit);
     const miss = sh.todayMin - already - placed;
     if (miss > 0) out.shortfall.push({ taskId: sh.taskId, min: miss });
+  }
+  // 6b. 余った作業枠に、残りがある義務タスクを期限順に細分化して入れる(大きなタスクの動的な消化)
+  if (opts.fill !== false) {
+    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && +t.remainingH > 0 && !skipped.includes(t.id))
+      .map((t) => ({ t, deadline: deadlineKey(t, date) }))
+      .sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : (+b.t.remainingH) - (+a.t.remainingH)));
+    for (const { t } of fillers) {
+      const mu = +t.minUnit > 0 ? +t.minUnit : 30;
+      if (budget < mu) break;
+      const left = Math.round(+t.remainingH * 60) - (logged[t.id] || 0) - placedOf(t.id) - kept.filter((b) => b.taskId === t.id).reduce((a, b) => a + (b.end - b.start), 0);
+      if (left < mu) continue;
+      place(t, t.id, Math.min(left, budget), mu, { filler: true });
+    }
   }
   out.blocks = blocks.sort((a, b) => a.start - b.start || a.end - b.end);
   return out;

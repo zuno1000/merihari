@@ -93,6 +93,15 @@ export function start(entries, opts, ctx) {
   return { entries: out, entry: out[e.id] };
 }
 
+/** 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める */
+export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '' }, ctx) {
+  if (startMin == null || endMin == null || endMin <= startMin) throw new Error('終了は開始より後にしてください');
+  const out = clone(entries);
+  const e = { id: ctx.uid(), date, start: mm(startMin), end: mm(endMin), categoryId, taskId, note, plannedMin: null, updatedAt: ctx.nowISO(), deletedAt: null };
+  out[e.id] = e;
+  return resolveOverlap(out, e.id, 1440, ctx);
+}
+
 /** 「終わる」(F1-3)。at 省略時は nowMin */
 export function stop(entries, { date, nowMin, at, windowEndOf }, ctx) {
   return closeOpen(entries, { date, at: at ?? nowMin, windowEndOf }, ctx);

@@ -8,12 +8,13 @@ import * as report from './report.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
 import { toast } from './ui.js';
-import { renderToday, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
+import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.5.2';
+export const APP_VERSION = '0.6.0';
 export const NEWS = [
+  { v: '0.6.0', text: '画面を 今 / タイムライン / タスク / 設定 の4つに。記録は右下の ＋ から(チップはシートの中)。タイムラインは ‹ › で前後の日(未来は見通し)。カレンダーの予定は原則「在宅」、タイムラインで予定をタップして在宅/外出を選ぶと曜日と時刻で覚えます(設定で 曜日で決める/原則外出 も)。期限までにやることを空いた作業枠に細分化して入れます。タスクは日付と時間で正確に。設定に「使い方」。同期データの検証を強化。' },
   { v: '0.5.2', text: 'パスフレーズやタスク編集の縦書き崩れを修正(レポートの柱グラフと CSS クラス名が衝突)。タスクの見出しを「今日やる分 / 期限まで余裕のある義務 / やりたいこと」にして説明を添えました。' },
   { v: '0.5.1', text: '設定の「平日/土日・曜日ごと」切替が縦に崩れるのを修正(レポートの帯と CSS クラス名が衝突していました)。' },
   { v: '0.5.0', text: 'Phase 4: Google 連携。カレンダーの予定あり/なし(free/busy)だけを読んで理想スケジュールに busy と移動を自動配置、予定をタップで在宅/外出の切替、鮮度の1行。Drive(appDataFolder)に端末側で暗号化して同期(パスフレーズはこのセッションだけ)、記録やタブ切替に乗せて静かに同期。' },
@@ -34,11 +35,12 @@ store.init();
 
 let tickFn = null;
 const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; } };
-const screens = { today: () => renderToday(view, ctx), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
-let current = 'today';
+const screens = { now: () => renderNow(view, ctx), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
+let current = 'now';
 
 function go(tab, arg) {
-  if (!screens[tab]) tab = 'today';
+  if (tab === 'today') tab = 'now';
+  if (!screens[tab]) tab = 'now';
   current = tab;
   tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   store.state.local.uiState = Object.assign({}, store.state.local.uiState, { tab });
@@ -82,13 +84,13 @@ function handleParams() {
 // 初回は設定ウィザードへ。2回目以降は前回のタブ(未設定なら今日)
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
-go(firstRun ? 'settings' : (logged ? 'today' : (store.state.local.uiState?.tab || 'today')));
+go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
 if (!firstRun) { if (finalizePending()) screens[current](); checkOpenEntry(ctx); }
 
 // Google: 接続済みなら GIS を先読みし、トークンがあれば静かに予定を取り直す(F6-3)。変わったら今日を描き直す
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
-  google.fetchBusy().then((changed) => { if (changed && current === 'today') screens.today(); }).catch(() => {});
+  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
 }
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
@@ -98,8 +100,8 @@ document.addEventListener('visibilitychange', () => {
   markActive();
   if (!store.state.data.meta.setupAt) return;
   finalizePending();
-  if (!checkOpenEntry(ctx) && current === 'today') screens.today();
-  google.fetchBusy().then((changed) => { if (changed && current === 'today') screens.today(); }).catch(() => {});
+  if (!checkOpenEntry(ctx) && (current === 'now' || current === 'timeline')) screens[current]();
+  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
   sync.autoSync();
 });
 

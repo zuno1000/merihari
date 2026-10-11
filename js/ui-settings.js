@@ -102,11 +102,16 @@ function sectionRoutines(rerender) {
     ...rows,
     addBtn('ルーティンを追加', () => { s.routines.push({ id: store.uid(), name: '新しいルーティン', start: '12:00', min: 30, days: [0, 1, 2, 3, 4, 5, 6], off: false }); store.touchSettings(); rerender(); }));
 }
-function sectionTransit() {
+function sectionTransit(rerender) {
   const s = S();
-  return card('移動', '外出とみなした予定の前後に、片道分の移動を自動で置きます(カレンダー連携は v0.5 から)。',
+  const daysBox = el('div', { hidden: s.outingDefault !== 'weekday' }, [el('p.muted.small', '外出扱いにする曜日'), dayChips(s.outingDays, () => store.touchSettings())]);
+  const memCount = Object.keys(s.outingMemory || {}).length;
+  return card('移動', '外出扱いの予定の前後に、片道分の移動を置きます。予定の内容は読まないので、外出かどうかは「既定」と、タイムラインで予定をタップして選んだ結果(曜日と時刻で記憶)で決めます。',
     el('div.row.field', [el('span.label', '外出時 片道'), numInput(s.transitMin, 0, 300, (v) => { s.transitMin = v; store.touchSettings(); }), el('span.unit', '分')]),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: s.outingByBusy, onchange: (e) => { s.outingByBusy = e.target.checked; store.touchSettings(); } }), el('span', '予定がある日は外出扱い')]),
+    el('p.muted.small', 'カレンダーの予定の既定'),
+    seg({ home: '原則 在宅', weekday: '曜日で決める', out: '原則 外出' }, s.outingDefault || 'home', (v) => { s.outingDefault = v; store.touchSettings(); daysBox.hidden = v !== 'weekday'; }),
+    daysBox,
+    memCount ? el('div.row', [el('span.muted.small', `覚えた判定 ${memCount} 件`), el('button.btn.sm.ghost', { type: 'button', onclick: () => { s.outingMemory = {}; store.touchSettings(); toast('消しました'); rerender && rerender(); } }, '消す')]) : null,
     el('details', [el('summary.muted.small', 'くわしく'),
       el('div.row.field', [el('span.label', '外出候補とみなす予定の長さ'), numInput(s.outingMinBusyMin, 5, 600, (v) => { s.outingMinBusyMin = v; store.touchSettings(); }), el('span.unit', '分以上')])]));
 }
@@ -187,12 +192,38 @@ function sectionGoogle(rerender) {
     el('details', [el('summary.muted.small', 'クライアント ID を上書き(通常は不要)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]));
 }
 
+function sectionHelp() {
+  const h = (t) => el('h3.help-h', t);
+  const p = (t) => el('p.help-p', t);
+  const li = (items) => el('ul.help-ul', items.map((t) => el('li', t)));
+  return el('div.help', [
+    h('4つの画面'),
+    li(['今: いまやること1つを言い切ります。記録中はタイマーが出ます。', 'タイムライン: 左が理想、右が実績。‹ › で前後の日を見られます。', 'タスク: 期限と大きさを入れると「今日やること」を計算します。', '設定: 作業時間帯・ルーティン・移動・習慣・休憩・カテゴリ・Google。']),
+    h('記録する(右下の ＋)'),
+    li(['カテゴリをタップ=いまから記録。次のカテゴリをタップすると前の記録が閉じます。', '長押し(PC は右クリック)=開始時刻を指定して記録(さっきからやっていた分)。', '● は記録中。シートの「終わる」で終了。', 'SNS・動画は「あと何分?」で区切りを置きます。時間が来ると「今」が教えます。', '実績ブロックをタップで時刻・カテゴリ・メモ・分割・削除。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
+    h('タスクの3つの区分'),
+    li(['今日やること: 期限から逆算して、今日やっておくべき量があるもの。理想スケジュールに入ります。', '期限までにやること: 今日の分は 0 でも、空いた作業枠があれば順に細分化して入れます(期限が近づくと自動で「今日やること」に上がります)。', 'やりたいこと: 義務ではないもの。予定には入れず、空いた時間に。']),
+    p('「今日やること」の量は、残り見積 × 今日の作業枠 ÷ 期限までの作業枠 で決めます(5分丸め・最小単位以上)。期限を過ぎていれば残り全部。'),
+    h('理想スケジュールの組み方'),
+    li(['固定: カレンダーの予定 → 移動 → 生活ルーティン → 夜の休憩 → 習慣。', '作業: 今日やること → 余った枠に期限までにやること。1枠は最大90分、90分ごとに休憩10分。最後の30分は空けます。', '作業に回せる割合(既定60%)が上限。入り切らない分は朝の提案で伝えます。', '理想ブロックをタップで 今やる / 後ろへ / 今日はやらない。「今から再計画」でいま以降だけ組み直します。']),
+    h('移動と外出'),
+    li(['カレンダーからは「予定の有無」だけを読み、内容は読みません。', '外出かどうかは 設定の既定(原則在宅 / 曜日で決める / 原則外出)で決め、タイムラインで予定をタップして「在宅/外出」を選ぶと、その曜日・時刻を次回から覚えます。', '外出の予定の前後に片道分の移動を置きます。続けて外出する予定は1回の外出にまとめます。']),
+    h('レポート'),
+    li(['作業時間帯の終了30分前から「今日のレポート」。翌朝に確定し、「昨日」の1行で振り返れます。', '肯定的な事実を先に、改善点は事実だけ。責める言葉は使いません。', '図: 作業の合計と先週比、1日の帯(理想/実績)、カテゴリ別、7日間の推移。']),
+    h('Google とプライバシー'),
+    li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '同期は記録やタブ切替に乗せて5分おきに静かに行います。']),
+    h('ショートカット'),
+    li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了(iOS のショートカットから)。']),
+  ]);
+}
+
 const SECTIONS = {
   window: { title: '作業時間帯', build: () => sectionWindow() },
   routines: { title: '生活ルーティン', build: (re) => sectionRoutines(re) },
   habits: { title: '毎日の習慣', build: (re) => sectionHabits(re) },
   rest: { title: '休憩の方針', build: () => sectionRest() },
-  transit: { title: '移動', build: () => sectionTransit() },
+  transit: { title: '移動', build: (re) => sectionTransit(re) },
+  help: { title: '使い方', build: () => sectionHelp() },
   categories: { title: 'カテゴリ', build: (re) => sectionCategories(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
@@ -212,7 +243,7 @@ export function renderWizard(view, ctx) {
   const steps = [
     { title: 'まず、作業時間帯', build: () => sectionWindow() },
     { title: '次に、生活ルーティン', build: (re) => sectionRoutines(re) },
-    { title: '最後に、移動・習慣・休憩', build: (re) => [sectionTransit(), sectionHabits(re), sectionRest()] },
+    { title: '最後に、移動・習慣・休憩', build: (re) => [sectionTransit(re), sectionHabits(re), sectionRest()] },
   ];
   const draw = () => {
     clear(view);
@@ -283,6 +314,7 @@ export function renderSettings(view, ctx, section = null) {
   const newsBox = el('div.list.news-box', { hidden: true }, ctx.news.map((n) => el('div.srow.plain', [el('span.lbl', `v${n.v}`), el('span.val.left', n.text)])));
   view.append(
     el('h1', '設定'),
+    group(null, [srow('使い方', null, open('help'))]),
     group('毎日の枠', [
       srow('作業時間帯', summary.window(), open('window')),
       srow('生活ルーティン', summary.routines(), open('routines')),
