@@ -15,13 +15,13 @@ export function blockCategory(b) {
   if (b.type === 'busy') return b.categoryId || null;
   return null;
 }
-/** plan のブロックをカテゴリ別の分に(ラベルの無い busy は数えない) */
-export function plannedByCategory(plan) {
+/** plan のブロックをカテゴリ別の分に(ラベルの無い busy は数えない)。upto を渡すとそこまでの分だけ(途中経過は「いままでの理想」と比べる・v0.10) */
+export function plannedByCategory(plan, upto = 1440) {
   const out = {};
   for (const b of plan?.blocks || []) {
     const id = blockCategory(b);
-    if (!id) continue;
-    out[id] = (out[id] || 0) + (b.end - b.start);
+    if (!id || b.start >= upto) continue;
+    out[id] = (out[id] || 0) + (Math.min(b.end, upto) - b.start);
   }
   return out;
 }
@@ -89,8 +89,8 @@ function restOverlap(plan, entries, date, categories, nowMin) {
  */
 export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
   const categories = settings?.categories || [];
-  const planned = plannedByCategory(plan);
-  const busyPlanned = plannedByCategory({ blocks: (plan?.blocks || []).filter((b) => b.type === 'busy') }); // ラベル付きの予定の分(入らなくても責めない)
+  const planned = plannedByCategory(plan, nowMin);
+  const busyPlanned = plannedByCategory({ blocks: (plan?.blocks || []).filter((b) => b.type === 'busy') }, nowMin); // ラベル付きの予定の分(入らなくても責めない)
   const actual = totalsByCategory(entries, date, nowMin);
   const base = baseline(entries, date);
   const ids = new Set([...Object.keys(planned), ...Object.keys(actual), ...Object.keys(base?.byCategory || {})]);
@@ -106,7 +106,9 @@ export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
   const W = windowFor(settings, date);
   const u = unlogged(entries, date, W, nowMin);
   const rk = restOverlap(plan, entries, date, categories, nowMin);
-  return { date, byCategory: by, hasPlan: !!(plan && plan.blocks && plan.blocks.length), workMin, driftMin, restMin, baselineWorkMin: base ? baselineWorkMin : null, baselineDays: base?.days || 0,
+  const plannedWorkMin = Object.values(by).filter((r) => r.kind === 'work').reduce((a, r) => a + r.planned, 0);
+  const dayDone = !W || nowMin >= W.end;
+  return { date, byCategory: by, hasPlan: !!(plan && plan.blocks && plan.blocks.length), workMin, plannedWorkMin, dayDone, driftMin, restMin, baselineWorkMin: base ? baselineWorkMin : null, baselineDays: base?.days || 0,
     unloggedMin: u.unloggedMin, coverage: u.coverage, loggedMin: u.loggedMin, streak: streak(entries, date), restKept: rk ? mm(rk.block.start) : null };
 }
 
@@ -142,7 +144,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
     if (agg.hasPlan && r.planned - (r.busyPlanned || 0) >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}は今日は入りませんでした` });
     if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} でした(先週平均 ${fmtMinJa(r.baseline)})` });
   }
-  if (agg.unloggedMin >= 60) imp.push({ d: 0, text: `未記録が ${fmtMinJa(agg.unloggedMin)} ありました` });
+  if (agg.dayDone && agg.unloggedMin >= 60 && agg.coverage < 0.8) imp.push({ d: 0, text: `未記録が ${fmtMinJa(agg.unloggedMin)} ありました` }); // 途中経過では言わない(v0.10)
   imp.sort((a, b) => b.d - a.d);
   const improve = imp.slice(0, 2).map((x) => x.text);
 
@@ -163,7 +165,7 @@ export function buildReport(opts) {
   const lines = reportLines(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date });
   const byCategory = {};
   for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: r.planned, actual: r.actual, baseline: r.baseline };
-  return { date: opts.date, byCategory, workMin: agg.workMin, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
+  return { date: opts.date, byCategory, workMin: agg.workMin, plannedWorkMin: agg.plannedWorkMin, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, finalizedAt: opts.finalizedAt || null };
 }
 

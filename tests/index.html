@@ -192,6 +192,12 @@ document.getElementById('app').addEventListener('load', async () => {
     const hb = p0.blocks.find((b) => b.type === 'habit');
     ok(hb && hb.start === 450 && hb.end === 480 && hb.name === '英語', 'buildPlan: 朝の習慣は朝食直後の空き(07:30〜08:00)');
     ok(noOverlap(p0.blocks) && !types(p0).includes('task'), 'buildPlan: 重なり無し・タスク無しなら task ブロック無し');
+    const sl0 = p0.blocks.filter((b) => b.type === 'sleep');
+    ok(sl0.length === 2 && sl0[0].start === 0 && sl0[0].end === 420 && sl0[1].start === 1410 && sl0[1].end === 1440, 'buildPlan: 作業時間帯の外側に睡眠(0:00〜7:00・23:30〜24:00)(v0.10)');
+    const pSb = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'N', start: 1380, end: 1440 }] }, PC);
+    const slb = pSb.blocks.filter((b) => b.type === 'sleep');
+    ok(slb.length === 1 && slb[0].end === 420 && noOverlap(pSb.blocks) && Pn.blockAt(pSb.blocks, 1400).type === 'busy', 'buildPlan: 睡眠と重なる予定は予定を優先(睡眠を削る)');
+    ok(Pn.blockAt(p0.blocks, 100).type === 'sleep', 'blockAt: 夜中は睡眠');
     const p1 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, fill: false }, PC);
     const tb = p1.blocks.filter((b) => b.type === 'task');
     ok(tb.length === 1 && tb[0].start === 540 && tb[0].end === 620 && tb[0].taskId === 't1' && tb[0].categoryId === 'research', 'buildPlan: 今日の分 80 分を now(09:00) から 1 ブロックで置く');
@@ -268,6 +274,10 @@ document.getElementById('app').addEventListener('load', async () => {
       { type: 'task', start: 540, end: 630, categoryId: 'research' }, { type: 'task', start: 640, end: 730, categoryId: 'research' },
       { type: 'habit', start: 450, end: 480, categoryId: 'english' }, { type: 'rest', start: 1200, end: 1260, long: true }, { type: 'routine', start: 720, end: 765 }, { type: 'transit', start: 490, end: 540 }, { type: 'busy', start: 900, end: 960 } ] };
     ok(eq(Rp.plannedByCategory(planR), { research: 180, english: 30, rest: 60, life: 45, transit: 50 }), 'plannedByCategory: task/habit はカテゴリ、rest/routine/transit は固定カテゴリ、ラベル無しの busy は数えない');
+    ok(eq(Rp.plannedByCategory(planR, 600), { research: 60, english: 30, transit: 50 }), 'plannedByCategory: upto でそこまでの分だけ(途中経過は「いままでの理想」と比べる・v0.10)');
+    const aggMid = Rp.aggregate({ entries: {}, plan: planR, date: RD, nowMin: 600, settings: ds });
+    ok(aggMid.byCategory.research.planned === 60 && aggMid.plannedWorkMin === 90 && aggMid.dayDone === false && !Rp.reportLines(aggMid, { tasks: {}, entries: {}, date: RD }).improve.some((t) => t.startsWith('未記録')), 'aggregate: 途中経過では理想を now で切り、未記録は言わない');
+    ok(S.migrate({ schema: 1, plans: { '2026-10-12': { blocks: [{ type: 'sleep', start: 0, end: 420 }] } } }).plans['2026-10-12'].blocks.length === 1, 'migrate: sleep ブロックを通す');
     ok(eq(Rp.plannedByCategory({ blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }] }), { class: 90 }) && Rp.blockCategory({ type: 'busy' }) === null, 'plannedByCategory: ラベルのある busy はそのカテゴリに数える(v0.8)');
     const aggB = Rp.aggregate({ entries: {}, plan: { blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }, { type: 'task', start: 700, end: 760, categoryId: 'research' }] }, date: RD, nowMin: 1440, settings: ds });
     const linesB = Rp.reportLines(aggB, { tasks: {}, entries: {}, date: RD });

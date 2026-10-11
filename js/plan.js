@@ -1,5 +1,5 @@
 // merihari ─ plan.js: 理想スケジュールの生成(仕様書 §6.2〜6.4、F2・F5-2)。すべて純関数。
-// block = { id, type:'busy'|'transit'|'routine'|'habit'|'task'|'rest', start, end(分), name, taskId?, habitId?, routineId?, auto?, long?, pinned?, filler? }
+// block = { id, type:'busy'|'transit'|'routine'|'habit'|'task'|'rest'|'sleep', start, end(分), name, taskId?, habitId?, routineId?, auto?, long?, pinned?, filler? }
 // plan  = { date, generatedAt, confirmedAt, blocks:[], shortfall:[{taskId,min}], skipped:[taskId] }
 import { windowFor, routinesFor, longRestMin, workableMin, mergeIntervals, subtractIntervals, addDays, hm } from './time.js';
 
@@ -221,6 +221,10 @@ export function buildPlan(opts, ctx) {
   const busy = decideOuting((opts.busy || []).filter((b) => b.end > b.start), settings, date, overrides, transitOverrides, labelOverrides);
   const catName = (id) => (settings.categories || []).find((c) => c.id === id)?.name || null;
   for (const b of busy) fixed.push({ id: uid(), type: 'busy', start: Math.max(0, b.start), end: Math.min(1440, b.end), name: (b.categoryId && catName(b.categoryId)) || '予定', busyId: b.id, out: b.out, outingSource: b.outingSource, transitMin: b.transitMin, transitSource: b.transitSource, categoryId: b.categoryId || null, labelSource: b.labelSource });
+  // 1b. 睡眠(v0.10): 作業時間帯の外側を睡眠として置く。予定と重なる分は予定を優先して削る
+  for (const iv of subtractIntervals([{ start: 0, end: W.start }, { start: W.end, end: 1440 }], busy)) {
+    if (iv.end - iv.start >= 15) fixed.push({ id: uid(), type: 'sleep', start: iv.start, end: iv.end, name: '睡眠' });
+  }
   // 2. transit(外出グループの前後。長さは予定ごと: 当日の指定 > 記憶 > 設定の片道)
   for (const g of groupOuting(busy, settings, W)) {
     if (g.before > 0) fixed.push({ id: uid(), type: 'transit', start: Math.max(0, g.start - g.before), end: g.start, name: '移動', busyId: g.firstId, groupIds: g.ids });
@@ -341,7 +345,7 @@ export function buildPlan(opts, ctx) {
 
 /** min を含むブロック(複数なら task/habit より busy/transit/routine/rest を優先) */
 export function blockAt(blocks, min) {
-  const PRI = { busy: 0, transit: 1, routine: 2, rest: 3, habit: 4, task: 5 };
+  const PRI = { busy: 0, transit: 1, routine: 2, rest: 3, habit: 4, task: 5, sleep: 6 };
   return (blocks || []).filter((b) => b.start <= min && min < b.end).sort((a, b) => PRI[a.type] - PRI[b.type])[0] || null;
 }
 

@@ -1,7 +1,7 @@
 // merihari ─ ui-today.js: 「今」と「タイムライン」の画面と、記録・plan の共通操作。
 // 今: ヒーロー(§6.7 の状態機械)+ 次の予定 + 鮮度/昨日の1行。タイムライン: 日付を動かせる 2 レーン(理想=plan・実績=entries)。
 // 記録の入口は右下の「＋」(カテゴリのチップはシートの中)。
-import { el, clear, toast, sheet, confirmSheet, ring, picto } from './ui.js';
+import { el, clear, toast, sheet, confirmSheet, ring } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
@@ -203,11 +203,7 @@ function upcoming(n, p, ctx, rerender) {
   return el('section.group', [
     el('h2', list.length ? 'この後の予定' : '予定'),
     el('div.list', rows.length ? rows : el('p.muted.small.pad', 'この後の予定はありません。')),
-    el('div.row.tl-foot', [
-      el('button.btn.sm.ghost', { type: 'button', onclick: () => reportSheet(n.date) }, 'レポート'),
-      el('span.grow'),
-      el('button.btn.sm.ghost', { type: 'button', onclick: () => ctx.go('timeline') }, 'タイムライン ›'),
-    ]),
+    el('div.row.tl-foot', [el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: () => reportSheet(n.date) }, 'レポート ›')]),
   ]);
 }
 
@@ -315,11 +311,11 @@ function buildHero(n, p, ctx, rerender) {
   const btn = (label, onclick, primary = false) => el(`button.btn${primary ? '.primary' : '.ghost'}`, { type: 'button', onclick }, label);
   const begin = (b) => () => { const t = b.taskId ? T()[b.taskId] : null; startCategory(b.categoryId || (t ? t.categoryId : 'other'), null, { taskId: b.taskId ?? null, plannedMin: b.end - b.start }); rerender(); };
   /** 共通の組み立て */
-  const build = ({ kicker, title, value = null, inner = null, pct = dayPct, color = null, sub = null, buttons = [], say = null, pic = 'stand', onTap = null }) => {
+  const build = ({ kicker, title, value = null, inner = null, pct = dayPct, color = null, sub = null, buttons = [], onTap = null }) => {
     const rg = ring(pct, [kicker ? el('span.ring-k', kicker) : null, el('b.ring-t', title), value, inner ? el('span.ring-s', inner) : null]);
     if (color) rg.node.querySelector('.ring-arc').style.stroke = color;
     if (onTap) { rg.node.classList.add('tap'); rg.node.addEventListener('click', onTap); }
-    const node = el('section.now-hero', [rg.node, sub ? el('p.now-sub', sub) : null, buttons.length ? el('div.now-btns', buttons) : null, say ? el('div.say', [picto(pic), el('span', say)]) : null]);
+    const node = el('section.now-hero', [rg.node, sub ? el('p.now-sub', sub) : null, buttons.length ? el('div.now-btns', buttons) : null]);
     return { node, ring: rg };
   };
 
@@ -338,14 +334,13 @@ function buildHero(n, p, ctx, rerender) {
     const h = build({ kicker: t ? `${c.name}・記録中` : '記録中', title: t ? t.name : c.name, value: elapsed, inner: innerText(n), pct: pctOf(n), color: c.color,
       sub: remainText || null,
       buttons: [btn('別のことへ', () => chipsSheet(n, rerender)), btn(over ? '区切る' : '終わる', () => stopAndAsk(rerender), true)],
-      say: over ? 'ここで区切ると、次に移りやすい。' : 'いい調子。リングをタップすると記録を直せます。', pic: 'sit',
       onTap: () => editEntrySheet(o.id, n, rerender) });
     const inner = h.node.querySelector('.ring-s');
     tick = (m) => { elapsed.textContent = fmtMinJa(log.elapsedMin(o, m.date, m.min)); if (inner) inner.textContent = innerText(m); h.ring.set(pctOf(m)); };
     return { node: h.node, tick, key };
   }
-  if (!w || n.min < w.start) return { node: build({ kicker: 'おはよう', title: w ? `作業時間帯は ${mm(w.start)} から` : '作業時間帯の設定がありません', pct: 0, say: w ? '予定はそのとき組みます。それまではゆっくり。' : '設定で作業時間帯を決めると予定を組みます。', pic: 'rest' }).node, tick, key };
-  if (n.min >= w.end) return { node: build({ kicker: 'おつかれさま', title: '今日はおしまい', inner: total ? `記録 合計 ${fmtMinJa(total)}` : '記録がなくても大丈夫', pct: dayTotal ? dayPct : (total ? 1 : 0), say: 'レポートは「この後の予定」の下から。明日のことは明日。', pic: 'rest' }).node, tick, key };
+  if (!w || n.min < w.start) return { node: build({ kicker: 'おはよう', title: w ? `作業時間帯は ${mm(w.start)} から` : '作業時間帯の設定がありません', pct: 0 }).node, tick, key };
+  if (n.min >= w.end) return { node: build({ kicker: 'おつかれさま', title: '今日はおしまい', inner: total ? `記録 合計 ${fmtMinJa(total)}` : '記録がなくても大丈夫', pct: dayTotal ? dayPct : (total ? 1 : 0) }).node, tick, key };
   if (p && !p.confirmedAt) {
     const taskMin = p.blocks.filter((b) => b.type === 'task').reduce((a, b) => a + (b.end - b.start), 0);
     const short = p.shortfall.map((s) => `${T()[s.taskId]?.name || ''} −${fmtMin(s.min)}`).join('・');
@@ -355,22 +350,21 @@ function buildHero(n, p, ctx, rerender) {
     const dflt = p.blocks.filter((b) => b.type === 'busy' && b.outingSource === 'default');
     if (dflt.length) sub += ` 予定 ${dflt.length} 件は${dflt[0].out ? '外出' : '在宅'}扱い。違えばタイムラインで予定をタップ。`;
     return { node: build({ kicker: '今日の予定', title: '組みました', inner: taskMin ? `作業 ${fmtMinJa(taskMin)}` : null, pct: 0, sub,
-      buttons: [btn('タイムラインで調整', () => { confirmPlan(n); ctx.go('timeline'); }), btn('OK', () => { confirmPlan(n); rerender(); }, true)], say: '予定どおりでなくて大丈夫。主役はいまやること1つ。' }).node, tick, key };
+      buttons: [btn('タイムラインで調整', () => { confirmPlan(n); ctx.go('timeline'); }), btn('OK', () => { confirmPlan(n); rerender(); }, true)] }).node, tick, key };
   }
   const b = p ? plan.blockAt(p.blocks, n.min) : null;
-  if (b && b.type === 'transit') return { node: build({ kicker: '移動中', title: '移動', inner: `〜${mm(b.end)}`, color: catOf('transit').color, sub: remainText || null, buttons: [btn('移動を記録', () => { startCategory('transit'); rerender(); }, true)], say: 'スマホでできることを。英単語・メールの返事・休憩でも。', pic: 'walk' }).node, tick, key };
+  if (b && b.type === 'transit') return { node: build({ kicker: '移動中', title: '移動', inner: `〜${mm(b.end)}`, color: catOf('transit').color, sub: remainText || null, buttons: [btn('移動を記録', () => { startCategory('transit'); rerender(); }, true)] }).node, tick, key };
   if (b && b.type === 'busy') {
     const bc = b.categoryId ? catOf(b.categoryId) : null;
     return { node: build({ kicker: '予定の時間', title: bc ? bc.name : '予定', inner: `〜${mm(b.end)}`, color: bc ? bc.color : null, sub: remainText || null,
-      buttons: [bc ? btn(`${bc.name}を記録`, () => { startCategory(bc.id); rerender(); }, true) : btn('記録する', () => chipsSheet(n, rerender), true)],
-      say: (b.out ? '外出扱い。' : '在宅扱い。') + (bc ? '' : ' タイムラインで予定をタップすると何の予定か選べます。') }).node, tick, key };
+      buttons: [bc ? btn(`${bc.name}を記録`, () => { startCategory(bc.id); rerender(); }, true) : btn('記録する', () => chipsSheet(n, rerender), true)] }).node, tick, key };
   }
-  if (b && b.type === 'routine') return { node: build({ kicker: 'いまは', title: b.name, inner: `〜${mm(b.end)}`, color: catOf('life').color, sub: remainText || null, buttons: [btn('生活を記録', () => { startCategory('life'); rerender(); }, true)], say: '生活の時間も予定のうち。', pic: 'rest' }).node, tick, key };
+  if (b && b.type === 'routine') return { node: build({ kicker: 'いまは', title: b.name, inner: `〜${mm(b.end)}`, color: catOf('life').color, sub: remainText || null, buttons: [btn('生活を記録', () => { startCategory('life'); rerender(); }, true)] }).node, tick, key };
   if (b && b.type === 'rest') {
     const left = el('b.ring-v', fmtMinJa(b.end - n.min));
     const len = Math.max(1, b.end - b.start);
     const h = build({ kicker: '休憩していい時間', title: b.long ? '長い休憩' : (b.drift ? b.name : '休憩'), value: left, inner: 'あと', pct: (b.end - n.min) / len, color: catOf('rest').color, sub: remainText || null,
-      buttons: [btn('休憩を記録', () => { startCategory('rest'); rerender(); }, true)], say: b.long ? 'ちゃんと休むのも予定のうち。' : 'ひと区切り。水を飲んで、立って、窓の外を見る。', pic: 'rest' });
+      buttons: [btn('休憩を記録', () => { startCategory('rest'); rerender(); }, true)] });
     tick = (m) => { left.textContent = fmtMinJa(Math.max(0, b.end - m.min)); h.ring.set(Math.max(0, b.end - m.min) / len); };
     return { node: h.node, tick, key };
   }
@@ -379,17 +373,16 @@ function buildHero(n, p, ctx, rerender) {
     const behind = n.min - b.start >= 30 && !(logged[b.taskId] > 0);
     const starter = t?.starter ? `とっかかり: ${t.starter}` : 'まず 5 分だけ。';
     return { node: build({ kicker: `いま ${mm(b.start)}〜${mm(b.end)}`, title: b.name, inner: b.filler ? '余った時間で進める分' : (t ? catOf(t.categoryId).name : null), color: catOf(b.categoryId || t?.categoryId || 'other').color,
-      sub: (behind ? `${fmtMinJa(n.min - b.start)} 遅れています。後ろへ(再計画)できます。 ` : '') + (remainText || ''),
-      buttons: [btn('後ろへ', () => { replan(n, { last: b.taskId || null, deferHabit: b.habitId || null }); rerender(); }), btn('始める', begin(b), true)],
-      say: starter, pic: behind ? 'stand' : 'sit' }).node, tick, key };
+      sub: [behind ? `${fmtMinJa(n.min - b.start)} 遅れています。後ろへ(再計画)できます。` : '', starter, remainText || ''].filter(Boolean).join(' '),
+      buttons: [btn('後ろへ', () => { replan(n, { last: b.taskId || null, deferHabit: b.habitId || null }); rerender(); }), btn('始める', begin(b), true)] }).node, tick, key };
   }
   const next = p ? plan.nextWorkBlock(p.blocks, n.min) : null;
   if (remain > 0) {
     return { node: build({ kicker: 'あと', title: `${fmtMinJa(remain)} やれば今日はおしまい`, inner: next ? `次は ${mm(next.start)} から ${next.name}` : '枠が足りません。入れられる分だけで大丈夫',
-      buttons: next ? [btn('今から再計画', () => { replan(n); rerender(); }), btn(`${next.name} を始める`, begin(next), true)] : [btn('今から再計画', () => { replan(n); rerender(); }, true)], say: 'いま始めても大丈夫。' }).node, tick, key };
+      buttons: next ? [btn('今から再計画', () => { replan(n); rerender(); }), btn(`${next.name} を始める`, begin(next), true)] : [btn('今から再計画', () => { replan(n); rerender(); }, true)] }).node, tick, key };
   }
   return { node: build({ kicker: shares.length ? '今日の分は終わり' : '自由時間', title: shares.length ? '休んで大丈夫' : 'タスクを入れると提案します', pct: shares.length ? 1 : 0, color: catOf('rest').color,
-    buttons: next ? [btn(`${next.name} を始める`, begin(next))] : [], say: shares.length ? '余った時間は好きに使って。記録だけ残しておくと夜のレポートに出ます。' : '「タスク」で期限と大きさを入れると「今日やること」を計算します。', pic: 'rest' }).node, tick, key };
+    buttons: next ? [btn(`${next.name} を始める`, begin(next))] : [] }).node, tick, key };
 }
 
 // ---- ＋(記録の入口) ----
@@ -516,16 +509,17 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
     el('span.grow'),
-    isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(n.date) }, '今日'),
+    isToday ? el('span.muted.small', '← スワイプで前後の日 →') : el('button.btn.sm', { type: 'button', onclick: () => goDate(n.date) }, '今日'),
   ]);
   const note = preview ? el('p.muted.small.note', '見通し(仮)。予定は当日の朝に組み直します。') : (!isToday && !p && date < n.date ? el('p.muted.small.note', 'この日の理想スケジュールはありません。') : null);
-  const tl = buildTimeline({ date, nowMin: isToday ? n.min : null, p, entries: log.entriesOf(E(), date), isToday, preview }, rerender);
+  const tl = buildTimeline({ date, nowMin: isToday ? n.min : null, p, entries: log.entriesOf(E(), date), isToday, preview, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
   view.append(...[nav, note, tl.node, fab(n, rerender, date)].filter(Boolean));
   if (isToday) ctx.setTick(() => { const m = nowInfo(); if (m.date !== n.date) { rerender(); return; } tl.tick(m); });
 }
 
 // ---- タイムライン本体 ----
 function blockColor(b) {
+  if (b.type === 'sleep') return '#a0aec0';
   if (b.type === 'busy') return b.categoryId ? catOf(b.categoryId).color : accentColor();
   if (b.type === 'transit') return catOf('transit').color;
   if (b.type === 'routine') return catOf('life').color;
@@ -534,25 +528,34 @@ function blockColor(b) {
 }
 function blockName(b) { return b.type === 'busy' ? `${b.categoryId ? b.name : '予定'}${b.out ? '(外出)' : ''}` : b.name; }
 
-function buildTimeline({ date, nowMin, p, entries, isToday, preview }, rerender) {
+function buildTimeline({ date, nowMin, p, entries, isToday, preview, onSwipe = null }, rerender) {
+  let swipe = null;
   const s = S();
   const w = windowFor(s, date);
   const blocks = p ? p.blocks : [];
   const nm = nowMin == null ? 1440 : nowMin;
   const endOf = (e) => (e.end == null ? Math.max(nm, hm(e.start) + 1) : hm(e.end));
-  let lo = w ? w.start : 420, hi = w ? w.end : 1380;
-  for (const e of entries) { lo = Math.min(lo, hm(e.start)); hi = Math.max(hi, endOf(e)); }
-  for (const b of blocks) { lo = Math.min(lo, b.start); hi = Math.max(hi, b.end); }
-  if (isToday && nm > lo && nm < 1440) hi = Math.max(hi, Math.min(1440, nm + 30));
-  lo = Math.floor(lo / 60) * 60; hi = Math.min(1440, Math.ceil(hi / 60) * 60);
-  const y = (m) => (m - lo) * PX_PER_MIN;
+  // 表示範囲は 0:00〜24:00(睡眠も理想に入る・v0.10)。作業時間帯の外側(睡眠帯)は 1/4 に圧縮して縦の長さを抑える
+  const lo = 0, hi = 1440;
+  const zs = w ? w.start : 420, ze = w ? w.end : 1380;
+  const SLEEP_SCALE = 0.25;
+  const y = (m) => {
+    const a = Math.min(m, zs) * SLEEP_SCALE;
+    const bm = Math.max(0, Math.min(m, ze) - zs) * PX_PER_MIN;
+    const c = Math.max(0, m - ze) * SLEEP_SCALE;
+    return Math.round(a + bm + c);
+  };
   const body = el('div.tl', { style: { height: `${y(hi)}px` } });
-  for (let h = lo; h <= hi; h += 60) body.append(el('div.tl-hour', { style: { top: `${y(h)}px` } }, el('span', mm(h))));
+  for (let h = lo; h <= hi; h += 60) {
+    const dim = h < zs || h > ze;
+    if (dim && h % 240 !== 0 && h !== hi) continue; // 圧縮帯は 4 時間ごと
+    body.append(el('div.tl-hour', { class: `tl-hour${dim ? ' dim' : ''}`, style: { top: `${y(h)}px` } }, el('span', mm(h))));
+  }
   const planLane = el('div.lane.plan'), logLane = el('div.lane.log');
   const n = nowInfo();
   for (const b of blocks) {
     const editable = isToday && (b.type === 'task' || b.type === 'habit' || (b.type === 'rest' && b.auto) || b.type === 'busy' || (b.type === 'transit' && b.busyId));
-    planLane.append(block(b.start, b.end, { name: blockName(b), color: blockColor(b), muted: !(b.type === 'task' || b.type === 'habit' || b.type === 'busy'), busy: b.type === 'busy' && !b.categoryId, onclick: editable ? () => planBlockSheet(b, n, rerender) : null }));
+    planLane.append(block(b.start, b.end, { name: blockName(b), color: blockColor(b), muted: !(b.type === 'task' || b.type === 'habit' || b.type === 'busy'), busy: b.type === 'busy' && !b.categoryId, sleep: b.type === 'sleep', onclick: editable ? () => planBlockSheet(b, n, rerender) : null }));
   }
   for (const e of entries) {
     const c = catOf(e.categoryId);
@@ -579,7 +582,12 @@ function buildTimeline({ date, nowMin, p, entries, isToday, preview }, rerender)
     el('button.btn.sm.ghost', { type: 'button', onclick: () => { replan(n); rerender(); toast('今から組み直しました'); } }, '今から再計画'),
     el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('今日の予定を作り直しますか?', '手で動かしたものも含めて、いまの設定とタスクから組み直します。', '作り直す', () => { delete P()[date]; store.save(); rerender(); }) }, '作り直す'),
   ]) : (date < n.date ? el('div.row.tl-foot', [el('button.btn.sm.ghost', { type: 'button', onclick: () => reportSheet(date) }, 'この日のレポート')]) : null);
-  const node = el('section.timeline', [
+  const node = el('section.timeline', { ontouchstart: (e) => { const t = e.touches[0]; swipe = { x: t.clientX, y: t.clientY, t: Date.now() }; }, ontouchend: (e) => {
+    if (!swipe || !onSwipe) return;
+    const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) onSwipe(dx < 0 ? 1 : -1); // 左へスワイプ=次の日
+  } }, [
     el('div.lane-heads', [el('span'), el('span', preview ? '見通し' : '理想'), el('span', '実績')]),
     body, foot,
   ]);
@@ -588,7 +596,7 @@ function buildTimeline({ date, nowMin, p, entries, isToday, preview }, rerender)
 
   function block(start, end, o) {
     const hgt = Math.max(4, y(end) - y(start));
-    const b = el(o.onclick ? 'button.blk' : 'div.blk', { type: o.onclick ? 'button' : null, class: `blk${o.muted ? ' muted' : ''}${o.open ? ' open' : ''}${o.busy ? ' busy' : ''}`, style: { top: `${y(start)}px`, height: `${hgt}px`, borderLeftColor: o.color, background: o.busy ? '' : o.color + '22' }, onclick: o.onclick,
+    const b = el(o.onclick ? 'button.blk' : 'div.blk', { type: o.onclick ? 'button' : null, class: `blk${o.muted ? ' muted' : ''}${o.open ? ' open' : ''}${o.busy ? ' busy' : ''}${o.sleep ? ' sleep' : ''}`, style: { top: `${y(start)}px`, height: `${hgt}px`, borderLeftColor: o.sleep || o.busy ? '' : o.color, background: o.busy || o.sleep ? '' : o.color + '22' }, onclick: o.onclick,
       title: `${mm(start)}〜${o.open ? '' : mm(end)} ${o.name}` });
     if (hgt >= 26) b.append(el('span.blk-name', `${o.name}${o.open ? ' ▶' : ''}`), el('span.blk-dur', fmtMin(end - start)));
     else if (hgt >= 14) b.append(el('span.blk-name', o.name));

@@ -295,16 +295,26 @@ p.gap{margin-top:14px}
 .ring-v{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.01em}
 .ring-s{font-size:12px;color:var(--muted);line-height:1.4}
 .now-hero{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 0 14px}
-.now-sub{font-size:14px;color:var(--muted);text-align:center;margin:0;line-height:1.55}
+.now-sub{font-size:14px;color:var(--muted);text-align:center;margin:0 8px;line-height:1.6}
 .now-btns{display:flex;gap:10px;width:100%;justify-content:center}
 .now-btns .btn{flex:1;max-width:260px;justify-content:center;text-align:center}
 .now-btns .btn.primary{min-height:50px;font-size:17px}
 .now-btns .btn.ghost{flex:0 0 auto}
-.picto{fill:var(--accent);flex:none}
-.say{display:flex;align-items:center;gap:12px;margin:4px 2px 14px;color:var(--fg);font-size:14px;line-height:1.5}
 .today-head{justify-content:center}
 .now-card.big{border:0}
 .hero-card{border:0}
 .card,.list{border-color:transparent}
 .srow{border-top-color:var(--line)}
 @media (prefers-color-scheme:dark){.card,.list{border-color:var(--line)}}
+
+/* ---- v0.10: 余白の調整(チップ列と上の行の間)・睡眠・スワイプ ---- */
+.field{margin:10px 0}
+.quick .row.field{margin:12px 0 0}
+.quick .chips.small,.sheet .chips.small{margin-top:10px}
+.chips.small{gap:8px}
+.item{padding:10px 0}
+.item .row + .row,.item .row + .days{margin-top:8px}
+.blk.sleep{background:repeating-linear-gradient(135deg,var(--line) 0 4px,transparent 4px 9px);border-left:1px solid var(--line);color:var(--muted)}
+.tl-hour.dim span{color:#b8bcc6}
+.timeline{touch-action:pan-y}
+.now-hero{margin-bottom:18px}

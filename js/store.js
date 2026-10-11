@@ -146,7 +146,7 @@ const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const optStr = (v, max) => (typeof v === 'string' ? v.slice(0, max) : v == null ? null : null);
 const str = (v, max, dflt = '') => (typeof v === 'string' ? v.slice(0, max) : dflt);
 const num = (v, min, max, dflt) => (Number.isFinite(+v) && +v >= min && +v <= max ? +v : dflt);
-const BLOCK_TYPES = new Set(['busy', 'transit', 'routine', 'habit', 'task', 'rest']);
+const BLOCK_TYPES = new Set(['busy', 'transit', 'routine', 'habit', 'task', 'rest', 'sleep']);
 /** id → record のマップを検証しながら作り直す。validate が null を返したレコードは捨てる */
 function cleanMap(raw, validate) {
   const out = {};
@@ -184,7 +184,7 @@ export function validateReport(r, id) {
   const by = {};
   if (isObj(r.byCategory)) for (const k of Object.keys(r.byCategory)) if (safeKey(k) && isObj(r.byCategory[k])) by[k] = { planned: num(r.byCategory[k].planned, 0, 1440, 0), actual: num(r.byCategory[k].actual, 0, 1440, 0), baseline: r.byCategory[k].baseline == null ? null : num(r.byCategory[k].baseline, 0, 1440, null) };
   return { ...stripUnsafe(r), date: r.date || id, byCategory: by, lines: strs(r.lines), positive: strs(r.positive), improve: strs(r.improve), tomorrow: optStr(r.tomorrow, 300),
-    workMin: num(r.workMin, 0, 1440, 0), driftMin: num(r.driftMin, 0, 1440, 0), unloggedMin: num(r.unloggedMin, 0, 1440, 0), coverage: num(r.coverage, 0, 1, 0), loggedMin: num(r.loggedMin, 0, 1440, 0), streak: num(r.streak, 0, 100000, 0), finalizedAt: optStr(r.finalizedAt, 40) };
+    workMin: num(r.workMin, 0, 1440, 0), plannedWorkMin: num(r.plannedWorkMin, 0, 1440, 0), driftMin: num(r.driftMin, 0, 1440, 0), unloggedMin: num(r.unloggedMin, 0, 1440, 0), coverage: num(r.coverage, 0, 1, 0), loggedMin: num(r.loggedMin, 0, 1440, 0), streak: num(r.streak, 0, 100000, 0), finalizedAt: optStr(r.finalizedAt, 40) };
 }
 export function validateLedger(r) { return isObj(r) ? { usableMin: num(r.usableMin, 0, 1440, 0), workMin: num(r.workMin, 0, 1440, 0) } : null; }
 

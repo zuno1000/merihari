@@ -59,17 +59,6 @@ export function ring(pct, children, { size = 240, stroke = 12 } = {}) {
   return { node, set: (p) => arc.setAttribute('stroke-dashoffset', (c * (1 - Math.max(0, Math.min(1, p || 0)))).toFixed(1)) };
 }
 
-/** 青いピクトグラム(bondavi 風の人型)。kind: 'stand' | 'sit' | 'rest' | 'walk' */
-export function picto(kind = 'stand') {
-  const body = {
-    stand: ['M22 10a4 4 0 1 1 0 .1', 'M18 18h8v16h-3v12h-2V34h-2v12h-3V34h-1'],
-    sit: ['M26 10a4 4 0 1 1 0 .1', 'M20 18h10v12h12v3H30v2h-6v10h-3V33h-1'],
-    rest: ['M10 30a4 4 0 1 1 0 .1', 'M16 28h26v4H16zM40 32h4v8h-4zM14 32h4v8h-4z'],
-    walk: ['M24 10a4 4 0 1 1 0 .1', 'M20 18h8l6 8-2 2-5-6v12l6 10-3 2-7-10-5 10-3-2 5-12V18'],
-  }[kind] || [];
-  return svg('svg', { class: 'picto', viewBox: '0 0 48 48', width: 48, height: 48, 'aria-hidden': 'true' }, body.map((d) => svg('path', { d })));
-}
-
 let toastTimer = null;
 export function toast(msg) {
   const t = document.getElementById('toast');

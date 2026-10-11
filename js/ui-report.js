@@ -48,7 +48,7 @@ export function reportSheet(date) {
   close = sheet((c) => { close = c; return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点・翌朝に確定' : '未確定')]),
     el('p.rep-lead', r.positive[0]),
-    heroFigure(r, baseWork),
+    heroFigure(r, baseWork, isToday),
     bullets(r),
     words(r),
     el('details.rep-details', [el('summary.muted.small', 'くわしく'),
@@ -71,8 +71,15 @@ function delta(cur, base, upGood) {
   const good = upGood ? diff > 0 : diff < 0;
   return el('span.kpi-delta', { style: { color: statusColor(good ? 'good' : 'bad') } }, `${diff > 0 ? '▲' : '▼'} ${fmtMin(Math.abs(diff))} 先週平均比`);
 }
-function heroFigure(r, baseWork) {
-  return el('section.kpis', el('div.kpi.hero-figure', [el('span.kpi-label', '作業の合計'), el('b.kpi-value.big', fmtMin(r.workMin) || '0m'), delta(r.workMin, baseWork, true)]));
+function heroFigure(r, baseWork, isToday) {
+  const planned = r.plannedWorkMin || 0;
+  const pct = planned ? Math.min(100, Math.round((r.workMin / planned) * 100)) : 0;
+  return el('section.kpis', el('div.kpi.hero-figure', [
+    el('span.kpi-label', '作業の合計'),
+    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('b.kpi-value.big', fmtMin(r.workMin) || '0m'), planned ? el('span.muted.small', `理想 ${fmtMin(planned)}${isToday && !r.finalizedAt ? '(いままでの分)' : ''}`) : null]),
+    planned ? el('div.meter', { role: 'img', 'aria-label': `理想に対して ${pct}%` }, el('i', { style: { width: `${pct}%` } })) : null,
+    delta(r.workMin, baseWork, true),
+  ]));
 }
 // ---- 週のまとめ(F3-6) ----
 function weekBox(date) {
