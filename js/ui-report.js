@@ -87,7 +87,7 @@ function dayStrip(plan, entries, W, nowMin, isToday) {
   const caption = el('p.strip-caption.muted.small', isToday ? 'セグメントをタップすると時間が出ます' : 'セグメントをタップすると時間が出ます');
   const segs = [];
   const seg = (start, end, color, label, cls = '') => {
-    const s = el('button.seg', { type: 'button', class: `seg ${cls}`, title: `${mm(start)}〜${mm(end)} ${label}`,
+    const s = el('button.sseg', { type: 'button', class: `sseg ${cls}`, title: `${mm(start)}〜${mm(end)} ${label}`,
       style: { left: `calc(${pct(start)}% + 1px)`, width: `calc(${pct(end) - pct(start)}% - 2px)`, background: color },
       onclick: () => { caption.textContent = `${mm(start)}〜${mm(end)} ${label}(${fmtMin(end - start)})`; segs.forEach((x) => x.classList.toggle('lit', x === s)); } });
     segs.push(s);

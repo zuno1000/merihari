@@ -12,8 +12,9 @@ import { renderToday, startCategory, stopRecording, checkOpenEntry, finalizePend
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.1';
 export const NEWS = [
+  { v: '0.5.1', text: '設定の「平日/土日・曜日ごと」切替が縦に崩れるのを修正(レポートの帯と CSS クラス名が衝突していました)。' },
   { v: '0.5.0', text: 'Phase 4: Google 連携。カレンダーの予定あり/なし(free/busy)だけを読んで理想スケジュールに busy と移動を自動配置、予定をタップで在宅/外出の切替、鮮度の1行。Drive(appDataFolder)に端末側で暗号化して同期(パスフレーズはこのセッションだけ)、記録やタブ切替に乗せて静かに同期。' },
   { v: '0.4.1', text: 'レポートを図中心に(作業の合計と先週比・SNS・カバー率・連続日数のタイル、1日の帯で理想と実績を並べる、カテゴリ別ブレット、7日間の推移、表)。カテゴリの既定色を色覚でも見分けやすい組み合わせに更新(ダークモード対応)。' },
   { v: '0.4.0', text: 'Phase 3: 日次レポート(肯定的事実を先頭に・理想/実績/先週平均の横棒・翌朝に確定)、昨日のレポートの1行、朝の一言(手つかずの近い期限)、SNS・動画の「あと何分?」区切り、休憩の時間に今日の分の残り。' },
