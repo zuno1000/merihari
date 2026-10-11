@@ -2,13 +2,15 @@
 // 版の上げ方: APP_VERSION・NEWS・sw.js の CACHE を同じコミットで更新する(§9 版管理)。
 import * as store from './store.js';
 import * as time from './time.js';
+import * as log from './log.js';
 import { toast } from './ui.js';
-import { renderToday } from './ui-today.js';
+import { renderToday, startCategory, stopRecording, checkOpenEntry } from './ui-today.js';
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.1.1';
+export const APP_VERSION = '0.2.0';
 export const NEWS = [
+  { v: '0.2.0', text: 'Phase 1: カテゴリチップで記録(タップ=開始・次のチップで切替・長押しで「さっきから」)、実績レーン、記録の編集(時刻・カテゴリ・メモ・分割・削除)、止め忘れの回収、?log= パラメータ。' },
   { v: '0.1.1', text: 'Phase 0: 3タブの骨組み・はじめの設定(3ステップ)・設定画面・データの書き出し/読み込み・テスト基盤。' },
   { v: '0.1.0', text: '雛形を作成。' },
 ];
@@ -19,11 +21,14 @@ const tabs = document.getElementById('tabs');
 store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
 store.init();
 
-const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate };
+let tickFn = null;
+const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; } };
 const screens = { today: () => renderToday(view, ctx), tasks: () => renderTasks(view, ctx), settings: () => renderSettings(view, ctx) };
+let current = 'today';
 
 function go(tab) {
   if (!screens[tab]) tab = 'today';
+  current = tab;
   tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   store.state.local.uiState = Object.assign({}, store.state.local.uiState, { tab });
   store.saveLocal();
@@ -35,12 +40,47 @@ tabs.addEventListener('click', (e) => {
   if (b) go(b.dataset.tab);
 });
 
+// 最後に触った時刻(F1-4 の候補に使う)。分が変わったときだけ保存
+function markActive() {
+  const la = { date: time.dateKey(), min: time.minuteOfDay() };
+  const prev = store.state.local.lastActive;
+  if (prev && prev.date === la.date && prev.min === la.min) return;
+  store.state.local.lastActive = la;
+  store.saveLocal();
+}
+document.addEventListener('pointerdown', markActive, { passive: true });
+
+// URL パラメータ(F1-8): ?log=研究 / ?log=stop / ?ctx=transit|home。履歴は汚さない
+function handleParams() {
+  const q = new URLSearchParams(location.search);
+  if (![...q.keys()].length) return false;
+  history.replaceState(null, '', location.pathname);
+  const ctxParam = q.get('ctx');
+  if (ctxParam) { store.state.local.ctx = ctxParam === 'transit' ? 'transit' : 'home'; store.saveLocal(); }
+  const l = q.get('log');
+  if (!l) return false;
+  if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return false; }
+  if (l === 'stop') { stopRecording(); return true; }
+  const c = store.state.data.settings.categories.find((x) => x.id === l || x.name === l);
+  if (!c) { toast(`カテゴリ「${l}」がありません`); return false; }
+  startCategory(c.id);
+  return true;
+}
+
 // 初回は設定ウィザードへ。2回目以降は前回のタブ(未設定なら今日)
 const firstRun = !store.state.data.meta.setupAt;
-go(firstRun ? 'settings' : (store.state.local.uiState?.tab || 'today'));
+const logged = handleParams();
+go(firstRun ? 'settings' : (logged ? 'today' : (store.state.local.uiState?.tab || 'today')));
+if (!firstRun) checkOpenEntry(ctx);
 
-// URL パラメータ(?log= は v0.2 で実装)。履歴は汚さない
-if (location.search) history.replaceState(null, '', location.pathname);
+// 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
+setInterval(() => { if (tickFn) tickFn(); }, 15000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  markActive();
+  if (!store.state.data.meta.setupAt) return;
+  if (!checkOpenEntry(ctx) && current === 'today') screens.today();
+});
 
 // Service Worker と更新確認(F8-2)
 let reg = null;
@@ -65,5 +105,6 @@ window.M = {
   APP_VERSION,
   NEWS,
   time,
+  log,
   store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS },
 };

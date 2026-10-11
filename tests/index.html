@@ -85,12 +85,71 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(throws(() => S.validateImport({ schema: 99, settings: {} })), 'validateImport: 新しい schema は拒否');
     ok(S.validateImport({ schema: 1, settings: {} }).schema === 1, 'validateImport: 通れば migrate 済みを返す');
 
+    // ---- log.js(F1) ----
+    log('\n# log');
+    const L = M.log;
+    let seq = 0;
+    const C = { uid: () => 'e' + (++seq), nowISO: () => '2026-10-11T16:00:00+09:00' };
+    const D = '2026-10-11';
+    const alive = (es) => Object.values(es).filter((e) => !e.deletedAt).sort((a, b) => T.hm(a.start) - T.hm(b.start)).map((e) => `${e.categoryId} ${e.start}-${e.end ?? 'open'}`);
+    const wEnd = () => 1410; // 23:30
+    let es = {};
+    let r = L.start(es, { date: D, nowMin: 870, categoryId: 'research', windowEndOf: wEnd }, C);
+    ok(eq(alive(r.entries), ['research 14:30-open']), 'start: 現在時刻から記録中エントリを作る');
+    ok(eq(es, {}), 'start: 引数の entries を変更しない(純関数)');
+    es = r.entries;
+    r = L.start(es, { date: D, nowMin: 880, categoryId: 'research', windowEndOf: wEnd }, C);
+    ok(r.ignored === true && eq(alive(r.entries), ['research 14:30-open']), 'start: 同じカテゴリの連打は無視(F1-1)');
+    r = L.start(es, { date: D, nowMin: 900, categoryId: 'rest', windowEndOf: wEnd }, C);
+    ok(eq(alive(r.entries), ['research 14:30-15:00', 'rest 15:00-open']), 'start: 次のチップで直前を現在時刻で閉じる(連続記録)');
+    es = r.entries;
+    r = L.stop(es, { date: D, nowMin: 915, windowEndOf: wEnd }, C);
+    ok(eq(alive(r.entries), ['research 14:30-15:00', 'rest 15:00-15:15']) && r.closed.categoryId === 'rest', 'stop: 記録中を現在時刻で閉じる');
+    es = r.entries;
+    ok(L.openEntry(es) === null && L.openEntry(r.entries) === null, 'openEntry: 記録中が無ければ null');
+    r = L.start(es, { date: D, nowMin: 965, startMin: 930, categoryId: 'english', windowEndOf: wEnd }, C);
+    ok(eq(alive(r.entries), ['research 14:30-15:00', 'rest 15:00-15:15', 'english 15:30-open']), 'start: さっきから(startMin)で過去から記録中にできる(F1-2)');
+    es = r.entries;
+    r = L.start(es, { date: D, nowMin: 965, startMin: 905, categoryId: 'sns', windowEndOf: wEnd }, C);
+    ok(eq(alive(r.entries), ['research 14:30-15:00', 'rest 15:00-15:05', 'sns 15:05-open']), 'start: 事後入力が記録中と重なれば記録中は捨て、前の記録は詰める');
+    r = L.stop(es, { date: D, nowMin: 1000, windowEndOf: wEnd }, C);
+    es = r.entries; // research 14:30-15:00, rest 15:00-15:15, english 15:30-16:40
+    const engId = Object.values(es).find((e) => e.categoryId === 'english').id;
+    r = L.setTimes(es, engId, { start: '15:10', end: '16:00' }, 1000, C);
+    ok(eq(alive(r), ['research 14:30-15:00', 'rest 15:00-15:10', 'english 15:10-16:00']), 'setTimes: 時刻編集で隣を詰める(F1-7)');
+    ok(throws(() => L.setTimes(es, engId, { start: '16:00', end: '15:00' }, 1000, C)), 'setTimes: 終了≦開始は拒否');
+    let big = L.start({}, { date: D, nowMin: 600, startMin: 540, categoryId: 'life', windowEndOf: wEnd }, C).entries;
+    big = L.stop(big, { date: D, nowMin: 1080, windowEndOf: wEnd }, C).entries; // life 09:00-18:00
+    let mid = L.start(big, { date: D, nowMin: 870, categoryId: 'research', windowEndOf: wEnd }, C); // 14:30 に生活の途中で研究を開始
+    mid = L.stop(mid.entries, { date: D, nowMin: 960, windowEndOf: wEnd }, C).entries; // 16:00 に終了 → 生活の後半が残る
+    ok(eq(alive(mid), ['life 09:00-14:30', 'research 14:30-16:00', 'life 16:00-18:00']), 'resolveOverlap: 真ん中に入れると前後に分割される');
+    const covered = L.setTimes(mid, Object.values(mid).find((e) => e.categoryId === 'research').id, { start: '08:00', end: '19:00' }, 1200, C);
+    ok(eq(alive(covered), ['research 08:00-19:00']) && Object.values(covered).filter((e) => e.deletedAt).length === 2, 'resolveOverlap: 丸ごと覆われた記録は tombstone(deletedAt)で残る');
+    let ys = { a: { id: 'a', date: '2026-10-10', start: '22:00', end: null, categoryId: 'research', updatedAt: 'x', deletedAt: null } };
+    r = L.closeOpen(ys, { date: D, at: 600, windowEndOf: () => 1410 }, C);
+    ok(r.closed.end === '23:30', 'closeOpen: 前日の記録中はその日の作業時間帯の終わりで閉じる(F1-3)');
+    r = L.closeOpen(ys, { date: D, at: 600, windowEndOf: () => 1300 }, C);
+    ok(r.closed.end === '24:00', 'closeOpen: 作業時間帯の終わりが開始より前なら 24:00');
+    r = L.start(ys, { date: D, nowMin: 600, categoryId: 'research', windowEndOf: () => 1410 }, C);
+    ok(eq(alive(r.entries), ['research 10:00-open', 'research 22:00-23:30']), 'start: 前日の同カテゴリ記録中は無視せず閉じて今日の分を作る');
+    ok(L.elapsedMin({ start: '14:30', end: null, date: D }, D, 900) === 30 && L.elapsedMin(ys.a, D, 600) === 120, 'elapsedMin: 同日は now まで・別日は 24:00 まで');
+    ok(L.isStale({ start: '10:00', end: null, date: D }, D, 780) && !L.isStale({ start: '10:00', end: null, date: D }, D, 700), 'isStale: 3時間以上で止め忘れ(F1-4)');
+    ok(eq(L.totalsByCategory(mid, D, 1200), { life: 450, research: 90 }), 'totalsByCategory');
+    const cands = L.backfillCandidates(es, D, 1000);
+    ok(cands[0].min === 915 && eq(cands.map((c) => c.min), [915, 985, 970, 940]), 'backfillCandidates: 直前の終わり/15分前/30分前/1時間前(重複なし)');
+    ok(eq(L.backfillCandidates({}, D, 20).map((c) => c.min), [5]), 'backfillCandidates: 0:00 より前の候補は出さない');
+    const sp = L.split(mid, Object.values(mid).find((e) => e.categoryId === 'research').id, 900, 1200, C);
+    ok(eq(alive(sp), ['life 09:00-14:30', 'research 14:30-15:00', 'research 15:00-16:00', 'life 16:00-18:00']), 'split: ここで分ける');
+    ok(throws(() => L.split(mid, Object.values(mid)[0].id, 1300, 1200, C)), 'split: 範囲外は拒否');
+    const rm = L.remove(es, engId, C);
+    ok(rm[engId].deletedAt && !es[engId].deletedAt && L.entriesOf(rm, D).length === 2, 'remove: tombstone・元は変更しない・entriesOf から消える');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

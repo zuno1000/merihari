@@ -15,7 +15,16 @@ python -m http.server 8000
 セルフテスト: http://localhost:8000/tests/ (localhost でのみ動く)。ネガティブコントロール1件を含むので「1 failed」が合格。
 
 ## 現在の版
-- v0.1.x(Phase 0): 3タブの骨組み・はじめの設定(3ステップ)・設定画面・データの書き出し/読み込み・テスト基盤。記録は v0.2 から。
+- v0.2.x(Phase 1): カテゴリチップで記録(タップ=開始、次のチップで切替、長押し/「さっきから…」で事後入力)、実績レーン、記録の編集(時刻・カテゴリ・メモ・分割・削除)、止め忘れの回収、前日の記録中は作業時間帯の終わりで自動終了。理想スケジュールの提案は v0.3 から。
+- v0.1.x(Phase 0): 3タブの骨組み・はじめの設定(3ステップ)・設定画面・データの書き出し/読み込み・テスト基盤。
+
+## iOS ショートカットから記録する
+URL を開くだけで記録できる(iOS の「ショートカット」や「オートメーション」で使う):
+- `https://zuno1000.github.io/merihari/?log=研究` … そのカテゴリの記録を開始(名前か id。既定 id: research / class / english / job / hunt / life / rest / sns / transit / other)
+- `https://zuno1000.github.io/merihari/?log=stop` … 記録を終了
+- `?ctx=transit` / `?ctx=home` … 移動中/在宅の文脈(v0.3 以降で使う)
+
+定時のプッシュ通知はサーバー無しの PWA では出せないので、時計アプリやショートカットのオートメーションで代用する。
 
 ## Google Cloud の設定(Phase 4 で使う)
 1. Calendar API / Drive API を有効化。
