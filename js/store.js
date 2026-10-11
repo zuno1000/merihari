@@ -8,21 +8,23 @@ export const SCHEMA = 1;
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
+import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
+
 export const CATEGORY_KINDS = { work: '作業', life: '生活', rest: '休憩', drift: 'ダラダラ' };
 
 /** 既定カテゴリ(§3・§13-2)。id は固定で、名前・並び・種別は編集可 */
 export function defaultCategories() {
   return [
-    { id: 'research', name: '研究', kind: 'work', color: '#2b6cb0', order: 1 },
-    { id: 'class', name: '授業', kind: 'work', color: '#6b46c1', order: 2 },
-    { id: 'english', name: '英語', kind: 'work', color: '#2c7a7b', order: 3 },
-    { id: 'job', name: 'バイト', kind: 'work', color: '#b7791f', order: 4 },
-    { id: 'hunt', name: '就活', kind: 'work', color: '#c05621', order: 5 },
-    { id: 'life', name: '生活', kind: 'life', color: '#718096', order: 6 },
-    { id: 'rest', name: '休憩', kind: 'rest', color: '#38a169', order: 7 },
-    { id: 'sns', name: 'SNS・動画', kind: 'drift', color: '#e53e3e', order: 8 },
-    { id: 'transit', name: '移動', kind: 'life', color: '#a0aec0', order: 9 },
-    { id: 'other', name: 'その他', kind: 'work', color: '#4a5568', order: 10 },
+    { id: 'research', name: '研究', kind: 'work', color: DEFAULT_COLORS.research, order: 1 },
+    { id: 'class', name: '授業', kind: 'work', color: DEFAULT_COLORS.class, order: 2 },
+    { id: 'english', name: '英語', kind: 'work', color: DEFAULT_COLORS.english, order: 3 },
+    { id: 'job', name: 'バイト', kind: 'work', color: DEFAULT_COLORS.job, order: 4 },
+    { id: 'hunt', name: '就活', kind: 'work', color: DEFAULT_COLORS.hunt, order: 5 },
+    { id: 'life', name: '生活', kind: 'life', color: DEFAULT_COLORS.life, order: 6 },
+    { id: 'rest', name: '休憩', kind: 'rest', color: DEFAULT_COLORS.rest, order: 7 },
+    { id: 'sns', name: 'SNS・動画', kind: 'drift', color: DEFAULT_COLORS.sns, order: 8 },
+    { id: 'transit', name: '移動', kind: 'life', color: DEFAULT_COLORS.transit, order: 9 },
+    { id: 'other', name: 'その他', kind: 'work', color: DEFAULT_COLORS.other, order: 10 },
   ];
 }
 
@@ -111,7 +113,9 @@ function normalizeSettings(raw) {
     ? raw.categories.filter((c) => isObj(c) && c.id).map((c, i) => ({
         ...c, id: String(c.id), name: String(c.name || c.id),
         kind: Object.keys(CATEGORY_KINDS).includes(c.kind) ? c.kind : 'work',
-        color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#718096',
+        color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
+          ? (LEGACY_COLORS[c.id] && c.color.toLowerCase() === LEGACY_COLORS[c.id] ? DEFAULT_COLORS[c.id] : c.color) // v0.4.0 以前の既定色は新しい既定色へ
+          : (DEFAULT_COLORS[c.id] || '#718096'),
         order: Number.isFinite(+c.order) ? +c.order : i + 1,
       }))
     : d.categories;

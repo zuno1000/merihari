@@ -3,6 +3,7 @@
 import { el, clear, toast, confirmSheet, DAY_JA } from './ui.js';
 import * as store from './store.js';
 import { hm } from './time.js';
+import { EXTRA_COLORS } from './palette.js';
 
 const S = () => store.state.data.settings;
 const DAYS7 = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -152,8 +153,7 @@ function sectionCategories(rerender) {
   return card('カテゴリ', '記録と集計の単位。種別は 作業/生活/休憩/ダラダラ(SNS・動画)。',
     ...rows,
     addBtn('カテゴリを追加', () => {
-      const colors = ['#2b6cb0', '#6b46c1', '#2c7a7b', '#b7791f', '#c05621', '#718096', '#38a169', '#e53e3e'];
-      s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: 'work', color: colors[s.categories.length % colors.length], order: s.categories.length + 1 });
+      s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: 'work', color: EXTRA_COLORS[s.categories.length % EXTRA_COLORS.length], order: s.categories.length + 1 });
       store.touchSettings(); rerender();
     }));
 }

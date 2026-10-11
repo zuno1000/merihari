@@ -164,22 +164,80 @@ button.srow:active{background:var(--accent-bg)}
 input.date{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);padding:8px 10px;min-height:44px;flex:1;min-width:0}
 details.group summary{padding:4px;cursor:pointer}
 
-/* ---- レポート ---- */
+
+/* ---- レポート(図中心) ---- */
+:root{--deemph:#d9dbe3;--track:#eceef3;--ink2:#52514e;--grid:#e6e8f0}
+@media (prefers-color-scheme:dark){:root{--deemph:#3a3d48;--track:#2b2d35;--ink2:#c3c2b7;--grid:#2c2c2a}}
 .yline,.rlink{margin:0 0 10px}
 .yline .srow{padding:6px 6px 6px 14px}
 .ybody{flex:1;display:flex;align-items:center;gap:10px;min-width:0;border:0;background:none;color:var(--fg);font-family:inherit;font-size:14px;text-align:left;padding:6px 0;cursor:pointer}
 .ybody .lbl{color:var(--muted);font-size:13px;flex:none}
 .ybody .val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg);font-size:14px}
 .rlink .srow .lbl{color:var(--accent);font-weight:600}
+.rep-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rep-head h2{margin:0}
+.rep-lead{font-size:17px;font-weight:600;line-height:1.45;margin:6px 0 12px}
 .report-lines p{margin:6px 0;line-height:1.5}
-.report-lines .lead{font-size:17px;font-weight:600}
 .report-lines .tomorrow{color:var(--accent)}
-.bars{margin:14px 0 6px}
-.bar-row{padding:8px 0;border-top:1px solid var(--line)}
-.bar-name{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;margin-bottom:4px}
-.bar-line{display:grid;grid-template-columns:2.6em 1fr 3.4em;align-items:center;gap:8px;margin:2px 0}
-.bar-k{font-size:11px;color:var(--muted)}
-.bar{height:8px;background:var(--bg);border-radius:4px;position:relative;overflow:hidden}
-.bar i{display:block;position:absolute;left:0;top:0;bottom:0;border-radius:4px}
-.bar.faint i{opacity:.35}
-.bar-v{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+/* KPI */
+.kpis{margin:0 0 14px}
+.kpi{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi-label{font-size:12px;color:var(--muted)}
+.kpi-value{font-size:20px;font-weight:600;line-height:1.2}
+.kpi-value small{font-size:12px;font-weight:400;color:var(--muted)}
+.kpi-value.big{font-size:44px;font-weight:700;line-height:1.1;letter-spacing:-.01em}
+.kpi-delta{font-size:12px}
+.hero-figure{padding:4px 0 10px}
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;border-top:1px solid var(--grid);padding-top:10px}
+.meter{height:6px;background:var(--accent-bg);border-radius:3px;overflow:hidden;margin:4px 0 2px}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:3px}
+/* 図の共通 */
+.fig{margin:0 0 16px;padding:0}
+.fig figcaption{font-size:13px;font-weight:600;color:var(--ink2);margin:0 0 8px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:12px;color:var(--muted)}
+.lg{display:inline-flex;align-items:center;gap:5px}
+.lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.lg i.track{background:var(--track)}
+.lg i.sw-bar{background:var(--muted);height:6px;width:14px;border-radius:0 3px 3px 0}
+.lg i.sw-tick{width:2px;height:12px;border-radius:1px;background:var(--fg)}
+.lg i.sw-base{width:8px;height:8px;border-radius:50%;background:none;border:2px solid var(--muted)}
+/* 1日の帯 */
+.strip{display:flex;flex-direction:column;gap:6px}
+.strip-row{display:grid;grid-template-columns:2.2em 1fr;align-items:center;gap:6px}
+.strip-k{font-size:12px;color:var(--muted)}
+.strip-track{position:relative;height:20px;background:var(--track);border-radius:4px}
+.seg{position:absolute;top:0;bottom:0;border:0;padding:0;border-radius:2px;cursor:pointer;min-width:2px}
+.seg.faint{opacity:.45}
+.seg.lit{outline:2px solid var(--fg);outline-offset:1px}
+.strip-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--danger);transform:translateX(-1px)}
+.strip-axis{position:relative;height:14px}
+.strip-axis span{position:absolute;transform:translateX(-50%);font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.strip-axis span:first-child{transform:none}
+.strip-axis span:last-child{transform:translateX(-100%)}
+.strip-caption{margin:4px 0 0;min-height:1.4em}
+/* ブレット */
+.bullets{display:flex;flex-direction:column;gap:8px}
+.bullet{display:grid;grid-template-columns:5.2em 1fr 3.4em;align-items:center;gap:8px}
+.bullet-name{display:flex;align-items:center;gap:5px;font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bullet-name .dot{width:8px;height:8px;flex:none}
+.bullet-track{position:relative;height:18px;background:var(--track);border-radius:3px}
+.bullet-bar{position:absolute;left:0;top:5px;height:8px;border-radius:0 4px 4px 0;display:block}
+.bullet-tick{position:absolute;top:1px;bottom:1px;width:2px;background:var(--fg);border-radius:1px;transform:translateX(-1px)}
+.bullet-base{position:absolute;top:50%;width:8px;height:8px;border-radius:50%;border:2px solid var(--muted);background:var(--card);transform:translate(-50%,-50%);box-sizing:border-box}
+.bullet-val{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+/* 7日間 */
+.trends{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.trend-title{font-size:12px;color:var(--muted);margin-bottom:4px}
+.cols{display:flex;align-items:flex-end;gap:4px;height:84px;border-bottom:1px solid var(--grid);padding-bottom:0}
+.col-slot{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative;min-width:0}
+.col{display:block;width:100%;max-width:24px;border-radius:4px 4px 0 0}
+.col-val{font-size:11px;color:var(--ink2);margin-bottom:2px;white-space:nowrap}
+.col-x{position:absolute;top:100%;margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap}
+.col-x.on{color:var(--fg);font-weight:600}
+.trend{padding-bottom:18px}
+/* 表 */
+.rep-details{margin:6px 0 12px}
+.table{display:flex;flex-direction:column;margin:8px 0;font-size:13px}
+.tr{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:6px;padding:5px 0;border-top:1px solid var(--grid)}
+.tr.th{border-top:0;color:var(--muted);font-size:12px}
+.td.num{text-align:right;font-variant-numeric:tabular-nums}

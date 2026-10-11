@@ -4,6 +4,9 @@ import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
 import * as report from './report.js';
+import { reportSheet } from './ui-report.js';
+import { displayColor } from './palette.js';
+export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, DAY_JA, weekday, addDays } from './time.js';
 
 const LCTX = { uid: store.uid, nowISO: store.nowISO };
@@ -17,7 +20,7 @@ const P = () => store.state.data.plans;
 const nowInfo = () => ({ date: dateKey(), min: minuteOfDay() });
 const windowEndOf = (date) => windowFor(S(), date)?.end ?? null;
 const cats = () => S().categories.slice().sort((a, b) => a.order - b.order);
-export function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : id, color: '#718096', kind: 'work' }; }
+export function catOf(id) { const c = S().categories.find((x) => x.id === id) || { id, name: id === 'other' ? 'その他' : id, color: '#718096', kind: 'work' }; return { ...c, color: displayColor(c.color) }; }
 function commit(entries) { store.state.data.entries = entries; store.save(); }
 
 // ---- 記録操作(UI・URL から呼ぶ) ----
@@ -77,39 +80,6 @@ export function finalizePending() {
   }
   if (changed) store.save();
   return changed;
-}
-
-/** レポート(F3-4): 文章 → カテゴリ別の横棒(理想/実績/先週平均)→ 詳細 */
-export function reportSheet(date) {
-  const d = store.state.data;
-  const n = nowInfo();
-  const r = d.reports[date]?.finalizedAt ? d.reports[date]
-    : report.buildReport({ entries: d.entries, plan: d.plans[date] || null, date, nowMin: date === n.date ? n.min : 1440, settings: d.settings, tasks: d.tasks });
-  const rows = Object.entries(r.byCategory).map(([id, v]) => ({ id, ...v, c: catOf(id) })).filter((x) => x.planned || x.actual || x.baseline).sort((a, b) => b.actual - a.actual);
-  const max = Math.max(1, ...rows.map((x) => Math.max(x.planned, x.actual, x.baseline || 0)));
-  const bar = (label, min, color, cls = '') => el('div.bar-line', [el('span.bar-k', label), el('div.bar', { class: `bar ${cls}` }, el('i', { style: { width: `${Math.round((min / max) * 100)}%`, background: color } })), el('span.bar-v', min ? fmtMin(min) : '–')]);
-  const title = date === n.date ? '今日のレポート' : `${+date.slice(5, 7)}/${+date.slice(8, 10)} のレポート`;
-  sheet((close) => [
-    el('h2', title),
-    r.finalizedAt ? null : el('p.muted.small', date === n.date ? 'いまの時点の集計です(翌朝に確定します)。' : '未確定の集計です。'),
-    el('div.report-lines', [
-      ...r.positive.map((t, i) => el('p', { class: i === 0 ? 'lead' : '' }, t)),
-      ...r.improve.map((t) => el('p.muted', t)),
-      r.tomorrow ? el('p.tomorrow', r.tomorrow) : null,
-    ]),
-    rows.length ? el('div.bars', rows.map((x) => el('div.bar-row', [
-      el('div.bar-name', [el('span.dot', { style: { background: x.c.color } }), x.name || x.c.name]),
-      bar('理想', x.planned, '#b8bccc'), bar('実績', x.actual, x.c.color), x.baseline != null ? bar('先週', x.baseline, x.c.color, 'faint') : null,
-    ]))) : null,
-    el('details', [el('summary.muted.small', '詳細'), el('div.list', [
-      el('div.srow.plain', [el('span.lbl', '記録できた時間'), el('span.val', fmtMinJa(r.loggedMin))]),
-      el('div.srow.plain', [el('span.lbl', '未記録'), el('span.val', fmtMinJa(r.unloggedMin))]),
-      el('div.srow.plain', [el('span.lbl', '記録カバー率'), el('span.val', `${Math.round(r.coverage * 100)}%`)]),
-      el('div.srow.plain', [el('span.lbl', '作業の合計'), el('span.val', fmtMinJa(r.workMin))]),
-      el('div.srow.plain', [el('span.lbl', '続けて記録した日数'), el('span.val', `${r.streak} 日`)]),
-    ])]),
-    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: close }, '閉じる')),
-  ]);
 }
 
 /** 起動時・復帰時の確認(F1-3 前夜の自動終了 / F1-4 止め忘れ回収)。シートを出したら true */

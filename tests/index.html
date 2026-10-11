@@ -78,6 +78,8 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(broken.settings.routines.length === 1 && broken.settings.routines[0].min === 30 && eq(broken.settings.routines[0].days, [0, 1, 2, 3, 4, 5, 6]), 'migrate: ルーティンは start 必須・min/days を補完');
     ok(broken.settings.foo === 1 && broken.bar === 2, 'migrate: 未知キーを保持(前方互換)');
     ok(eq(broken.entries, {}) && eq(broken.meta.resetAt, null), 'migrate: entries/meta を補完');
+    const legacy = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2b6cb0', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#123456', order: 2 }, { id: 'new', name: 'x', kind: 'work', color: 'bad', order: 3 }] } });
+    ok(legacy.settings.categories[0].color === '#2a78d6' && legacy.settings.categories[1].color === '#123456' && legacy.settings.categories[2].color === '#718096', 'migrate: 旧既定色は新既定色へ・自分で変えた色は保持・壊れた色は灰');
     const once = S.migrate({ schema: 1, settings: { transitMin: 40 } });
     ok(eq(S.migrate(once), once), 'migrate: 冪等');
     ok(once.settings.transitMin === 40, 'migrate: 正しい値は保持');
@@ -263,7 +265,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

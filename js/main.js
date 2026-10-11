@@ -10,8 +10,9 @@ import { renderToday, startCategory, stopRecording, checkOpenEntry, finalizePend
 import { renderTasks } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.4.1';
 export const NEWS = [
+  { v: '0.4.1', text: 'レポートを図中心に(作業の合計と先週比・SNS・カバー率・連続日数のタイル、1日の帯で理想と実績を並べる、カテゴリ別ブレット、7日間の推移、表)。カテゴリの既定色を色覚でも見分けやすい組み合わせに更新(ダークモード対応)。' },
   { v: '0.4.0', text: 'Phase 3: 日次レポート(肯定的事実を先頭に・理想/実績/先週平均の横棒・翌朝に確定)、昨日のレポートの1行、朝の一言(手つかずの近い期限)、SNS・動画の「あと何分?」区切り、休憩の時間に今日の分の残り。' },
   { v: '0.3.0', text: 'Phase 2: 朝の理想スケジュール提案(生活ルーティン・習慣・夜の休憩・タスクの今日の分を自動配置)、理想レーン、ヒーローの状態機械(いまやること1つ+始める)、今から再計画、タスクのかんたん追加と「今日の分」。' },
   { v: '0.2.1', text: '今日画面の上部を簡素化(日付と記録中だけ)。「時刻を指定」で事後入力。設定を一覧→項目ごとの編集画面に整理。' },
