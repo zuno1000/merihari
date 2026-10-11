@@ -8,14 +8,15 @@ import * as report from './report.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
 import * as passkey from './passkey.js';
-import { toast } from './ui.js';
+import { toast, el } from './ui.js';
 import * as ui from './ui.js';
 import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.13.1';
 export const NEWS = [
+  { v: '0.13.1', text: '作業時間帯が終わったあとに記録を「終わる」とホームが真っ白になる不具合を修正(Drive は関係ありません)。万一描けないときはメッセージと「もう一度」を出します。タスクの期限に時刻を付けられます(かんたん追加とタスクの編集の「時刻」)。時刻のある期限は、その日の時刻までの作業枠で今日の分を計算し、理想もその時刻より前に置きます。' },
   { v: '0.13.0', text: 'タスクを追加・編集・完了にすると、きょうの理想のいま以降を自動で組み直します(期限を早めれば今日に入り、明日以降の見通しにも反映)。設定 › 記録 › すき間 に「記録を始めるとき、最後の記録の終わりから数える」(既定オフ)。1日の切れ目(2:00 など)の前に前の日のレポートを確定したり、期限切れのシートを出したりしないようにしました。' },
   { v: '0.12.3', text: 'ホームのリングと副文を「きょうの作業 ◯ / 理想 ◯」(作業種別の記録の合計 / その日の理想の作業枠の合計)に統一し、「今日の分はあと◯分」をやめました。明日以降の見通しでは、その日より前が期限のタスクは終わっている前提で入れません(期限切れが先の日を埋めていた)。1日の切れ目(2:00 など)の前は、暦日の今日のタイムラインを「見通し」として出し、「この時間は?」を出しません。レポートの文をふつうの丁寧な文に戻しました(評価や励ましの言葉は足さない)。' },
   { v: '0.12.2', text: '作業時間帯の終わりを翌日の深夜(6:00 まで)にできます(例 7:00〜1:00)。これまでは終わりが始まりより早いと作業時間帯が無い扱いになり、理想が組まれず、レポートも「記録なし」になっていました。深夜は 0:00 を過ぎてもホームとタイムラインは前の日のまま続き、記録中のものは 0:00 で切って続けます。⋯ のボタン名を「いま以降を組み直す(済んだ分はそのまま)」「1日ぜんぶ組み直す」「組み直す前に戻す」に。「さっきから」で選んだ候補に色が付きます。レポートの文を短く言い切る調子に(bondavi 風)。' },
@@ -49,6 +50,15 @@ let tickFn = null;
 const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current };
 const screens = { now: () => renderNow(view, ctx), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
 let current = 'now';
+// 画面の描画で例外が起きても真っ白にしない(v0.13.1): メッセージと「もう一度」を出し、console に残す
+function showError(e) {
+  console.error(e);
+  while (view.firstChild) view.removeChild(view.firstChild);
+  view.append(el('section.card', [el('h2', '画面を描けませんでした'), el('p.muted.small', String(e && e.message || e)), el('div.row', [
+    el('button.btn.primary', { type: 'button', onclick: () => go(current) }, 'もう一度'),
+    el('button.btn.ghost', { type: 'button', onclick: () => go('settings') }, '設定へ')])]));
+}
+for (const k of Object.keys(screens)) { const f = screens[k]; screens[k] = (arg) => { try { f(arg); } catch (e) { showError(e); } }; }
 
 function go(tab, arg) {
   if (tab === 'today') tab = 'now';
@@ -111,7 +121,7 @@ if (!firstRun) sync.autoSyncOnOpen();
 document.addEventListener('click', () => { sync.autoSyncOnGesture(); }, { capture: true });
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
-setInterval(() => { if (tickFn) tickFn(); }, 15000);
+setInterval(() => { try { if (tickFn) tickFn(); } catch (e) { console.error(e); } }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();

@@ -382,7 +382,7 @@ function buildHero(n, p, ctx, rerender, real = n) {
     return { node: h.node, tick, key };
   }
   if (!w || n.min < w.start) return { node: build({ kicker: 'おはよう', title: w ? `作業時間帯は ${mm(w.start)} から` : '作業時間帯の設定がありません', pct: 0 }).node, tick, key };
-  if (n.min >= w.end) return { node: build({ kicker: 'おつかれさま', title: '今日はおしまい', inner: total ? `記録 合計 ${fmtMinJa(total)}` : '記録がなくても大丈夫', pct: dayTotal ? dayPct : (total ? 1 : 0) }).node, tick, key };
+  if (n.min >= w.end) return { node: build({ kicker: 'おつかれさま', title: '今日はおしまい', inner: total ? `記録 合計 ${fmtMinJa(total)}` : '記録がなくても大丈夫', pct: idealWork ? dayPct : (total ? 1 : 0) }).node, tick, key };
   if (p && !p.confirmedAt) {
     const taskMin = p.blocks.filter((b) => b.type === 'task').reduce((a, b) => a + (b.end - b.start), 0);
     const short = p.shortfall.map((s) => `${T()[s.taskId]?.name || ''} −${fmtMin(s.min)}`).join('・');

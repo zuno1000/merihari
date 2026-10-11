@@ -138,9 +138,11 @@ export function sumMin(list) {
  * 使える時間(分)= 作業時間帯 − 生活ルーティン − busy − 移動 − 長い休憩 − 習慣(§6.1)
  * extra: busy/transit などの追加区間 [{start,end}](分)。
  */
-export function usableMin(settings, key, extra = []) {
-  const w = windowFor(settings, key);
-  if (!w) return 0;
+export function usableMin(settings, key, extra = [], until = null) {
+  const w0 = windowFor(settings, key);
+  if (!w0) return 0;
+  const w = until == null ? w0 : { start: w0.start, end: Math.min(w0.end, until) }; // until(分): 期限の時刻まで(v0.13.1)
+  if (w.end <= w.start) return 0;
   const cuts = [...routinesFor(settings, key), ...extra];
   const free = sumMin(subtractIntervals([w], cuts));
   const habitMin = (settings?.habits || []).reduce((a, h) => a + (+h.min > 0 ? +h.min : 0), 0);
@@ -148,9 +150,9 @@ export function usableMin(settings, key, extra = []) {
 }
 
 /** 作業に回せる時間(分)= usable × ratio(既定 0.6) */
-export function workableMin(settings, key, extra = []) {
+export function workableMin(settings, key, extra = [], until = null) {
   const ratio = typeof settings?.ratio === 'number' && settings.ratio >= 0 && settings.ratio <= 1 ? settings.ratio : 0.6;
-  return Math.round(usableMin(settings, key, extra) * ratio);
+  return Math.round(usableMin(settings, key, extra, until) * ratio);
 }
 
 /** 分 → '1h20m' / '45m' / '0m' */

@@ -1,5 +1,5 @@
 // merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1/F5-2)。かんたん追加(名前+期限チップ+大きさチップ)と一覧。
-import { el, clear, toast, sheet, confirmSheet, svg } from './ui.js';
+import { el, clear, toast, sheet, confirmSheet, svg, timeField } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMD, effectiveDay } from './time.js';
@@ -46,19 +46,21 @@ function chipRow(options, value, onpick, keyOf = (o) => o.value) {
 function quickAdd(today, rerender) {
   const name = el('input.text', { type: 'text', placeholder: 'タスク名(Enter で追加)', autocomplete: 'off', maxlength: 100 });
   const dateIn = el('input.date', { type: 'date', value: deadlineOptions(today)[2].value, min: today });
+  const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
+  const dl = () => (dateIn.value ? dateIn.value + (timeIn.value ? 'T' + timeIn.value : '') : null);
   const hoursIn = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.5, min: 0.25, max: 999, value: 1, 'aria-label': '時間' });
   const submit = () => {
     const nm = name.value.trim();
     if (!nm) { toast('名前を入れてください'); name.focus(); return; }
     const hours = Math.max(0.25, +hoursIn.value || 1);
-    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dateIn.value || null, remainingH: hours, remainingSetAt: store.nowISO(), minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
+    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dl(), remainingH: hours, remainingSetAt: store.nowISO(), minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
     toast('追加しました');
     rerender();
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   return el('section.card.quick', [
     el('div.row', [name, el('button.btn.primary', { type: 'button', onclick: submit }, '追加')]),
-    el('div.row.field', [el('span.label', '期限'), dateIn]),
+    el('div.row.field', [el('span.label', '期限'), dateIn, timeIn]),
     chipRow(deadlineOptions(today), dateIn.value, (o) => { dateIn.value = o.value || ''; }),
     el('div.row.field', [el('span.label', '大きさ'), hoursIn, el('span.unit', '時間')]),
     chipRow(SIZES, 1, (o) => { hoursIn.value = o.h; }, (o) => o.h),
@@ -131,7 +133,7 @@ export function renderTasks(view, ctx) {
     const meta = [];
     if (s && s.todayMin > 0) meta.push(`今日 ${fmtH(s.todayMin)}${lg ? `(済 ${fmtH(lg)})` : ''}`);
     meta.push(`残り ${fmtH(plan.remainingMin(t, E))}`); // 記録した分を自動で引いた残り(v0.12)
-    meta.push(t.repeat?.type === 'weekly' ? `毎週 ${t.repeat.hours}h${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)}/${t.lastWeek.hours}h)` : ''}` : fmtDeadline(plan.deadlineKey(t, today), today));
+    meta.push(t.repeat?.type === 'weekly' ? `毎週 ${t.repeat.hours}h${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)}/${t.lastWeek.hours}h)` : ''}` : fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));
     const overdue = !t.doneAt && t.deadline && t.deadline.slice(0, 10) < today;
     const recording = open && open.taskId === t.id;
     return el('div.trow', [
@@ -163,6 +165,7 @@ function editSheet(t, today, rerender, ctx) {
   let kind = t.kind || 'duty';
   const kindSeg = el('div.seg', ['duty', 'wish'].map((k) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); } }, k === 'duty' ? '義務' : 'やりたい')));
   const deadline = el('input.date', { type: 'date', value: t.deadline ? t.deadline.slice(0, 10) : '' });
+  const dlTime = timeField(t.deadline && t.deadline.length >= 16 ? t.deadline.slice(11, 16) : '', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
   const left0 = Math.round(plan.remainingMin(t, store.state.data.entries) / 15) * 15 / 60; // いまの残り(記録を引いたもの)を見せる。変えなければ触らない
   const remaining = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.25, min: 0, max: 999, value: left0 });
   const cat = el('select', cats.map((c) => el('option', { value: c.id, selected: c.id === t.categoryId }, c.name)));
@@ -174,7 +177,7 @@ function editSheet(t, today, rerender, ctx) {
     el('div.col', [
       el('label.field.col', [el('span.label', '名前'), name]),
       kindSeg,
-      el('div.row.field', [el('span.label', '期限'), deadline, el('button.btn.sm.ghost', { type: 'button', onclick: () => { deadline.value = ''; } }, 'なし')]),
+      el('div.row.field', [el('span.label', '期限'), deadline, dlTime, el('button.btn.sm.ghost', { type: 'button', onclick: () => { deadline.value = ''; dlTime.set(''); } }, 'なし')]),
       el('div.row.field', [el('span.label', '残り見積'), remaining, el('span.unit', '時間'), el('span.grow'), el('span.label', 'カテゴリ'), cat]),
       el('label.row.field', [repeatOn, el('span', '毎週'), repeatH, el('span.unit', '時間')]),
       el('label.field.col', [el('span.label', 'メモ'), note]),
@@ -183,7 +186,7 @@ function editSheet(t, today, rerender, ctx) {
       el('button.btn.danger', { type: 'button', onclick: () => confirmSheet('このタスクを削除しますか?', t.name, '削除', () => { t.deletedAt = store.nowISO(); saveTask(t); close(); rerender(); }, true) }, '削除'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); return; }
-        t.name = nm; t.kind = kind; t.deadline = deadline.value || null;
+        t.name = nm; t.kind = kind; t.deadline = deadline.value ? deadline.value + (dlTime.value ? 'T' + dlTime.value : '') : null;
         if (+remaining.value !== left0) { t.remainingH = Math.max(0, +remaining.value || 0); t.remainingSetAt = store.nowISO(); }
         t.categoryId = cat.value;
         t.note = note.value.trim();

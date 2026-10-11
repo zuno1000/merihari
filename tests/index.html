@@ -503,6 +503,17 @@ document.getElementById('app').addEventListener('load', async () => {
     log('\n# v0.13');
     ok(S.migrate({ schema: 1, settings: { startFromLast: true } }).settings.startFromLast === true && S.migrate({ schema: 1, settings: { startFromLast: 'yes' } }).settings.startFromLast === false && S.defaultSettings().startFromLast === false, 'settings.startFromLast: 真偽値だけ・既定オフ');
 
+    // ---- v0.13.1: 期限の時刻 ----
+    log('\n# v0.13.1');
+    ok(T.usableMin(ds, '2026-10-13', [], 720) < T.usableMin(ds, '2026-10-13') && T.usableMin(ds, '2026-10-13', [], 300) === 0, 'usableMin: until で期限の時刻までに切る');
+    ok(Pn.deadlineMin({ deadline: '2026-10-13T15:00' }) === 900 && Pn.deadlineMin({ deadline: '2026-10-13' }) === null && Pn.deadlineKey({ deadline: '2026-10-13T15:00' }, '2026-10-12') === '2026-10-13', 'deadlineMin / deadlineKey: 時刻つきの期限');
+    const tdA = { a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-13', remainingH: 4, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
+    const tdB = { a: { ...tdA.a, deadline: '2026-10-13T09:00' } };
+    ok(Pn.todayShare(tdB, '2026-10-12', ds)[0].todayMin > Pn.todayShare(tdA, '2026-10-12', ds)[0].todayMin, 'todayShare: 期限に時刻があると、その日の枠が減る分だけ今日の分が増える');
+    const pdue = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: { a: { ...tdA.a, deadline: '2026-10-13T10:00', remainingH: 3 } }, entries: {}, busy: [] }, PC);
+    const dueBlocks = pdue.blocks.filter((b) => b.taskId === 'a');
+    ok(dueBlocks.length && dueBlocks.every((b) => b.end <= 600) && pdue.shortfall.some((x) => x.taskId === 'a'), 'buildPlan: 期限の時刻より前にしか置かず、入らない分は shortfall');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

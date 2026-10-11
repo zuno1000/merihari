@@ -18,13 +18,18 @@ export function deadlineKey(t, date) {
   if (typeof t.deadline !== 'string' || t.deadline.length < 10) return null;
   return t.deadline.slice(0, 10);
 }
+/** 期限の時刻(分)。'YYYY-MM-DDTHH:MM' のときだけ。無ければ null(v0.13.1) */
+export function deadlineMin(t) {
+  if (typeof t?.deadline !== 'string' || t.deadline.length < 16 || t.deadline[10] !== 'T') return null;
+  return hm(t.deadline.slice(11, 16));
+}
 
 /** 期限までに使える作業時間(分)。date〜deadline(両端含む)。過ぎていれば今日だけ */
-export function availableUntil(settings, date, deadline, maxDays = 60) {
+export function availableUntil(settings, date, deadline, maxDays = 60, dueMin = null) {
   let sum = 0;
   let d = date;
   for (let i = 0; i < maxDays; i++) {
-    sum += workableMin(settings, d);
+    sum += d === deadline && dueMin != null ? workableMin(settings, d, [], dueMin) : workableMin(settings, d); // 期限の日は時刻まで(v0.13.1)
     if (deadline == null ? i >= 29 : d >= deadline) break;
     d = addDays(d, 1);
   }
@@ -66,13 +71,14 @@ export function todayShare(tasks, date, settings, entries = {}) {
     const minUnit = +t.minUnit > 0 ? +t.minUnit : 30;
     cumR += remMin;
     if (deadline == null) { out.push({ taskId: t.id, todayMin: 0, remainingMin: remMin, deadline: null, ratio: 0, short: false, minUnit }); continue; }
-    const A = Math.max(1, availableUntil(settings, date, deadline));
+    const dueMin = deadlineMin(t);
+    const A = Math.max(1, availableUntil(settings, date, deadline, 60, dueMin));
     const ratio = cumR / A;
     let share = ratio >= 1 || deadline <= date ? remMin : remMin * wToday / A;
     share = r5(share);
     if (share < minUnit / 2) share = 0; else share = Math.max(minUnit, share);
     share = Math.min(share, remMin);
-    out.push({ taskId: t.id, todayMin: share, remainingMin: remMin, deadline, ratio, short: ratio > 1, minUnit });
+    out.push({ taskId: t.id, todayMin: share, remainingMin: remMin, deadline, ratio, short: ratio > 1, minUnit, dueMin: deadline === date ? dueMin : null });
   }
   return out;
 }
@@ -304,7 +310,7 @@ export function buildPlan(opts, ctx) {
     const already = (logged[sh.taskId] || 0) + keptOf(sh.taskId);
     const want = sh.todayMin - already;
     if (want <= 0) continue;
-    queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0 });
+    queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0, due: sh.dueMin ?? null });
   }
   if (opts.fill !== false) {
     const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id) && !assumed(t, deadlineKey(t, date)))
@@ -349,7 +355,8 @@ export function buildPlan(opts, ctx) {
         break;
       }
       if (restMin === 0) sinceRest = 0;
-      let chunk = Math.min(need, workMin - sinceRest, slot.end - cursor);
+      if (head.due != null && cursor + head.mu > head.due) { queue.shift(); continue; } // 期限の時刻より前にしか置かない(v0.13.1)
+      let chunk = Math.min(need, workMin - sinceRest, slot.end - cursor, head.due != null ? head.due - cursor : Infinity);
       if (!longPlaced && workDone < longAt) chunk = Math.min(chunk, Math.max(head.mu, longAt - workDone)); // 長い休憩の位置で区切る
       if (chunk < head.mu) break; // この枠の残りでは足りない → 次の空きへ(順番は守る)
       blocks.push({ id: uid(), type: 'task', start: cursor, end: cursor + chunk, name: head.t?.name || '', taskId: head.taskId, categoryId: head.t?.categoryId || 'other', ...(head.share ? {} : { filler: true }) });

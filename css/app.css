@@ -375,3 +375,6 @@ p.gap{margin-top:14px}
 
 /* ---- v0.12.2: 選んだ候補の強調(さっきから) ---- */
 .btn.on,.tfield.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+
+/* ---- v0.13.1: 期限の時刻 ---- */
+.quick .tfield,.sheet .row.field .tfield{min-width:4.6em;padding:8px 8px}
