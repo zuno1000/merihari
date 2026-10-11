@@ -9,12 +9,14 @@ import * as google from './google.js';
 import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import { toast } from './ui.js';
+import * as ui from './ui.js';
 import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.10.0';
+export const APP_VERSION = '0.11.0';
 export const NEWS = [
+  { v: '0.11.0', text: '「今」タブを「ホーム」に。タスクはタップでホームに移ってすぐ記録開始(編集は ⋯)。記録を「終わる」でシートを出さず、ホームに「終えた記録 [直す]」と「残り見積 [減らす]」の1行だけ。記録のシートは開始/終了を時計で直すとその場で保存、「途中から別のこと」はカテゴリをタップして「いつから」を選ぶだけ(授業に切り替えていた・止め忘れたまま SNS に移った、を後から切り出せる)。時刻の入力はすべて時計の文字盤(時 → 分)。レポートは「1日の円」(24時間を何がどれだけ占めたか)を主役に、1日の帯の目盛の重なりを修正。タイムラインは開くと現在時刻へスクロール、睡眠帯は予定や記録と重なる部分を圧縮しない、「1日の始まり」(設定 › 作業時間帯)で 2:00〜翌 2:00 のような1日にできる。期限の表記を「10月12日」に。タスク編集から とっかかり・最小単位 を外し、画面の説明文を減らして「使い方」にまとめた。' },
   { v: '0.10.0', text: '睡眠を理想スケジュールに自動で置きます(作業時間帯の外側。予定と重なれば予定を優先)。タイムラインは 0:00〜24:00 を表示し睡眠帯は圧縮、左右にスワイプで前後の日へ。「今」のひとこと(ピクトグラム)を外し、とっかかりは副文へ。ホームの「タイムライン ›」を削除。レポート: 途中経過は「いままでの理想」と比べ、作業の合計に理想の目安(メーター)、未記録は1日の終わりだけ。タスクのチップ列など余白を調整。' },
   { v: '0.9.0', text: '「今」を bondavi(継続する技術)風に: 中央の大きなリング1つに いまやること、下に主ボタン、ピクトグラムのひとこと。背景はほぼ白・枠線と影なし・タブはアイコン。ver.1 に向けて: 期限超過の出口(+1週/半分にして+1週/完了/消す)、毎週X時間型の自動送り(先週 x/yh)、記録を終えたときの残り見積の減算提案、作業に回せる割合の校正提案(週1回)、レポートに週のまとめ、「この後の予定」で同じタスクの連続枠を1行に。' },
   { v: '0.8.0', text: '外出を選んだ予定は長さや時間帯に関係なく前後に移動を置くように修正(既定の片道で。長さは予定をタップして調整)。予定をタップして「この予定は?」をテンプレ(カテゴリ)から選ぶと色と名前が付き、同じ曜日・時刻で記憶、「今」ではそのカテゴリをワンタップで記録。同期のパスフレーズを 顔認証 / パスキー で開ける(任意・設定 › Google)。レポートを簡素化(一言・作業の合計・カテゴリ別だけ。帯や推移は「くわしく」へ)。確定後のレポートを再計算。タイムラインの未記録に「この時間は?」。' },
@@ -141,6 +143,7 @@ window.M = {
   log,
   plan,
   report,
+  ui: { timeField: ui.timeField },
   sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },

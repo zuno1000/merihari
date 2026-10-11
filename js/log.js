@@ -148,6 +148,24 @@ export function split(entries, id, at, nowMin, ctx) {
   return out;
 }
 
+/**
+ * 「途中から別のことをしていた」(v0.11・F1-9): at(分)以降を categoryId に切り出す。
+ * at が開始以前なら丸ごと変更。記録中の後半は記録中のまま(= 止め忘れたまま SNS に移った、を後から直せる)。
+ * 戻り値 { entries, tailId }(tailId は切り出した後半の id。丸ごと変更なら元の id)
+ */
+export function switchFrom(entries, id, at, categoryId, nowMin, ctx) {
+  const out = clone(entries);
+  const e = out[id];
+  if (!alive(e)) return { entries: out, tailId: null };
+  const s = hm(e.start), en = effectiveEnd(e, e.date, nowMin);
+  if (at >= en) throw new Error('終わりより前の時刻にしてください');
+  if (at <= s) { Object.assign(e, { categoryId, taskId: null, plannedMin: null, updatedAt: ctx.nowISO() }); return { entries: out, tailId: e.id }; }
+  const tail = { ...e, id: ctx.uid(), start: mm(at), categoryId, taskId: null, plannedMin: null, note: '', updatedAt: ctx.nowISO() };
+  e.end = mm(at); e.updatedAt = ctx.nowISO();
+  out[tail.id] = tail;
+  return { entries: out, tailId: tail.id };
+}
+
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */
 export function elapsedMin(e, date, nowMin) {
   if (!e) return 0;

@@ -59,6 +59,78 @@ export function ring(pct, children, { size = 240, stroke = 12 } = {}) {
   return { node, set: (p) => arc.setAttribute('stroke-dashoffset', (c * (1 - Math.max(0, Math.min(1, p || 0)))).toFixed(1)) };
 }
 
+/**
+ * 時刻の入力(v0.11): クロックウィジェット。ボタンに時刻を出し、タップで時計の文字盤(時 → 分)から選ぶ(セレクトやスピナーを使わない)。
+ * value 'HH:MM' | ''。opts { onchange(v), allowEmpty, emptyLabel, label }。戻り値はボタン要素(.value で読める・.set(v) で変えられる)
+ */
+export function timeField(value, opts = {}) {
+  const btn = el('button.tfield', { type: 'button', 'aria-label': opts.label || '時刻' });
+  const show = () => { btn.textContent = btn.value || (opts.emptyLabel || 'なし'); btn.classList.toggle('empty', !btn.value); };
+  btn.set = (v) => { btn.value = v || ''; show(); };
+  btn.set(value);
+  btn.addEventListener('click', () => clockSheet(btn.value, { ...opts, onpick: (v) => { btn.set(v); if (opts.onchange) opts.onchange(v); } }));
+  return btn;
+}
+
+/** 時計の文字盤で時刻を選ぶシート。時(外=12〜23・内=0〜11)→ 分(5分刻み)。文字盤はタップでもなぞっても選べる */
+export function clockSheet(value, { onpick, allowEmpty = false, title = null } = {}) {
+  const now = new Date();
+  const m0 = /^(\d{1,2}):(\d{2})$/.exec(value || '');
+  let h = m0 ? +m0[1] % 24 : now.getHours();
+  let mi = m0 ? +m0[2] : Math.round(now.getMinutes() / 5) * 5 % 60;
+  let stage = 'h';
+  const SZ = 260, C = SZ / 2, RO = 104, RI = 66;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const hb = el('button.ck-h', { type: 'button', onclick: () => { stage = 'h'; draw(); } }, p2(h));
+  const mb = el('button.ck-m', { type: 'button', onclick: () => { stage = 'm'; draw(); } }, p2(mi));
+  const head = el('div.clock-head', [hb, el('span', ':'), mb]);
+  const face = svg('svg', { class: 'clock', viewBox: `0 0 ${SZ} ${SZ}`, width: SZ, height: SZ, role: 'group', 'aria-label': '時計の文字盤' });
+  const pos = (i, r) => { const a = (i / 12) * Math.PI * 2 - Math.PI / 2; return [C + r * Math.cos(a), C + r * Math.sin(a)]; };
+  const draw = () => {
+    clear(face);
+    hb.classList.toggle('on', stage === 'h'); mb.classList.toggle('on', stage === 'm');
+    hb.textContent = p2(h); mb.textContent = p2(mi);
+    face.append(svg('circle', { class: 'clock-face', cx: C, cy: C, r: C - 2 }));
+    const items = stage === 'h'
+      ? [...Array.from({ length: 12 }, (_, i) => ({ v: i + 12, i, r: RO })), ...Array.from({ length: 12 }, (_, i) => ({ v: i, i, r: RI }))]
+      : Array.from({ length: 12 }, (_, i) => ({ v: i * 5, i, r: RO }));
+    const sel = stage === 'h' ? h : mi;
+    const cur = items.find((x) => x.v === sel) || items[0];
+    const [hx, hy] = pos(cur.i, cur.r);
+    face.append(svg('line', { class: 'clock-hand', x1: C, y1: C, x2: hx, y2: hy }), svg('circle', { class: 'clock-pin', cx: C, cy: C, r: 3 }));
+    for (const it of items) {
+      const [x, y] = pos(it.i, it.r);
+      face.append(svg('g', { class: `ck${it.v === sel ? ' on' : ''}${it.r === RI ? ' inner' : ''}` }, [svg('circle', { cx: x, cy: y, r: 17 }), svg('text', { x, y: y + 1, 'text-anchor': 'middle', 'dominant-baseline': 'middle' }, stage === 'h' ? String(it.v) : p2(it.v))]));
+    }
+  };
+  const pick = (ev) => {
+    const r = face.getBoundingClientRect();
+    const x = (ev.clientX - r.left) * (SZ / r.width) - C, y = (ev.clientY - r.top) * (SZ / r.height) - C;
+    const ang = Math.atan2(y, x) + Math.PI / 2;
+    const i = ((Math.round((ang / (Math.PI * 2)) * 12) % 12) + 12) % 12;
+    if (stage === 'h') h = Math.hypot(x, y) < (RO + RI) / 2 ? i : i + 12; else mi = i * 5;
+    draw();
+  };
+  let pressed = false, close;
+  face.addEventListener('pointerdown', (e) => { pressed = true; face.setPointerCapture(e.pointerId); pick(e); });
+  face.addEventListener('pointermove', (e) => { if (pressed) pick(e); });
+  const finish = () => { if (stage === 'h') { stage = 'm'; draw(); return; } close(); if (onpick) onpick(`${p2(h)}:${p2(mi)}`); };
+  face.addEventListener('pointerup', () => { if (!pressed) return; pressed = false; finish(); });
+  face.addEventListener('pointercancel', () => { pressed = false; });
+  draw();
+  close = sheet((c) => { close = c; return [
+    title ? el('h2', title) : null,
+    head, face,
+    el('div.row', [
+      el('button.btn', { type: 'button', onclick: () => close() }, 'やめる'),
+      allowEmpty ? el('button.btn.ghost', { type: 'button', onclick: () => { close(); if (onpick) onpick(''); } }, 'なし') : null,
+      el('span.grow'),
+      el('button.btn.primary', { type: 'button', onclick: () => { close(); if (onpick) onpick(`${p2(h)}:${p2(mi)}`); } }, 'OK'),
+    ]),
+  ]; });
+  return close;
+}
+
 let toastTimer = null;
 export function toast(msg) {
   const t = document.getElementById('toast');

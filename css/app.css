@@ -318,3 +318,42 @@ p.gap{margin-top:14px}
 .tl-hour.dim span{color:#b8bcc6}
 .timeline{touch-action:pan-y}
 .now-hero{margin-bottom:18px}
+
+/* ---- v0.11: 時計の文字盤・1日の円・タスク行(タップで開始・⋯で編集)・時刻ボタン ---- */
+.tfield{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);padding:8px 12px;min-height:44px;min-width:6.2em;font-size:17px;font-variant-numeric:tabular-nums;cursor:pointer;font-family:inherit;flex:none;text-align:center}
+.tfield.empty{color:var(--muted);font-size:14px}
+.clock-head{display:flex;align-items:center;justify-content:center;gap:4px;font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;margin:4px 0 8px}
+.clock-head button{border:0;background:var(--bg);color:var(--muted);font:inherit;font-size:40px;line-height:1;padding:4px 10px;border-radius:12px;cursor:pointer;font-variant-numeric:tabular-nums}
+.clock-head button.on{background:var(--accent-bg);color:var(--accent)}
+.clock{display:block;margin:0 auto;touch-action:none;max-width:100%;height:auto}
+.clock-face{fill:var(--bg)}
+.clock-hand{stroke:var(--accent);stroke-width:2}
+.clock-pin{fill:var(--accent)}
+.ck circle{fill:transparent;cursor:pointer}
+.ck text{font-size:15px;fill:var(--fg);pointer-events:none;font-variant-numeric:tabular-nums}
+.ck.inner text{font-size:13px;fill:var(--muted)}
+.ck.on circle{fill:var(--accent)}
+.ck.on text{fill:#fff}
+.pie-fig{margin:4px 0 14px}
+.pie-wrap{position:relative;width:200px;height:200px;margin:0 auto}
+.pie{display:block;transform:rotate(-90deg)}
+.pie-seg{fill:none;cursor:pointer}
+.pie-seg.lit{stroke-width:36}
+.pie-unlogged{stroke:var(--track)}
+.pie-sleep{stroke:#d7dbe3}
+@media (prefers-color-scheme:dark){.pie-sleep{stroke:#3a3d48}}
+.pie-future{stroke:transparent;pointer-events:none}
+.pie-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.pie-center b{font-size:26px;font-weight:700;line-height:1.1;letter-spacing:-.01em}
+.pie-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 12px;margin-top:10px;font-size:12px;color:var(--muted)}
+.pie-legend .lg i{width:10px;height:10px;border-radius:3px}
+.pie-legend i.sw-unlogged{background:var(--track)}
+.pie-legend i.sw-sleep{background:#d7dbe3}
+.pie-fig .strip-caption{text-align:center}
+.tname{display:flex;align-items:center;gap:6px}
+.tname .dot{width:8px;height:8px}
+.rec-mark{font-size:11px;color:var(--danger);font-weight:600}
+.tedit{width:44px;flex:none;border:0;background:none;color:var(--muted);font-size:20px;cursor:pointer;font-family:inherit}
+.tedit:active{color:var(--accent)}
+.sheet h2 .dot.big{margin-right:8px}
+.sheet .row.field{margin-top:10px}

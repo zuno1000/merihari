@@ -112,6 +112,31 @@ export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
     unloggedMin: u.unloggedMin, coverage: u.coverage, loggedMin: u.loggedMin, streak: streak(entries, date), restKept: rk ? mm(rk.block.start) : null };
 }
 
+/**
+ * 1日の円グラフ(v0.11・F3-7): 24 時間を「カテゴリ別の実績・未記録(作業時間帯の中)・睡眠(作業時間帯の外で記録なし)・これから(今日の残り)」に分ける。
+ * 戻り値 [{ id, min }] の順序: カテゴリ(多い順)→ unlogged → sleep → future。合計は 1440。
+ */
+export function dayPie(entries, date, W, nowMin = 1440) {
+  const upto = Math.max(0, Math.min(1440, nowMin));
+  const actual = totalsByCategory(entries, date, upto);
+  const logged = Object.values(actual).reduce((a, b) => a + b, 0);
+  const win = W ? { start: Math.min(W.start, upto), end: Math.min(W.end, upto) } : null;
+  const winLen = win ? Math.max(0, win.end - win.start) : 0;
+  // 作業時間帯の中の記録(未記録の計算用)。帯の外の記録は睡眠から引く
+  let inWin = 0;
+  for (const e of entriesOf(entries, date)) {
+    const s = hm(e.start), en = Math.min(upto, e.end == null ? upto : hm(e.end));
+    if (win && en > s) inWin += Math.max(0, Math.min(en, win.end) - Math.max(s, win.start));
+  }
+  const unlogged = Math.max(0, winLen - inWin);
+  const sleep = Math.max(0, upto - winLen - (logged - inWin));
+  const rows = Object.entries(actual).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min }));
+  if (unlogged > 0) rows.push({ id: 'unlogged', min: unlogged });
+  if (sleep > 0) rows.push({ id: 'sleep', min: sleep });
+  if (1440 - upto > 0) rows.push({ id: 'future', min: 1440 - upto });
+  return rows;
+}
+
 /** 未着手(紐づく記録ゼロ)で期限が near 日以内の義務タスク(期限順) */
 export function untouchedNear(tasks, entries, date, near = 3) {
   const touched = new Set(Object.values(entries || {}).filter((e) => alive(e) && e.taskId).map((e) => e.taskId));

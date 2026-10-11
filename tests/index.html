@@ -424,6 +424,31 @@ document.getElementById('app').addEventListener('load', async () => {
     let badJson = false; try { await Sy.decrypt('{not json', 'x'); } catch (e) { badJson = /不正/.test(e.message); }
     ok(badJson, 'decrypt: 壊れた JSON は拒否');
 
+    // ---- v0.11: 時刻の書式・1日の始まり・圧縮座標・途中から切り出し・1日の円 ----
+    log('\n# v0.11');
+    ok(T.fmtMD('2026-10-12') === '10月12日' && T.fmtMD('2026-10-12', true) === '10月12日(月)' && T.fmtMD(null) === '', 'fmtMD: 10月12日(月)');
+    ok(T.dayStartMin({ dayStart: '02:00' }) === 120 && T.dayStartMin({}) === 0 && T.dayStartMin({ dayStart: '09:00' }) === 0, 'dayStartMin: 0〜6 時だけ有効');
+    ok(S.migrate({ schema: 1, settings: { dayStart: '03:00' } }).settings.dayStart === '03:00' && S.migrate({ schema: 1, settings: { dayStart: '12:00' } }).settings.dayStart === '00:00', 'settings.dayStart は 0〜6 時だけ通す');
+    const cyf = T.compressY([{ start: 0, end: 420 }, { start: 1380, end: 1440 }], [{ start: 60, end: 120 }], 0.25);
+    ok(cyf(0) === 0 && cyf(60) === 15 && cyf(120) === 75 && cyf(420) === 150 && cyf(1440) === 1125, 'compressY: 睡眠帯は 1/4、予定と重なる部分は等倍');
+    ok(Math.abs(cyf(1440) - (1440 - 0.75 * (60 + 300 + 60))) < 1e-9 && cyf(900) - cyf(899) === 1 && cyf(1400) - cyf(1399) === 0.25, 'compressY: 作業時間帯は 1px/分・圧縮帯は 0.25');
+    const sw0 = { a: { id: 'a', date: '2026-10-12', start: '10:00', end: '11:20', categoryId: 'research', taskId: 't1', note: 'x', plannedMin: 60, deletedAt: null } };
+    const sw1 = L.switchFrom(sw0, 'a', 650, 'class', 1440, PC);
+    const swTail = sw1.entries[sw1.tailId];
+    ok(sw1.entries.a.end === '10:50' && swTail.start === '10:50' && swTail.end === '11:20' && swTail.categoryId === 'class' && swTail.taskId === null && swTail.plannedMin === null && swTail.note === '' && sw0.a.end === '11:20', 'switchFrom: at 以降を別カテゴリに切り出す(タスク・区切りは引き継がない・入力は変えない)');
+    const sw2 = L.switchFrom(sw0, 'a', 600, 'class', 1440, PC);
+    ok(sw2.tailId === 'a' && sw2.entries.a.categoryId === 'class' && Object.keys(sw2.entries).length === 1, 'switchFrom: 開始以前なら丸ごと変更');
+    const swOpen = L.switchFrom({ o: { id: 'o', date: '2026-10-12', start: '10:00', end: null, categoryId: 'research', taskId: null, note: '', plannedMin: null, deletedAt: null } }, 'o', 660, 'sns', 720, PC);
+    ok(swOpen.entries.o.end === '11:00' && swOpen.entries[swOpen.tailId].end === null && swOpen.entries[swOpen.tailId].categoryId === 'sns', 'switchFrom: 記録中は後半が記録中のまま(止め忘れたまま SNS に移った)');
+    ok(throws(() => L.switchFrom(sw0, 'a', 700, 'class', 1440, PC)), 'switchFrom: 終わり以降は拒否');
+    const pie = Rp.dayPie({ a: { id: 'a', date: '2026-10-12', start: '09:00', end: '11:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '06:00', end: '06:30', categoryId: 'life', deletedAt: null } }, '2026-10-12', { start: 420, end: 1410 }, 720);
+    const pm = Object.fromEntries(pie.map((x) => [x.id, x.min]));
+    ok(pm.research === 120 && pm.life === 30 && pm.unlogged === 180 && pm.sleep === 390 && pm.future === 720 && pie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: カテゴリ・未記録(帯の中)・睡眠(帯の外で記録なし)・これから の合計が 1440');
+    ok(pie[0].id === 'research' && pie[pie.length - 1].id === 'future', 'dayPie: 多い順 → 未記録 → 睡眠 → これから');
+    ok(!Rp.dayPie({}, '2026-10-12', null, 1440).some((x) => x.id === 'unlogged') && Rp.dayPie({}, '2026-10-12', null, 1440)[0].min === 1440, 'dayPie: 作業時間帯なしなら全部睡眠扱い');
+    const tfEl = M.ui.timeField('09:30', {});
+    ok(tfEl.value === '09:30' && tfEl.textContent === '09:30' && (tfEl.set('10:00'), tfEl.value === '10:00' && tfEl.textContent === '10:00') && (tfEl.set(''), tfEl.classList.contains('empty')), 'timeField: value と表示が一致・set で変えられる');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
@@ -434,7 +459,8 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- 画面(骨組み) ----
     log('\n# ui');
     const doc = W.document;
-    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4, 'タブは4つ(今/タイムライン/タスク/設定)');
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4, 'タブは4つ(ホーム/タイムライン/タスク/設定)');
+    ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
     ok(!!doc.querySelector('#view h1'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');
 

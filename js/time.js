@@ -153,3 +153,29 @@ export function fmtMinJa(min) {
   if (h) return `${h}時間`;
   return `${r}分`;
 }
+
+/** 'YYYY-MM-DD' → '10月12日'(v0.11: 「10/12」は 今日/残り の区切りと紛れるのでやめた)。withDay で '10月12日(月)' */
+export function fmtMD(key, withDay = false) {
+  if (typeof key !== 'string' || key.length < 10) return '';
+  const s = `${+key.slice(5, 7)}月${+key.slice(8, 10)}日`;
+  return withDay ? `${s}(${DAY_JA[weekday(key)]})` : s;
+}
+
+/** タイムラインの「1日の始まり」(分・0〜360)。設定 dayStart('HH:MM')。無ければ 0(0:00 区切り) */
+export function dayStartMin(settings) {
+  const m = hm(settings?.dayStart);
+  return m != null && m >= 0 && m <= 360 ? m : 0;
+}
+
+/**
+ * タイムラインの縦の圧縮(v0.10/0.11)。zones の区間を scale 倍に縮めるが、keep(予定や記録)と重なる部分は縮めない。
+ * 戻り値 y(m): 分 → 縦位置(分換算)。単調増加で、keep の中は等倍。
+ */
+export function compressY(zones, keep, scale = 0.25) {
+  const cz = subtractIntervals(zones, keep).filter((z) => z.end - z.start >= 30);
+  return (m) => {
+    let cut = 0;
+    for (const z of cz) { const ov = Math.min(m, z.end) - z.start; if (ov > 0) cut += ov * (1 - scale); }
+    return m - cut;
+  };
+}
