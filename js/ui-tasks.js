@@ -115,7 +115,9 @@ export function renderTasks(view, ctx) {
   const shareOf = Object.fromEntries(shares.map((s) => [s.taskId, s]));
   const todayList = shares.filter((s) => s.todayMin > 0).map((s) => T()[s.taskId]);
   const todayIds = new Set(todayList.map((t) => t.id));
-  const duties = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && !todayIds.has(t.id)).sort(byDeadline);
+  const overdue = plan.overdueTasks(T(), today, E);
+  const overdueIds = new Set(overdue.map((t) => t.id));
+  const duties = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && !todayIds.has(t.id) && !overdueIds.has(t.id)).sort(byDeadline);
   const wishes = tasks.filter((t) => !t.doneAt && t.kind === 'wish').sort(byDeadline);
   const done = tasks.filter((t) => t.doneAt).sort((a, b) => (a.doneAt < b.doneAt ? 1 : -1));
 
@@ -151,6 +153,7 @@ export function renderTasks(view, ctx) {
   view.append(
     el('h1', 'タスク'),
     quickAdd(today, rerender),
+    overdue.length ? el('section.group', [el('h2', '期限切れ'), el('p.muted.small.gnote', '理想には入れません。期限を変えるか、完了にしてください。'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     section('今日やること', null, todayList, '今日やるべき分はありません。'),
     section('期限までにやること', null, duties, 'なし'),
     section('やりたいこと', null, wishes, 'なし'),

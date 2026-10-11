@@ -144,7 +144,7 @@ export function dayPie(entries, date, W, nowMin = 1440) {
 export function untouchedNear(tasks, entries, date, near = 3) {
   const touched = new Set(Object.values(entries || {}).filter((e) => alive(e) && e.taskId).map((e) => e.taskId));
   const limit = addDays(date, near);
-  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && typeof t.deadline === 'string' && t.deadline.slice(0, 10) <= limit && !touched.has(t.id))
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && typeof t.deadline === 'string' && t.deadline.slice(0, 10) <= limit && t.deadline.slice(0, 10) >= date && !touched.has(t.id)) // 期限切れは F5-5 で扱う(v0.13.3)
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
 }
 

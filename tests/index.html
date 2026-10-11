@@ -174,7 +174,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 義務だけを期限順(やりたい・完了は除く)');
     ok(sh[0].todayMin === 30 && sh[1].todayMin === 80, 'todayShare: EDF 配分(面談 60×450/900=30, 修論 720×450/3978≈80)');
     const late = Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10, minUnit: 30 } }, MON, ds);
-    ok(late[0].todayMin === 600 && late[0].short === true, 'todayShare: 期限超過は残り全部を前倒しし short=true');
+    ok(late.length === 0, 'todayShare: 期限を過ぎたタスクは入れない(v0.13.3・F2-15。期限超過の出口で期限を変えるか完了にする)');
     ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30 } }, MON, ds)[0].todayMin === 0, 'todayShare: 配分が最小単位の半分未満なら今日は 0');
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
     const WM = T.windowFor(ds, MON);
@@ -497,7 +497,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const ovT = { z: { id: 'z', name: 'ゼミ準備', kind: 'duty', deadline: '2026-10-12', remainingH: 8, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null }, y: { id: 'y', name: 'y', kind: 'duty', deadline: '2026-10-20', remainingH: 2, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
     const pv = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [], preview: true }, PC);
     const prx = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [] }, PC);
-    ok(!pv.blocks.some((b) => b.taskId === 'z') && pv.blocks.some((b) => b.taskId === 'y') && prx.blocks.some((b) => b.taskId === 'z'), 'buildPlan(preview): 明日以降の見通しでは、その日より前が期限のタスクは終わっている前提で入れない(当日の plan には入る)');
+    ok(!pv.blocks.some((b) => b.taskId === 'z') && pv.blocks.some((b) => b.taskId === 'y') && !prx.blocks.some((b) => b.taskId === 'z'), 'buildPlan: 期限を過ぎたタスクはどの日の理想にも入れない(v0.13.3)');
 
     // ---- v0.13 ----
     log('\n# v0.13');
@@ -525,6 +525,20 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も 2 つに分ける');
     ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00 終了の記録は 30 分・翌日分は 10 分と数える');
     ok(Pn.remainingMin({ id: 'h', remainingH: 0.5 }, {}) === 30 && Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: '2026-10-12', remainingH: 0.5, minUnit: 15, categoryId: 'research', deletedAt: null, doneAt: null } }, '2026-10-12', ds)[0].todayMin === 30, '大きさ 0.5 時間は 30 分として配分される');
+
+    // ---- v0.13.3: 期限切れは理想に入れない・消した/終えたタスクの枠を引き継がない ----
+    log('\n# v0.13.3');
+    const ovr = { id: 'o', name: 'o', kind: 'duty', deadline: '2026-10-11', remainingH: 3, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
+    ok(!Pn.isEligible(ovr, '2026-10-12') && Pn.isEligible(ovr, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null }, '2026-10-12') && !Pn.isEligible({ ...ovr, doneAt: 'x' }, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null, repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' } }, '2026-10-12'), 'isEligible: 期限がその日以降(期限なし・毎週型は可)・完了/削除/やりたいは不可');
+    ok(Pn.todayShare({ o: ovr }, '2026-10-12', ds).length === 0 && Pn.todayShare({ o: ovr }, '2026-10-11', ds)[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
+    const pov = Pn.buildPlan({ settings: ds, date: '2026-10-12', tasks: { o: ovr }, entries: {}, busy: [], ensureMin: ['o'], first: 'o' }, PC);
+    ok(!pov.blocks.some((b) => b.taskId === 'o'), 'buildPlan: ensureMin や first で指名しても期限切れは入れない');
+    const livek = { k: { id: 'k', name: 'k', kind: 'duty', deadline: '2026-10-20', remainingH: 5, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
+    const prevP = { blocks: [{ id: 'b1', type: 'task', taskId: 'gone', start: 540, end: 600, name: 'gone' }, { id: 'b2', type: 'task', taskId: 'k', start: 600, end: 660, name: 'k' }, { id: 'b3', type: 'task', taskId: 'k', start: 900, end: 960, name: 'k', pinned: true }, { id: 'b4', type: 'task', taskId: 'done', start: 960, end: 1020, name: 'done', pinned: true }], skipped: [] };
+    const pk1 = Pn.buildPlan({ settings: ds, date: '2026-10-12', nowMin: 720, tasks: { ...livek, done: { ...livek.k, id: 'done', doneAt: 'x' } }, entries: {}, busy: [], prev: prevP }, PC);
+    const kids = pk1.blocks.filter((b) => b.type === 'task').map((b) => b.id);
+    ok(!kids.includes('b1') && kids.includes('b2') && kids.includes('b3') && !kids.includes('b4'), 'buildPlan(再計画): 消したタスクの過去の枠と、終えたタスクの pinned は引き継がない。生きているタスクの過去の枠と pinned は残す');
+    ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5 で扱う)');
 
     // ---- 版規約(§9) ----
     log('\n# version');

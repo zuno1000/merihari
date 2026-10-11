@@ -61,7 +61,7 @@ export function remainingMin(t, entries = {}, beforeDate = null) {
  */
 export function todayShare(tasks, date, settings, entries = {}) {
   const wToday = workableMin(settings, date);
-  const list = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0)
+  const list = Object.values(tasks || {}).filter((t) => isEligible(t, date) && remainingMin(t, entries, date) > 0)
     .map((t) => ({ t, deadline: deadlineKey(t, date) }))
     .sort((a, b) => (a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : a.t.name.localeCompare(b.t.name));
   const out = [];
@@ -81,6 +81,16 @@ export function todayShare(tasks, date, settings, entries = {}) {
     out.push({ taskId: t.id, todayMin: share, remainingMin: remMin, deadline, ratio, short: ratio > 1, minUnit, dueMin: deadline === date ? dueMin : null });
   }
   return out;
+}
+
+/**
+ * 理想に入れてよいタスクか(v0.13.3・F2-15): 生きていて・未完了・義務で・期限がその日以降(期限なしは可)。
+ * 期限を過ぎたタスクはどの日の理想にも入れない(期限超過の出口 F5-5 で期限を変えるか完了にする。変えれば replanForTasks で即入る)。
+ */
+export function isEligible(t, date) {
+  if (!alive(t) || t.doneAt || t.kind === 'wish') return false;
+  const dl = deadlineKey(t, date);
+  return dl == null || dl >= date;
 }
 
 /** タスクに紐づく今日の実績(分) */
@@ -274,7 +284,9 @@ export function buildPlan(opts, ctx) {
   // 5. 再計画なら過去の task/rest(auto)・pinned を引き継ぐ。最後の 30 分は free(就寝準備)
   const from = Math.max(nowMin, W.start);
   const to = W.end - 30;
-  const kept = (prev?.blocks || []).filter((b) => b.drift || ((b.type === 'task' || (b.type === 'rest' && b.auto)) && (b.end <= from || b.pinned)));
+  // 消した・終えた・期限を過ぎたタスクの枠は引き継がない(過去の枠は生きているタスクなら残す。pinned は入れてよいタスクだけ)
+  const keepTask = (b) => (b.end <= from ? alive(tasks[b.taskId]) : b.pinned && isEligible(tasks[b.taskId], date));
+  const kept = (prev?.blocks || []).filter((b) => b.drift || (b.type === 'task' && keepTask(b)) || (b.type === 'rest' && b.auto && (b.end <= from || b.pinned)));
   const blocks = [...fixed, ...kept];
   // 6. タスクと休憩(v0.7): 今日の分(期限順)→ 余った作業枠に期限までにやることを細分化。
   //    休憩は時刻固定ではなく、作業 workMin ごとに restMin、作業の累計が longRestAt に達したところに長い休憩 longMin。
@@ -285,20 +297,18 @@ export function buildPlan(opts, ctx) {
   const cats = settings.categories || [];
   const logged = loggedByTask(entries, date, nowMin);
   // 見通し(preview: 明日以降の仮の plan)では、その日より前が期限のタスクは「それまでに終わっている」前提で入れない(v0.12.3: 期限切れが先の日を埋めていた)
-  const preview = opts.preview === true;
-  const assumed = (t, dl) => preview && typeof dl === 'string' && dl < date;
-  let shares = todayShare(tasks, date, settings, entries).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId) && !assumed(tasks[s.taskId], s.deadline));
+  let shares = todayShare(tasks, date, settings, entries).filter((s) => s.todayMin > 0 && !skipped.includes(s.taskId));
   // F4-3: 期限が近くて未着手の義務タスクは、配分が 0 でも最小単位(30 分以上)だけ入れる
   for (const id of opts.ensureMin || []) {
     if (skipped.includes(id) || shares.some((s) => s.taskId === id)) continue;
     const t = tasks[id];
-    if (!alive(t) || t.doneAt) continue;
+    if (!isEligible(t, date)) continue;
     const mu = +t.minUnit > 0 ? +t.minUnit : 30;
     shares.push({ taskId: id, todayMin: Math.max(30, mu), remainingMin: remainingMin(t, entries, date), minUnit: mu, ensured: true });
   }
   if (first) shares = [...shares.filter((s) => s.taskId === first), ...shares.filter((s) => s.taskId !== first)];
   if (last) shares = [...shares.filter((s) => s.taskId !== last), ...shares.filter((s) => s.taskId === last)];
-  if (first && !shares.some((s) => s.taskId === first) && tasks[first] && alive(tasks[first]) && !tasks[first].doneAt) {
+  if (first && !shares.some((s) => s.taskId === first) && tasks[first] && isEligible(tasks[first], date)) {
     const t = tasks[first];
     shares.unshift({ taskId: first, todayMin: Math.max(30, Math.min(remainingMin(t, entries, date) || 30, workMin)), remainingMin: remainingMin(t, entries, date), minUnit: +t.minUnit > 0 ? +t.minUnit : 30 });
   }
@@ -310,10 +320,10 @@ export function buildPlan(opts, ctx) {
     const already = (logged[sh.taskId] || 0) + keptOf(sh.taskId);
     const want = sh.todayMin - already;
     if (want <= 0) continue;
-    queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0, due: sh.dueMin ?? null });
+    queue.push({ t: tasks[sh.taskId], taskId: sh.taskId, want: Math.max(want, sh.minUnit), mu: sh.minUnit, share: true, placed: 0, due: sh.dueMin ?? (deadlineKey(tasks[sh.taskId], date) === date ? deadlineMin(tasks[sh.taskId]) : null) });
   }
   if (opts.fill !== false) {
-    const fillers = Object.values(tasks).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id) && !assumed(t, deadlineKey(t, date)))
+    const fillers = Object.values(tasks).filter((t) => isEligible(t, date) && remainingMin(t, entries, date) > 0 && !skipped.includes(t.id))
       .map((t) => ({ t, deadline: deadlineKey(t, date) }))
       .sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : remainingMin(b.t, entries, date) - remainingMin(a.t, entries, date)));
     for (const { t } of fillers) {
