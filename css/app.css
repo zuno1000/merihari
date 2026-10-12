@@ -103,8 +103,8 @@ button.blk{cursor:pointer}
 .blk.open{border-style:dashed;border-left-style:solid;outline:1px dashed var(--accent);outline-offset:-1px}
 .blk-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .blk-dur,.blk-note{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-now{position:absolute;left:3.2em;right:0;border-top:2px solid var(--danger);pointer-events:none;z-index:2}
-.tl-now span{position:absolute;right:0;top:-18px;font-size:11px;color:var(--danger);background:var(--bg);padding:0 4px;font-variant-numeric:tabular-nums}
+.tl-now{position:absolute;left:3.2em;right:0;border-top:2px solid var(--accent);pointer-events:none;z-index:2}
+.tl-now span{position:absolute;right:0;top:-18px;font-size:11px;color:var(--accent);background:var(--bg);padding:0 4px;font-variant-numeric:tabular-nums}
 
 /* ---- 設定: 一覧(ラベル左/値右)と項目画面 ---- */
 .group{margin:0 0 16px}
@@ -214,7 +214,7 @@ details.group summary{padding:4px;cursor:pointer}
 .sseg{position:absolute;top:0;bottom:0;border:0;padding:0;border-radius:2px;cursor:pointer;min-width:2px}
 .sseg.faint{opacity:.45}
 .sseg.lit{outline:2px solid var(--fg);outline-offset:1px}
-.strip-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--danger);transform:translateX(-1px)}
+.strip-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--accent);transform:translateX(-1px)}
 .strip-axis{position:relative;height:14px}
 .strip-axis span{position:absolute;transform:translateX(-50%);font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .strip-axis span:first-child{transform:none}
@@ -378,3 +378,22 @@ p.gap{margin-top:14px}
 
 /* ---- v0.13.1: 期限の時刻 ---- */
 .quick .tfield,.sheet .row.field .tfield{min-width:4.6em;padding:8px 8px}
+
+/* ---- v0.14: ホームの簡素化(バッジ)・タイムラインのドラッグ・現在線の色 ---- */
+.fab.fab2.badge{border-color:var(--accent)}
+.fab-badge{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--danger);border:2px solid var(--bg);box-sizing:content-box}
+.ring.tap{cursor:pointer}
+.ring.tap:active .ring-in{transform:scale(.97)}
+.blk{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.blk.drag{overflow:visible}
+.hdl{position:absolute;left:0;right:0;height:12px;touch-action:none;cursor:ns-resize;z-index:3}
+.hdl.top{top:-2px}
+.hdl.bot{bottom:-2px}
+.hdl::after{content:"";position:absolute;left:50%;width:22px;height:3px;border-radius:2px;background:currentColor;opacity:.25;transform:translateX(-50%)}
+.hdl.top::after{top:3px}
+.hdl.bot::after{bottom:3px}
+.blk.dragging,.blk.grab{z-index:4;box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:.95}
+.blk.grab{transform:scale(1.02)}
+.blk-time{position:absolute;right:4px;top:2px;font-size:11px;color:var(--accent);background:var(--card);padding:0 4px;border-radius:4px;font-variant-numeric:tabular-nums;z-index:5}
+.lane.log.drop{outline:2px dashed var(--accent);outline-offset:2px;border-radius:6px}
+.blk.ghost{opacity:.55;pointer-events:none;border-left:4px solid;z-index:3}

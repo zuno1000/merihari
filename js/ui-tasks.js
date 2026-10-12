@@ -33,7 +33,7 @@ function deadlineOptions(today) {
     { label: 'なし', value: null },
   ];
 }
-const SIZES = [{ label: '30m', h: 0.5 }, { label: '1h', h: 1 }, { label: '3h', h: 3 }, { label: '8h', h: 8 }, { label: '20h', h: 20 }];
+const SIZES = [{ label: '10m', h: 1 / 6 }, { label: '30m', h: 0.5 }, { label: '1h', h: 1 }, { label: '3h', h: 3 }, { label: '8h', h: 8 }, { label: '20h', h: 20 }];
 
 function chipRow(options, value, onpick, keyOf = (o) => o.value) {
   const row = el('div.chips.small');
@@ -43,27 +43,46 @@ function chipRow(options, value, onpick, keyOf = (o) => o.value) {
   return row;
 }
 
+/**
+ * かんたん追加(v0.14): 名前+期限(日付/時刻/チップ)+大きさ(10m〜)+カテゴリ+毎週。
+ * 期限チップの「毎週」を選ぶと期限の代わりに「毎週 ◯時間」(大きさの欄が週の時間になる)。
+ */
 function quickAdd(today, rerender) {
   const name = el('input.text', { type: 'text', placeholder: 'タスク名(Enter で追加)', autocomplete: 'off', maxlength: 100 });
   const dateIn = el('input.date', { type: 'date', value: deadlineOptions(today)[2].value, min: today });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
   const dl = () => (dateIn.value ? dateIn.value + (timeIn.value ? 'T' + timeIn.value : '') : null);
-  const hoursIn = el('input.num', { type: 'number', inputmode: 'decimal', step: 0.5, min: 0.25, max: 999, value: 1, 'aria-label': '時間' });
+  const hoursIn = el('input.num', { type: 'number', inputmode: 'decimal', step: 'any', min: 0.1, max: 999, value: 1, 'aria-label': '時間' });
+  let weekly = false;
+  let cid = defaultCategory();
+  const sizeLabel = el('span.label', '大きさ');
+  const unit = el('span.unit', '時間');
+  const dlRow = el('div.row.field', [el('span.label', '期限'), dateIn, timeIn]);
+  const dlChips = chipRow([...deadlineOptions(today), { label: '毎週', value: 'weekly' }], dateIn.value, (o) => {
+    weekly = o.value === 'weekly';
+    dlRow.hidden = weekly;
+    sizeLabel.textContent = weekly ? '毎週' : '大きさ';
+    unit.textContent = weekly ? '時間 / 週' : '時間';
+    if (!weekly) dateIn.value = o.value || '';
+  });
+  const catChips = el('div.chips.small', S().categories.slice().sort((a, b) => a.order - b.order).filter((c) => c.kind === 'work').map((c) => el('button', { type: 'button', class: `chip sm2${c.id === cid ? ' on' : ''}`, onclick: (e) => { cid = c.id; catChips.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
   const submit = () => {
     const nm = name.value.trim();
     if (!nm) { toast('名前を入れてください'); name.focus(); return; }
-    const hours = Math.max(0.25, +hoursIn.value || 1);
-    saveTask({ id: store.uid(), name: nm, kind: 'duty', deadline: dl(), remainingH: hours, remainingSetAt: store.nowISO(), minUnit: hours >= 3 ? 30 : 15, categoryId: defaultCategory(), starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null });
+    const hours = Math.max(1 / 12, +hoursIn.value || 1);
+    const t = { id: store.uid(), name: nm, kind: 'duty', deadline: weekly ? null : dl(), remainingH: hours, remainingSetAt: store.nowISO(), minUnit: plan.minUnitFor(hours), categoryId: cid, starter: '', repeat: weekly ? { type: 'weekly', hours: Math.max(0.5, hours), weekEnd: 'sun' } : null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null };
+    saveTask(t);
     toast('追加しました');
     rerender();
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   return el('section.card.quick', [
     el('div.row', [name, el('button.btn.primary', { type: 'button', onclick: submit }, '追加')]),
-    el('div.row.field', [el('span.label', '期限'), dateIn, timeIn]),
-    chipRow(deadlineOptions(today), dateIn.value, (o) => { dateIn.value = o.value || ''; }),
-    el('div.row.field', [el('span.label', '大きさ'), hoursIn, el('span.unit', '時間')]),
-    chipRow(SIZES, 1, (o) => { hoursIn.value = o.h; }, (o) => o.h),
+    dlRow,
+    dlChips,
+    el('div.row.field', [sizeLabel, hoursIn, unit]),
+    chipRow(SIZES, 1, (o) => { hoursIn.value = Math.round(o.h * 1000) / 1000; }, (o) => o.h),
+    catChips,
   ]);
 }
 function defaultCategory() {
@@ -151,7 +170,7 @@ export function renderTasks(view, ctx) {
   };
   const section = (title, note, list, empty) => el('section.group', [el('h2', title), note ? el('p.muted.small.gnote', note) : null, el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
 
-  view.append(
+  view.append(...[ // v0.14: null を native append すると "null" の文字が出る(期限切れが無い日に「今日やること」の上に出ていた)
     el('h1', 'タスク'),
     quickAdd(today, rerender),
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('p.muted.small.gnote', '理想には入れません。期限を変えるか、完了にしてください。'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
@@ -159,7 +178,7 @@ export function renderTasks(view, ctx) {
     section('期限までにやること', null, duties, 'なし'),
     section('やりたいこと', null, wishes, 'なし'),
     el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
-  );
+  ].filter(Boolean));
 }
 const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0);
 

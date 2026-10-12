@@ -18,6 +18,12 @@ export function deadlineKey(t, date) {
   if (typeof t.deadline !== 'string' || t.deadline.length < 10) return null;
   return t.deadline.slice(0, 10);
 }
+/** 大きさ(時間)から最小単位(分)(v0.14): 10 分のタスクは 10 分の枠で入る(15 分に膨らませない)。3 時間以上は 30、それ以外は 15 */
+export function minUnitFor(hours) {
+  const min = Math.round((+hours || 0) * 60);
+  if (min > 0 && min < 15) return Math.max(5, min);
+  return hours >= 3 ? 30 : 15;
+}
 /** 期限の時刻(分)。'YYYY-MM-DDTHH:MM' のときだけ。無ければ null(v0.13.1) */
 export function deadlineMin(t) {
   if (typeof t?.deadline !== 'string' || t.deadline.length < 16 || t.deadline[10] !== 'T') return null;
@@ -286,7 +292,15 @@ export function buildPlan(opts, ctx) {
   const to = W.end - 30;
   // 消した・終えた・期限を過ぎたタスクの枠は引き継がない(過去の枠は生きているタスクなら残す。pinned は入れてよいタスクだけ)
   const keepTask = (b) => (b.end <= from ? alive(tasks[b.taskId]) : b.pinned && isEligible(tasks[b.taskId], date));
-  const kept = (prev?.blocks || []).filter((b) => b.drift || (b.type === 'task' && keepTask(b)) || (b.type === 'rest' && b.auto && (b.end <= from || b.pinned)));
+  const kept0 = (prev?.blocks || []).filter((b) => b.drift || (b.type === 'task' && keepTask(b)) || (b.type === 'rest' && b.auto && (b.end <= from || b.pinned)));
+  // v0.14: 引き継ぐ枠(いま以降の pinned など)が固定(予定・移動・ルーティン・習慣)と重なれば直後の空きへずらし、入らなければ外す
+  //        (移動時間や在宅/外出を変えたあとに、前の枠が重なったまま残って空白やずれに見えていた)
+  const kept = [];
+  for (const b of kept0) {
+    if (b.end <= from) { kept.push(b); continue; }
+    const q = placeOrShift(b, [...fixed, ...kept.filter((x) => x.end > from)], W);
+    if (q) kept.push(q);
+  }
   const blocks = [...fixed, ...kept];
   // 6. タスクと休憩(v0.7): 今日の分(期限順)→ 余った作業枠に期限までにやることを細分化。
   //    休憩は時刻固定ではなく、作業 workMin ごとに restMin、作業の累計が longRestAt に達したところに長い休憩 longMin。
@@ -368,7 +382,9 @@ export function buildPlan(opts, ctx) {
       if (head.due != null && cursor + head.mu > head.due) { queue.shift(); continue; } // 期限の時刻より前にしか置かない(v0.13.1)
       let chunk = Math.min(need, workMin - sinceRest, slot.end - cursor, head.due != null ? head.due - cursor : Infinity);
       if (!longPlaced && workDone < longAt) chunk = Math.min(chunk, Math.max(head.mu, longAt - workDone)); // 長い休憩の位置で区切る
-      if (chunk < head.mu) break; // この枠の残りでは足りない → 次の空きへ(順番は守る)
+      // v0.14: 枠の残りが最小単位に足りなくても 15 分以上あれば埋める(予定や移動の前の細かなすき間を空白にしない。§13 ⑤ は日の合計の話)
+      const tail = slot.end - cursor;
+      if (chunk < head.mu) { if (chunk === tail && tail >= 15 && need >= tail) chunk = tail; else break; } // この枠の残りでは足りない → 次の空きへ(順番は守る)
       blocks.push({ id: uid(), type: 'task', start: cursor, end: cursor + chunk, name: head.t?.name || '', taskId: head.taskId, categoryId: head.t?.categoryId || 'other', ...(head.share ? {} : { filler: true }) });
       cursor += chunk; head.placed += chunk; budget -= chunk; workDone += chunk; sinceRest += chunk;
       placedOf[head.taskId] = (placedOf[head.taskId] || 0) + chunk;

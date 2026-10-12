@@ -555,6 +555,20 @@ document.getElementById('app').addEventListener('load', async () => {
     const yPie = Rp.dayPie(yR, '2026-10-12', { start: 420, end: 1500 }, 1560);
     ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24 時間超の nowMin でも合計は 1440');
 
+
+    // ---- v0.14: 最小単位・すき間の埋め・引き継いだ枠のずらし ----
+    ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10 分のタスクは 10・15 分未満は 5 以上・3 時間以上は 30');
+    // 8:00 から 90 分 → 休憩 10 分 → 予定 9:55 までの 15 分は最小単位(30)未満だが埋める
+    const tailP = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: { s: { id: 's', name: '小', kind: 'duty', deadline: MON, remainingH: 4, minUnit: 30, categoryId: 'research' } }, entries: {}, busy: [{ id: 'B', start: 595, end: 630 }], fill: false }, PC);
+    ok(noOverlap(tailP.blocks) && tailP.blocks.some((b) => b.type === 'task' && b.start === 580 && b.end === 595), 'buildPlan: 予定の前の 15 分以上のすき間(最小単位未満)はタスクで埋める(v0.14・空白を作らない)');
+    ok(!Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: { s: { id: 's', name: '小', kind: 'duty', deadline: MON, remainingH: 4, minUnit: 30, categoryId: 'research' } }, entries: {}, busy: [{ id: 'B', start: 590, end: 630 }], fill: false }, PC).blocks.some((b) => b.type === 'task' && b.end === 590 && b.end - b.start < 15), 'buildPlan: 15 分未満のすき間は埋めない');
+    const pinPrev = { blocks: [{ id: 'k', type: 'task', start: 600, end: 660, taskId: 't1', name: '修論', pinned: true, categoryId: 'research' }], skipped: [] };
+    const pinP = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, busy: [{ id: 'B', start: 600, end: 630 }], prev: pinPrev, fill: false }, PC);
+    const pinK = pinP.blocks.find((b) => b.id === 'k');
+    ok(noOverlap(pinP.blocks) && pinK && pinK.start === 630 && pinK.end === 690 && pinK.pinned, 'buildPlan: 引き継いだ pinned の枠が予定と重なれば直後の空きへずらす(v0.14・移動時間を変えたあとのずれ)');
+    const pinGone = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, busy: [{ id: 'B', start: 600, end: 1410 }], prev: pinPrev, fill: false }, PC);
+    ok(noOverlap(pinGone.blocks) && !pinGone.blocks.some((b) => b.id === 'k'), 'buildPlan: ずらす先が無ければ引き継がない');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
