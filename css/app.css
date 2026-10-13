@@ -532,8 +532,8 @@ button.srow.goal:first-child{border-top:0}
 .tl-nav .tl-total{flex:none;margin-left:auto;font-variant-numeric:tabular-nums}
 .tl-nav .undo .undo-t{font-size:12px;white-space:nowrap}
 /* ---- v0.15.8: 取り消し(タイムラインの ↶) ---- */
-.tl-nav .undo{display:inline-flex;align-items:center;gap:2px;min-width:36px;padding:4px 5px;margin-left:-2px;flex:none}
-.tl-nav .undo.redo{margin-left:0}
+.tl-nav .undo{display:inline-flex;align-items:center;gap:2px;min-width:40px;padding:4px 8px;flex:none}
+.tl-nav .undo.redo{margin-right:0}
 .tl-nav{gap:2px;flex-wrap:nowrap}
 .tl-nav .tl-date{flex:none;padding:4px 4px}
 .tl-nav .tl-date b{white-space:nowrap;font-size:16px}

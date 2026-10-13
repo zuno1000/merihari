@@ -14,8 +14,9 @@ import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.15.12';
+export const APP_VERSION = '0.15.13';
 export const NEWS = [
+  { v: '0.15.13', text: 'タイムラインの上段から「記録 ◯h」の表示を外し(右にはみ出していた。合計はホームの円とレポートで)、「戻す」「やり直す」を右端に揃えました。' },
   { v: '0.15.12', text: '同期の整え: 別の端末で足した記録と時間が重なっていた場合、同じ端末での操作と同じ規則(新しく変えた方を優先し、古い方の端を詰める)で整えます。両方の端末で同時に「記録中」だった場合は、あとから始めた方だけを記録中のまま残します。記録そのものが消えることはありません(消えるのは自分で削除したときだけ)。' },
   { v: '0.15.11', text: 'タイムラインの上の段が窮屈で日付が縦に折れていたのを修正。「戻す」「やり直す」はアイコンだけ(戻せる回数は小さな数字)にし、日付は折り返さないようにしました。' },
   { v: '0.15.10', text: 'タイムラインに「やり直す」(↷)を追加。「戻す」で取り消した操作を、戻した順に戻せます(新しい変更をすると「やり直す」は空になります)。「戻す」は少し左に寄せました。' },
