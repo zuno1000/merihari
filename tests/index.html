@@ -157,6 +157,12 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(alive(added), ['life 09:00-10:00', 'research 10:00-11:00', 'life 11:00-12:00']), 'addEntry: 閉じた記録を追加し隣を詰める(分割)');
     ok(throws(() => L.addEntry({}, { date: D, startMin: 660, endMin: 600, categoryId: 'a' }, C)), 'addEntry: 終了≦開始は拒否');
     ok(L.fillFromPlan === undefined, 'v0.15: 「理想どおりだった」(fillFromPlan)は廃止');
+    // v0.15.8: 取り消し(同期に負けない戻し方)
+    const snap0 = { a: { id: 'a', date: D, start: '09:00', end: '10:00', categoryId: 'research', updatedAt: '2026-10-11T10:00:00+09:00', deletedAt: null }, b: { id: 'b', date: D, start: '10:00', end: '11:00', categoryId: 'sns', updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null } };
+    const cur0 = { a: { ...snap0.a, end: '10:30', updatedAt: '2026-10-11T12:00:00+09:00' }, c: { id: 'c', date: D, start: '11:00', end: '12:00', categoryId: 'rest', updatedAt: '2026-10-11T12:00:00+09:00', deletedAt: null } }; // b を消し・a を直し・c を足した
+    const rv = L.revertTo(cur0, snap0, C);
+    ok(rv.a.end === '10:00' && rv.a.updatedAt === C.nowISO() && rv.b.end === '11:00' && rv.b.updatedAt === C.nowISO() && rv.c.deletedAt === C.nowISO() && Object.keys(rv).length === 3 && cur0.a.end === '10:30' && snap0.a.updatedAt === '2026-10-11T10:00:00+09:00', 'revertTo: 控えの状態に戻し、変わる記録には新しい updatedAt・あとから足した記録は tombstone(入力は変えない)');
+    ok(eq(L.revertTo(snap0, snap0, C), snap0), 'revertTo: 同じなら何も押さない');
 
     // ---- plan.js(v0.15: 目安) ----
     log('\n# plan(目安)');

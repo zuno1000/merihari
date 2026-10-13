@@ -30,10 +30,28 @@ const windowEndOf = (date) => windowFor(S(), date)?.end ?? null;
 const cats = () => S().categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
 const md = (key) => fmtMD(key, true);
 export function catOf(id) { const c = S().categories.find((x) => x.id === id) || { id, name: id === 'other' ? 'その他' : '消したカテゴリ', color: null, kind: 'work' }; return { ...c, color: displayColor(c.color) }; }
-function commit(entries) { store.state.data.entries = entries; store.save(); }
+/**
+ * 記録の変更はすべて commit を通る。直前の状態を控えておき(最大 20)、タイムラインの ↶ で 1 つずつ戻せる(v0.15.8・F1-17)。
+ * log.* は純関数で前の entries を変更しないので、参照を控えるだけでよい。
+ */
+const undoStack = [];
+export const undoCount = () => undoStack.length;
+export const undoLabel = () => (undoStack.length ? undoStack[undoStack.length - 1].label : '');
+function commit(entries, label = '記録の変更') {
+  if (store.state.data.entries !== entries) { undoStack.push({ label, entries: store.state.data.entries, at: Date.now() }); if (undoStack.length > 20) undoStack.shift(); }
+  store.state.data.entries = entries; store.save();
+}
+/** ↶: 直前の変更を取り消す。戻した記録には新しい updatedAt を押す(同期で元に戻されない)。戻り値は取り消した操作の名前(無ければ null) */
+export function undoLast() {
+  const snap = undoStack.pop();
+  if (!snap) return null;
+  store.state.data.entries = log.revertTo(store.state.data.entries, snap.entries, LCTX);
+  store.save(); refreshAddButton(); sync.autoSync();
+  return snap.label;
+}
 const gapMin = () => (Number.isFinite(+S().gapAbsorbMin) ? +S().gapAbsorbMin : 10);
 /** 日付の記録のすき間を閉じてから保存(編集・追加・切り出しのあと) */
-function commitTidy(entries, date) { commit(log.closeSmallGaps(entries, date, gapMin(), LCTX)); }
+function commitTidy(entries, date, label) { commit(log.closeSmallGaps(entries, date, gapMin(), LCTX), label); }
 /** 予定(busy)の記憶キー: 曜日 + 開始時刻(15 分丸め)。予定の内容は使わない */
 export function busyKey(date, startMin) { return `${weekday(date)}:${Math.round((startMin % 1440) / 15) * 15}`; }
 let timelineDate = null; // いま開いているタイムラインの日(今日なら null)。タブバーの ＋ が過去の日に記録を足すために使う
@@ -65,7 +83,7 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   }
   const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null }, LCTX);
   if (r.ignored) { toast(`${catOf(categoryId).name} を記録中です`); return r; }
-  commit(log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX)); // v0.12: 直前の記録との数分のすき間は次の記録に含める
+  commit(log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX), `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める
   refreshAddButton();
   const nm = taskName(extra.taskId, categoryId);
   toast(startMin == null ? `${nm} を開始` : `${mm(startMin)} から ${nm}`);
@@ -77,7 +95,7 @@ export function stopRecording(at = null) {
   const n = effNow();
   const r = log.stop(E(), { date: n.date, nowMin: n.min, at, windowEndOf }, LCTX);
   if (!r.closed) { toast('記録中のものはありません'); return r; }
-  commit(r.entries);
+  commit(r.entries, `${catOf(r.closed.categoryId).name} の終了`);
   refreshAddButton();
   toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
   sync.autoSync();
@@ -85,7 +103,7 @@ export function stopRecording(at = null) {
 }
 /** 閉じた記録を足す(後から記録・v0.15 の主役)。date の記録のすき間を閉じて保存 */
 function addClosed({ date, startMin, endMin, categoryId, taskId = null, busyKey: bk = null }) {
-  commitTidy(log.addEntry(E(), { date, startMin, endMin, categoryId, taskId }, LCTX, dayEndOf(date)), date);
+  commitTidy(log.addEntry(E(), { date, startMin, endMin, categoryId, taskId }, LCTX, dayEndOf(date)), date, `${taskName(taskId, categoryId)} ${mm(startMin % 1440)}〜${mm(endMin % 1440)} の追加`);
   if (bk) { S().busyMemory = { ...(S().busyMemory || {}), [bk]: categoryId }; store.touchSettings(); } // 予定の時間に何をしたかを覚える(次からその候補)
   sync.autoSync();
   toast(`${taskName(taskId, categoryId)} ${mm(startMin % 1440)}〜${mm(endMin % 1440)} を記録`);
@@ -442,6 +460,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
     el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), el('span.muted.small', ' ▤')]),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
+    el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
     el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
     el('span.grow'),
     showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
@@ -557,7 +576,7 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], entries, nextEn
     const start = mm(ns - x.off);
     const end = x.e.end == null ? null : mm(ne - x.off);
     try {
-      commit(log.setTimes(E(), x.e.id, { start, end }, n.min, LCTX, dayEndOf(x.date))); // 手で合わせた時刻なので すき間は閉じない
+      commit(log.setTimes(E(), x.e.id, { start, end }, n.min, LCTX, dayEndOf(x.date)), `${catOf(x.e.categoryId).name} の時刻の変更(ドラッグ)`); // 手で合わせた時刻なので すき間は閉じない
       sync.autoSync(); rerender();
       toast(`${mm(ns % 1440)}〜${end ? mm(ne % 1440) : ''} に直しました`);
     } catch (err) { toast(err.message); rerender(); }
@@ -653,8 +672,8 @@ function editEntrySheet(id, n0, rerender) {
   const title = `${t ? t.name : c.name} ${e.start}〜${e.end ?? ''}`;
   let close;
   const save = (fn) => { try { fn(); close(); rerender(); sync.autoSync(); } catch (err) { toast(err.message); } };
-  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: v, end: e.end }, n.min, LCTX, dayEndOf(e.date)), e.date)) });
-  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: v || null }, n.min, LCTX, dayEndOf(e.date)), e.date)) });
+  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: v, end: e.end }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の開始時刻の変更`)) });
+  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: v || null }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の終了時刻の変更`)) });
   const switchChips = el('div.chips.small', cats().filter((x) => x.id !== e.categoryId).map((x) => el('button.chip.sm2.cat', { type: 'button', style: { '--c': x.color }, onclick: () => { close(); switchSheet(e, x, n, rerender); } }, [el('span.dot', { style: { background: x.color } }), x.name])));
   close = sheet((cl) => { close = cl; return [
     el('h2', [el('i.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' }), title]),
@@ -667,7 +686,7 @@ function editEntrySheet(id, n0, rerender) {
       el('button.btn.sm', { type: 'button', onclick: () => { close(); taskLinkSheet(e, rerender); } }, t ? 'タスク' : 'タスクに紐づけ'),
       el('button.btn.sm', { type: 'button', onclick: () => { close(); noteSheet(e, rerender); } }, 'メモ'),
       el('span.grow'),
-      el('button.btn.sm.danger', { type: 'button', onclick: () => confirmSheet('この記録を削除しますか?', title, '削除', () => { commit(log.remove(E(), e.id, LCTX)); close(); rerender(); }, true) }, '削除'),
+      el('button.btn.sm.danger', { type: 'button', onclick: () => confirmSheet('この記録を削除しますか?', title, '削除', () => { commit(log.remove(E(), e.id, LCTX), `${title} の削除`); close(); rerender(); }, true) }, '削除'),
     ]),
   ]; });
 }
@@ -676,7 +695,7 @@ function switchSheet(e, cat, n, rerender) {
   const end = e.end == null ? n.min : hm(e.end);
   const s = hm(e.start);
   const apply = (at) => {
-    try { const r = log.switchFrom(E(), e.id, at, cat.id, n.min, LCTX); commitTidy(r.entries, e.date); rerender(); sync.autoSync(); toast(`${mm(Math.max(s, at))} から ${cat.name} に`); } catch (err) { toast(err.message); }
+    try { const r = log.switchFrom(E(), e.id, at, cat.id, n.min, LCTX); commitTidy(r.entries, e.date, `${cat.name} への切り出し`); rerender(); sync.autoSync(); toast(`${mm(Math.max(s, at))} から ${cat.name} に`); } catch (err) { toast(err.message); }
   };
   const opts = [[15, '15分前から'], [30, '30分前から'], [60, '1時間前から']].filter(([d]) => end - d > s);
   sheet((close) => [
@@ -691,7 +710,7 @@ function switchSheet(e, cat, n, rerender) {
 function categorySheet(e, rerender) {
   sheet((close) => [
     el('h2', 'カテゴリを変更'),
-    el('div.chips', cats().map((c) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { commit(log.update(E(), e.id, { categoryId: c.id }, LCTX)); close(); rerender(); } }, [el('span.dot', { style: { background: c.color } }), c.name]))),
+    el('div.chips', cats().map((c) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { commit(log.update(E(), e.id, { categoryId: c.id }, LCTX), `カテゴリを ${c.name} に変更`); close(); rerender(); } }, [el('span.dot', { style: { background: c.color } }), c.name]))),
   ]);
 }
 function taskLinkSheet(e, rerender) {
@@ -700,8 +719,8 @@ function taskLinkSheet(e, rerender) {
     el('h2', 'タスクを紐づけ'),
     tasks.length ? null : el('p.muted.small', 'タスクがありません。'),
     el('div.col', [
-      ...tasks.map((t) => el('button.btn.block', { type: 'button', class: `btn block${t.id === e.taskId ? ' primary' : ''}`, onclick: () => { commit(log.update(E(), e.id, { taskId: t.id, categoryId: t.categoryId || e.categoryId }, LCTX)); close(); rerender(); } }, t.name)),
-      e.taskId ? el('button.btn.block.ghost', { type: 'button', onclick: () => { commit(log.update(E(), e.id, { taskId: null }, LCTX)); close(); rerender(); } }, '紐づけを外す') : null,
+      ...tasks.map((t) => el('button.btn.block', { type: 'button', class: `btn block${t.id === e.taskId ? ' primary' : ''}`, onclick: () => { commit(log.update(E(), e.id, { taskId: t.id, categoryId: t.categoryId || e.categoryId }, LCTX), `${t.name} への紐づけ`); close(); rerender(); } }, t.name)),
+      e.taskId ? el('button.btn.block.ghost', { type: 'button', onclick: () => { commit(log.update(E(), e.id, { taskId: null }, LCTX), '紐づけの解除'); close(); rerender(); } }, '紐づけを外す') : null,
     ]),
   ]);
 }
@@ -711,6 +730,6 @@ function noteSheet(e, rerender) {
     el('h2', 'メモ'),
     el('div.row', inp),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
-      el('button.btn.primary.grow', { type: 'button', onclick: () => { commit(log.update(E(), e.id, { note: inp.value.trim() }, LCTX)); close(); rerender(); } }, '保存')]),
+      el('button.btn.primary.grow', { type: 'button', onclick: () => { commit(log.update(E(), e.id, { note: inp.value.trim() }, LCTX), 'メモの変更'); close(); rerender(); } }, '保存')]),
   ]);
 }

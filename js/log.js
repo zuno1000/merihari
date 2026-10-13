@@ -198,6 +198,22 @@ export function closeSmallGaps(entries, date, maxGap, ctx) {
   return out;
 }
 
+/**
+ * 取り消し(v0.15.8・F1-17): いまの entries を snapshot の状態に戻す。ただの差し替えだと同期(id ごとの updatedAt の LWW)で元に戻されてしまうので、
+ * 変わる記録には新しい updatedAt を押し、snapshot に無い記録(あとから足したもの)は tombstone にする。純関数
+ */
+export function revertTo(current, snapshot, ctx) {
+  const out = clone(snapshot || {});
+  const now = ctx.nowISO();
+  const ids = new Set([...Object.keys(current || {}), ...Object.keys(out)]);
+  for (const id of ids) {
+    const cur = current?.[id], snap = out[id];
+    if (!snap) { out[id] = { ...clone(cur), deletedAt: now, updatedAt: now }; continue; }
+    if (!cur || JSON.stringify(cur) !== JSON.stringify(snap)) snap.updatedAt = now;
+  }
+  return out;
+}
+
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */
 export function elapsedMin(e, date, nowMin) {
   if (!e) return 0;

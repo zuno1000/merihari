@@ -526,3 +526,9 @@ button.srow.goal:first-child{border-top:0}
 .palrow .row.wrap{margin-top:8px;gap:8px}
 .help-h{font-size:13px;color:var(--muted);margin:14px 0 4px}
 .sheet .col .row.field{margin:0;gap:8px}
+
+/* ---- v0.15.8: 取り消し(タイムラインの ↶) ---- */
+.tl-nav .undo{display:inline-flex;align-items:center;gap:3px;min-width:40px;padding:4px 8px}
+.tl-nav .undo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tl-nav .undo:disabled{opacity:.3}
+.tl-nav .undo .undo-n{font-size:11px;font-variant-numeric:tabular-nums}
