@@ -78,7 +78,7 @@ small{color:var(--muted)}
 <header class="top">
   <h1>merihari(メリハリ)仕様書</h1>
   <div class="meta">
-    <span>版: v0.1(初版)→ v0.15〜v0.15.4 改訂(2026-10-13・記録アプリへ)</span><span>作成: 2026-10-11</span><span>作成者: 水野 + Claude(Cowork)</span><span>状態: ドラフト(実装前)</span>
+    <span>版: v0.1(初版)→ v0.15〜v0.15.7 改訂(2026-10-13・記録アプリへ)</span><span>作成: 2026-10-11</span><span>作成者: 水野 + Claude(Cowork)</span><span>状態: ドラフト(実装前)</span>
   </div>
   <p>「記録するのはワンタップ、考えるのはアプリ」── 1日の理想スケジュールを提案し、実際に何をしたかをワンタップで記録し、夜に「前より良くなった」を言葉で返す個人用の時間管理 PWA。<br>
   <b>残り時間(nokorijikan)v0.1 試作の後継</b>として、設計の芯(free/busy のみ・Drive 端末側暗号化・ルールベース・画面3つ)を引き継ぎ、主役を「タスクの残り時間」から「今日一日のタイムライン」へ移す。</p>
@@ -196,6 +196,8 @@ v0.13.4 改訂(ユーザー FB「23:40〜0:10 が直せない」「切れ目の�
 <p class="rev"><b>v0.15.3 改訂(ユーザー FB 7 点):</b> ①ホームの「タスクと習慣」の説明文を削除し、設定 › 使い方 に集約。②設定 › カテゴリ に「配色をまとめて変える」(palette.PALETTES: パステル / やわらか / くっきり / しずか。settings.palette に記録し、選んだあとは旧既定色の自動置き換えをしない)。③<b>記録の入口はタブバー中央の ＋</b>(index.html の #tab-add・ui-today.openAdd/refreshAddButton・記録中は ●)。右下の浮いたボタン(＋とレポート)は行の ▶ と重なるので廃止。<b>レポートはホームの円をタップ</b>(7日。昨日が未読なら円に赤い点・最初のタップで昨日)、タイムラインは日付をタップでその日のレポート。過去の日のタイムラインでは ＋ がその日に記録を足すシート。④レポートの推移は 作業/ダラダラ を上下に並べ、同じ期間・同じ目盛(共通の max)。⑤「目安のふり返り」→<b>「習慣のふり返り」</b>。行をタップで<b>習慣のカレンダー</b>(ui-report.habitCalendarSheet): 月曜始まりの週で並べ、日ごとの取り組みの濃さ(カテゴリ色の color-mix)・毎日の目安に届いた日の ✓・毎週型は右端に週の合計と ✓。「すべて」は最近の 12 週。report.goalsSummary が dayList(日ごとの分)を返す。⑥タスク画面の「毎日・毎週」→「習慣」。⑦アプリのアイコンを白地+パステルの弧 3 本(1日の円)のシンプルなものに(icon.svg・theme_color #ffffff)。</p>
 
 <p class="rev"><b>v0.15.4 改訂(ユーザー FB 3 点):</b> ①<b>設定 › 配色</b>(F8-8): 配色セットの一覧(組み込み PALETTES 5 つ: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット settings.palettes [{id,name,colors:{categoryId:'#rrggbb'}}])。「適用」でカテゴリの色がまとめて切り替わる(settings.palette に id)。自分のセットは「いまの色を保存」(いまのカテゴリの色をセットに)か「複製して編集」から作り、編集シート(editPaletteSheet)でカテゴリごとにピッカー / カラーコードで決めて「適用して閉じる」。カテゴリ画面の「配色をまとめて変える」は廃止(個別の色はカテゴリ画面のまま)。②タブバー中央の ＋ は文字(全角 ＋)だと字面の中で上に寄るので SVG(path / 記録中は circle)に変え、flex で中心に揃えた。③アプリのアイコンを Pastel Color Pt.2(#8869a5 #c58ade #b1beea #90c4e9 #8095ce)の弧 5 本(44/26/18/14/10)+中心の点に。同じ 5 色を組み込みの配色「パステル Pt.2」としても使える。</p>
+
+<p class="rev"><b>v0.15.7 改訂(同期の競合・ユーザー FB):</b> 初期設定だけの端末と同期したら元の端末のカテゴリが消えた。原因は settings が「settingsUpdatedAt の新しい方で丸ごと上書き」(F7-4)だったこと。<b>F7-4 改</b>: <code>sync.mergeSettings(sa, sb)</code> ─ スカラー(作業時間帯・すき間など)は従来どおり新しい方。<b>カテゴリ・種別・配色セットは id ごとに統合</b>: 片側にしか無いものは残す(非表示方式なので union でよい)、両側にあれば item.updatedAt の新しい方、無ければ「既定のまま」でない方(isDefault: defaultCategories / defaultKinds と名前・種別・色が同じか)、それも同じなら settingsUpdatedAt の勝者側。busyMemory は union(勝者優先)、palette は選んでいる方。<b>F7-6(新)</b> 項目ごとの updatedAt: <code>store.touchSettings</code> が前回保存時の控え(itemSnap)と比べて変わった項目にだけ押す(UI は変更箇所を知らなくてよい)。<b>同期前の設定の控え</b>: syncDrive がカテゴリ・種別・配色・palette のどれかを変えるときは local.settingsBackup に直前の settings を 1 つ控え、設定 › データ「同期前の設定に戻す」で戻せる(戻すと全項目に新しい印を押すので次の同期で勝つ)。すでに消えたカテゴリは v0.15.6 の「消したカテゴリ」から名前を付け直す。</p>
 
 <div class="wf">
 <div class="phone">

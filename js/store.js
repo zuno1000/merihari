@@ -111,7 +111,7 @@ function normalizeSettings(raw) {
   s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
   // 種別(v0.15.2): 無ければ既定。カテゴリの種別は存在するものだけ(無ければ work か先頭)
-  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true })) : null;
+  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true, ...(typeof k.updatedAt === 'string' ? { updatedAt: k.updatedAt.slice(0, 40) } : {}) })) : null;
   s.kinds = kindsRaw && kindsRaw.length ? kindsRaw : defaultKinds();
   const kindIds = new Set(s.kinds.map((k) => k.id));
   const kindFallback = kindIds.has('work') ? 'work' : s.kinds[0].id;
@@ -132,7 +132,7 @@ function normalizeSettings(raw) {
   if (s.kindSchema < 1) { if (!kindsRaw && kindIds.has('fixed')) for (const c of s.categories) if ((c.id === 'class' || c.id === 'job') && c.kind === 'work') c.kind = 'fixed'; s.kindSchema = 1; }
   // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
   s.palette = typeof raw.palette === 'string' && raw.palette.length <= 40 ? raw.palette : null;
-  s.palettes = Array.isArray(raw.palettes) ? raw.palettes.filter((p) => isObj(p) && p.id).slice(0, 50).map((p) => { const colors = {}; if (isObj(p.colors)) for (const [k, v] of Object.entries(p.colors)) if (safeKey(k) && typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) colors[k] = v.toLowerCase(); return { id: String(p.id).slice(0, 40), name: String(p.name || '配色').slice(0, 40), colors }; }) : [];
+  s.palettes = Array.isArray(raw.palettes) ? raw.palettes.filter((p) => isObj(p) && p.id).slice(0, 50).map((p) => { const colors = {}; if (isObj(p.colors)) for (const [k, v] of Object.entries(p.colors)) if (safeKey(k) && typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) colors[k] = v.toLowerCase(); return { id: String(p.id).slice(0, 40), name: String(p.name || '配色').slice(0, 40), colors, ...(typeof p.updatedAt === 'string' ? { updatedAt: p.updatedAt.slice(0, 40) } : {}) }; }) : [];
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
@@ -255,20 +255,46 @@ export const state = { data: null, local: null, onSaveError: null };
 export function init() {
   state.data = migrate(readJSON(KEY));
   state.local = Object.assign(defaultLocal(), readJSON(LOCAL_KEY) || {});
+  refreshItemSnap();
   return state;
 }
 
 export function save() {
   try {
     writeJSON(KEY, state.data);
+    refreshItemSnap();
     if (state.local && !state.local.pendingSync) { state.local.pendingSync = true; writeJSON(LOCAL_KEY, state.local); }
   } catch (e) { state.onSaveError?.(e); }
 }
 export function saveLocal() {
   try { writeJSON(LOCAL_KEY, state.local); } catch (e) { state.onSaveError?.(e); }
 }
+/**
+ * 設定の項目(カテゴリ・種別・配色セット)ごとの updatedAt(v0.15.7・F7-6): 同期で id ごとに新しい方を選ぶための印。
+ * touchSettings のたびに、前回保存時から内容が変わった項目にだけ押す(UI のどこで変えたかを知らなくてよい)。
+ */
+const itemSnap = new Map();
+const ITEM_LISTS = [['categories', 'cat'], ['kinds', 'kind'], ['palettes', 'pal']];
+const itemJSON = (x) => { const c = { ...x }; delete c.updatedAt; return JSON.stringify(c, Object.keys(c).sort()); };
+function refreshItemSnap() {
+  itemSnap.clear();
+  const s = state.data?.settings; if (!s) return;
+  for (const [list, pre] of ITEM_LISTS) for (const x of s[list] || []) if (x && x.id) itemSnap.set(`${pre}:${x.id}`, itemJSON(x));
+}
+export function stampChangedItems(now = nowISO()) {
+  const s = state.data?.settings; if (!s) return [];
+  const stamped = [];
+  for (const [list, pre] of ITEM_LISTS) for (const x of s[list] || []) {
+    if (!x || !x.id) continue;
+    const key = `${pre}:${x.id}`;
+    if (itemSnap.get(key) !== itemJSON(x)) { x.updatedAt = now; stamped.push(key); }
+  }
+  return stamped;
+}
 export function touchSettings() {
-  state.data.settings.settingsUpdatedAt = nowISO();
+  const now = nowISO();
+  stampChangedItems(now);
+  state.data.settings.settingsUpdatedAt = now;
   save();
 }
 

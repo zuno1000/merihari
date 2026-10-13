@@ -14,8 +14,9 @@ import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.15.6';
+export const APP_VERSION = '0.15.7';
 export const NEWS = [
+  { v: '0.15.7', text: '同期の修正: これまで設定は「設定全体を新しい方で上書き」していたため、初期設定だけの端末と同期すると元の端末のカテゴリ(色・種別・配色も)が消えることがありました。カテゴリ・種別・配色セットを 1 つごとに統合するようにし、片方の端末にしか無いものは残し、両方にあれば最後に変えた方を採ります(既定のままの方には負けません)。同期でカテゴリなどが変わるときは直前の設定を端末に控え、設定 › データ「同期前の設定に戻す」で戻せます(戻した設定は次の同期で他の端末にも広がります)。すでに消えてしまったカテゴリは「消したカテゴリ」として残っているので、設定 › カテゴリ › 非表示のカテゴリ で名前を付け直し、「表示に戻す」で元どおりになります。' },
   { v: '0.15.6', text: 'ホームの内訳などに c_xxxx のような内部 ID が出る不具合を修正。以前の版で削除したカテゴリの記録で、カテゴリの定義が無くなっていたものです。読み込み時に「消したカテゴリ」という名前の非表示カテゴリとして復元し、設定 › カテゴリ › 非表示のカテゴリ で名前を付け直したり、表示に戻したりできます。記録は消えていません。' },
   { v: '0.15.5', text: 'iPhone のホーム画面アイコンが変わらない件: iOS は SVG のアイコンを受け付けないため、PNG(512px・白地)を用意して apple-touch-icon と manifest に設定しました。iOS はアイコンを「追加した時点」で固定するので、更新後に いったんホーム画面から削除 → Safari で開き直して「ホーム画面に追加」をやり直してください。' },
   { v: '0.15.4', text: '設定に「配色」を追加: 配色セットの一覧(組み込み 5 つ: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)から「適用」すると、カテゴリの色がまとめて切り替わります。自分のセットは「いまの色を保存」か「複製して編集」から作り、カテゴリごとにピッカーかカラーコードで色を決めて保存できます(カテゴリ画面の「配色をまとめて変える」はこちらへ移しました)。タブバー中央の ＋ を文字から図形に変え、丸の中心に揃えました。アプリのアイコンを Pastel Color Pt.2(紫〜青の 5 色)の弧に変えました(ホーム画面に追加し直すと反映されます)。' },
@@ -173,8 +174,8 @@ window.M = {
   plan,
   report,
   ui: { timeField: ui.timeField },
-  sync: { merge: sync.merge, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
+  sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

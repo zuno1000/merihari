@@ -273,7 +273,24 @@ document.getElementById('app').addEventListener('load', async () => {
     const mAB = Sy.merge(dA, dB), mBA = Sy.merge(dB, dA);
     ok(eq(mAB, mBA), 'merge: 対称 merge(a,b) == merge(b,a)');
     ok(mAB.entries.e1.end === '10:30' && mAB.entries.e2.deletedAt && mAB.entries.e3 && mAB.tasks.t1, 'merge: id ごとに updatedAt の LWW・tombstone は残る・片側だけのものは残る');
-    ok(mAB.settings.gapAbsorbMin === 15 && mAB.extra.x === 1 && mAB.other === 2, 'merge: settings は settingsUpdatedAt・未知キーは保持');
+    ok(mAB.settings.gapAbsorbMin === 15 && mAB.extra.x === 1 && mAB.other === 2, 'merge: settings のスカラーは settingsUpdatedAt・未知キーは保持');
+    // v0.15.7: カテゴリ・種別・配色セットは id ごとに統合(初期設定だけの端末に負けない)
+    const custom = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-01T10:00:00+09:00', palette: 'mine', palettes: [{ id: 'mine', name: '自分の', colors: { research: '#111111' } }], busyMemory: { '1:540': 'class' },
+      kinds: [...S.defaultKinds(), { id: 'k_x', name: '趣味2', work: false, drift: false }],
+      categories: [{ id: 'research', name: '卒論', kind: 'work', color: '#111111', order: 1 }, { id: 'c_old', name: '読書', kind: 'k_x', color: '#222222', order: 2 }, { id: 'sns', name: 'SNS・動画', kind: 'drift', color: '#f7bdbd', order: 3 }] };
+    const freshS = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-13T20:00:00+09:00', busyMemory: { '2:600': 'job' } };
+    const mkD = (settings) => ({ schema: 1, settings, entries: {}, tasks: {}, plans: {}, reports: {}, ledger: {}, meta: { resetAt: null, lastSyncAt: null, setupAt: '2026-10-11T08:00:00+09:00', appVersion: '0.15.7' } });
+    const mCF = Sy.merge(mkD(custom), mkD(freshS)), mFC = Sy.merge(mkD(freshS), mkD(custom));
+    ok(eq(mCF, mFC), 'merge(settings v0.15.7): 対称');
+    const cm = mCF.settings;
+    ok(cm.categories.find((c) => c.id === 'research').name === '卒論' && cm.categories.find((c) => c.id === 'research').color === '#111111', 'merge(settings): 既定のままの端末(新しい settingsUpdatedAt)に、カスタマイズしたカテゴリは負けない');
+    ok(cm.categories.some((c) => c.id === 'c_old' && c.name === '読書') && cm.categories.some((c) => c.id === 'english'), 'merge(settings): 片側にしか無いカテゴリは両方残る(初期設定の端末の既定カテゴリも)');
+    ok(cm.kinds.some((k) => k.id === 'k_x') && cm.palettes.length === 1 && cm.palette === 'mine' && cm.busyMemory['1:540'] === 'class' && cm.busyMemory['2:600'] === 'job', 'merge(settings): 種別・配色セット・予定の記憶も統合');
+    ok(cm.gapAbsorbMin === 10 && cm.settingsUpdatedAt === '2026-10-13T20:00:00+09:00', 'merge(settings): スカラーは従来どおり新しい方');
+    const newer = { ...custom, settingsUpdatedAt: '2026-10-14T00:00:00+09:00', categories: custom.categories.map((c) => (c.id === 'research' ? { ...c, name: '修論', updatedAt: '2026-10-14T00:00:00+09:00' } : c)) };
+    const older = { ...custom, categories: custom.categories.map((c) => (c.id === 'research' ? { ...c, name: '博論', updatedAt: '2026-10-12T00:00:00+09:00' } : c)) };
+    ok(Sy.merge(mkD(older), mkD(newer)).settings.categories.find((c) => c.id === 'research').name === '修論' && Sy.merge(mkD(newer), mkD(older)).settings.categories.find((c) => c.id === 'research').name === '修論', 'merge(settings): 両側で変えたカテゴリは updatedAt の新しい方');
+    ok(Sy.mergeSettings(null, custom) === custom && Sy.mergeSettings(null, null).categories.length === 11, 'mergeSettings: 片側が無ければもう片側・両方無ければ既定');
     ok(mAB.reports['2026-10-10'].finalizedAt && mAB.ledger['2026-10-10'].workMin === 120, 'merge: reports は確定済み優先・ledger は決定的');
     ok(mAB.meta.setupAt === '2026-10-11T08:00:00+09:00' && mAB.meta.lastSyncAt === '2026-10-11T12:00:00+09:00' && mAB.meta.appVersion === '0.5.0', 'merge: meta は setupAt 最古・lastSyncAt/appVersion 最新');
     const tieA = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'a' } } }, tieB = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'b' } } };

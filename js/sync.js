@@ -78,7 +78,7 @@ export function merge(a, b) {
   out.schema = Math.max(+a.schema || 1, +b.schema || 1);
   const sa = fresh({ updatedAt: a.settings.settingsUpdatedAt }) || !resetAt ? a.settings : null;
   const sb = fresh({ updatedAt: b.settings.settingsUpdatedAt }) || !resetAt ? b.settings : null;
-  out.settings = pick(sa, sb, (s) => s.settingsUpdatedAt) || store.defaultSettings();
+  out.settings = mergeSettings(sa, sb);
   out.entries = mergeById(a.entries, b.entries, (r) => r.updatedAt, fresh);
   out.tasks = mergeById(a.tasks, b.tasks, (r) => r.updatedAt, fresh);
   out.plans = mergeById(a.plans, b.plans, (r) => r.updatedAt || r.generatedAt, fresh);
@@ -92,6 +92,45 @@ export function merge(a, b) {
     appVersion: later(a.meta.appVersion, b.meta.appVersion) || null,
   };
   return out;
+}
+
+/**
+ * 設定のマージ(v0.15.7・F7-4 改): 作業時間帯などのスカラーは settingsUpdatedAt の新しい方(従来)。
+ * カテゴリ・種別・配色セットは id ごとに統合する: 片側にしか無いものは残す(初期設定だけの端末と同期しても消えない)、
+ * 両側にあれば updatedAt の新しい方、無ければ「既定のまま」でない方(カスタマイズした方)、それも同じなら settingsUpdatedAt の勝者。
+ */
+export function mergeSettings(sa, sb) {
+  if (!sa && !sb) return store.defaultSettings();
+  if (!sa || !sb) return sa || sb;
+  const base = pick(sa, sb, (s) => s.settingsUpdatedAt || '');
+  const other = base === sa ? sb : sa;
+  const isDefault = (kind, x) => {
+    if (kind === 'cat') { const d = store.defaultCategories().find((y) => y.id === x.id); return !!d && d.name === x.name && d.kind === x.kind && d.color === x.color && !x.archived; }
+    if (kind === 'kind') { const d = store.defaultKinds().find((y) => y.id === x.id); return !!d && d.name === x.name && !!d.work === !!x.work && !!d.drift === !!x.drift; }
+    return false;
+  };
+  const mergeItems = (kind, lb, lo, sortByOrder) => {
+    const out = [];
+    const seen = new Set();
+    const choose = (x, y) => {
+      const ux = x.updatedAt || '', uy = y.updatedAt || '';
+      if (ux !== uy) return ux > uy ? x : y;
+      const dx = isDefault(kind, x), dy = isDefault(kind, y);
+      if (dx !== dy) return dx ? y : x;
+      return x; // どちらも同じ扱いなら settingsUpdatedAt の勝者(base)側
+    };
+    for (const x of lb || []) { if (!x || !x.id || seen.has(x.id)) continue; seen.add(x.id); const y = (lo || []).find((z) => z && z.id === x.id); out.push(y ? choose(x, y) : x); }
+    for (const y of lo || []) { if (!y || !y.id || seen.has(y.id)) continue; seen.add(y.id); out.push(y); }
+    return sortByOrder ? out.sort((p, q) => ((+p.order || 0) - (+q.order || 0)) || (p.id < q.id ? -1 : p.id > q.id ? 1 : 0)) : out;
+  };
+  return {
+    ...base,
+    categories: mergeItems('cat', base.categories, other.categories, true),
+    kinds: mergeItems('kind', base.kinds, other.kinds, false),
+    palettes: mergeItems('pal', base.palettes, other.palettes, false),
+    palette: base.palette || other.palette || null, // 適用中の配色セットは「選んでいる方」を残す
+    busyMemory: { ...(other.busyMemory || {}), ...(base.busyMemory || {}) },
+  };
 }
 
 /** 60 日より前に削除されたレコードを掃除(F5-4) */
@@ -192,6 +231,10 @@ export async function syncDrive({ interactive = false } = {}) {
       let remote;
       try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
       data = merge(data, remote);
+      // v0.15.7: 同期でカテゴリ・種別・配色が変わるときは、同期前の設定を端末に 1 つ控える(設定 › データ「同期前の設定に戻す」)
+      const keys = ['categories', 'kinds', 'palettes', 'palette'];
+      const prev = store.state.data.settings;
+      if (keys.some((k) => stableJSON(prev[k]) !== stableJSON(data.settings[k]))) { local.settingsBackup = { at: store.nowISO(), settings: JSON.parse(JSON.stringify(prev)) }; }
     }
     const changed = stableJSON(sansMeta(data)) !== before;
     const nowISO = store.nowISO();
