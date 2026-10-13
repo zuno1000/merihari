@@ -465,3 +465,24 @@ button.crow:active{background:var(--accent-bg)}
 .cols.dense .col-x{font-size:9px}
 .fig .crows{margin-top:2px}
 .fig .crow{padding:5px 2px;cursor:default}
+
+/* ---- v0.15.2: 種別/色の設定・非表示・予定は未記録の所だけ・未記録の行から「何をしていた?」・タグ ---- */
+.gtag{font-size:10px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);flex:none;letter-spacing:.02em}
+.srow.goal .gnote{margin:0}
+.group .gnote{margin:-2px 4px 8px;font-size:12px}
+.crow.unlogged{color:var(--fg)}
+.crow.unlogged .cname{display:flex;flex-direction:column;gap:1px;white-space:normal}
+.crow.unlogged .ask{font-size:13px;color:var(--accent);font-weight:600;word-break:keep-all}
+.blk.gap.busy{background:repeating-linear-gradient(135deg,var(--accent-bg) 0 6px,transparent 6px 10px);border-color:var(--accent-bg);border-left:3px solid var(--accent);color:var(--muted)}
+.blk.gap.busy .blk-name{color:var(--fg);font-weight:600}
+input.color{width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--bg);flex:none;cursor:pointer}
+input.color::-webkit-color-swatch-wrapper{padding:4px}
+input.color::-webkit-color-swatch{border:0;border-radius:6px}
+input.text.hex{flex:none;width:7.2em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}
+.colorrow{flex-wrap:wrap}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.sw{width:26px;height:26px;border-radius:50%;border:1px solid rgba(0,0,0,.12);cursor:pointer;padding:0}
+.sw:active{transform:scale(.92)}
+.item .label{min-width:2.2em}
+.row.item{padding:8px 0}
+.label.small,span.small{font-size:13px}

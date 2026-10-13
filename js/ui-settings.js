@@ -1,6 +1,6 @@
 // merihari ─ ui-settings.js: 初回ウィザード(3ステップ・既定値で「次へ」3回)と設定画面(仕様書 §4.3)
 // 設定画面は「一覧(ラベル+いまの値)→ 行をタップで項目ごとの編集画面」。編集部品はウィザードと共有する。
-import { el, clear, toast, confirmSheet, DAY_JA, timeField } from './ui.js';
+import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField } from './ui.js';
 import * as store from './store.js';
 import { hm, dayStartMin, mm } from './time.js';
 import { EXTRA_COLORS } from './palette.js';
@@ -45,7 +45,8 @@ function isSimpleWindow(w) {
 const summary = {
   window() { const w = S().window; return isSimpleWindow(w) ? `平日 ${fmtT(w.mon[0])}–${fmtT(w.mon[1])} / 土日 ${fmtT(w.sat[0])}–${fmtT(w.sat[1])}` : '曜日ごと'; },
   logging() { const s = S(); const g = +s.gapAbsorbMin || 0; return (s.startFromLast ? '最後の記録から・' : '') + (g ? `${g}分までのすき間は次の記録に含める` : 'すき間はそのまま'); },
-  categories() { const c = S().categories.slice().sort((a, b) => a.order - b.order); return `${c.slice(0, 4).map((x) => x.name).join('・')}${c.length > 4 ? ` …全${c.length}件` : ''}`; },
+  categories() { const c = S().categories.filter((x) => !x.archived).sort((a, b) => a.order - b.order); return `${c.slice(0, 4).map((x) => x.name).join('・')}${c.length > 4 ? ` …全${c.length}件` : ''}`; },
+  kinds() { const k = S().kinds || []; return `${k.slice(0, 4).map((x) => x.name).join('・')}${k.length > 4 ? ` …全${k.length}件` : ''}`; },
 };
 
 // ---- 編集部品(ウィザードと項目画面で共有) ----
@@ -90,27 +91,61 @@ function sectionLogging() {
 }
 function sectionCategories(rerender) {
   const s = S();
-  const sorted = s.categories.slice().sort((a, b) => a.order - b.order);
-  const renumber = () => { sorted.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
-  const rows = sorted.map((c, i) => el('div.item', [
-    el('div.row', [
-      el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }),
-      textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }),
-      el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${c.name} を削除`, disabled: sorted.length <= 1,
-        onclick: () => confirmSheet(`「${c.name}」を削除しますか?`, 'このカテゴリで記録した実績は「その他」として集計されます。', '削除', () => { s.categories = s.categories.filter((x) => x !== c); renumber(); }, true) }, '削除'),
-    ]),
-    el('div.row', [
-      el('span.label', '種別'), select(store.CATEGORY_KINDS, c.kind, (v) => { c.kind = v; store.touchSettings(); }), el('span.grow'),
-      el('button.btn.sm', { type: 'button', 'aria-label': '上へ', disabled: i === 0, onclick: () => { [sorted[i - 1], sorted[i]] = [sorted[i], sorted[i - 1]]; renumber(); } }, '↑'),
-      el('button.btn.sm', { type: 'button', 'aria-label': '下へ', disabled: i === sorted.length - 1, onclick: () => { [sorted[i + 1], sorted[i]] = [sorted[i], sorted[i + 1]]; renumber(); } }, '↓'),
-    ]),
-  ]));
-  return card('カテゴリ', '記録と集計の単位。種別は 作業/生活/休憩/ダラダラ(SNS・動画)。朝食・入浴などは「生活」、寝る/起きるは「睡眠」のチップで。',
+  const kinds = Object.fromEntries((s.kinds || []).map((k) => [k.id, k.name]));
+  const live = s.categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
+  const archived = s.categories.filter((c) => c.archived);
+  const renumber = () => { live.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
+  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
+  const rows = live.map((c, i) => {
+    const dot = el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' });
+    const setColor = (v, persist = true) => { c.color = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
+    const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, placeholder: '#9ccbee', autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード',
+      onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
+    const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
+    const swatches = el('div.swatches', EXTRA_COLORS.map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) })));
+    return el('div.item', [
+      el('div.row', [
+        dot,
+        textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }),
+        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${c.name} を非表示にする`, disabled: live.length <= 1,
+          onclick: () => confirmSheet(`「${c.name}」を非表示にしますか?`, '記録は消えません。これまでの記録はこの名前と色のまま残り、集計にも入ります。チップに出なくなるだけで、あとから「表示に戻す」こともできます。', '非表示にする', () => { c.archived = true; renumber(); toast('非表示にしました(記録は残っています)'); }) }, '非表示'),
+      ]),
+      el('div.row', [
+        el('span.label', '種別'), select(kinds, c.kind, (v) => { c.kind = v; store.touchSettings(); }), el('span.grow'),
+        el('button.btn.sm', { type: 'button', 'aria-label': '上へ', disabled: i === 0, onclick: () => { [live[i - 1], live[i]] = [live[i], live[i - 1]]; renumber(); } }, '↑'),
+        el('button.btn.sm', { type: 'button', 'aria-label': '下へ', disabled: i === live.length - 1, onclick: () => { [live[i + 1], live[i]] = [live[i], live[i + 1]]; renumber(); } }, '↓'),
+      ]),
+      el('div.row.colorrow', [el('span.label', '色'), pick, hex, swatches]),
+    ]);
+  });
+  return card('カテゴリ', '記録と集計の単位。色はパレットから選ぶか、カラーコード(#RRGGBB)で指定できます。消す代わりに「非表示」にするので、これまでの記録は消えません。',
     ...rows,
     addBtn('カテゴリを追加', () => {
-      s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: 'work', color: EXTRA_COLORS[s.categories.length % EXTRA_COLORS.length], order: s.categories.length + 1 });
+      s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false });
       store.touchSettings(); rerender();
-    }));
+    }),
+    archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('span.grow', c.name), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
+}
+
+/** 種別(v0.15.2): カテゴリを束ねる区分。レポートの「作業」に数えるか・「ダラダラ」として数えるかを持つ。使っている種別は消せない */
+function sectionKinds(rerender) {
+  const s = S();
+  const used = (k) => s.categories.filter((c) => c.kind === k.id).length;
+  const rows = s.kinds.map((k) => el('div.item', [
+    el('div.row', [
+      textInput(k.name, (v) => { k.name = v || k.id; store.touchSettings(); }, { 'aria-label': '種別名' }),
+      el('span.muted.small', { style: { flex: 'none' } }, `${used(k)} 件`),
+      el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${k.name} を削除`, disabled: used(k) > 0 || s.kinds.length <= 1, title: used(k) > 0 ? 'この種別のカテゴリがあるので消せません' : '',
+        onclick: () => { s.kinds = s.kinds.filter((x) => x !== k); store.touchSettings(); rerender(); } }, '削除'),
+    ]),
+    el('div.row.wrap', [
+      el('label.row', [el('input', { type: 'checkbox', checked: !!k.work, onchange: (e) => { k.work = e.target.checked; store.touchSettings(); } }), el('span.small', '「作業」として数える')]),
+      el('label.row', [el('input', { type: 'checkbox', checked: !!k.drift, onchange: (e) => { k.drift = e.target.checked; store.touchSettings(); } }), el('span.small', '「ダラダラ」として数える(減ると良い)')]),
+    ]),
+  ]));
+  return card('種別', 'カテゴリを束ねる区分(例: 決まった作業=授業・バイト、作業=研究、趣味)。レポートの「作業」の合計に入れる種別と、「ダラダラ」として先週と比べる種別をここで決めます。種別はいくつでも増やせます。',
+    ...rows,
+    addBtn('種別を追加', () => { s.kinds.push({ id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false }); store.touchSettings(); rerender(); }));
 }
 
 const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -153,9 +188,9 @@ function sectionHelp() {
   const li = (items) => el('ul.help-ul', items.map((t) => el('li', t)));
   return el('div.help', [
     h('4つの画面'),
-    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。記録中はその上にタイマー、そうでなければ「◯分 未記録。何をしていた?」の 1 行。下に「きょうの目安」(毎日・毎週・期限・やりたいこと)。レポートは ＋ の上の小さなボタン。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。開くと現在時刻の位置に移ります。カレンダーの予定は薄い背景として描きます(内容は読みません)。', 'タスク: 名前を入れて Enter。触ると いつまで / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '設定: 作業時間帯・カテゴリ・すき間・Google。']),
+    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。下に「タスクと習慣」(期限・毎日・毎週・やりたい のタグ付き。きょうの分の目安と済んだ分。▶ でいまから)。レポートは ＋ の上の小さなボタン(7日/30日/すべて)。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。開くと現在時刻の位置に移ります。カレンダーの予定は薄い背景として描きます(内容は読みません)。', 'タスク: 名前を入れて Enter。触ると いつまで / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '設定: 作業時間帯・カテゴリ(名前・色・種別・非表示)・種別(作業/ダラダラとして数えるか)・すき間・Google。']),
     h('記録する(右下の ＋)'),
-    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを 1 回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'ホームの「何をしていた?」の行、内訳の行、目安の行、タイムラインの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが 10 分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00 など)なら、0:00 を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
+    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを 1 回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、タスクと習慣の行、タイムラインの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが 10 分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00 など)なら、0:00 を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分 の順にタップ。分はなぞると 1 分刻み、下の −5/−1/+1/+5 でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5 分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
     h('タスクと目安'),
@@ -163,7 +198,7 @@ function sectionHelp() {
     h('レポート'),
     li(['レポートは ＋ の上の小さなボタンから(タイムラインではその日のレポート)。翌朝に確定し、昨日の分が未読ならボタンにバッジが付きます。', '肯定的な事実を先に、改善点は事実だけ。比べる相手は先週の平均と、毎日・毎週の目安だけ。責める言葉は使いません。', '「1日の円」は 24 時間を カテゴリ・未記録・睡眠・これから で分けたもの。タップで時間が出ます。カテゴリ別・1日の帯・7日間の推移・表は「くわしく」に。確定したあとに記録を直したら「いまの記録で再計算」。']),
     h('Google とプライバシー'),
-    li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。タイムラインの背景に薄く描き、未記録なら「予定の時間は?」で記録でき、そのとき選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '顔認証 / パスキー(任意): 設定 › Google で有効にすると、この端末のパスキーの中の秘密でパスフレーズを包んで保存し、次回からは Face ID・指紋・Windows Hello などで解錠して同期します。パスフレーズそのものは保存しません。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズ(またはパスキー)を聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。']),
+    li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。タイムラインでは記録の無いところにだけ薄く描き(記録したら消えます)、過去なら「予定の時間は?」で記録でき、そのとき選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '顔認証 / パスキー(任意): 設定 › Google で有効にすると、この端末のパスキーの中の秘密でパスフレーズを包んで保存し、次回からは Face ID・指紋・Windows Hello などで解錠して同期します。パスフレーズそのものは保存しません。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズ(またはパスキー)を聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。']),
     h('ショートカット'),
     li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了(iOS のショートカットから)。']),
   ]);
@@ -173,6 +208,7 @@ const SECTIONS = {
   window: { title: '作業時間帯', build: () => sectionWindow() },
   help: { title: '使い方', build: () => sectionHelp() },
   categories: { title: 'カテゴリ', build: (re) => sectionCategories(re) },
+  kinds: { title: '種別', build: (re) => sectionKinds(re) },
   logging: { title: '記録のすき間', build: () => sectionLogging() },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
@@ -265,6 +301,7 @@ export function renderSettings(view, ctx, section = null) {
     group('記録', [
       srow('作業時間帯', summary.window(), open('window')),
       srow('カテゴリ', summary.categories(), open('categories')),
+      srow('種別', summary.kinds(), open('kinds')),
       srow('すき間', summary.logging(), open('logging')),
     ]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),

@@ -8,15 +8,37 @@ export const SCHEMA = 1;
 
 import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 
-export const CATEGORY_KINDS = { work: '作業', life: '生活', rest: '休憩', drift: 'ダラダラ' };
+/** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
+export function defaultKinds() {
+  return [
+    { id: 'work', name: '作業', work: true, drift: false },
+    { id: 'fixed', name: '決まった作業', work: true, drift: false },
+    { id: 'life', name: '生活', work: false, drift: false },
+    { id: 'rest', name: '休憩', work: false, drift: false },
+    { id: 'drift', name: 'ダラダラ', work: false, drift: true },
+    { id: 'hobby', name: '趣味', work: false, drift: false },
+  ];
+}
+export const CATEGORY_KINDS = Object.fromEntries(defaultKinds().map((k) => [k.id, k.name]));
+/** 種別 id → 役割 { work, drift, rest, name }。settings に kinds が無ければ既定(旧データ・テストの素の settings) */
+export function kindRole(settings, kindId) {
+  const k = (Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds()).find((x) => x.id === kindId);
+  if (k) return { work: !!k.work, drift: !!k.drift, rest: kindId === 'rest', name: k.name };
+  return { work: kindId === 'work' || kindId === 'fixed', drift: kindId === 'drift', rest: kindId === 'rest', name: String(kindId || '') };
+}
+/** カテゴリ id → 役割(カテゴリが無ければ id から推定: rest/sns/life/transit、他は作業) */
+export function catRole(settings, catId) {
+  const c = (settings?.categories || []).find((x) => x.id === catId);
+  return kindRole(settings, c ? c.kind : (catId === 'rest' ? 'rest' : catId === 'sns' ? 'drift' : catId === 'life' || catId === 'transit' || catId === 'sleep' ? 'life' : 'work'));
+}
 
 /** 既定カテゴリ(§3・§13-2)。id は固定で、名前・並び・種別は編集可 */
 export function defaultCategories() {
   return [
     { id: 'research', name: '研究', kind: 'work', color: DEFAULT_COLORS.research, order: 1 },
-    { id: 'class', name: '授業', kind: 'work', color: DEFAULT_COLORS.class, order: 2 },
+    { id: 'class', name: '授業', kind: 'fixed', color: DEFAULT_COLORS.class, order: 2 },
     { id: 'english', name: '英語', kind: 'work', color: DEFAULT_COLORS.english, order: 3 },
-    { id: 'job', name: 'バイト', kind: 'work', color: DEFAULT_COLORS.job, order: 4 },
+    { id: 'job', name: 'バイト', kind: 'fixed', color: DEFAULT_COLORS.job, order: 4 },
     { id: 'hunt', name: '就活', kind: 'work', color: DEFAULT_COLORS.hunt, order: 5 },
     { id: 'life', name: '生活', kind: 'life', color: DEFAULT_COLORS.life, order: 6 },
     { id: 'rest', name: '休憩', kind: 'rest', color: DEFAULT_COLORS.rest, order: 7 },
@@ -41,6 +63,8 @@ export function defaultSettings() {
     startFromLast: false,    // 記録を始めるとき最後の記録の終わりから数える(v0.13)
     catSchema: 2,            // 既定カテゴリの世代(2: 睡眠を追加)。古いデータに1回だけ足すための印
     habitsMigrated: true,    // v0.15: 旧「毎日の習慣」をタスク(毎日 ◯分)へ移したか
+    kinds: defaultKinds(),   // v0.15.2: 種別(増減できる)
+    kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     categories: defaultCategories(),
     settingsUpdatedAt: null,
   };
@@ -84,19 +108,26 @@ function normalizeSettings(raw) {
   s.dayStart = isHM(raw.dayStart) && /^0[0-6]:[0-5]\d$/.test(raw.dayStart) ? raw.dayStart : d.dayStart;
   s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
-  s.categories = Array.isArray(raw.categories) && raw.categories.length
-    ? raw.categories.filter((c) => isObj(c) && c.id).map((c, i) => ({
+  // 種別(v0.15.2): 無ければ既定。カテゴリの種別は存在するものだけ(無ければ work か先頭)
+  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true })) : null;
+  s.kinds = kindsRaw && kindsRaw.length ? kindsRaw : defaultKinds();
+  const kindIds = new Set(s.kinds.map((k) => k.id));
+  const kindFallback = kindIds.has('work') ? 'work' : s.kinds[0].id;
+  s.categories = (Array.isArray(raw.categories) && raw.categories.length ? raw.categories : d.categories).filter((c) => isObj(c) && c.id).map((c, i) => ({
         ...c, id: String(c.id), name: String(c.name || c.id),
-        kind: Object.keys(CATEGORY_KINDS).includes(c.kind) ? c.kind : 'work',
+        kind: typeof c.kind === 'string' && kindIds.has(c.kind) ? c.kind : kindFallback,
+        archived: c.archived === true, // v0.15.2: 消す代わりに非表示(記録は名前と色のまま残る)
         color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
           ? ((LEGACY_COLORS[c.id] || []).includes(c.color.toLowerCase()) ? DEFAULT_COLORS[c.id] : c.color) // 過去の既定色は新しい既定色へ(自分で選んだ色は保持)
           : (DEFAULT_COLORS[c.id] || DEFAULT_COLORS.life),
         order: Number.isFinite(+c.order) ? +c.order : i + 1,
-      }))
-    : d.categories;
+      }));
   // v0.12: 既定カテゴリに「睡眠」を足す(古いデータには1回だけ。消したら戻さない)
   s.catSchema = Number.isFinite(+raw.catSchema) ? +raw.catSchema : 1;
   if (s.catSchema < 2) { if (!s.categories.some((c) => c.id === 'sleep')) s.categories.push({ id: 'sleep', name: '睡眠', kind: 'life', color: DEFAULT_COLORS.sleep, order: s.categories.length + 1 }); s.catSchema = 2; }
+  // v0.15.2: 旧データの 授業・バイト を「決まった作業」へ 1 回だけ移す(種別を自分で定義していれば触らない)
+  s.kindSchema = Number.isFinite(+raw.kindSchema) ? +raw.kindSchema : 0;
+  if (s.kindSchema < 1) { if (!kindsRaw && kindIds.has('fixed')) for (const c of s.categories) if ((c.id === 'class' || c.id === 'job') && c.kind === 'work') c.kind = 'fixed'; s.kindSchema = 1; }
   // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;

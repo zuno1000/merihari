@@ -23,7 +23,7 @@ const fmtDeadline = (key, today) => (!key ? '期限なし' : key === today ? '�
 
 function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); autoSync(); }
 const effToday = () => effectiveDay(S(), dateKey(), minuteOfDay()).date;
-const workCats = () => S().categories.slice().sort((a, b) => a.order - b.order).filter((c) => c.kind === 'work');
+const workCats = () => S().categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order); // v0.15.2: 種別は自由なので全カテゴリ(非表示は除く)
 function defaultCategory() { const c = workCats()[0]; return c ? c.id : 'other'; }
 
 /** いつまで(v0.15): 今日 / 明日 / 今週 / 来週 / 日付… / 毎日 / 毎週 / いつか(やりたいこと) */
@@ -192,7 +192,7 @@ const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? 
 
 /** 編集(v0.15): 種類(期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる */
 function editSheet(t, today, rerender, ctx) {
-  const cats = S().categories.slice().sort((a, b) => a.order - b.order);
+  const cats = S().categories.filter((c) => !c.archived || c.id === t.categoryId).sort((a, b) => a.order - b.order);
   const name = el('input.text', { type: 'text', value: t.name, maxlength: 100 });
   let kind = t.kind === 'wish' ? 'wish' : t.repeat?.type === 'daily' ? 'daily' : t.repeat?.type === 'weekly' ? 'weekly' : 'deadline';
   const deadline = el('input.date', { type: 'date', value: t.deadline ? t.deadline.slice(0, 10) : '' });

@@ -4,9 +4,9 @@
 import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory } from './log.js';
 import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange } from './plan.js';
+import { catRole } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
-const kindOf = (categories, id) => (categories || []).find((c) => c.id === id)?.kind || (id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' ? 'life' : 'work');
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
 
 /** 記録のある日付の集合 */
@@ -68,11 +68,12 @@ export function aggregate({ entries, date, nowMin = 1440, settings }) {
   const by = {};
   let workMin = 0, driftMin = 0, restMin = 0, baselineWorkMin = 0;
   for (const id of ids) {
-    const row = { actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: kindOf(categories, id), name: nameOf(categories, id) };
+    const role = catRole(settings, id);
+    const row = { actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: (categories.find((c) => c.id === id) || {}).kind || null, work: role.work, drift: role.drift, rest: role.rest, name: nameOf(categories, id) };
     by[id] = row;
-    if (row.kind === 'work') { workMin += row.actual; baselineWorkMin += row.baseline || 0; }
-    if (row.kind === 'drift') driftMin += row.actual;
-    if (row.kind === 'rest') restMin += row.actual;
+    if (row.work) { workMin += row.actual; baselineWorkMin += row.baseline || 0; }
+    if (row.drift) driftMin += row.actual;
+    if (row.rest) restMin += row.actual;
   }
   const W = windowFor(settings, date);
   const u = unlogged(entries, date, W, nowMin);
@@ -133,8 +134,8 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   const day = date || agg.date;
   // 文体(v0.12.3): ふつうの丁寧な文。事実を一文ずつ。励ましや評価の言葉(「それでも大丈夫」「十分です」)は足さない
   for (const [, r] of Object.entries(by)) {
-    if (r.kind === 'drift' && r.baseline != null && r.baseline - r.actual >= 15) pos.push({ pri: 1, d: r.baseline - r.actual, text: `${r.name}は先週の平均より ${fmtMinJa(r.baseline - r.actual)} 少なくなりました。` });
-    if (r.kind === 'work' && r.baseline != null && r.actual - r.baseline >= 15) pos.push({ pri: 2, d: r.actual - r.baseline, text: `${r.name}は先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多くなりました。` });
+    if (r.drift && r.baseline != null && r.baseline - r.actual >= 15) pos.push({ pri: 1, d: r.baseline - r.actual, text: `${r.name}は先週の平均より ${fmtMinJa(r.baseline - r.actual)} 少なくなりました。` });
+    if (r.work && r.baseline != null && r.actual - r.baseline >= 15) pos.push({ pri: 2, d: r.actual - r.baseline, text: `${r.name}は先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多くなりました。` });
   }
   // 目安(毎日/毎週)に届いた日(v0.15)
   for (const g of goals(tasks, entries, day, 1440)) {
@@ -149,7 +150,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
 
   const imp = [];
   for (const [, r] of Object.entries(by)) {
-    if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} で、先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多めでした。` });
+    if (r.drift && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} で、先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多めでした。` });
   }
   if (agg.dayDone && agg.unloggedMin >= 60 && agg.coverage < 0.8) imp.push({ d: 0, text: `記録のない時間が ${fmtMinJa(agg.unloggedMin)} ありました。` }); // 途中経過では言わない(v0.10)
   imp.sort((a, b) => b.d - a.d);
@@ -174,14 +175,13 @@ export function buildReport(opts) {
 
 /** 週のまとめ(F3-6・v0.9): date を含む直近 7 日と、その前の 7 日の作業・ダラダラの合計(分)と記録日数。純関数 */
 export function weekSummary(entries, settings, date) {
-  const categories = settings?.categories || [];
   const sum = (from) => {
     let workMin = 0, driftMin = 0, days = 0;
     for (let i = 0; i < 7; i++) {
       const d = addDays(from, -i);
       const t = totalsByCategory(entries, d, 1440);
       if (Object.keys(t).length) days++;
-      for (const [id, m] of Object.entries(t)) { const k = kindOf(categories, id); if (k === 'work') workMin += m; else if (k === 'drift') driftMin += m; }
+      for (const [id, m] of Object.entries(t)) { const r = catRole(settings, id); if (r.work) workMin += m; else if (r.drift) driftMin += m; }
     }
     return { workMin, driftMin, days };
   };
@@ -193,7 +193,6 @@ export function weekSummary(entries, settings, date) {
  * nowDate の日は nowMin までで数える(記録中も)。戻り値 { from, to, days(期間の日数), loggedDays, loggedMin, workMin, driftMin, byCategory:{id:min}, daily:[{key, workMin, driftMin, loggedMin}] }
  */
 export function periodSummary(entries, settings, from, to, { nowDate = null, nowMin = 1440 } = {}) {
-  const categories = settings?.categories || [];
   const by = {};
   const daily = [];
   let loggedMin = 0, workMin = 0, driftMin = 0, loggedDays = 0;
@@ -202,8 +201,8 @@ export function periodSummary(entries, settings, from, to, { nowDate = null, now
     let w = 0, dr = 0, lg = 0;
     for (const [id, m] of Object.entries(t)) {
       by[id] = (by[id] || 0) + m; lg += m;
-      const k = kindOf(categories, id);
-      if (k === 'work') w += m; else if (k === 'drift') dr += m;
+      const r = catRole(settings, id);
+      if (r.work) w += m; else if (r.drift) dr += m;
     }
     if (lg > 0) loggedDays++;
     loggedMin += lg; workMin += w; driftMin += dr;

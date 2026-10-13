@@ -12,7 +12,9 @@ import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDa
 const S = () => store.state.data.settings;
 function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : id, color: null, kind: 'work' }; }
 const colorOf = (id) => displayColor(catOf(id).color);
-const kindOf = (id) => catOf(id).kind;
+const roleOf = (id) => store.catRole(S(), id);
+/** ダラダラ種別の名前(ユーザーが変えられる)。無ければ「ダラダラ」 */
+const driftLabel = () => (S().kinds || []).filter((k) => k.drift).map((k) => k.name).join('・') || 'ダラダラ';
 const md = (key) => fmtMD(key);
 const RANGES = [['day', '今日'], ['week', '7日'], ['month', '30日'], ['all', 'すべて']];
 
@@ -58,8 +60,8 @@ function dayView(date, today, nowMin, reopen) {
   const entries = log.entriesOf(d.entries, date);
   const W = windowFor(d.settings, date) || { start: 420, end: 1410 };
   const base = report.baseline(d.entries, date);
-  const baseWork = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'work').reduce((a, [, v]) => a + v, 0) : null;
-  const baseDrift = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'drift').reduce((a, [, v]) => a + v, 0) : null;
+  const baseWork = base ? Object.entries(base.byCategory).filter(([id]) => roleOf(id).work).reduce((a, [, v]) => a + v, 0) : null;
+  const baseDrift = base ? Object.entries(base.byCategory).filter(([id]) => roleOf(id).drift).reduce((a, [, v]) => a + v, 0) : null;
   const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, label: k === date ? (isToday ? '今日' : `${+k.slice(8, 10)}日`) : DAY_JA[weekday(k)], ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
   const title = isToday ? '今日のレポート' : `${fmtMD(date, true)}のレポート`;
   const recompute = () => {
@@ -218,14 +220,14 @@ function weekBox(date) {
   const cmp = ws.prev.days ? (Math.abs(d) < 15 ? '前の7日と同じくらい' : `前の7日より ${fmtMin(Math.abs(d))} ${d > 0 ? '多い' : '少ない'}`) : '前の7日の記録なし';
   return el('div.list', { style: { margin: '0 0 12px' } }, [
     el('div.srow.plain', [el('span.lbl', 'この7日の作業'), el('span.val', `${fmtMin(ws.week.workMin)}(記録 ${ws.week.days} 日)・${cmp}`)]),
-    el('div.srow.plain', [el('span.lbl', 'この7日の SNS・動画'), el('span.val', fmtMin(ws.week.driftMin))]),
+    el('div.srow.plain', [el('span.lbl', `この7日の ${driftLabel()}`), el('span.val', fmtMin(ws.week.driftMin))]),
   ]);
 }
 // ---- タイル(くわしく) ----
 function tiles(r, baseDrift) {
   const cov = Math.round((r.coverage || 0) * 100);
   return el('div.kpi-row', [
-    el('div.kpi', [el('span.kpi-label', 'SNS・動画'), el('b.kpi-value', fmtMin(r.driftMin)), delta(r.driftMin, baseDrift, false)]),
+    el('div.kpi', [el('span.kpi-label', driftLabel()), el('b.kpi-value', fmtMin(r.driftMin)), delta(r.driftMin, baseDrift, false)]),
     el('div.kpi', [el('span.kpi-label', '記録カバー率'), el('b.kpi-value', `${cov}%`),
       el('div.meter', { role: 'img', 'aria-label': `記録カバー率 ${cov}%` }, el('i', { style: { width: `${cov}%` } })),
       el('span.kpi-delta.muted', `未記録 ${fmtMin(r.unloggedMin)}`)]),
@@ -311,11 +313,11 @@ function trendFigure(items, caption) {
       })),
     ]);
   };
-  const workColor = displayColor(S().categories.find((c) => c.kind === 'work')?.color);
-  const driftColor = displayColor(S().categories.find((c) => c.kind === 'drift')?.color);
+  const workColor = displayColor(S().categories.find((c) => !c.archived && roleOf(c.id).work)?.color);
+  const driftColor = displayColor(S().categories.find((c) => !c.archived && roleOf(c.id).drift)?.color);
   return el('figure.fig', [
     el('figcaption', caption),
-    el('div.trends', [chart('作業', 'workMin', workColor || 'var(--accent)'), chart('SNS・動画', 'driftMin', driftColor || 'var(--danger)')]),
+    el('div.trends', [chart('作業', 'workMin', workColor || 'var(--accent)'), chart(driftLabel(), 'driftMin', driftColor || 'var(--danger)')]),
   ]);
 }
 
@@ -340,7 +342,7 @@ function tables(r, days) {
       ...rows.map((x) => el('div.tr', [cell(catOf(x.id).name), cell(x.actual ? fmtMin(x.actual) : '–', 'num'), cell(x.baseline ? fmtMin(x.baseline) : '–', 'num')])),
     ]),
     el('div.table', [
-      el('div.tr.th', [cell('日'), cell('作業', 'num'), cell('SNS・動画', 'num'), cell('記録', 'num')]),
+      el('div.tr.th', [cell('日'), cell('作業', 'num'), cell(driftLabel(), 'num'), cell('記録', 'num')]),
       ...days.map((x) => el('div.tr', [cell(fmtMD(x.key, true)), cell(x.workMin ? fmtMin(x.workMin) : '–', 'num'), cell(x.driftMin ? fmtMin(x.driftMin) : '–', 'num'), cell(x.loggedMin ? fmtMin(x.loggedMin) : '–', 'num')])),
     ]),
     el('div.list', [
