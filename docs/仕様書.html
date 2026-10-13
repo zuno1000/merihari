@@ -78,7 +78,7 @@ small{color:var(--muted)}
 <header class="top">
   <h1>merihari(メリハリ)仕様書</h1>
   <div class="meta">
-    <span>版: v0.1(初版)→ v0.15〜v0.15.8 改訂(2026-10-13・記録アプリへ)</span><span>作成: 2026-10-11</span><span>作成者: 水野 + Claude(Cowork)</span><span>状態: ドラフト(実装前)</span>
+    <span>版: v0.1(初版)→ v0.15〜v0.15.12 改訂(2026-10-13・記録アプリへ)</span><span>作成: 2026-10-11</span><span>作成者: 水野 + Claude(Cowork)</span><span>状態: ドラフト(実装前)</span>
   </div>
   <p>「記録するのはワンタップ、考えるのはアプリ」── 1日の理想スケジュールを提案し、実際に何をしたかをワンタップで記録し、夜に「前より良くなった」を言葉で返す個人用の時間管理 PWA。<br>
   <b>残り時間(nokorijikan)v0.1 試作の後継</b>として、設計の芯(free/busy のみ・Drive 端末側暗号化・ルールベース・画面3つ)を引き継ぎ、主役を「タスクの残り時間」から「今日一日のタイムライン」へ移す。</p>
@@ -200,6 +200,8 @@ v0.13.4 改訂(ユーザー FB「23:40〜0:10 が直せない」「切れ目の�
 <p class="rev"><b>v0.15.7 改訂(同期の競合・ユーザー FB):</b> 初期設定だけの端末と同期したら元の端末のカテゴリが消えた。原因は settings が「settingsUpdatedAt の新しい方で丸ごと上書き」(F7-4)だったこと。<b>F7-4 改</b>: <code>sync.mergeSettings(sa, sb)</code> ─ スカラー(作業時間帯・すき間など)は従来どおり新しい方。<b>カテゴリ・種別・配色セットは id ごとに統合</b>: 片側にしか無いものは残す(非表示方式なので union でよい)、両側にあれば item.updatedAt の新しい方、無ければ「既定のまま」でない方(isDefault: defaultCategories / defaultKinds と名前・種別・色が同じか)、それも同じなら settingsUpdatedAt の勝者側。busyMemory は union(勝者優先)、palette は選んでいる方。<b>F7-6(新)</b> 項目ごとの updatedAt: <code>store.touchSettings</code> が前回保存時の控え(itemSnap)と比べて変わった項目にだけ押す(UI は変更箇所を知らなくてよい)。<b>同期前の設定の控え</b>: syncDrive がカテゴリ・種別・配色・palette のどれかを変えるときは local.settingsBackup に直前の settings を 1 つ控え、設定 › データ「同期前の設定に戻す」で戻せる(戻すと全項目に新しい印を押すので次の同期で勝つ)。すでに消えたカテゴリは v0.15.6 の「消したカテゴリ」から名前を付け直す。</p>
 
 <p class="rev"><b>v0.15.8 改訂(ユーザー FB):</b> <b>F1-17 取り消し</b>: 記録の変更はすべて ui-today の commit(entries, label) を通り、直前の entries(log.* は純関数なので参照を控えるだけ)を最大 20 件積む。タイムラインの上の ↶(数字は戻せる回数・aria-label に操作名)で 1 つずつ戻す。戻すときは <code>log.revertTo(current, snapshot)</code> で、変わる記録に新しい updatedAt を押し、控えに無い記録(あとから足したもの)は tombstone にする(id ごとの LWW の同期で元に戻されない)。対象: ドラッグ・時刻の変更・削除・追加・切り出し・カテゴリ/紐づけ/メモの変更・記録の開始/終了。非表示のカテゴリは記録・名前・色が残ることを明記(F8-6)。</p>
+
+<p class="rev"><b>v0.15.8〜v0.15.12 改訂(取り消し・同期の整え):</b> F1-17 取り消し/やり直し(↶ ↷・最大 20・log.revertTo で同期に負けない)。UI の記号は SVG で描く(▤ が iOS で化けた)。<b>F7-7(新)</b> 同期のあとの整え: <code>log.normalizeAfterMerge(entries, ctx)</code> ─ 記録中(end=null)が複数なら、あとから始めた方だけ残し他はその開始で閉じる。同じ日の中で時間が重なる記録は、updatedAt の新しい順に「確定」し、古い記録は確定済みと重なる分を削る(丸ごと覆われれば tombstone・分割されれば長い方)。記録が消えるのは 自分で削除したとき(tombstone)と端末のデータ消去の伝播(resetAt)だけで、「片方の端末に無い(未記入)」が勝つことはない(id ごとの union)。</p>
 
 <div class="wf">
 <div class="phone">

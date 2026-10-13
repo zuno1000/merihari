@@ -1,6 +1,7 @@
 // merihari ─ sync.js: 端末側暗号化(PBKDF2-SHA256 310,000 回 → AES-256-GCM)・Drive appDataFolder・マージ(仕様書 F7・§8.2)。
 // merge は純関数で対称(merge(a,b) ≡ merge(b,a))。tests で固定する。
 import * as store from './store.js';
+import { normalizeAfterMerge } from './log.js';
 import { gfetch, getToken, isConnected, savedToken, loadGis } from './google.js';
 import { el, sheet, toast } from './ui.js';
 import * as passkey from './passkey.js';
@@ -231,6 +232,7 @@ export async function syncDrive({ interactive = false } = {}) {
       let remote;
       try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
       data = merge(data, remote);
+      data.entries = normalizeAfterMerge(data.entries, { uid: store.uid, nowISO: store.nowISO }); // v0.15.12: 別端末の記録との重なり・二重の記録中を整える
       // v0.15.7: 同期でカテゴリ・種別・配色が変わるときは、同期前の設定を端末に 1 つ控える(設定 › データ「同期前の設定に戻す」)
       const keys = ['categories', 'kinds', 'palettes', 'palette'];
       const prev = store.state.data.settings;

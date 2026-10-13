@@ -214,6 +214,42 @@ export function revertTo(current, snapshot, ctx) {
   return out;
 }
 
+/**
+ * 同期のあとの整え(v0.15.12・F7-7): 端末ごとに別々に足した記録が時間で重なっていれば、同じ端末での操作と同じ規則(重なりは許さず隣を詰める)で整える。
+ * 新しく変えた方(updatedAt が後)を優先し、古い方を詰める。記録中(end=null)が複数あれば、いちばん新しく始めたものだけを記録中のまま残し、他はその開始で閉じる。
+ * 何も変わらなければ入力と同じ内容を返す。純関数
+ */
+export function normalizeAfterMerge(entries, ctx) {
+  let out = clone(entries || {});
+  const live = () => Object.values(out).filter(alive);
+  // 1. 記録中は 1 件だけ
+  const opens = live().filter((e) => e.end == null).sort((a, b) => (a.date + a.start < b.date + b.start ? -1 : 1));
+  for (let i = 0; i < opens.length - 1; i++) {
+    const e = out[opens[i].id], next = opens[i + 1];
+    const endMin = e.date === next.date ? hm(next.start) : 1440;
+    if (endMin > hm(e.start)) { e.end = mm(endMin); e.updatedAt = ctx.nowISO(); } else { e.deletedAt = ctx.nowISO(); e.updatedAt = e.deletedAt; }
+  }
+  // 2. 日ごとに、更新が新しい順に「確定」していき、あとから見る(古い)記録は確定済みと重なる分を削る(同じ日の中だけ)
+  const byDate = {};
+  for (const e of live()) (byDate[e.date] = byDate[e.date] || []).push(e);
+  for (const list of Object.values(byDate)) {
+    const sorted = list.sort((a, b) => ((a.updatedAt || '') > (b.updatedAt || '') ? -1 : (a.updatedAt || '') < (b.updatedAt || '') ? 1 : a.id < b.id ? -1 : 1));
+    const fixed = [];
+    for (const e0 of sorted) {
+      const e = out[e0.id];
+      const s0 = hm(e.start), en0 = e.end == null ? 1800 : hm(e.end);
+      let segs = [{ start: s0, end: en0 }];
+      for (const f of fixed) segs = segs.flatMap((g) => (f.end <= g.start || f.start >= g.end ? [g] : [g.start < f.start ? { start: g.start, end: f.start } : null, f.end < g.end ? { start: f.end, end: g.end } : null].filter(Boolean)));
+      segs = segs.filter((g) => g.end > g.start);
+      if (!segs.length) { e.deletedAt = ctx.nowISO(); e.updatedAt = e.deletedAt; continue; } // 丸ごと覆われた
+      const best = segs.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0]; // 分割されたら長い方を残す
+      if (best.start !== s0 || best.end !== en0) { e.start = mm(best.start); if (e.end != null) e.end = mm(best.end); e.updatedAt = ctx.nowISO(); }
+      fixed.push({ start: best.start, end: e.end == null ? 1800 : best.end });
+    }
+  }
+  return out;
+}
+
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */
 export function elapsedMin(e, date, nowMin) {
   if (!e) return 0;

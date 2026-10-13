@@ -163,6 +163,14 @@ document.getElementById('app').addEventListener('load', async () => {
     const rv = L.revertTo(cur0, snap0, C);
     ok(rv.a.end === '10:00' && rv.a.updatedAt === C.nowISO() && rv.b.end === '11:00' && rv.b.updatedAt === C.nowISO() && rv.c.deletedAt === C.nowISO() && Object.keys(rv).length === 3 && cur0.a.end === '10:30' && snap0.a.updatedAt === '2026-10-11T10:00:00+09:00', 'revertTo: 控えの状態に戻し、変わる記録には新しい updatedAt・あとから足した記録は tombstone(入力は変えない)');
     ok(eq(L.revertTo(snap0, snap0, C), snap0), 'revertTo: 同じなら何も押さない');
+    // v0.15.12: 同期のあとの整え(重なり・二重の記録中)
+    const mgE = { a: { id: 'a', date: D, start: '09:00', end: '11:00', categoryId: 'research', updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null }, b: { id: 'b', date: D, start: '10:00', end: '12:00', categoryId: 'class', updatedAt: '2026-10-11T12:00:00+09:00', deletedAt: null }, c: { id: 'c', date: '2026-10-10', start: '09:00', end: '10:00', categoryId: 'rest', updatedAt: '2026-10-10T10:00:00+09:00', deletedAt: null } };
+    const nm1 = L.normalizeAfterMerge(mgE, C);
+    ok(nm1.a.end === '10:00' && nm1.b.start === '10:00' && nm1.b.end === '12:00' && nm1.c.end === '10:00' && mgE.a.end === '11:00', 'normalizeAfterMerge: 別端末の記録と重なれば、新しく変えた方を優先して古い方を詰める(入力は変えない)');
+    const mgO = { a: { id: 'a', date: D, start: '09:00', end: null, categoryId: 'research', updatedAt: 'x', deletedAt: null }, b: { id: 'b', date: D, start: '10:00', end: null, categoryId: 'class', updatedAt: 'y', deletedAt: null } };
+    const nm2 = L.normalizeAfterMerge(mgO, C);
+    ok(nm2.a.end === '10:00' && nm2.b.end === null && L.openEntry(nm2).id === 'b', 'normalizeAfterMerge: 記録中が 2 つなら、あとから始めた方だけを記録中のまま残す');
+    ok(eq(L.normalizeAfterMerge(snap0, C), snap0), 'normalizeAfterMerge: 重なりが無ければ何も変えない');
 
     // ---- plan.js(v0.15: 目安) ----
     log('\n# plan(目安)');
