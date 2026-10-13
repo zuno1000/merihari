@@ -225,7 +225,7 @@ export function weeklyBuckets(daily, weekEndDow = 0) {
 }
 
 /**
- * 期間の目安のまとめ(v0.15.1): 毎日 → 届いた日数 / 期間の日数、毎週 → 期間にかかる週ごとの実績と目安、やりたいこと → ふれた日数と合計。
+ * 期間の習慣のまとめ(v0.15.1・v0.15.3 で dayList を追加): 毎日 → 届いた日数 / 期間の日数、毎週 → 期間にかかる週ごとの実績と目安、やりたいこと → ふれた日数と合計。dayList=[{key,min}] は日ごと(カレンダー用)。
  * 期限つきは出さない(タスク画面で見る)。戻り値 [{ taskId, name, categoryId, kind, ... }]
  */
 export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin = 1440 } = {}) {
@@ -233,15 +233,15 @@ export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin 
   const list = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const dayLogged = (t) => { const r = []; for (let d = from; d <= to; d = addDays(d, 1)) r.push({ key: d, min: loggedBetween(entries, t.id, d, d, nowDate, nowMin) }); return r; };
   for (const t of list) {
-    if (t.kind === 'wish') { const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', touchedDays: ds.filter((x) => x.min > 0).length, doneMin: ds.reduce((a, x) => a + x.min, 0), lastDate: lastLoggedDate(entries, t.id) }); continue; }
-    if (t.repeat?.type === 'daily') { const target = +t.repeat.min > 0 ? +t.repeat.min : 30; const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: target, days: ds.length, metDays: ds.filter((x) => x.min >= target).length, doneMin: ds.reduce((a, x) => a + x.min, 0) }); continue; }
+    if (t.kind === 'wish') { const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', touchedDays: ds.filter((x) => x.min > 0).length, doneMin: ds.reduce((a, x) => a + x.min, 0), lastDate: lastLoggedDate(entries, t.id), dayList: ds }); continue; }
+    if (t.repeat?.type === 'daily') { const target = +t.repeat.min > 0 ? +t.repeat.min : 30; const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: target, days: ds.length, metDays: ds.filter((x) => x.min >= target).length, doneMin: ds.reduce((a, x) => a + x.min, 0), dayList: ds }); continue; }
     if (t.repeat?.type === 'weekly') {
       const target = Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
       const weeks = [];
       let { from: wf, to: wt } = weekRange(t, from);
       while (wf <= to) { weeks.push({ end: wt, doneMin: loggedBetween(entries, t.id, wf, wt, nowDate, nowMin), targetMin: target, current: nowDate != null && wf <= nowDate && nowDate <= wt }); wf = addDays(wf, 7); wt = addDays(wt, 7); }
       for (const w of weeks) w.done = w.doneMin >= w.targetMin;
-      out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0) });
+      out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0), dayList: dayLogged(t) });
     }
   }
   return out.sort((a, b) => ({ daily: 0, weekly: 1, wish: 2 })[a.kind] - ({ daily: 0, weekly: 1, wish: 2 })[b.kind]);

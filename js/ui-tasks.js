@@ -183,7 +183,7 @@ export function renderTasks(view, ctx) {
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     section('きょうの目安があるもの', todayList, '期限から逆算して、きょうやる分があるものはありません。'),
     section('期限までに', duties, 'なし'),
-    section('毎日・毎週', repeats, 'なし'),
+    section('習慣', repeats, 'なし'),
     section('やりたいこと', wishes, 'なし'),
     el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
   ].filter(Boolean));

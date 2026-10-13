@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#2f6fcf"/><rect x="14" y="16" width="36" height="8" rx="4" fill="#fff"/><rect x="14" y="28" width="22" height="8" rx="4" fill="#fff" opacity=".85"/><rect x="14" y="40" width="30" height="8" rx="4" fill="#fff" opacity=".6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- merihari: 白地に「1日の円」。3 つのパステルの弧(作業・習慣・休憩)= メリハリ -->
+  <rect width="64" height="64" rx="14" fill="#ffffff"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#e6e8ec"/>
+  <g transform="rotate(-90 32 32)" fill="none" stroke-width="8.5" stroke-linecap="butt">
+    <circle cx="32" cy="32" r="20" stroke="#9ccbee" stroke-dasharray="60 65.66" stroke-dashoffset="0"/>
+    <circle cx="32" cy="32" r="20" stroke="#b4e3d2" stroke-dasharray="30 95.66" stroke-dashoffset="-65.2"/>
+    <circle cx="32" cy="32" r="20" stroke="#f9cfa8" stroke-dasharray="20 105.66" stroke-dashoffset="-100.4"/>
+  </g>
+  <circle cx="32" cy="32" r="4" fill="#2f6fcf"/>
+</svg>

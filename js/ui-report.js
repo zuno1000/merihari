@@ -8,6 +8,7 @@ import * as log from './log.js';
 import * as report from './report.js';
 import { displayColor, statusColor } from './palette.js';
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, DAY_JA, weekday, effectiveDay, dayCut } from './time.js';
+import { kindRole } from './store.js';
 
 const S = () => store.state.data.settings;
 function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : id, color: null, kind: 'work' }; }
@@ -118,7 +119,7 @@ function periodView(range, date, nowMin) {
     cmp,
     rows.length ? catBars(rows, ps.loggedDays) : null,
     rows.length ? trendFigure(trendItems, range === 'all' && ps.days > 42 ? '週ごとの推移' : `${ps.days} 日の推移`) : null,
-    gsum.length ? goalsBox(gsum, ps.days) : null,
+    gsum.length ? goalsBox(gsum, ps.days, from, to) : null,
     rows.length ? el('details.rep-details', [el('summary.muted.small', '表'), periodTable(rows, ps)]) : null,
   ];
 }
@@ -152,16 +153,57 @@ function catBars(rows, loggedDays) {
   ]);
 }
 
-/** 目安のふり返り(期間用): 毎日 → 届いた日 / 日数、毎週 → 週ごと、やりたいこと → ふれた日数 */
-function goalsBox(gsum, days) {
+/** 習慣のふり返り(期間用): 毎日 → 届いた日 / 日数、毎週 → 週ごと、やりたいこと → ふれた日数。行をタップでカレンダー(v0.15.3) */
+function goalsBox(gsum, days, from, to) {
   const row = (g) => {
     let meta, pct = 0;
     if (g.kind === 'daily') { meta = `毎日 ${fmtMinJa(g.targetMin)}・届いた日 ${g.metDays} / ${g.days} 日・合計 ${fmtMinJa(g.doneMin)}`; pct = g.days ? Math.round((g.metDays / g.days) * 100) : 0; }
     else if (g.kind === 'weekly') { meta = `毎週 ${fmtMinJa(g.targetMin)}・${g.weeks.map((w) => `${fmtMin(w.doneMin)}${w.done ? '✓' : ''}`).join(' / ')}`; pct = g.weeks.length ? Math.round((g.metWeeks / g.weeks.length) * 100) : 0; }
     else { meta = `やりたいこと・ふれた日 ${g.touchedDays} 日・合計 ${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後 ${fmtMD(g.lastDate)}` : ''}`; pct = days ? Math.round((g.touchedDays / days) * 100) : 0; }
-    return el('div.srow.goal', [el('span.gmain', [el('span.gname', [el('i.dot', { style: { background: colorOf(g.categoryId) } }), g.name]), el('span.gmeta', meta), el('span.meter', el('i', { style: { width: `${pct}%`, background: colorOf(g.categoryId) } }))])]);
+    return el('button.srow.goal', { type: 'button', 'aria-label': `${g.name} のカレンダーを開く`, onclick: () => habitCalendarSheet(g, from, to) }, [el('span.gmain', [el('span.gname', [el('span.gtag', { daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: colorOf(g.categoryId) } }), g.name]), el('span.gmeta', meta), el('span.meter', el('i', { style: { width: `${pct}%`, background: colorOf(g.categoryId) } }))]), el('span.chev', '›')]);
   };
-  return el('section.group', [el('h2', '目安のふり返り'), el('div.list', gsum.map(row))]);
+  return el('section.group', [el('h2', '習慣のふり返り'), el('div.list', gsum.map(row))]);
+}
+
+/**
+ * 習慣のカレンダー(v0.15.3): 期間を月曜始まりの週で並べ、日ごとの取り組みの濃さ(カテゴリ色)と、毎日の目安に届いた日の ✓。毎週型は右端に週の合計と ✓。
+ * 長い期間(すべて)は最近の 12 週だけ。
+ */
+function habitCalendarSheet(g, from, to) {
+  const color = colorOf(g.categoryId);
+  const ref = g.kind === 'daily' ? g.targetMin : g.kind === 'weekly' ? Math.max(15, Math.round(g.targetMin / 7)) : 60; // 濃さの基準(分)
+  const byKey = Object.fromEntries((g.dayList || []).map((d) => [d.key, d.min]));
+  let start = from;
+  while (weekday(start) !== 1) start = addDays(start, -1);          // 月曜まで戻す
+  let end = to;
+  while (weekday(end) !== 0) end = addDays(end, 1);                 // 日曜まで進める
+  const weeks = [];
+  for (let d = start; d <= end; d = addDays(d, 7)) weeks.push(d);
+  const shown = weeks.slice(-12);
+  const weekOf = (mon) => (g.weeks || []).find((w) => w.end === addDays(mon, 6));
+  const rows = shown.map((mon) => {
+    const cells = Array.from({ length: 7 }, (_, i) => {
+      const key = addDays(mon, i);
+      const inRange = key >= from && key <= to;
+      const min = byKey[key] || 0;
+      const ratio = Math.min(1, min / ref);
+      const met = g.kind === 'daily' && min >= g.targetMin;
+      return el('div.hc-cell', { class: `hc-cell${inRange ? '' : ' out'}${met ? ' met' : ''}`, style: inRange && min > 0 ? { background: `color-mix(in srgb, ${color} ${Math.round(18 + ratio * 62)}%, var(--card))` } : null, title: `${fmtMD(key)} ${fmtMin(min)}` }, [
+        el('span.hc-d', String(+key.slice(8, 10))), inRange && min > 0 ? el('span.hc-m', met ? '✓' : fmtMin(min)) : null,
+      ]);
+    });
+    const w = weekOf(mon);
+    const sum = g.kind === 'weekly' ? el('div.hc-week', { class: `hc-week${w?.done ? ' met' : ''}` }, w ? [el('span.hc-m', fmtMin(w.doneMin)), w.done ? el('span.hc-ok', '✓') : null] : '') : null;
+    return el('div.hc-row', [...cells, sum].filter(Boolean));
+  });
+  const head = el('div.hc-row.hc-head', [...['月', '火', '水', '木', '金', '土', '日'].map((d) => el('div.hc-cell.hc-h', d)), g.kind === 'weekly' ? el('div.hc-week.hc-h', '週') : null].filter(Boolean));
+  const meta = g.kind === 'daily' ? `毎日 ${fmtMinJa(g.targetMin)} の目安。届いた日は ✓` : g.kind === 'weekly' ? `毎週 ${fmtMinJa(g.targetMin)} の目安。右端は週の合計(届けば ✓)` : 'やりたいこと。色が濃いほど長く取り組んだ日';
+  sheet((close) => [
+    el('h2', [el('i.dot.big', { style: { background: color }, 'aria-hidden': 'true' }), g.name]),
+    el('p.muted.small', `${fmtMD(shown[0] < from ? from : shown[0])}〜${fmtMD(to)}・${meta}${weeks.length > 12 ? '(最近の 12 週)' : ''}`),
+    el('div.hc', [head, ...rows]),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]);
 }
 
 function periodTable(rows, ps) {
@@ -297,8 +339,8 @@ function bullets(r) {
 
 // ---- 推移(作業 / SNS・動画: 最後を強調、ほかは控えめ)。items: [{ key, label, workMin, driftMin }] ----
 function trendFigure(items, caption) {
+  const max = Math.max(30, ...items.flatMap((x) => [x.workMin, x.driftMin])); // 2 つの図は同じ期間・同じ目盛(v0.15.3)
   const chart = (label, key, color) => {
-    const max = Math.max(30, ...items.map((x) => x[key]));
     const n = items.length;
     return el('div.trend', [
       el('div.trend-title', label),

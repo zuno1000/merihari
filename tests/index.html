@@ -433,6 +433,9 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(gsum.map((g) => g.kind).join() === 'daily,weekly,wish' && gsum[0].metDays === 1 && gsum[0].days === 7 && gsum[0].doneMin === 30, 'goalsSummary: 毎日 → 届いた日数 / 日数(期限つきは出さない)');
     ok(gsum[1].weeks.length === 2 && gsum[1].weeks[0].end === '2026-10-11' && gsum[1].weeks[0].doneMin === 0 && gsum[1].weeks[1].doneMin === 60 && gsum[1].weeks[1].done && gsum[1].weeks[1].current && gsum[1].metWeeks === 1, 'goalsSummary: 毎週 → 期間にかかる週ごとの実績と目安(今週は current)');
     ok(gsum[2].touchedDays === 1 && gsum[2].doneMin === 20 && gsum[2].lastDate === '2026-10-12', 'goalsSummary: やりたいこと → ふれた日数・合計・最後の日');
+    ok(gsum[0].dayList.length === 7 && gsum[0].dayList[5].key === '2026-10-12' && gsum[0].dayList[5].min === 30 && gsum[1].dayList.length === 7 && gsum[1].dayList[6].min === 60, 'goalsSummary(v0.15.3): dayList に日ごとの分(カレンダー用)');
+    const palS = S.migrate({ schema: 1, settings: { palette: 'vivid', categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
+    ok(palS.palette === 'vivid' && palS.categories[0].color === '#2a78d6' && S.migrate({ schema: 1, settings: { palette: 5 } }).settings.palette === null, 'migrate(v0.15.3): 配色のプリセットを選んだあとは旧既定色を置き換えない・palette は文字列だけ');
 
     // ---- 版規約(§9) ----
     log('\n# version');
@@ -444,7 +447,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- 画面(骨組み) ----
     log('\n# ui');
     const doc = W.document;
-    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4, 'タブは4つ(ホーム/タイムライン/タスク/設定)');
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4 && doc.querySelector('#tabs #tab-add'), 'タブは4つ(ホーム/タイムライン/タスク/設定)+ 中央の ＋(v0.15.3)');
     ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
     ok(!!doc.querySelector('#view h1, #view .today-head'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');

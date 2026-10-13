@@ -36,6 +36,22 @@ const gapMin = () => (Number.isFinite(+S().gapAbsorbMin) ? +S().gapAbsorbMin : 1
 function commitTidy(entries, date) { commit(log.closeSmallGaps(entries, date, gapMin(), LCTX)); }
 /** 予定(busy)の記憶キー: 曜日 + 開始時刻(15 分丸め)。予定の内容は使わない */
 export function busyKey(date, startMin) { return `${weekday(date)}:${Math.round((startMin % 1440) / 15) * 15}`; }
+let timelineDate = null; // いま開いているタイムラインの日(今日なら null)。タブバーの ＋ が過去の日に記録を足すために使う
+/** タブバーの ＋(v0.15.3): ホーム/タスク/設定では記録のシート、過去の日のタイムラインではその日に記録を足すシート */
+export function openAdd(current, rerender) {
+  const n = effNow();
+  if (current === 'timeline' && timelineDate && timelineDate !== n.date) { entrySheet({ date: timelineDate, start: 540, end: 600 }, rerender); return; }
+  chipsSheet(n, rerender);
+}
+/** タブバーの ＋ の見た目(記録中なら ●) */
+export function refreshAddButton() {
+  const b = document.getElementById('tab-add');
+  if (!b) return;
+  const o = store.state.data ? log.openEntry(E()) : null;
+  b.classList.toggle('rec', !!o);
+  b.textContent = o ? '●' : '＋';
+  b.setAttribute('aria-label', o ? '記録中(タップで切り替え・終了)' : '記録する');
+}
 const taskName = (taskId, cid) => (taskId && T()[taskId] ? T()[taskId].name : catOf(cid).name);
 
 // ---- 記録操作(UI・URL から呼ぶ) ----
@@ -49,6 +65,7 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null }, LCTX);
   if (r.ignored) { toast(`${catOf(categoryId).name} を記録中です`); return r; }
   commit(log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX)); // v0.12: 直前の記録との数分のすき間は次の記録に含める
+  refreshAddButton();
   const nm = taskName(extra.taskId, categoryId);
   toast(startMin == null ? `${nm} を開始` : `${mm(startMin)} から ${nm}`);
   sync.autoSync();
@@ -60,6 +77,7 @@ export function stopRecording(at = null) {
   const r = log.stop(E(), { date: n.date, nowMin: n.min, at, windowEndOf }, LCTX);
   if (!r.closed) { toast('記録中のものはありません'); return r; }
   commit(r.entries);
+  refreshAddButton();
   toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
   sync.autoSync();
   return r;
@@ -163,8 +181,8 @@ export function renderNow(view, ctx) {
   view.append(...[
     el('div.today-head', [el('b', md(e.date))]),
     hero?.node, breakdown(e, rerender), goalsBox(e, rerender), freshLine(e, rerender),
-    reportFab(e.date, unseenYesterday(e), 'week'), fab(e, rerender),
   ].filter(Boolean));
+  timelineDate = null;
   const key = homeKey(e);
   ctx.setTick(() => {
     const m = nowInfo();
@@ -217,7 +235,7 @@ function breakdown(n, rerender) {
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const work = Object.entries(totals).filter(([id]) => store.catRole(S(), id).work).reduce((a, [, v]) => a + v, 0);
   const un = report.unlogged(E(), n.date, W, n.min);
-  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? 'きょうの記録' : 'まだ記録なし')]);
+  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? 'きょうの記録' : 'まだ記録なし'), el('span.pie-hint', 'レポート ›')]);
   const pie = pieFigure(E(), n.date, W, n.min, { workMin: work }, { size: 220, stroke: 34, center });
   const rows = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min, c: catOf(id) }));
   const max = Math.max(1, ...rows.map((r) => r.min)); // 棒はカテゴリの最大を 100% に(未記録が大きい日でもカテゴリの差が見える)
@@ -236,9 +254,18 @@ function breakdown(n, rerender) {
       el('span.cbar', el('i', { style: { width: `${Math.min(100, Math.round((un.unloggedMin / max) * 100))}%`, background: 'var(--line)' } })),
     ]));
   }
+  // 円のタップでレポート(v0.15.3: 小ボタンは廃止)。昨日のレポートが未読なら赤い点を付け、最初のタップは昨日を開く
+  const unseen = unseenYesterday(n);
+  const wrap = pie ? pie.querySelector('.pie-wrap') : el('div.pie-wrap.empty', { style: { width: '220px', height: '220px' } }, center);
+  wrap.classList.add('tap');
+  wrap.setAttribute('role', 'button'); wrap.setAttribute('tabindex', '0'); wrap.setAttribute('aria-label', unseen ? '昨日のレポート(未読)を開く' : 'レポートを開く');
+  if (unseen) wrap.append(el('i.pie-badge', { 'aria-hidden': 'true' }));
+  const openReport = () => { if (unseen) { store.state.local.reportSeen = unseen; store.saveLocal(); rerender(); reportSheet(unseen, 'day'); return; } reportSheet(n.date, 'week'); }; // 既読にしたら赤い点を消す(描き直してからシート)
+  wrap.addEventListener('click', openReport);
+  wrap.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openReport(); } });
   return el('section.breakdown', [
-    pie ? pie.querySelector('.pie-wrap') : el('div.pie-wrap.empty', { style: { width: '220px', height: '220px' } }, center),
-    list.length ? el('div.crows', list) : el('p.muted.small.center', '記録は右下の ＋ から。タイムラインの未記録をタップしても足せます。'),
+    wrap,
+    list.length ? el('div.crows', list) : el('p.muted.small.center', '記録は下の ＋ から。タイムラインの未記録をタップしても足せます。'),
   ]);
 }
 
@@ -261,7 +288,7 @@ function goalsBox(n, rerender) {
       el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : `${g.name} をいまから記録`, title: 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
     ]);
   };
-  return el('section.group', [el('h2', 'タスクと習慣'), el('p.muted.small.gnote', 'きょうの分の目安と、済んだ分。▶ でいまから、行のタップで後から記録。'), el('div.list', gs.map(row))]);
+  return el('section.group', [el('h2', 'タスクと習慣'), el('div.list', gs.map(row))]);
 }
 
 /** 鮮度と同期の1行(§4.1) */
@@ -281,27 +308,10 @@ function freshLine(n, rerender) {
   return rows.length ? el('div.list.freshline', rows) : null;
 }
 
-/** 昨日のレポートがまだ見られていなければその日付(v0.14: レポートの小ボタンにバッジ) */
+/** 昨日のレポートがまだ見られていなければその日付(v0.14: バッジ。v0.15.3: ホームの円に赤い点) */
 function unseenYesterday(n) {
   const y = addDays(n.date, -1);
   return store.state.data.reports[y] && store.state.local.reportSeen !== y ? y : null;
-}
-/** レポートへの入口は ＋ の上の小さなボタン1つ(v0.12)。昨日の未読があればバッジを出し、最初のタップは昨日のレポートを開く(v0.14) */
-function reportFab(date, unseen = null, range = 'day') {
-  const open = () => {
-    if (unseen) { store.state.local.reportSeen = unseen; store.saveLocal(); reportSheet(unseen, 'day'); return; }
-    reportSheet(date, range);
-  };
-  const b = el('button.fab.fab2', { type: 'button', class: `fab fab2${unseen ? ' badge' : ''}`, 'aria-label': unseen ? '昨日のレポート(未読)' : 'レポート', title: unseen ? '昨日のレポート' : 'レポート', onclick: open },
-    svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 20V10M10 20V4M16 20v-8M22 20H2' })]));
-  if (unseen) b.append(el('i.fab-badge', { 'aria-hidden': 'true' }));
-  return b;
-}
-
-// ---- ＋(記録の入口) ----
-function fab(n, rerender, date = null) {
-  const o = log.openEntry(E());
-  return el('button.fab', { type: 'button', 'aria-label': '記録する', class: `fab${o ? ' rec' : ''}`, onclick: () => (date && date !== n.date ? entrySheet({ date, start: 540, end: 600 }, rerender) : chipsSheet(n, rerender)) }, o ? '●' : '＋');
 }
 
 /**
@@ -429,7 +439,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const nav = el('div.tl-nav', [
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
-    el('b', md(date)),
+    el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), el('span.muted.small', ' ▤')]),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
     el('span.grow'),
@@ -437,7 +447,8 @@ export function renderTimeline(view, ctx, dateArg = null) {
   ]);
   const busy = [...google.busyForDate(date), ...(ds > 0 ? google.busyForDate(next).filter((b) => b.start < ds).map((b) => ({ ...b, start: b.start + 1440, end: Math.min(ds, b.end) + 1440 })) : [])];
   const tl = buildTimeline({ date, ds, nowRel, busy, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], showNow, gapUpto, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
-  view.append(...[nav, tl.node, reportFab(date), fab(e, rerender, showNow ? null : date)].filter(Boolean));
+  view.append(nav, tl.node);
+  timelineDate = showNow ? null : date;
   if (showNow) {
     ctx.setTick(() => { const m = nowInfo(); const em = effectiveDay(S(), m.date, m.min); if (em.date !== date) { ctx.go('timeline'); return; } tl.tick(em.min); });
     // 開いたら現在時刻が見えるところへ(v0.11)。main.js の go() が先頭に戻したあとに動かす

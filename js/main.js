@@ -10,12 +10,13 @@ import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import { toast, el } from './ui.js';
 import * as ui from './ui.js';
-import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending } from './ui-today.js';
+import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton } from './ui-today.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.15.2';
+export const APP_VERSION = '0.15.3';
 export const NEWS = [
+  { v: '0.15.3', text: '記録の入口を右下の浮いたボタンからタブバー中央の ＋ に移しました(行の ▶ と重ならない。記録中は ●)。レポートの小ボタンは廃止し、ホームの円をタップするとレポート(7 日)、タイムラインの日付をタップするとその日のレポートが開きます(昨日が未読なら円に赤い点)。ホームの「タスクと習慣」の説明文を消し、設定 › 使い方 にまとめました。設定 › カテゴリ に「配色をまとめて変える」(パステル / やわらか / くっきり / しずか)。レポートの推移は 作業 と ダラダラ を上下に並べ、同じ期間・同じ目盛にしました。レポートの「目安のふり返り」は「習慣のふり返り」になり、行をタップするとカレンダー(日ごとの取り組みの濃さ・届いた日の ✓・毎週は週の合計)が開きます。タスク画面の「毎日・毎週」は「習慣」に。アプリのアイコンを白地のシンプルなものに変えました(ホーム画面に追加し直すと反映されます)。' },
   { v: '0.15.2', text: '配色: 緑を薄く、オレンジをピーチに(全体をさらに淡いパステルに。旧既定色は自動で移行)。設定 › カテゴリ で色をパレット・カラーピッカー・カラーコード(#RRGGBB)で自由に変えられます。カテゴリは「削除」ではなく「非表示」に: これまでの記録は名前と色のまま残り、集計にも入ります(あとから表示に戻せます)。設定 › 種別: 種別を増やしたり減らしたりでき(例: 決まった作業=授業・バイト、作業=研究、趣味)、種別ごとに「作業として数える」「ダラダラとして数える」を決められます(既定で 授業・バイト は「決まった作業」に移しました)。タイムライン: カレンダーの予定は記録の無いところにだけ描き、記録したらその部分の予定は消えます(文字が重なりません)。過去の予定の時間は「予定の時間は?」(覚えたカテゴリがあれば「予定: 授業?」)のボタンになり、そのまま記録できます。ホームは記録だけに: 最上段の「何をしていた?」と「つぎは ◯◯?」の行をやめ、内訳の「未記録」の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)が開きます。「きょうの目安」は「タスクと習慣」に改め、行ごとに 期限/毎日/毎週/やりたい のタグを付けました(きょうの分の目安と済んだ分)。' },
   { v: '0.15.1', text: 'ホームの「◯分 未記録。何をしていた?」を 2 行(時刻と分 / 問い)にして、言葉の途中で折り返さないようにしました。既定のカテゴリ色をパステル(さわやか)に変え、チップにも色の地を付けました(自分で変えた色はそのまま)。レポートは上の切替で 今日 / 7日 / 30日 / すべて をふり返れます(ホームの小ボタンからは 7 日で開きます。昨日の未読があれば昨日)。期間では 記録の内訳の円・カテゴリ別の合計と 1 日平均・前の同じ期間との比較・日(または週)ごとの推移・目安のふり返り(毎日: 届いた日数、毎週: 週ごと、やりたいこと: ふれた日数)。促し: 未記録が無いときはホームの 1 行に「つぎは ◯◯?」(まだ届いていない目安を 1 つ・タップで後から記録・▶ でいまから)。きょうの目安の行の右にも ▶(いまから)。' },
   { v: '0.15.0', text: '理想スケジュール(時間割)をやめ、記録アプリに切り替えました。タスクや予定を正確に入れないと理想が実態とずれてしまうためです。ホームは「きょうの内訳」(1日の円とカテゴリ別の一覧・未記録も)が主役で、記録中でなければ「◯分 未記録。何をしていた?」の 1 行を出します。＋のシートは「時刻を決めて」が既定: 開始(最後の記録の終わり)〜終了(いま)が先に入っていて、カテゴリを 1 回タップで記録(後から足すのが基本)。「いまから」はタイマー。タイムラインは実績 1 レーンになり、カレンダーの予定は薄い背景に(未記録なら「予定の時間は?」で記録し、選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます)。ドラッグ・長押し・「この時間は?」「寝ていた?」はそのまま。「きょうの目安」: 期限のあるタスクは 残り ÷ 期限までの日数、毎日 ◯分(旧「毎日の習慣」はタスクに移しました)、毎週 ◯時間、やりたいこと(この 7 日と最後にふれた日)。タスクの追加は名前の 1 行だけ。触ると いつまで(今日/明日/今週/来週/日付…/毎日/毎週/いつか)・どれくらい・カテゴリ のチップが出ます。レポートから理想との比較を外し、先週の平均と目安だけを見ます。設定から 生活ルーティン・習慣・休憩の方針・移動 を外しました(はじめの設定は作業時間帯だけ)。' },
@@ -75,6 +76,7 @@ function go(tab, arg) {
   store.state.local.uiState = Object.assign({}, store.state.local.uiState, { tab });
   store.saveLocal();
   screens[tab](arg);
+  refreshAddButton();
   window.scrollTo(0, 0);
   sync.autoSync();
 }
@@ -82,6 +84,8 @@ tabs.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
   if (b) go(b.dataset.tab);
 });
+// 記録の入口はタブバー中央の ＋(v0.15.3: 右下の浮いたボタンは行の ▶ と重なるのでやめた)
+document.getElementById('tab-add').addEventListener('click', () => { if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return; } openAdd(current, () => screens[current]()); });
 
 // 最後に触った時刻(F1-4 の候補に使う)。分が変わったときだけ保存
 function markActive() {
@@ -128,7 +132,7 @@ if (!firstRun) sync.autoSyncOnOpen();
 document.addEventListener('click', () => { sync.autoSyncOnGesture(); }, { capture: true });
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
-setInterval(() => { try { if (tickFn) tickFn(); } catch (e) { console.error(e); } }, 15000);
+setInterval(() => { try { if (tickFn) tickFn(); refreshAddButton(); } catch (e) { console.error(e); } }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();

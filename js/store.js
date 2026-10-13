@@ -65,6 +65,7 @@ export function defaultSettings() {
     habitsMigrated: true,    // v0.15: 旧「毎日の習慣」をタスク(毎日 ◯分)へ移したか
     kinds: defaultKinds(),   // v0.15.2: 種別(増減できる)
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
+    palette: null,           // v0.15.3: 選んだ配色のプリセット(null=既定。選ぶと旧既定色の自動置き換えをしない)
     categories: defaultCategories(),
     settingsUpdatedAt: null,
   };
@@ -118,7 +119,7 @@ function normalizeSettings(raw) {
         kind: typeof c.kind === 'string' && kindIds.has(c.kind) ? c.kind : kindFallback,
         archived: c.archived === true, // v0.15.2: 消す代わりに非表示(記録は名前と色のまま残る)
         color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
-          ? ((LEGACY_COLORS[c.id] || []).includes(c.color.toLowerCase()) ? DEFAULT_COLORS[c.id] : c.color) // 過去の既定色は新しい既定色へ(自分で選んだ色は保持)
+          ? (!raw.palette && (LEGACY_COLORS[c.id] || []).includes(c.color.toLowerCase()) ? DEFAULT_COLORS[c.id] : c.color) // 過去の既定色は新しい既定色へ(自分で選んだ色・配色のプリセットを選んだあとは保持)
           : (DEFAULT_COLORS[c.id] || DEFAULT_COLORS.life),
         order: Number.isFinite(+c.order) ? +c.order : i + 1,
       }));
@@ -129,6 +130,7 @@ function normalizeSettings(raw) {
   s.kindSchema = Number.isFinite(+raw.kindSchema) ? +raw.kindSchema : 0;
   if (s.kindSchema < 1) { if (!kindsRaw && kindIds.has('fixed')) for (const c of s.categories) if ((c.id === 'class' || c.id === 'job') && c.kind === 'work') c.kind = 'fixed'; s.kindSchema = 1; }
   // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
+  s.palette = typeof raw.palette === 'string' && raw.palette.length <= 20 ? raw.palette : null;
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
