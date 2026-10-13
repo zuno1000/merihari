@@ -49,7 +49,8 @@ export function refreshAddButton() {
   if (!b) return;
   const o = store.state.data ? log.openEntry(E()) : null;
   b.classList.toggle('rec', !!o);
-  b.textContent = o ? '●' : '＋';
+  // 文字の ＋ は字面の中で上に寄るので SVG で描く(v0.15.4)
+  b.replaceChildren(svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, o ? [svg('circle', { cx: 12, cy: 12, r: 6 })] : [svg('path', { d: 'M12 5v14M5 12h14' })]));
   b.setAttribute('aria-label', o ? '記録中(タップで切り替え・終了)' : '記録する');
 }
 const taskName = (taskId, cid) => (taskId && T()[taskId] ? T()[taskId].name : catOf(cid).name);

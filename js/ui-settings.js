@@ -47,6 +47,7 @@ const summary = {
   logging() { const s = S(); const g = +s.gapAbsorbMin || 0; return (s.startFromLast ? '最後の記録から・' : '') + (g ? `${g}分までのすき間は次の記録に含める` : 'すき間はそのまま'); },
   categories() { const c = S().categories.filter((x) => !x.archived).sort((a, b) => a.order - b.order); return `${c.slice(0, 4).map((x) => x.name).join('・')}${c.length > 4 ? ` …全${c.length}件` : ''}`; },
   kinds() { const k = S().kinds || []; return `${k.slice(0, 4).map((x) => x.name).join('・')}${k.length > 4 ? ` …全${k.length}件` : ''}`; },
+  palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット ${(s.palettes || []).length} 件`; },
 };
 
 // ---- 編集部品(ウィザードと項目画面で共有) ----
@@ -118,22 +119,72 @@ function sectionCategories(rerender) {
       el('div.row.colorrow', [el('span.label', '色'), pick, hex, swatches]),
     ]);
   });
-  // 配色をまとめて変える(v0.15.3): id が既定のものはプリセットの色、それ以外は順に
-  const applyPalette = (key) => {
-    const p = PALETTES[key]; if (!p) return;
-    let i = 0;
-    for (const c of s.categories) { c.color = p.colors[c.id] || p.extra[i++ % p.extra.length]; }
-    s.palette = key; store.touchSettings(); rerender(); toast(`配色を「${p.name}」にしました`);
-  };
-  const paletteRow = el('div.chips.small', Object.entries(PALETTES).map(([key, p]) => el('button.chip.sm2.pal', { type: 'button', class: `chip sm2 pal${s.palette === key ? ' on' : ''}`, onclick: () => confirmSheet(`配色を「${p.name}」にしますか?`, 'すべてのカテゴリの色をまとめて変えます(あとから 1 つずつ変えられます)。', '変える', () => applyPalette(key)) }, [el('span.pal-dots', ['research', 'class', 'english', 'rest', 'sns'].map((id) => el('i', { style: { background: p.colors[id] } }))), p.name])));
-  return card('カテゴリ', '記録と集計の単位。色はパレットから選ぶか、カラーコード(#RRGGBB)で指定できます。消す代わりに「非表示」にするので、これまでの記録は消えません。',
-    el('div.row.field', [el('span.label', '配色をまとめて変える')]), paletteRow,
+  return card('カテゴリ', '記録と集計の単位。色はパレットから選ぶか、カラーコード(#RRGGBB)で指定できます(まとめて変えるには 設定 › 配色)。消す代わりに「非表示」にするので、これまでの記録は消えません。',
     ...rows,
     addBtn('カテゴリを追加', () => {
       s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false });
       store.touchSettings(); rerender();
     }),
     archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('span.grow', c.name), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
+}
+
+/**
+ * 配色(v0.15.4): 配色セットの一覧(組み込み + 自分のセット)。適用するとカテゴリの色がまとめて切り替わる。
+ * 自分のセットは「いまの色を保存」「組み込みを複製」から作り、名前とカテゴリごとの色を編集できる。
+ */
+function sectionPalettes(rerender) {
+  const s = S();
+  const live = s.categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
+  const builtin = Object.entries(PALETTES).map(([id, p]) => ({ id, name: p.name, colors: p.colors, extra: p.extra, builtin: true }));
+  const mine = s.palettes || [];
+  const colorsOf = (p) => { let i = 0; return live.map((c) => p.colors[c.id] || (p.extra ? p.extra[i++ % p.extra.length] : c.color)); };
+  const apply = (p) => {
+    const cols = colorsOf(p);
+    live.forEach((c, i) => { c.color = cols[i]; });
+    s.palette = p.id; store.touchSettings(); rerender(); toast(`配色「${p.name}」を適用しました`);
+  };
+  const snapshot = (name, base = null) => ({ id: 'p_' + store.uid().slice(0, 8), name, colors: Object.fromEntries(live.map((c, i) => [c.id, base ? colorsOf(base)[i] : c.color])) });
+  const row = (p) => el('div.item.palrow', [
+    el('div.row', [
+      el('span.pal-dots.big', colorsOf(p).slice(0, 8).map((x) => el('i', { style: { background: x } }))),
+      el('span.grow', { style: { fontSize: '15px' } }, [p.name, s.palette === p.id ? el('span.gok', ' ✓ 適用中') : null]),
+    ]),
+    el('div.row.wrap', [
+      el('button.btn.sm.primary', { type: 'button', onclick: () => apply(p) }, '適用'),
+      p.builtin ? el('button.btn.sm', { type: 'button', onclick: () => { s.palettes = [...mine, snapshot(`${p.name} のコピー`, p)]; store.touchSettings(); rerender(); toast('自分のセットに複製しました'); } }, '複製して編集')
+        : el('button.btn.sm', { type: 'button', onclick: () => editPaletteSheet(p, live, rerender) }, '編集'),
+      p.builtin ? null : el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`配色「${p.name}」を削除しますか?`, 'いまのカテゴリの色はそのままです。', '削除', () => { s.palettes = mine.filter((x) => x !== p); if (s.palette === p.id) s.palette = null; store.touchSettings(); rerender(); }, true) }, '削除'),
+    ]),
+  ]);
+  return card('配色', '配色セットを適用すると、カテゴリの色がまとめて切り替わります。自分のセットは「いまの色を保存」か組み込みの「複製して編集」から作り、カテゴリごとの色を編集できます。',
+    el('h3.help-h', '自分のセット'),
+    ...(mine.length ? mine.map(row) : [el('p.muted.small', 'まだありません。')]),
+    addBtn('いまの色を保存', () => { const p = snapshot(`配色 ${mine.length + 1}`); s.palettes = [...mine, p]; s.palette = p.id; store.touchSettings(); rerender(); toast('いまの色を保存しました'); }),
+    el('h3.help-h', '組み込み'),
+    ...builtin.map(row));
+}
+/** 自分の配色セットの編集: 名前と、カテゴリごとの色(ピッカー / カラーコード)。変えた時点で保存。「適用」でカテゴリの色に反映 */
+function editPaletteSheet(p, live, rerender) {
+  const s = S();
+  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
+  const name = el('input.text', { type: 'text', value: p.name, maxlength: 40, 'aria-label': 'セット名', onchange: (e) => { p.name = e.target.value.trim() || p.name; store.touchSettings(); } });
+  const rows = live.map((c) => {
+    const cur = () => p.colors[c.id] || c.color;
+    const dot = el('span.dot.big', { style: { background: cur() }, 'aria-hidden': 'true' });
+    const set = (v, persist = true) => { p.colors[c.id] = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
+    const hex = el('input.text.hex', { type: 'text', value: cur(), maxlength: 7, autocomplete: 'off', spellcheck: false, 'aria-label': `${c.name} のカラーコード`, onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) set(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = cur(); } } });
+    const pick = el('input.color', { type: 'color', value: cur(), 'aria-label': `${c.name} の色`, oninput: (e) => set(e.target.value, false), onchange: (e) => set(e.target.value) });
+    return el('div.row.field', [dot, el('span', { style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.name), pick, hex]);
+  });
+  sheet((close) => [
+    el('h2', '配色セットを編集'),
+    el('label.field.col', [el('span.label', '名前'), name]),
+    el('div.col', rows),
+    el('div.row', [
+      el('button.btn', { type: 'button', onclick: () => { close(); rerender(); } }, '閉じる'),
+      el('button.btn.primary.grow', { type: 'button', onclick: () => { live.forEach((c) => { if (p.colors[c.id]) c.color = p.colors[c.id]; }); s.palette = p.id; store.touchSettings(); close(); rerender(); toast(`配色「${p.name}」を適用しました`); } }, '適用して閉じる'),
+    ]),
+  ]);
 }
 
 /** 種別(v0.15.2): カテゴリを束ねる区分。レポートの「作業」に数えるか・「ダラダラ」として数えるかを持つ。使っている種別は消せない */
@@ -197,11 +248,13 @@ function sectionHelp() {
   const li = (items) => el('ul.help-ul', items.map((t) => el('li', t)));
   return el('div.help', [
     h('4つの画面'),
-    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。円をタップするとレポート(7日/30日/すべて/今日。昨日が未読なら赤い点が付き、最初のタップで昨日を開きます)。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。下に「タスクと習慣」: 期限・毎日・毎週・やりたい のタグ付きで、きょうの分の目安と済んだ分。行のタップで後から記録、右の ▶ でいまから記録。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。日付をタップするとその日のレポート。開くと現在時刻の位置に移ります。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。', 'タスク: 名前を入れて Enter。触ると いつまで / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '設定: 作業時間帯・カテゴリ(名前・色・種別・非表示・配色をまとめて変える)・種別(作業/ダラダラとして数えるか)・すき間・Google。']),
+    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。円をタップするとレポート(7日/30日/すべて/今日。昨日が未読なら赤い点が付き、最初のタップで昨日を開きます)。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。下に「タスクと習慣」: 期限・毎日・毎週・やりたい のタグ付きで、きょうの分の目安と済んだ分。行のタップで後から記録、右の ▶ でいまから記録。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。日付をタップするとその日のレポート。開くと現在時刻の位置に移ります。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。', 'タスク: 名前を入れて Enter。触ると いつまで / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '設定: 作業時間帯・カテゴリ(名前・色・種別・非表示)・種別(作業/ダラダラとして数えるか)・配色(セットの保存・編集・適用)・すき間・Google。']),
     h('記録する(下の ＋)'),
     li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを 1 回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、タスクと習慣の行、タイムラインの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが 10 分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00 など)なら、0:00 を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分 の順にタップ。分はなぞると 1 分刻み、下の −5/−1/+1/+5 でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5 分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
+    h('配色'),
+    li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます。']),
     h('タスクと目安'),
     li(['タスク画面は 期限切れ / きょうの目安があるもの / 期限までに / 習慣(毎日・毎週) / やりたいこと / 完了。名前を入れて Enter で追加、触ると いつまで / どれくらい / カテゴリ のチップが出ます。', '期限のあるタスク: 残り ÷ 期限までの日数 が「きょうの目安」。期限が近づくほど増えます。期限を過ぎたら朝に 1 回「+1週 / 半分にして +1週 / 完了 / 消す」を聞きます。', '毎日 ◯分: 毎日の目安(英語など)。きょうの記録と比べます。', '毎週 ◯時間: 週の目安。週(日曜まで)の記録と比べ、週が変わると「先週 x/yh」を残して戻します。', 'やりたいこと: 目安は持ちません。この 7 日の記録と最後にふれた日を出し、1 週間ふれていなければレポートの「明日への一言」で思い出させます。', '目安は「予定」ではありません。入れなくても責めませんし、いつやるかはあなたが決めます。']),
     h('レポート'),
@@ -218,6 +271,7 @@ const SECTIONS = {
   help: { title: '使い方', build: () => sectionHelp() },
   categories: { title: 'カテゴリ', build: (re) => sectionCategories(re) },
   kinds: { title: '種別', build: (re) => sectionKinds(re) },
+  palettes: { title: '配色', build: (re) => sectionPalettes(re) },
   logging: { title: '記録のすき間', build: () => sectionLogging() },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
@@ -311,6 +365,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('作業時間帯', summary.window(), open('window')),
       srow('カテゴリ', summary.categories(), open('categories')),
       srow('種別', summary.kinds(), open('kinds')),
+      srow('配色', summary.palettes(), open('palettes')),
       srow('すき間', summary.logging(), open('logging')),
     ]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),

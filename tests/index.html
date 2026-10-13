@@ -436,6 +436,8 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(gsum[0].dayList.length === 7 && gsum[0].dayList[5].key === '2026-10-12' && gsum[0].dayList[5].min === 30 && gsum[1].dayList.length === 7 && gsum[1].dayList[6].min === 60, 'goalsSummary(v0.15.3): dayList に日ごとの分(カレンダー用)');
     const palS = S.migrate({ schema: 1, settings: { palette: 'vivid', categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
     ok(palS.palette === 'vivid' && palS.categories[0].color === '#2a78d6' && S.migrate({ schema: 1, settings: { palette: 5 } }).settings.palette === null, 'migrate(v0.15.3): 配色のプリセットを選んだあとは旧既定色を置き換えない・palette は文字列だけ');
+    const myP = S.migrate({ schema: 1, settings: { palettes: [{ id: 'p1', name: 'mine', colors: { research: '#ABCDEF', sns: 'bad', '__proto__': '#000000' } }, { noId: 1 }, 'x'] } }).settings.palettes;
+    ok(myP.length === 1 && myP[0].id === 'p1' && myP[0].colors.research === '#abcdef' && !('sns' in myP[0].colors) && Object.keys(myP[0].colors).length === 1 && S.migrate(null).settings.palettes.length === 0, 'migrate(v0.15.4): 自分の配色セットは id と #RRGGBB の色だけを通す');
 
     // ---- 版規約(§9) ----
     log('\n# version');

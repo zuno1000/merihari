@@ -1,11 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- merihari: 白地に「1日の円」。3 つのパステルの弧(作業・習慣・休憩)= メリハリ -->
+  <!-- merihari: 白地に「1日の円」。Pastel Color Pt.2(#8869a5 #c58ade #b1beea #90c4e9 #8095ce)の弧 5 本 = メリハリ -->
   <rect width="64" height="64" rx="14" fill="#ffffff"/>
-  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#e6e8ec"/>
-  <g transform="rotate(-90 32 32)" fill="none" stroke-width="8.5" stroke-linecap="butt">
-    <circle cx="32" cy="32" r="20" stroke="#9ccbee" stroke-dasharray="60 65.66" stroke-dashoffset="0"/>
-    <circle cx="32" cy="32" r="20" stroke="#b4e3d2" stroke-dasharray="30 95.66" stroke-dashoffset="-65.2"/>
-    <circle cx="32" cy="32" r="20" stroke="#f9cfa8" stroke-dasharray="20 105.66" stroke-dashoffset="-100.4"/>
+  <!-- 円周 2π·20 = 125.66。弧の長さ 44 / 26 / 18 / 14 / 10、すき間 2.73 ×5 -->
+  <g transform="rotate(-90 32 32)" fill="none" stroke-width="9" stroke-linecap="butt">
+    <circle cx="32" cy="32" r="20" stroke="#8095ce" stroke-dasharray="44 81.66" stroke-dashoffset="0"/>
+    <circle cx="32" cy="32" r="20" stroke="#90c4e9" stroke-dasharray="26 99.66" stroke-dashoffset="-46.73"/>
+    <circle cx="32" cy="32" r="20" stroke="#b1beea" stroke-dasharray="18 107.66" stroke-dashoffset="-75.46"/>
+    <circle cx="32" cy="32" r="20" stroke="#c58ade" stroke-dasharray="14 111.66" stroke-dashoffset="-96.19"/>
+    <circle cx="32" cy="32" r="20" stroke="#8869a5" stroke-dasharray="10 115.66" stroke-dashoffset="-112.92"/>
   </g>
-  <circle cx="32" cy="32" r="4" fill="#2f6fcf"/>
+  <circle cx="32" cy="32" r="4.5" fill="#8869a5"/>
 </svg>

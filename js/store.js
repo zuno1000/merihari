@@ -65,7 +65,8 @@ export function defaultSettings() {
     habitsMigrated: true,    // v0.15: 旧「毎日の習慣」をタスク(毎日 ◯分)へ移したか
     kinds: defaultKinds(),   // v0.15.2: 種別(増減できる)
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
-    palette: null,           // v0.15.3: 選んだ配色のプリセット(null=既定。選ぶと旧既定色の自動置き換えをしない)
+    palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
+    palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
     categories: defaultCategories(),
     settingsUpdatedAt: null,
   };
@@ -130,7 +131,8 @@ function normalizeSettings(raw) {
   s.kindSchema = Number.isFinite(+raw.kindSchema) ? +raw.kindSchema : 0;
   if (s.kindSchema < 1) { if (!kindsRaw && kindIds.has('fixed')) for (const c of s.categories) if ((c.id === 'class' || c.id === 'job') && c.kind === 'work') c.kind = 'fixed'; s.kindSchema = 1; }
   // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
-  s.palette = typeof raw.palette === 'string' && raw.palette.length <= 20 ? raw.palette : null;
+  s.palette = typeof raw.palette === 'string' && raw.palette.length <= 40 ? raw.palette : null;
+  s.palettes = Array.isArray(raw.palettes) ? raw.palettes.filter((p) => isObj(p) && p.id).slice(0, 50).map((p) => { const colors = {}; if (isObj(p.colors)) for (const [k, v] of Object.entries(p.colors)) if (safeKey(k) && typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) colors[k] = v.toLowerCase(); return { id: String(p.id).slice(0, 40), name: String(p.name || '配色').slice(0, 40), colors }; }) : [];
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
