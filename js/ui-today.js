@@ -35,18 +35,34 @@ export function catOf(id) { const c = S().categories.find((x) => x.id === id) ||
  * log.* は純関数で前の entries を変更しないので、参照を控えるだけでよい。
  */
 const undoStack = [];
+const redoStack = []; // v0.15.10: 「戻す」を戻す(やり直し)。新しい変更をすると空になる
 export const undoCount = () => undoStack.length;
+export const redoCount = () => redoStack.length;
 export const undoLabel = () => (undoStack.length ? undoStack[undoStack.length - 1].label : '');
+export const redoLabel = () => (redoStack.length ? redoStack[redoStack.length - 1].label : '');
 function commit(entries, label = '記録の変更') {
-  if (store.state.data.entries !== entries) { undoStack.push({ label, entries: store.state.data.entries, at: Date.now() }); if (undoStack.length > 20) undoStack.shift(); }
+  if (store.state.data.entries !== entries) { undoStack.push({ label, entries: store.state.data.entries, at: Date.now() }); if (undoStack.length > 20) undoStack.shift(); redoStack.length = 0; }
   store.state.data.entries = entries; store.save();
 }
-/** ↶: 直前の変更を取り消す。戻した記録には新しい updatedAt を押す(同期で元に戻されない)。戻り値は取り消した操作の名前(無ければ null) */
+/** 控えの状態に戻す(戻す/やり直す の共通部)。戻した記録には新しい updatedAt を押す(同期で元に戻されない) */
+function applySnapshot(snap) {
+  store.state.data.entries = log.revertTo(store.state.data.entries, snap.entries, LCTX);
+  store.save(); refreshAddButton(); sync.autoSync();
+}
+/** ↶: 直前の変更を取り消す。戻り値は取り消した操作の名前(無ければ null) */
 export function undoLast() {
   const snap = undoStack.pop();
   if (!snap) return null;
-  store.state.data.entries = log.revertTo(store.state.data.entries, snap.entries, LCTX);
-  store.save(); refreshAddButton(); sync.autoSync();
+  redoStack.push({ label: snap.label, entries: store.state.data.entries, at: Date.now() });
+  applySnapshot(snap);
+  return snap.label;
+}
+/** ↷: 取り消しを戻す(やり直す)。戻り値はやり直した操作の名前(無ければ null) */
+export function redoLast() {
+  const snap = redoStack.pop();
+  if (!snap) return null;
+  undoStack.push({ label: snap.label, entries: store.state.data.entries, at: Date.now() });
+  applySnapshot(snap);
   return snap.label;
 }
 const gapMin = () => (Number.isFinite(+S().gapAbsorbMin) ? +S().gapAbsorbMin : 10);
@@ -461,6 +477,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), svg('svg', { class: 'tl-rep', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 20V10M10 20V4M16 20v-8M22 20H2' })])]),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), el('span.undo-t', undoCount() ? `戻す ${undoCount()}` : '戻す')]),
+    el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), el('span.undo-t', redoCount() ? `やり直す ${redoCount()}` : 'やり直す')]),
     el('span.grow'),
     showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
     el('span.muted.small.tl-total', total ? `記録 ${fmtMin(total)}` : ''),
