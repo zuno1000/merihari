@@ -15,7 +15,7 @@ iframe{width:390px;height:720px;border:1px solid #ccc;flex:none}
 <iframe id="app" src="../index.html" title="app under test"></iframe>
 <script>
 // 仕様書 §9: iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件。
-// 純関数だけを検証し、アプリの localStorage には触らない。
+// 純関数だけを検証し、アプリの localStorage には触らない。v0.15: 理想スケジュール(buildPlan ほか)のテストは廃止し、「目安」(plan.goals ほか)に置き換えた。
 if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
   document.body.textContent = 'localhost でのみ実行(python -m http.server 8000 → http://localhost:8000/tests/)';
   throw new Error('not localhost');
@@ -48,48 +48,40 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(T.windowFor(d, '2026-10-11'), { start: 480, end: 1380 }), 'windowFor: 日曜は 08:00〜23:00');
     ok(eq(T.windowFor(d, '2026-10-12'), { start: 420, end: 1410 }), 'windowFor: 月曜は 07:00〜23:30');
     ok(T.windowFor({ window: { mon: ['23:00', '07:00'] } }, '2026-10-12') === null, 'windowFor: 終了≦開始は null');
-    const rs = T.routinesFor(d, '2026-10-12');
-    ok(rs.length === 4 && rs[0].name === '朝食' && rs[3].end === 1380, 'routinesFor: 既定4件が開始順・end=start+min');
-    const dd = S.defaultSettings(); dd.routines[0].days = [1, 2, 3, 4, 5];
-    ok(T.routinesFor(dd, '2026-10-11').length === 3, 'routinesFor: 曜日指定で除外される');
-    dd.routines[1].off = true;
-    ok(T.routinesFor(dd, '2026-10-12').length === 3, 'routinesFor: off は除外される');
     ok(eq(T.mergeIntervals([{ start: 10, end: 20 }, { start: 15, end: 30 }, { start: 40, end: 50 }, { start: 5, end: 5 }]),
       [{ start: 10, end: 30 }, { start: 40, end: 50 }]), 'mergeIntervals: 重なりをまとめ空区間を捨てる');
     ok(eq(T.subtractIntervals([{ start: 0, end: 100 }], [{ start: 10, end: 20 }, { start: 90, end: 120 }]),
       [{ start: 0, end: 10 }, { start: 20, end: 90 }]), 'subtractIntervals: 中抜き・端欠け');
     ok(T.sumMin([{ start: 0, end: 10 }, { start: 20, end: 25 }]) === 15, 'sumMin');
-    ok(T.usableMin(d, '2026-10-12') === 750, 'usableMin 月曜: 990−150(ルーティン)−60(夜休憩)−30(習慣)=750');
-    ok(T.usableMin(d, '2026-10-11') === 690, 'usableMin 日曜: 朝食は時間帯の外なので引かれない → 690');
-    ok(T.workableMin(d, '2026-10-12') === 450, 'workableMin = usable × 0.6');
-    ok(T.usableMin(d, '2026-10-12', [{ start: 600, end: 720 }]) === 630, 'usableMin: busy 等の追加区間を引く(昼食と重なる分は二重に引かない)');
-    ok(T.usableMin({ window: {} }, '2026-10-12') === 0, 'usableMin: 時間帯が無ければ 0');
     ok(T.fmtMin(80) === '1h20m' && T.fmtMin(45) === '45m' && T.fmtMin(120) === '2h' && T.fmtMin(0) === '0m', 'fmtMin');
     ok(T.fmtMinJa(80) === '1時間20分' && T.fmtMinJa(60) === '1時間', 'fmtMinJa');
+    ok(T.routinesFor === undefined && T.usableMin === undefined && T.workableMin === undefined, 'v0.15: ルーティン・使える時間の計算は廃止(理想スケジュールと一緒に)');
 
     // ---- store.js ----
     log('\n# store');
     const base = S.migrate(null);
     ok(base.schema === S.SCHEMA && base.settings.categories.length === 11 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ11件・v0.12 で睡眠を追加)');
-    ok(S.defaultSettings().routines !== S.defaultSettings().routines, 'defaultSettings: 呼ぶたびに新しいオブジェクト');
-    const broken = S.migrate({ schema: 1, bar: 2, settings: { transitMin: 'abc', ratio: 5, window: { mon: ['bad'] }, routines: [{ id: 'x', start: '9:00' }, { name: 'no start' }], foo: 1 }, entries: 'nope' });
-    ok(broken.settings.transitMin === 50 && broken.settings.ratio === 0.6, 'migrate: 壊れたスカラーは既定値へ');
-    ok(eq(base.settings.longRest, { min: 60, afterMin: 240 }) && !('eveningRest' in base.settings), 'defaultSettings: 長い休憩 60 分・目安 240 分(夜の休憩の時刻固定は無い)');
-    const legacyRest = S.migrate({ schema: 1, settings: { eveningRest: { start: '20:00', min: 45 } } }).settings;
-    ok(legacyRest.longRest.min === 45 && legacyRest.longRest.afterMin === 240 && !('eveningRest' in legacyRest), 'migrate: v0.6 の夜の休憩は長さだけ長い休憩へ引き継ぐ');
-    ok(S.migrate({ schema: 1, settings: { longRest: { min: 0, afterMin: 'x' } } }).settings.longRest.afterMin === 240 && S.migrate({ schema: 1, settings: { longRest: { min: 0 } } }).settings.longRest.min === 0, 'migrate: 長い休憩 0 分は保持・壊れた目安は既定へ');
-    ok(eq(S.migrate({ schema: 1, settings: { transitMemory: { '1:540': 20, '9:1': 5, '2:600': 'x', '3:615': 999 } } }).settings.transitMemory, { '1:540': 20 }), 'migrate: 移動の記憶はキーと範囲(0〜300)を検証');
-    ok(T.longRestMin(base.settings) === 60 && T.longRestMin({}) === 0, 'longRestMin');
-    ok(eq(S.migrate({ schema: 1, settings: { busyMemory: { '1:540': 'class', '2:600': '', 'x': 'a', '3:615': 5 } } }).settings.busyMemory, { '1:540': 'class', '2:600': '' }), 'migrate: 予定のラベルの記憶はキーと文字列を検証');
+    ok(S.defaultSettings().categories !== S.defaultSettings().categories, 'defaultSettings: 呼ぶたびに新しいオブジェクト');
+    ok(base.settings.habitsMigrated === true && !('habits' in base.settings) && !('routines' in base.settings) && !('ratio' in base.settings), 'defaultSettings(v0.15): 理想スケジュール用の設定を持たない');
+    const broken = S.migrate({ schema: 1, bar: 2, settings: { transitMin: 'abc', ratio: 5, window: { mon: ['bad'] }, routines: [{ id: 'x', start: '9:00' }], restEvery: { workMin: 90 }, longRest: { min: 60 }, outingMemory: { '1:600': 'out' }, foo: 1 }, entries: 'nope' });
+    ok(!('transitMin' in broken.settings) && !('ratio' in broken.settings) && !('routines' in broken.settings) && !('restEvery' in broken.settings) && !('longRest' in broken.settings) && !('outingMemory' in broken.settings), 'migrate(v0.15): 旧設定(移動・割合・ルーティン・休憩・外出)は捨てる');
     ok(eq(broken.settings.window.mon, ['07:00', '23:30']) && eq(broken.settings.window.sat, ['08:00', '23:00']), 'migrate: 壊れた曜日だけ既定値へ');
-    ok(broken.settings.routines.length === 1 && broken.settings.routines[0].min === 30 && eq(broken.settings.routines[0].days, [0, 1, 2, 3, 4, 5, 6]), 'migrate: ルーティンは start 必須・min/days を補完');
     ok(broken.settings.foo === 1 && broken.bar === 2, 'migrate: 未知キーを保持(前方互換)');
     ok(eq(broken.entries, {}) && eq(broken.meta.resetAt, null), 'migrate: entries/meta を補完');
+    ok(eq(S.migrate({ schema: 1, settings: { busyMemory: { '1:540': 'class', '2:600': '', 'x': 'a', '3:615': 5 } } }).settings.busyMemory, { '1:540': 'class', '2:600': '' }), 'migrate: 予定のラベルの記憶はキーと文字列を検証');
     const legacy = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2b6cb0', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#123456', order: 2 }, { id: 'new', name: 'x', kind: 'work', color: 'bad', order: 3 }] } });
     ok(legacy.settings.categories[0].color === '#2a78d6' && legacy.settings.categories[1].color === '#123456' && legacy.settings.categories[2].color === '#718096', 'migrate: 旧既定色は新既定色へ・自分で変えた色は保持・壊れた色は灰');
-    const once = S.migrate({ schema: 1, settings: { transitMin: 40 } });
+    const once = S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } });
     ok(eq(S.migrate(once), once), 'migrate: 冪等');
-    ok(once.settings.transitMin === 40, 'migrate: 正しい値は保持');
+    ok(once.settings.gapAbsorbMin === 15, 'migrate: 正しい値は保持');
+    // v0.15: 旧「毎日の習慣」→ タスク(毎日 ◯分)
+    const hb = S.migrate({ schema: 1, settings: { habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }, { name: '' }] }, tasks: {} });
+    ok(hb.tasks.habit_h1 && hb.tasks.habit_h1.repeat.type === 'daily' && hb.tasks.habit_h1.repeat.min === 30 && hb.tasks.habit_h1.categoryId === 'english' && hb.tasks.habit_h1.kind === 'duty' && Object.keys(hb.tasks).length === 1, 'migrate(v0.15): 習慣は「毎日 30分」のタスクになる(名前の無いものは捨てる)');
+    ok(hb.settings.habitsMigrated === true && !('habits' in hb.settings) && eq(S.migrate(hb), hb), 'migrate(v0.15): 移したら印を立てて habits を消す・冪等');
+    const hb2 = S.migrate({ schema: 1, settings: { habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30 }] }, tasks: { habit_h1: { id: 'habit_h1', name: '英語(自分で直した)', repeat: { type: 'daily', min: 45 }, updatedAt: 'x' } } });
+    ok(hb2.tasks.habit_h1.repeat.min === 45 && hb2.tasks.habit_h1.name === '英語(自分で直した)', 'migrate(v0.15): 同じ id のタスクがあれば上書きしない');
+    ok(!('habit_h1' in S.migrate({ schema: 1, settings: { habitsMigrated: true, habits: [{ id: 'h1', name: '英語', min: 30 }] }, tasks: {} }).tasks), 'migrate(v0.15): 移行済みの印があれば habits を無視して捨てる');
+    ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', repeat: { type: 'daily', min: 'x' } }, u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } }, v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.t.repeat.min === 30 && S.migrate({ schema: 1, tasks: { u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } } } }).tasks.u.repeat.min === 30 && S.migrate({ schema: 1, tasks: { v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.v.repeat === null, 'validateTask: 毎日型は 5〜600 分・知らない繰り返しは無し');
     ok(throws(() => S.validateImport({})) && throws(() => S.validateImport([1])) && throws(() => S.validateImport('x')), 'validateImport: merihari 以外は拒否');
     ok(throws(() => S.validateImport({ schema: 99, settings: {} })), 'validateImport: 新しい schema は拒否');
     ok(S.validateImport({ schema: 1, settings: {} }).schema === 1, 'validateImport: 通れば migrate 済みを返す');
@@ -152,136 +144,68 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(throws(() => L.split(mid, Object.values(mid)[0].id, 1300, 1200, C)), 'split: 範囲外は拒否');
     const rm = L.remove(es, engId, C);
     ok(rm[engId].deletedAt && !es[engId].deletedAt && L.entriesOf(rm, D).length === 2, 'remove: tombstone・元は変更しない・entriesOf から消える');
+    const added = L.addEntry({ x: { id: 'x', date: D, start: '09:00', end: '12:00', categoryId: 'life', updatedAt: 'x', deletedAt: null } }, { date: D, startMin: 600, endMin: 660, categoryId: 'research' }, C);
+    ok(eq(alive(added), ['life 09:00-10:00', 'research 10:00-11:00', 'life 11:00-12:00']), 'addEntry: 閉じた記録を追加し隣を詰める(分割)');
+    ok(throws(() => L.addEntry({}, { date: D, startMin: 660, endMin: 600, categoryId: 'a' }, C)), 'addEntry: 終了≦開始は拒否');
+    ok(L.fillFromPlan === undefined, 'v0.15: 「理想どおりだった」(fillFromPlan)は廃止');
 
-    // ---- plan.js(F2 / F5-2) ----
-    log('\n# plan');
+    // ---- plan.js(v0.15: 目安) ----
+    log('\n# plan(目安)');
     const Pn = M.plan;
     let pseq = 0;
     const PC = { uid: () => 'b' + (++pseq), nowISO: () => '2026-10-12T07:00:00+09:00' };
-    const MON = '2026-10-12'; // 月曜(作業 07:00〜23:30・workable 450)
-    const ds = S.defaultSettings();
-    const noOverlap = (bs) => { const x = bs.slice().sort((a, b) => a.start - b.start); return x.every((b, i) => i === 0 || b.start >= x[i - 1].end); };
+    const MON = '2026-10-12'; // 月曜
     const tasksA = {
       t1: { id: 't1', name: '修論', kind: 'duty', deadline: '2026-10-20T23:59', remainingH: 12, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null },
       t2: { id: 't2', name: '面談資料', kind: 'duty', deadline: '2026-10-13', remainingH: 1, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null },
       w1: { id: 'w1', name: 'Blender', kind: 'wish', deadline: null, remainingH: 5, minUnit: 30, categoryId: 'other', deletedAt: null, doneAt: null },
       d1: { id: 'd1', name: '済み', kind: 'duty', deadline: '2026-10-12', remainingH: 2, minUnit: 30, categoryId: 'other', deletedAt: null, doneAt: 'x' },
     };
+    ok(Pn.buildPlan === undefined && Pn.decideOuting === undefined && Pn.groupOuting === undefined, 'v0.15: 理想スケジュールの生成(buildPlan・外出判定)は廃止');
     ok(Pn.deadlineKey({ deadline: '2026-10-20T23:59' }) === '2026-10-20' && Pn.deadlineKey({ deadline: null }) === null, 'deadlineKey: 日付部分だけ');
     ok(Pn.deadlineKey({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON) === '2026-10-18', 'deadlineKey: 毎週型は今週の日曜');
-    ok(Pn.availableUntil(ds, MON, MON) === 450 && Pn.availableUntil(ds, MON, '2026-10-13') === 900, 'availableUntil: 期限まで(両端含む)の workable 合計');
-    const sh = Pn.todayShare(tasksA, MON, ds);
-    ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 義務だけを期限順(やりたい・完了は除く)');
-    ok(sh[0].todayMin === 30 && sh[1].todayMin === 80, 'todayShare: EDF 配分(面談 60×450/900=30, 修論 720×450/3978≈80)');
-    const late = Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10, minUnit: 30 } }, MON, ds);
-    ok(late.length === 0, 'todayShare: 期限を過ぎたタスクは入れない(v0.13.3・F2-15。期限超過の出口で期限を変えるか完了にする)');
-    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30 } }, MON, ds)[0].todayMin === 0, 'todayShare: 配分が最小単位の半分未満なら今日は 0');
+    ok(Pn.daysBetween('2026-10-12', '2026-10-20') === 8 && Pn.daysBetween('2026-10-12', '2026-10-12') === 0 && Pn.daysBetween('2026-10-12', '2026-10-11') === -1, 'daysBetween: 日付の差');
+    ok(Pn.deadlineMin({ deadline: '2026-10-13T15:00' }) === 900 && Pn.deadlineMin({ deadline: '2026-10-13' }) === null && Pn.deadlineKey({ deadline: '2026-10-13T15:00' }, '2026-10-12') === '2026-10-13', 'deadlineMin / deadlineKey: 時刻つきの期限');
+    ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10 分のタスクは 10・15 分未満は 5 以上・3 時間以上は 30');
+    const sh = Pn.todayShare(tasksA, MON);
+    ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 期限つきの義務だけを期限順(やりたい・完了は除く)');
+    ok(sh[0].todayMin === 30 && sh[0].daysLeft === 2 && sh[1].todayMin === 80 && sh[1].daysLeft === 9, 'todayShare: 残り ÷ 期限までの日数(今日を含む): 面談 60/2=30・修論 720/9=80');
+    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10 } }, MON).length === 0, 'todayShare: 期限を過ぎたタスクは入れない(期限超過の出口で期限を変えるか完了にする)');
+    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1 日あたりが 15 分未満なら今日は 0');
+    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: null, remainingH: 20 } }, MON).length === 0 && Pn.todayShare({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5 }, remainingH: 5 } }, MON).length === 0, 'todayShare: 期限なし・繰り返しは含めない(目安は goals で)');
+    ok(Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ 0.5 時間=30 分)');
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
-    const WM = T.windowFor(ds, MON);
-    const busyA = [{ id: 'A', start: 540, end: 630 }, { id: 'B', start: 660, end: 720 }, { id: 'C', start: 960, end: 990 }, { id: 'D', start: 1140, end: 1200 }];
-    const g = Pn.groupOuting(busyA.map((b) => ({ ...b, out: true })), ds, WM);
-    ok(g.length === 1 && g[0].start === 540 && g[0].end === 720 && eq(g[0].ids, ['A', 'B']), 'groupOuting: 45分以上・日中の busy を片道×2 未満の間隔でまとめる(30分の予定と18時以降は除外)');
-    ok(Pn.groupOuting(busyA.map((b) => ({ ...b, out: b.id !== 'A' })), ds, WM)[0].start === 660, 'groupOuting: 在宅(out=false)の予定は除外');
-    ok(Pn.groupOuting(Pn.decideOuting(busyA, ds, MON, {}), ds, WM).length === 0, 'groupOuting: 既定(原則在宅)では空');
-    ok(eq(Pn.placeOrShift({ start: 720, end: 765 }, [{ start: 690, end: 750 }], WM), { start: 750, end: 795, shifted: true }), 'placeOrShift: 重なれば直後の空きへ 15 分刻み');
-    ok(Pn.placeOrShift({ start: 1380, end: 1440 }, [{ start: 1380, end: 1410 }], WM) === null, 'placeOrShift: 入らなければ null');
-    ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]), 'freeSlots');
-    const p0 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {} }, PC);
-    const types = (p) => p.blocks.map((b) => b.type);
-    ok(types(p0).filter((t) => t === 'routine').length === 4 && !p0.blocks.some((b) => b.type === 'rest'), 'buildPlan: ルーティン4件・タスクが無い日は休憩も置かない(v0.7: 時刻固定の夜の休憩は廃止)');
-    const hb = p0.blocks.find((b) => b.type === 'habit');
-    ok(hb && hb.start === 450 && hb.end === 480 && hb.name === '英語', 'buildPlan: 朝の習慣は朝食直後の空き(07:30〜08:00)');
-    ok(noOverlap(p0.blocks) && !types(p0).includes('task'), 'buildPlan: 重なり無し・タスク無しなら task ブロック無し');
-    const sl0 = p0.blocks.filter((b) => b.type === 'sleep');
-    ok(sl0.length === 2 && sl0[0].start === 0 && sl0[0].end === 420 && sl0[1].start === 1410 && sl0[1].end === 1440, 'buildPlan: 作業時間帯の外側に睡眠(0:00〜7:00・23:30〜24:00)(v0.10)');
-    const pSb = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'N', start: 1380, end: 1440 }] }, PC);
-    const slb = pSb.blocks.filter((b) => b.type === 'sleep');
-    ok(slb.length === 1 && slb[0].end === 420 && noOverlap(pSb.blocks) && Pn.blockAt(pSb.blocks, 1400).type === 'busy', 'buildPlan: 睡眠と重なる予定は予定を優先(睡眠を削る)');
-    ok(Pn.blockAt(p0.blocks, 100).type === 'sleep', 'blockAt: 夜中は睡眠');
-    const p1 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, fill: false }, PC);
-    const tb = p1.blocks.filter((b) => b.type === 'task');
-    ok(tb.length === 1 && tb[0].start === 540 && tb[0].end === 620 && tb[0].taskId === 't1' && tb[0].categoryId === 'research', 'buildPlan: 今日の分 80 分を now(09:00) から 1 ブロックで置く');
-    ok(p1.shortfall.length === 0 && noOverlap(p1.blocks), 'buildPlan: 入り切れば shortfall 無し');
-    const bigT = { x: { id: 'x', name: '大物', kind: 'duty', deadline: '2026-10-12', remainingH: 10, minUnit: 30, categoryId: 'research' } };
-    const p2 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigT, entries: {} }, PC);
-    const tb2 = p2.blocks.filter((b) => b.type === 'task'), rb2 = p2.blocks.filter((b) => b.type === 'rest' && b.auto);
-    const total2 = tb2.reduce((a, b) => a + b.end - b.start, 0);
-    ok(tb2.every((b) => b.end - b.start >= 30 && b.end - b.start <= 90) && noOverlap(p2.blocks), 'buildPlan: task ブロックは最小単位以上・最大 90 分・重なり無し');
-    ok(tb2.every((b) => b.end <= WM.end - 30) && tb2[0].start === 540, 'buildPlan: 最後の 30 分には置かない');
-    ok(rb2.length >= 3 && rb2.filter((r) => !r.long).every((r) => tb2.some((b) => b.end === r.start && b.end - b.start === 90)), 'buildPlan: 短い休憩は 90 分の作業の直後');
-    const lr2 = rb2.find((r) => r.long);
-    ok(lr2 && lr2.end - lr2.start === 60 && tb2.filter((b) => b.end <= lr2.start).reduce((a, b) => a + b.end - b.start, 0) >= 240 && rb2.filter((r) => !r.long).every((r) => r.end - r.start === 10), 'buildPlan: 長い休憩 60 分は作業が 240 分進んだあと・短い休憩は 10 分(v0.7)');
-    ok(!Pn.buildPlan({ settings: { ...ds, longRest: { min: 0, afterMin: 240 } }, date: MON, nowMin: 540, tasks: bigT, entries: {} }, PC).blocks.some((b) => b.long), 'buildPlan: 長い休憩 0 分なら置かない');
-    const small = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { s: { id: 's', name: '小', kind: 'duty', deadline: MON, remainingH: 4, minUnit: 30, categoryId: 'research' } }, entries: {}, fill: false }, PC);
-    const sl = small.blocks.find((b) => b.long), st = small.blocks.filter((b) => b.type === 'task');
-    ok(sl && st.filter((b) => b.end <= sl.start).reduce((a, b) => a + b.end - b.start, 0) === 150 && st.reduce((a, b) => a + b.end - b.start, 0) === 240, 'buildPlan: 作業 240 分の日は 6 割(150 分)進んだところに長い休憩');
-    const lite = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, fill: false }, PC);
-    const ll = lite.blocks.find((b) => b.long);
-    ok(ll && ll.start === 620 && lite.blocks.filter((b) => b.type === 'task').length === 1, 'buildPlan: 作業が 3 時間未満の日は作業のあとに長い休憩(途中で割らない)');
-    const rested = Pn.buildPlan({ settings: ds, date: MON, nowMin: 900, tasks: bigT, entries: { r: { date: MON, start: '13:00', end: '14:00', categoryId: 'rest' } } }, PC);
-    ok(!rested.blocks.some((b) => b.long), 'buildPlan: 休憩を 60 分記録済みなら長い休憩は置かない');
-    const streak = { a: { date: MON, start: '13:00', end: '14:30', categoryId: 'research' } };
-    ok(Pn.workSinceRest(streak, MON, 870, ds.categories) === 90 && Pn.workSinceRest(streak, MON, 900, ds.categories) === 0 && Pn.workSinceRest({ ...streak, b: { date: MON, start: '14:30', end: '14:40', categoryId: 'rest' } }, MON, 880, ds.categories) === 0, 'workSinceRest: 続けて作業した分・10 分の空白や休憩の記録で 0 に戻る');
-    const cont = Pn.buildPlan({ settings: ds, date: MON, nowMin: 870, tasks: bigT, entries: streak, prev: null }, PC);
-    ok(cont.blocks.find((b) => b.type === 'rest' && b.start === 870), 'buildPlan: 再計画時、いままで 90 分続けて作業していれば最初に休憩を置く');
-    ok(Pn.longRestAt(600, 240) === 240 && Pn.longRestAt(200, 240) === 120 && Pn.longRestAt(90, 240) === 90 && Pn.longRestAt(30, 240) === 0, 'longRestAt: 十分なら afterMin・3h 以上は 6 割(15 分丸め)・3h 未満は作業のあと・60 分未満は 0');
-    ok(total2 <= 450 && total2 >= 420 && p2.shortfall[0]?.taskId === 'x' && p2.shortfall[0].min === 600 - total2, 'buildPlan: 作業に回せる割合(workable 450)が上限・入り切らない分は shortfall');
-    const p3 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 600, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1, fill: false }, PC);
-    const tb3 = p3.blocks.filter((b) => b.type === 'task');
-    ok(tb3.length === 1 && tb3[0].start === 600 && p3.confirmedAt === null, '再計画: now(10:00) にまたがる task は now から置き直す');
-    const p4 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 660, tasks: { t1: tasksA.t1 }, entries: {}, prev: p1, fill: false }, PC);
-    ok(p4.blocks.filter((b) => b.type === 'task').length === 1 && p4.blocks.find((b) => b.type === 'task').end === 620, '再計画: 過去の task ブロックは引き継ぎ、今日の分は満たしているので追加しない');
-    const p5 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, first: 't1' }, PC);
-    ok(p5.blocks.filter((b) => b.type === 'task')[0].taskId === 't1', 'buildPlan: first で先頭に置く(今やる)');
-    const p6 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, last: 't2', fill: false }, PC);
-    ok(p6.blocks.filter((b) => b.type === 'task').pop().taskId === 't2', 'buildPlan: last で最後に置く(後ろへ)');
-    const p7 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: tasksA, entries: {}, skipped: ['t1'] }, PC);
-    ok(!p7.blocks.some((b) => b.taskId === 't1') && eq(p7.skipped, ['t1']), 'buildPlan: skipped は置かない(今日はやらない)');
-    const p8 = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: { a: { date: MON, start: '08:00', end: '09:30', taskId: 't1', categoryId: 'research' } }, fill: false }, PC);
-    ok(!p8.blocks.some((b) => b.type === 'task'), 'buildPlan: 紐づく実績が今日の分を満たしていれば置かない');
-    const p9 = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out' }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }] }, PC);
-    const tr = p9.blocks.filter((b) => b.type === 'transit');
-    ok(tr.length === 2 && tr[0].start === 490 && tr[0].end === 540 && tr[1].start === 720 && tr[1].end === 770 && tr[0].busyId === 'A' && tr[1].busyId === 'A', 'buildPlan: 外出 busy の前後に片道 50 分の移動(busyId つき)');
-    const trO = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out' }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }], transitOverrides: { A: 20 } }, PC).blocks.filter((b) => b.type === 'transit');
-    ok(trO.length === 2 && trO[0].start === 520 && trO[1].end === 740, 'buildPlan: 当日の移動の指定(片道 20 分)で前後の移動が変わる');
-    const trM = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out', transitMemory: { '1:540': 0 } }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }] }, PC);
-    ok(!trM.blocks.some((b) => b.type === 'transit') && trM.blocks.find((b) => b.type === 'busy').transitSource === 'memory', 'buildPlan: 記憶した片道 0 分なら移動を置かない');
-    const dT = Pn.decideOuting([{ id: 'A', start: 540, end: 600 }, { id: 'B', start: 900, end: 960 }], { ...ds, transitMemory: { '1:540': 25 } }, MON, {}, { B: 40 });
-    ok(dT[0].transitMin === 25 && dT[0].transitSource === 'memory' && dT[1].transitMin === 40 && dT[1].transitSource === 'override' && Pn.decideOuting([{ id: 'C', start: 700, end: 760 }], ds, MON)[0].transitMin === 50, 'decideOuting: 移動は 当日の指定 > 記憶 > 設定の片道');
-    const gT = Pn.groupOuting([{ id: 'A', start: 540, end: 630, out: true, transitMin: 20 }, { id: 'B', start: 660, end: 720, out: true, transitMin: 60 }], ds, WM);
-    ok(gT.length === 1 && gT[0].before === 20 && gT[0].after === 60 && gT[0].firstId === 'A' && gT[0].lastId === 'B', 'groupOuting: グループの前は最初の予定の片道・後は最後の予定の片道');
-    const eve = [{ id: 'E', start: 1140, end: 1170 }];
-    ok(Pn.groupOuting(Pn.decideOuting(eve, { ...ds, outingDefault: 'out' }, MON), ds, WM).length === 0 && Pn.groupOuting(Pn.decideOuting(eve, ds, MON, { E: 'out' }), ds, WM).length === 1 && Pn.groupOuting(Pn.decideOuting(eve, { ...ds, outingMemory: { '1:1140': 'out' } }, MON), ds, WM).length === 1, 'groupOuting: 既定で外出の短い夜の予定は候補外・自分で外出にした予定は長さや時間帯に関係なく移動を置く(v0.8 修正)');
-    const pEve = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: eve, overrides: { E: 'out' } }, PC);
-    ok(pEve.blocks.filter((b) => b.type === 'transit').length === 2 && pEve.blocks.find((b) => b.type === 'transit').start === 1090, 'buildPlan: 外出を選んだ予定には既定の片道(50 分)で前後に移動');
-    const dL = Pn.decideOuting([{ id: 'A', start: 540, end: 600 }, { id: 'B', start: 900, end: 960 }, { id: 'C', start: 700, end: 760 }], { ...ds, busyMemory: { '1:540': 'class', '1:900': '' } }, MON, {}, {}, { B: 'job' });
-    ok(dL[0].categoryId === 'class' && dL[0].labelSource === 'memory' && dL[1].categoryId === 'job' && dL[1].labelSource === 'override' && dL[2].categoryId === null && dL[2].labelSource === 'none', 'decideOuting: 予定のラベルは 当日の指定 > 記憶(空文字は指定なし)');
-    const pL = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 600 }], labelOverrides: { A: 'class' } }, PC);
-    const bL = pL.blocks.find((b) => b.type === 'busy');
-    ok(bL.categoryId === 'class' && bL.name === '授業', 'buildPlan: ラベルのある予定はカテゴリ名と categoryId を持つ');
-    ok(p9.blocks.find((b) => b.type === 'routine' && b.name === '昼食').start === 780, 'buildPlan: 移動と重なる昼食は直後(13:00)へずらす');
-    ok(Pn.blockAt(p0.blocks, 455).type === 'habit' && Pn.blockAt(p0.blocks, 1000) === null, 'blockAt: その時刻のブロック / 無ければ null');
-    ok(Pn.nextWorkBlock(p1.blocks, 400).taskId === undefined || Pn.nextWorkBlock(p1.blocks, 500).taskId === 't1', 'nextWorkBlock: 次の作業ブロック');
-    ok(Pn.remainingToday(sh, { t2: 30, t1: 20 }) === 60 && Pn.remainingToday(sh, {}) === 110, 'remainingToday: 今日の分 − 紐づく実績');
+    const lbE = { a: { date: '2026-10-12', start: '09:00', end: '10:00', taskId: 'w' }, b: { date: '2026-10-15', start: '09:00', end: '09:30', taskId: 'w' }, c: { date: '2026-10-19', start: '09:00', end: '10:00', taskId: 'w' }, d: { date: '2026-10-13', start: '09:00', end: null, taskId: 'w' }, e: { date: '2026-10-14', start: '12:00', end: '13:00', taskId: 'x' } };
+    ok(Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18') === 90 && Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18', '2026-10-13', 600) === 90 + 60, 'loggedBetween: 期間内の紐づく記録。記録中は今日なら now まで');
+    ok(eq(Pn.weekRange({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON), { from: '2026-10-12', to: '2026-10-18' }), 'weekRange: 週の終わりを含む 7 日');
+    ok(Pn.lastLoggedDate(lbE, 'w') === '2026-10-19' && Pn.lastLoggedDate(lbE, 'zzz') === null, 'lastLoggedDate: 最後にふれた日');
+    const gTasks = {
+      t2: tasksA.t2,
+      d: { id: 'd', name: '英語', kind: 'duty', deadline: null, remainingH: 0, categoryId: 'english', repeat: { type: 'daily', min: 30 }, deletedAt: null, doneAt: null },
+      w: { id: 'w', name: '論文読み', kind: 'duty', deadline: null, remainingH: 5, categoryId: 'research', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, deletedAt: null, doneAt: null },
+      x: { id: 'x', name: 'Blender', kind: 'wish', deadline: null, remainingH: 0, categoryId: 'other', deletedAt: null, doneAt: null },
+      gone: { id: 'gone', name: '消した', kind: 'duty', deadline: null, categoryId: 'other', repeat: { type: 'daily', min: 30 }, deletedAt: 'x', doneAt: null },
+    };
+    const gE = { a: { date: MON, start: '09:00', end: '09:20', taskId: 'd', categoryId: 'english' }, b: { date: MON, start: '10:00', end: '11:30', taskId: 'w', categoryId: 'research' }, c: { date: '2026-10-15', start: '10:00', end: '10:30', taskId: 'w', categoryId: 'research' }, d: { date: '2026-10-01', start: '10:00', end: '11:00', taskId: 'x', categoryId: 'other' } };
+    const gs = Pn.goals(gTasks, gE, MON, 720);
+    ok(gs.map((g) => `${g.kind}:${g.taskId}`).join() === 'deadline:t2,daily:d,weekly:w,wish:x', 'goals: 期限 → 毎日 → 毎週 → やりたい の順・消したものは出さない');
+    ok(gs[0].targetMin === 30 && gs[0].doneMin === 0 && gs[0].deadline === '2026-10-13' && !gs[0].done, 'goals(期限): きょうの目安と今日の記録');
+    ok(gs[1].targetMin === 30 && gs[1].doneMin === 20 && !gs[1].done, 'goals(毎日): 毎日 30分 のうち 20分');
+    ok(gs[2].targetMin === 300 && gs[2].doneMin === 120 && gs[2].from === '2026-10-12' && gs[2].to === '2026-10-18', 'goals(毎週): 今週の記録(今日 90 + 15 日 30)');
+    ok(gs[3].targetMin === null && gs[3].doneMin === 0 && gs[3].lastDate === '2026-10-01' && !gs[3].done, 'goals(やりたい): 目安なし・直近 7 日 0・最後にふれた日');
+    ok(Pn.goals(gTasks, { ...gE, e: { date: MON, start: '12:00', end: '12:15', taskId: 'd' } }, MON, 800)[1].done === true, 'goals: 目安に届けば done');
+    ok(Pn.goals({}, {}, MON, 600).length === 0, 'goals: タスクが無ければ空');
+    ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]) && eq(Pn.freeSlots([{ start: 500, end: 560 }, { start: 550, end: 580 }], 540, 600), [{ start: 580, end: 600 }]), 'freeSlots: 空き区間(重なる区間も扱う)');
+    ok(Pn.isEligible(tasksA.t1, MON) && !Pn.isEligible(tasksA.w1, MON) && !Pn.isEligible(tasksA.d1, MON) && !Pn.isEligible({ ...tasksA.t1, deadline: '2026-10-11' }, MON) && Pn.isEligible({ ...tasksA.t1, deadline: null }, MON), 'isEligible: 期限がその日以降(期限なしは可)・完了/削除/やりたいは不可');
 
     // ---- report.js(F3 / §6.5) ----
     log('\n# report');
     const Rp = M.report;
     const RD = '2026-10-12';
-    const mkE = (date, start, end, categoryId, taskId = null) => ({ id: `${date}${start}${categoryId}`, date, start, end, categoryId, taskId, updatedAt: 'x', deletedAt: null });
+    const ds = S.defaultSettings();
+    const mkE = (date, start, end, categoryId, taskId = null) => ({ id: `${date}${start}${categoryId}${taskId || ''}`, date, start, end, categoryId, taskId, updatedAt: 'x', deletedAt: null });
     const toMap = (arr) => Object.fromEntries(arr.map((e) => [e.id, e]));
-    const planR = { blocks: [
-      { type: 'task', start: 540, end: 630, categoryId: 'research' }, { type: 'task', start: 640, end: 730, categoryId: 'research' },
-      { type: 'habit', start: 450, end: 480, categoryId: 'english' }, { type: 'rest', start: 1200, end: 1260, long: true }, { type: 'routine', start: 720, end: 765 }, { type: 'transit', start: 490, end: 540 }, { type: 'busy', start: 900, end: 960 } ] };
-    ok(eq(Rp.plannedByCategory(planR), { research: 180, english: 30, rest: 60, life: 45, transit: 50 }), 'plannedByCategory: task/habit はカテゴリ、rest/routine/transit は固定カテゴリ、ラベル無しの busy は数えない');
-    ok(eq(Rp.plannedByCategory(planR, 600), { research: 60, english: 30, transit: 50 }), 'plannedByCategory: upto でそこまでの分だけ(途中経過は「いままでの理想」と比べる・v0.10)');
-    const aggMid = Rp.aggregate({ entries: {}, plan: planR, date: RD, nowMin: 600, settings: ds });
-    ok(aggMid.byCategory.research.planned === 60 && aggMid.plannedWorkMin === 90 && aggMid.dayDone === false && !Rp.reportLines(aggMid, { tasks: {}, entries: {}, date: RD }).improve.some((t) => t.startsWith('未記録')), 'aggregate: 途中経過では理想を now で切り、未記録は言わない');
-    ok(S.migrate({ schema: 1, plans: { '2026-10-12': { blocks: [{ type: 'sleep', start: 0, end: 420 }] } } }).plans['2026-10-12'].blocks.length === 1, 'migrate: sleep ブロックを通す');
-    ok(eq(Rp.plannedByCategory({ blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }] }), { class: 90 }) && Rp.blockCategory({ type: 'busy' }) === null, 'plannedByCategory: ラベルのある busy はそのカテゴリに数える(v0.8)');
-    const aggB = Rp.aggregate({ entries: {}, plan: { blocks: [{ type: 'busy', start: 540, end: 630, categoryId: 'class' }, { type: 'task', start: 700, end: 760, categoryId: 'research' }] }, date: RD, nowMin: 1440, settings: ds });
-    const linesB = Rp.reportLines(aggB, { tasks: {}, entries: {}, date: RD });
-    ok(linesB.improve.some((t) => t.startsWith('研究の枠は使われませんでした')) && !linesB.improve.some((t) => t.startsWith('授業')), 'reportLines: ラベル付きの予定だけの理想は「入りませんでした」にしない(予定は責めない)');
+    ok(Rp.plannedByCategory === undefined && Rp.calibrationProposal === undefined && Rp.ledgerFor === undefined, 'v0.15: 理想との比較・割合の校正は廃止');
     const entR = toMap([
       mkE(RD, '09:00', '12:25', 'research'), mkE(RD, '13:00', '13:30', 'sns'), mkE(RD, '20:00', '20:40', 'rest'),
       mkE('2026-10-11', '10:00', '11:00', 'sns'), mkE('2026-10-11', '11:00', '13:00', 'research'),
@@ -293,37 +217,42 @@ document.getElementById('app').addEventListener('load', async () => {
     const un = Rp.unlogged(toMap([mkE(RD, '09:00', '10:00', 'a'), mkE(RD, '09:40', '11:40', 'b')]), RD, { start: 420, end: 1410 }, 720);
     ok(un.loggedMin === 160 && un.unloggedMin === 140 && Math.abs(un.coverage - 160 / 300) < 1e-9, 'unlogged: 作業時間帯の中で now まで・重なりは1回だけ数える');
     ok(Rp.streak(entR, RD) === 2 && Rp.streak(entR, '2026-10-13') === 2 && Rp.streak(entR, '2026-10-14') === 0, 'streak: 連続記録日数(今日に無ければ昨日から数える)');
-    const agg = Rp.aggregate({ entries: entR, plan: planR, date: RD, nowMin: 1440, settings: ds });
-    ok(agg.byCategory.research.planned === 180 && agg.byCategory.research.actual === 205 && agg.byCategory.sns.baseline === 60, 'aggregate: 理想/実績/ベースライン');
-    ok(agg.workMin === 205 && agg.driftMin === 30 && agg.baselineWorkMin === 90 && agg.restKept === '20:00', 'aggregate: 作業合計・drift 合計・先週の作業平均・休憩が予定どおり');
+    const aggMid = Rp.aggregate({ entries: entR, date: RD, nowMin: 600, settings: ds });
+    ok(aggMid.dayDone === false && !Rp.reportLines(aggMid, { tasks: {}, entries: {}, date: RD }).improve.some((t) => t.startsWith('記録のない')), 'aggregate: 途中経過では未記録を言わない');
+    const agg = Rp.aggregate({ entries: entR, date: RD, nowMin: 1440, settings: ds });
+    ok(agg.byCategory.research.actual === 205 && agg.byCategory.sns.baseline === 60 && agg.workMin === 205 && agg.driftMin === 30 && agg.baselineWorkMin === 90 && agg.dayDone, 'aggregate: 実績/ベースライン・作業合計・drift 合計・先週の作業平均');
     const lines = Rp.reportLines(agg, { tasks: {}, entries: entR, date: RD });
-    ok(lines.positive[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && lines.positive[1] === '研究は理想より 25分 多く進みました。', 'reportLines: 肯定文は優先 1 を Δ の大きい順で先頭(§6.5)');
-    ok(lines.positive.length === 3 && lines.positive[2] === '休憩は 20:00 に取れました。', 'reportLines: 肯定文は最大 3 文(優先2 の休憩)');
-    ok(lines.improve.includes('英語の枠は使われませんでした。') && lines.improve.some((t) => t.startsWith('記録のない時間が ')), 'reportLines: 改善点は事実だけ(入らなかった枠・未記録)');
-    ok(lines.tomorrow === null, 'reportLines: 近い期限の未着手が無ければ明日への一言は無し');
+    ok(lines.positive[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && lines.positive[1] === '研究は先週の平均より 1時間55分 多くなりました。' && lines.positive[2] === '作業は合計 3時間25分 でした。先週の平均は 1時間30分 です。', 'reportLines: 肯定文は ダラダラの減少 → 作業の増加 → 作業の合計(最大 3 文・§6.5)');
+    ok(lines.improve.length === 1 && lines.improve[0].startsWith('記録のない時間が '), 'reportLines: 改善点は事実だけ(未記録)');
+    ok(lines.tomorrow === null, 'reportLines: 近い期限の未着手も、ふれていないやりたいことも無ければ明日への一言は無し');
     const tasksR = { a: { id: 'a', name: '面談資料', kind: 'duty', deadline: '2026-10-14', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: '遠い', kind: 'duty', deadline: '2026-11-01', remainingH: 1 }, c: { id: 'c', name: '済', kind: 'duty', deadline: '2026-10-13', remainingH: 1, doneAt: 'x' } };
     ok(Rp.untouchedNear(tasksR, entR, RD).map((t) => t.id).join() === 'a', 'untouchedNear: 期限3日以内・未着手・未完了の義務だけ');
     ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料はまだ手つかずです(期限 10月14日)。明日、まず 5 分だけ。', 'reportLines: 明日への一言は 1 件');
-    const aggZero = Rp.aggregate({ entries: {}, plan: null, date: RD, nowMin: 1440, settings: ds });
+    const wishT = { x: { id: 'x', name: 'Blender', kind: 'wish', deletedAt: null, doneAt: null }, y: { id: 'y', name: '最近', kind: 'wish', deletedAt: null, doneAt: null }, z: { id: 'z', name: '未着手', kind: 'wish', deletedAt: null, doneAt: null } };
+    const wishE = toMap([mkE('2026-10-01', '10:00', '11:00', 'other', 'x'), mkE('2026-10-10', '10:00', '11:00', 'other', 'y')]);
+    ok(Rp.idleWishes(wishT, wishE, RD).map((t) => t.id).join() === 'z,x', 'idleWishes: 7 日以上ふれていないやりたいこと(未着手が先)');
+    ok(Rp.reportLines(agg, { tasks: wishT, entries: { ...entR, ...wishE }, date: RD }).tomorrow === '未着手(やりたいこと)はまだ手つかずです。明日、まず 5 分だけ。' && Rp.reportLines(agg, { tasks: { x: wishT.x }, entries: { ...entR, ...wishE }, date: RD }).tomorrow === 'Blender(やりたいこと)は 11 日ふれていません。明日、まず 5 分だけ。', 'reportLines: やりたいことを思い出させる一言(期限の未着手が無いとき)');
+    const dailyT = { d: { id: 'd', name: '英語', kind: 'duty', categoryId: 'english', repeat: { type: 'daily', min: 30 }, deletedAt: null, doneAt: null } };
+    const dailyE = toMap([mkE(RD, '09:00', '09:35', 'english', 'd')]);
+    ok(Rp.reportLines(Rp.aggregate({ entries: dailyE, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: dailyE, date: RD }).positive[0] === '英語は 35分 で、毎日の目安 30分 に届きました。', 'reportLines: 毎日の目安に届いた日はそれを先に言う');
+    const aggZero = Rp.aggregate({ entries: {}, date: RD, nowMin: 1440, settings: ds });
     ok(Rp.reportLines(aggZero, {}).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロでも必ず 1 文');
-    const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), plan: null, date: RD, nowMin: 1440, settings: ds });
+    const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), date: RD, nowMin: 1440, settings: ds });
     ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業は合計 40分 でした。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
-    const snap = Rp.buildReport({ entries: entR, plan: planR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
+    const snap = Rp.buildReport({ entries: entR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
     ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット');
-    ok(eq(Rp.ledgerFor(ds, RD, agg), { usableMin: 750, workMin: 205 }), 'ledgerFor: usableMin と workMin(§6.6 の材料)');
-    const pEns = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { far: { id: 'far', name: '遠い', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5, minUnit: 30, categoryId: 'other' } }, entries: {}, ensureMin: ['far'] }, PC);
-    ok(pEns.blocks.some((b) => b.taskId === 'far' && b.end - b.start === 30), 'buildPlan: ensureMin(朝の一言)で配分 0 のタスクにも 30 分だけ入れる');
+    ok(S.migrate({ schema: 1, reports: { [RD]: snap } }).reports[RD].workMin === 205, 'migrate: 新しいレポート(planned 0)も通る');
 
     // ---- sync.js(F7-4 マージ・暗号化)/ google.js(busy の切り出し) ----
     log('\n# sync');
     const Sy = M.sync, G = M.google;
-    const dA = { schema: 1, settings: { transitMin: 40, settingsUpdatedAt: '2026-10-11T10:00:00+09:00' },
+    const dA = { schema: 1, settings: { gapAbsorbMin: 10, settingsUpdatedAt: '2026-10-11T10:00:00+09:00' },
       entries: { e1: { id: 'e1', date: '2026-10-11', start: '09:00', end: '10:00', categoryId: 'research', updatedAt: '2026-10-11T10:00:00+09:00', deletedAt: null },
                  e2: { id: 'e2', date: '2026-10-11', start: '10:00', end: '11:00', categoryId: 'sns', updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null } },
       tasks: { t1: { id: 't1', name: 'A', updatedAt: '2026-10-11T09:00:00+09:00', deletedAt: null } },
       plans: {}, reports: { '2026-10-10': { date: '2026-10-10', lines: ['a'], finalizedAt: null } }, ledger: { '2026-10-10': { usableMin: 500, workMin: 100 } },
       meta: { resetAt: null, lastSyncAt: '2026-10-11T09:00:00+09:00', setupAt: '2026-10-11T08:00:00+09:00', appVersion: '0.5.0' }, extra: { x: 1 } };
-    const dB = { schema: 1, settings: { transitMin: 55, settingsUpdatedAt: '2026-10-11T12:00:00+09:00' },
+    const dB = { schema: 1, settings: { gapAbsorbMin: 15, settingsUpdatedAt: '2026-10-11T12:00:00+09:00' },
       entries: { e1: { id: 'e1', date: '2026-10-11', start: '09:00', end: '10:30', categoryId: 'research', updatedAt: '2026-10-11T10:30:00+09:00', deletedAt: null },
                  e2: { id: 'e2', date: '2026-10-11', start: '10:00', end: '11:00', categoryId: 'sns', updatedAt: '2026-10-11T11:30:00+09:00', deletedAt: '2026-10-11T11:30:00+09:00' },
                  e3: { id: 'e3', date: '2026-10-11', start: '12:00', end: '12:30', categoryId: 'rest', updatedAt: '2026-10-11T12:30:00+09:00', deletedAt: null } },
@@ -332,7 +261,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const mAB = Sy.merge(dA, dB), mBA = Sy.merge(dB, dA);
     ok(eq(mAB, mBA), 'merge: 対称 merge(a,b) == merge(b,a)');
     ok(mAB.entries.e1.end === '10:30' && mAB.entries.e2.deletedAt && mAB.entries.e3 && mAB.tasks.t1, 'merge: id ごとに updatedAt の LWW・tombstone は残る・片側だけのものは残る');
-    ok(mAB.settings.transitMin === 55 && mAB.extra.x === 1 && mAB.other === 2, 'merge: settings は settingsUpdatedAt・未知キーは保持');
+    ok(mAB.settings.gapAbsorbMin === 15 && mAB.extra.x === 1 && mAB.other === 2, 'merge: settings は settingsUpdatedAt・未知キーは保持');
     ok(mAB.reports['2026-10-10'].finalizedAt && mAB.ledger['2026-10-10'].workMin === 120, 'merge: reports は確定済み優先・ledger は決定的');
     ok(mAB.meta.setupAt === '2026-10-11T08:00:00+09:00' && mAB.meta.lastSyncAt === '2026-10-11T12:00:00+09:00' && mAB.meta.appVersion === '0.5.0', 'merge: meta は setupAt 最古・lastSyncAt/appVersion 最新');
     const tieA = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'a' } } }, tieB = { ...dA, entries: { e1: { ...dA.entries.e1, note: 'b' } } };
@@ -352,46 +281,16 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(bad, 'decrypt: 違うパスフレーズは失敗する');
     const enc2 = await Sy.encrypt({ a: 1 }, 'correct horse battery', '', { iterations: 1000 });
     ok(JSON.parse(enc2).iv !== encObj.iv, 'encrypt: IV は毎回ランダム');
+    let badFile = false; try { await Sy.decrypt(JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256-10', salt: 'AA==', iv: 'AA==', ct: 'AA==' }), 'x'); } catch (e) { badFile = /不正/.test(e.message); }
+    ok(badFile, 'decrypt: 反復回数が異常なファイルは拒否');
+    let badJson = false; try { await Sy.decrypt('{not json', 'x'); } catch (e) { badJson = /不正/.test(e.message); }
+    ok(badJson, 'decrypt: 壊れた JSON は拒否');
     const bz = G.busyIntervalsForDate([{ start: '2026-10-12T09:00:00+09:00', end: '2026-10-12T10:30:00+09:00' }, { start: '2026-10-11T23:00:00+09:00', end: '2026-10-12T01:00:00+09:00' }, { start: '2026-10-13T09:00:00+09:00', end: '2026-10-13T10:00:00+09:00' }], '2026-10-12');
     ok(bz.length === 2 && bz[0].start === 0 && bz[0].end === 60 && bz[1].start === 540 && bz[1].end === 630, 'busyIntervalsForDate: その日の分だけ・日またぎは切り出す(ローカル時刻)');
-    const pB = Pn.buildPlan({ settings: { ...ds, outingDefault: 'out' }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: [{ id: 'A', start: 540, end: 720 }], overrides: { A: 'home' } }, PC);
-    ok(!pB.blocks.some((b) => b.type === 'transit') && pB.blocks.some((b) => b.type === 'busy'), 'buildPlan: 在宅の上書きで移動を置かない(busy は残る)');
-
-    // ---- v0.6: 外出判定・空き時間への配分・記録の追加・同期データの検証 ----
-    log('\n# v0.6');
-    const busyM = [{ id: 'A', start: 600, end: 720 }, { id: 'B', start: 900, end: 960 }];
-    const dHome = Pn.decideOuting(busyM, ds, MON, {});
-    ok(dHome.every((b) => b.out === false && b.outingSource === 'default'), 'decideOuting: 既定は原則在宅');
-    ok(Pn.decideOuting(busyM, { ...ds, outingDefault: 'out' }, MON, {}).every((b) => b.out === true), 'decideOuting: 原則外出');
-    ok(Pn.decideOuting(busyM, { ...ds, outingDefault: 'weekday', outingDays: [1, 3] }, MON, {})[0].out === true && Pn.decideOuting(busyM, { ...ds, outingDefault: 'weekday', outingDays: [2] }, MON, {})[0].out === false, 'decideOuting: 曜日で決める(月曜)');
-    ok(Pn.outingMemoryKey(MON, 607) === '1:600', 'outingMemoryKey: 曜日:開始(15分丸め)');
-    const dMem = Pn.decideOuting(busyM, { ...ds, outingMemory: { '1:600': 'out' } }, MON, {});
-    ok(dMem[0].out === true && dMem[0].outingSource === 'memory' && dMem[1].out === false, 'decideOuting: 同じ曜日・時刻の記憶を使う');
-    const dOv = Pn.decideOuting(busyM, { ...ds, outingMemory: { '1:600': 'out' } }, MON, { A: 'home', B: 'out' });
-    ok(dOv[0].out === false && dOv[0].outingSource === 'override' && dOv[1].out === true, 'decideOuting: 当日の上書きが最優先');
-    const pHome = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: busyM }, PC);
-    ok(!pHome.blocks.some((b) => b.type === 'transit') && pHome.blocks.filter((b) => b.type === 'busy').length === 2, 'buildPlan: 原則在宅なら予定だけで移動は置かない');
-    const pOut = Pn.buildPlan({ settings: { ...ds, outingMemory: { '1:600': 'out' } }, date: MON, nowMin: 420, tasks: {}, entries: {}, busy: busyM }, PC);
-    ok(pOut.blocks.filter((b) => b.type === 'transit').length === 2 && pOut.blocks.find((b) => b.type === 'busy').out === true, 'buildPlan: 記憶で外出になった予定の前後に移動');
-    const bigNoDl = { big: { id: 'big', name: '大物', kind: 'duty', deadline: null, remainingH: 20, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
-    ok(Pn.todayShare(bigNoDl, MON, ds)[0].todayMin === 0, 'todayShare: 期限なしの義務は今日の分 0');
-    const pFill = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigNoDl, entries: {} }, PC);
-    const fb = pFill.blocks.filter((b) => b.type === 'task');
-    const fillMin = fb.reduce((a, b) => a + b.end - b.start, 0);
-    ok(fb.length >= 3 && fb.every((b) => b.filler && b.taskId === 'big' && b.end - b.start >= 30 && b.end - b.start <= 90) && fillMin >= 420 && fillMin <= 450, 'buildPlan: 期限なしの大物を余った作業枠(workable 450)に 90 分以下で細分化して入れる');
-    ok(noOverlap(pFill.blocks) && pFill.blocks.filter((b) => b.type === 'rest' && b.auto).length >= 2, 'buildPlan: 細分化した枠も重ならず・90 分ごとに休憩');
-    ok(!Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: bigNoDl, entries: {}, fill: false }, PC).blocks.some((b) => b.type === 'task'), 'buildPlan: fill:false なら空き配分をしない');
-    const pMix = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { ...tasksA, ...bigNoDl }, entries: {} }, PC);
-    const order = pMix.blocks.filter((b) => b.type === 'task').map((b) => b.taskId);
-    ok(order[0] === 't2' && order[1] === 't1' && pMix.blocks.some((b) => b.filler) && !order.includes('w1'), 'buildPlan: 今日の分(期限順)が先・余りは期限順に細分化・やりたいは入れない');
-    const added = L.addEntry({ x: { id: 'x', date: D, start: '09:00', end: '12:00', categoryId: 'life', updatedAt: 'x', deletedAt: null } }, { date: D, startMin: 600, endMin: 660, categoryId: 'research' }, C);
-    ok(eq(alive(added), ['life 09:00-10:00', 'research 10:00-11:00', 'life 11:00-12:00']), 'addEntry: 閉じた記録を追加し隣を詰める(分割)');
-    ok(throws(() => L.addEntry({}, { date: D, startMin: 660, endMin: 600, categoryId: 'a' }, C)), 'addEntry: 終了≦開始は拒否');
     const dirty = S.migrate({ schema: 1, settings: {}, entries: { ok1: { id: 'ok1', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research' }, bad1: { id: 'bad1', date: 'x', start: '09:00' }, bad2: 'str', '__proto__': { id: 'p', date: '2026-10-12', start: '09:00', end: null } }, tasks: { t: { id: 't', name: 'n', remainingH: 'abc', minUnit: 9999, kind: 'weird', repeat: { type: 'weekly', hours: 'x' } }, nope: { noName: 1 } }, plans: { '2026-10-12': { blocks: [{ type: 'task', start: 540, end: 600 }, { type: 'evil', start: 0, end: 10 }, { type: 'busy', start: 'a' }] } }, reports: { '2026-10-11': { lines: ['a', 1, 'b'], coverage: 7 } }, ledger: { '2026-10-11': { usableMin: 'x', workMin: 100 } } });
     ok(Object.keys(dirty.entries).join() === 'ok1' && !('id' in dirty.entries), 'migrate: 壊れた記録は捨て、__proto__ キーは無視(prototype を汚さない)');
     ok(dirty.tasks.t.remainingH === 0 && dirty.tasks.t.minUnit === 30 && dirty.tasks.t.kind === 'duty' && dirty.tasks.t.repeat.hours === 5 && !dirty.tasks.nope, 'migrate: タスクの型を正規化・名前の無いものは捨てる');
-    ok(dirty.plans['2026-10-12'].blocks.length === 1 && dirty.reports['2026-10-11'].lines.length === 2 && dirty.reports['2026-10-11'].coverage === 0 && dirty.ledger['2026-10-11'].usableMin === 0, 'migrate: plan/report/ledger の壊れた要素を落とす');
-    ok(S.migrate({ schema: 1, settings: { outingByBusy: true } }).settings.outingDefault === 'home' && S.migrate({ schema: 1, settings: { outingDefault: 'weekday', outingDays: [1, 9], outingMemory: { '1:600': 'out', 'x': 'out', '2:630': 'maybe' } } }).settings.outingDays.join() === '1' , 'migrate: 外出設定(旧 outingByBusy は原則在宅へ・曜日と記憶を検証)');
+    ok(dirty.plans['2026-10-12'].blocks.length === 1 && dirty.reports['2026-10-11'].lines.length === 2 && dirty.reports['2026-10-11'].coverage === 0 && dirty.ledger['2026-10-11'].usableMin === 0, 'migrate: 旧 plan/report/ledger の壊れた要素を落とす(旧データは同期のため保持)');
     const nowT = 1_000_000_000;
     const dec = (o) => Sy.autoSyncDecision({ connected: true, hasToken: true, hasPass: true, online: true, now: nowT, lastSyncAt: 0, pending: false, ...o });
     ok(dec({}) === 'silent' && dec({ hasToken: false }) === 'gesture' && dec({ hasPass: false }) === 'gesture', 'autoSyncDecision: 鍵が揃えば静かに・無ければ次のタップで');
@@ -401,28 +300,21 @@ document.getElementById('app').addEventListener('load', async () => {
     ok((await M.passkey.unwrap(secret, wrapped)) === 'ひみつのpassphrase' && wrapped.ct !== (await M.passkey.wrap(secret, 'ひみつのpassphrase')).ct, 'passkey: PRF の秘密でパスフレーズを包んで戻せる(iv は毎回違う)');
     let wrongKey = false; try { await M.passkey.unwrap(new Uint8Array(32), wrapped); } catch { wrongKey = true; }
     ok(wrongKey, 'passkey: 違う秘密では戻せない');
-    // ---- v0.9: Phase 5 の純関数 ----
-    log('\n# phase5');
-    const mg = Pn.mergeAdjacent([{ type: 'task', taskId: 'a', start: 600, end: 630 }, { type: 'task', taskId: 'a', start: 630, end: 660 }, { type: 'rest', start: 660, end: 670 }, { type: 'task', taskId: 'a', start: 670, end: 700 }]);
-    ok(mg.length === 3 && mg[0].end === 660 && mg[0].merged && !mg[2].merged, 'mergeAdjacent: 同じタスクの連続枠だけをまとめる');
+
+    // ---- 毎週型・期限超過・週のまとめ(v0.9) ----
+    log('\n# weekly / overdue');
     const wk = { w: { id: 'w', name: '英語', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 2, minUnit: 30, categoryId: 'english', deletedAt: null, doneAt: null } };
     const r0 = Pn.rollWeekly(wk, {}, '2026-10-12', PC);
     ok(r0.tasks.w.periodEnd === '2026-10-18' && r0.rolled.length === 0 && r0.tasks.w.remainingH === 2, 'rollWeekly: periodEnd が無ければ今週の終わりを設定するだけ');
     const r1 = Pn.rollWeekly(r0.tasks, { e: { date: '2026-10-15', start: '09:00', end: '10:30', taskId: 'w', deletedAt: null } }, '2026-10-19', PC);
     ok(r1.rolled.length === 1 && r1.tasks.w.remainingH === 5 && r1.tasks.w.periodEnd === '2026-10-25' && r1.tasks.w.lastWeek.doneMin === 90 && r1.tasks.w.lastWeek.hours === 5, 'rollWeekly: 週をまたいだら残り見積を戻し、先週の実績を残す(繰り越さない)');
     ok(eq(Pn.rollWeekly(wk, {}, '2026-10-12', PC).tasks.w, Pn.rollWeekly(wk, {}, '2026-10-12', PC).tasks.w) && eq(wk.w.periodEnd, undefined), 'rollWeekly: 入力を変更しない');
+    const rw = Pn.rollWeekly({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 1, periodEnd: '2026-10-11', deletedAt: null, doneAt: null } }, {}, '2026-10-12', PC);
+    ok(rw.tasks.w.remainingSetAt === '2026-10-12T00:00:00' && rw.tasks.w.remainingH === 5, 'rollWeekly: 新しい週の始まりを remainingSetAt にする');
     const od = Pn.overdueTasks({ a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-10', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: 'b', kind: 'duty', deadline: '2026-10-10', remainingH: 0, deletedAt: null, doneAt: null }, c: { id: 'c', name: 'c', kind: 'wish', deadline: '2026-10-01', remainingH: 1, deletedAt: null, doneAt: null }, d: { id: 'd', name: 'd', kind: 'duty', deadline: '2026-10-12', remainingH: 1, deletedAt: null, doneAt: null } }, '2026-10-12');
     ok(od.length === 1 && od[0].id === 'a', 'overdueTasks: 期限超過かつ残りがある義務だけ(やりたい・残り 0・今日が期限は除く)');
-    const led = {}; for (let i = 1; i <= 7; i++) led[T.addDays('2026-10-12', -i)] = { usableMin: 600, workMin: 240 };
-    const cp = Rp.calibrationProposal(led, ds, '2026-10-12');
-    ok(cp && cp.current === 0.6 && cp.proposed === 0.4 && cp.days === 7, 'calibrationProposal: 直近7日の実績 40% を提案(5% 刻み)');
-    ok(Rp.calibrationProposal(led, { ...ds, ratio: 0.45 }, '2026-10-12') === null && Rp.calibrationProposal({ [T.addDays('2026-10-12', -1)]: { usableMin: 600, workMin: 240 } }, ds, '2026-10-12') === null, 'calibrationProposal: 差が 10pt 未満・記録日が 4 日未満なら提案しない');
     const wsum = Rp.weekSummary({ a: { date: '2026-10-12', start: '09:00', end: '11:00', categoryId: 'research', deletedAt: null }, b: { date: '2026-10-03', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, c: { date: '2026-10-12', start: '12:00', end: '12:30', categoryId: 'sns', deletedAt: null } }, ds, '2026-10-12');
     ok(wsum.week.workMin === 120 && wsum.week.driftMin === 30 && wsum.week.days === 1 && wsum.prev.workMin === 60, 'weekSummary: 直近7日と前の7日の作業・ダラダラ・記録日数');
-    let badFile = false; try { await Sy.decrypt(JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256-10', salt: 'AA==', iv: 'AA==', ct: 'AA==' }), 'x'); } catch (e) { badFile = /不正/.test(e.message); }
-    ok(badFile, 'decrypt: 反復回数が異常なファイルは拒否');
-    let badJson = false; try { await Sy.decrypt('{not json', 'x'); } catch (e) { badJson = /不正/.test(e.message); }
-    ok(badJson, 'decrypt: 壊れた JSON は拒否');
 
     // ---- v0.11: 時刻の書式・1日の始まり・圧縮座標・途中から切り出し・1日の円 ----
     log('\n# v0.11');
@@ -449,31 +341,26 @@ document.getElementById('app').addEventListener('load', async () => {
     const tfEl = M.ui.timeField('09:30', {});
     ok(tfEl.value === '09:30' && tfEl.textContent === '09:30' && (tfEl.set('10:00'), tfEl.value === '10:00' && tfEl.textContent === '10:00') && (tfEl.set(''), tfEl.classList.contains('empty')), 'timeField: value と表示が一致・set で変えられる');
 
-    // ---- v0.12: 残り見積の自動減算・すき間・理想どおりだった・睡眠カテゴリ ----
+    // ---- v0.12: 残り見積の自動減算・すき間・睡眠カテゴリ ----
     log('\n# v0.12');
     const rt = { id: 'r', name: 'r', kind: 'duty', deadline: '2026-10-20', remainingH: 5, remainingSetAt: '2026-10-10T12:00:00+09:00', minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
     const rE = { a: { id: 'a', date: '2026-10-10', start: '09:00', end: '10:00', taskId: 'r', deletedAt: null }, b: { id: 'b', date: '2026-10-11', start: '09:00', end: '10:30', taskId: 'r', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '09:00', end: '09:30', taskId: 'r', deletedAt: null }, d: { id: 'd', date: '2026-10-12', start: '10:00', end: null, taskId: 'r', deletedAt: null }, e: { id: 'e', date: '2026-10-11', start: '12:00', end: '13:00', taskId: 'x', deletedAt: null } };
     ok(Pn.remainingMin(rt, rE) === 300 - 90 - 30 && Pn.remainingMin(rt, rE, '2026-10-12') === 300 - 90 && Pn.remainingMin(rt, {}) === 300, 'remainingMin: remainingSetAt より後の閉じた記録を引く(beforeDate で今日の分は引かない・記録中は引かない)');
     ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0 で止まる');
-    const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', ds, rE)[0];
-    ok(ts0 && ts0.remainingMin === 210, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する');
+    const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', rE)[0];
+    ok(ts0 && ts0.remainingMin === 210 && ts0.todayMin === 25, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9 日 → 25 分)');
     ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが 0 なら出さない');
-    const rw = Pn.rollWeekly({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 1, periodEnd: '2026-10-11', deletedAt: null, doneAt: null } }, {}, '2026-10-12', PC);
-    ok(rw.tasks.w.remainingSetAt === '2026-10-12T00:00:00' && rw.tasks.w.remainingH === 5, 'rollWeekly: 新しい週の始まりを remainingSetAt にする');
-    const gE = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
-    const gR = L.closeSmallGaps(gE, '2026-10-12', 10, PC);
-    ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE.b.start === '10:07', 'closeSmallGaps: 10 分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
-    ok(L.closeSmallGaps(gE, '2026-10-12', 0, PC).b.start === '10:07', 'closeSmallGaps: 0 なら何もしない');
-    const fBlocks = [{ type: 'routine', name: '朝食', start: 420, end: 450 }, { type: 'task', name: 't', taskId: 'r', categoryId: 'research', start: 540, end: 660 }, { type: 'busy', name: '予定', start: 660, end: 720, categoryId: null }, { type: 'rest', name: '休憩', start: 720, end: 740 }];
-    const fR = L.fillFromPlan({ x: { id: 'x', date: '2026-10-12', start: '09:30', end: '10:00', categoryId: 'sns', deletedAt: null } }, fBlocks, '2026-10-12', 730, (b) => ({ routine: 'life', task: b.categoryId, rest: 'rest' })[b.type] || null, PC);
-    const fS = fR.added.map((e) => `${e.categoryId} ${e.start}-${e.end}`).sort();
-    ok(eq(fS, ['life 07:00-07:30', 'research 09:00-09:30', 'research 10:00-11:00', 'rest 12:00-12:10']) && fR.added.find((e) => e.categoryId === 'life').note === '朝食' && fR.added.find((e) => e.taskId === 'r') && Object.keys(fR.entries).length === 5, 'fillFromPlan: 記録のない時間だけ写す(既存は避け・予定は写さず・upto で切り・ルーティンはメモに名前)');
+    const gE2 = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
+    const gR = L.closeSmallGaps(gE2, '2026-10-12', 10, PC);
+    ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE2.b.start === '10:07', 'closeSmallGaps: 10 分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
+    ok(L.closeSmallGaps(gE2, '2026-10-12', 0, PC).b.start === '10:07', 'closeSmallGaps: 0 なら何もしない');
     const pie2 = Rp.dayPie({ a: { id: 'a', date: '2026-10-12', start: '00:00', end: '06:00', categoryId: 'sleep', deletedAt: null } }, '2026-10-12', { start: 420, end: 1410 }, 720);
     ok(pie2.filter((x) => x.id === 'sleep').length === 1 && pie2.find((x) => x.id === 'sleep').min === 420, 'dayPie: 記録した睡眠と推定の睡眠は1つにまとめる');
     const mig = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
     ok(mig.categories.some((c) => c.id === 'sleep') && mig.catSchema === 2 && !S.migrate({ schema: 1, settings: { catSchema: 2, categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings.categories.some((c) => c.id === 'sleep'), 'migrate: 古いデータに睡眠カテゴリを1回だけ足す(消したら戻さない)');
     ok(S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } }).settings.gapAbsorbMin === 15 && S.migrate({ schema: 1, settings: { gapAbsorbMin: 99 } }).settings.gapAbsorbMin === 10, 'migrate: すき間は 0〜60 分');
     ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', updatedAt: '2026-10-01T00:00:00+09:00' } } }).tasks.t.remainingSetAt === '2026-10-01T00:00:00+09:00', 'validateTask: remainingSetAt が無ければ updatedAt を使う(過去の記録を急に引かない)');
+    ok(S.migrate({ schema: 1, settings: { startFromLast: true } }).settings.startFromLast === true && S.migrate({ schema: 1, settings: { startFromLast: 'yes' } }).settings.startFromLast === false && S.defaultSettings().startFromLast === false, 'settings.startFromLast: 真偽値だけ・既定オフ');
 
     // ---- v0.12.2: 深夜にまたぐ作業時間帯・実効の日・記録ありの日の文 ----
     log('\n# v0.12.2');
@@ -481,40 +368,14 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(T.windowFor(wx, '2026-10-12'), { start: 420, end: 1500, crosses: true }) && T.windowFor(wx, '2026-10-14') === null && eq(T.windowFor(wx, '2026-10-15'), { start: 1380, end: 1500, crosses: true }), 'windowFor: 終わりが 6:00 以前なら翌日の深夜(+1440)・同じ時刻は null');
     ok(T.dayCut(wx, '2026-10-12') === 60 && T.dayCut(wx, '2026-10-13') === 0 && T.dayCut({ ...wx, dayStart: '02:00' }, '2026-10-12') === 120, 'dayCut: またぐ分と 1日の始まり の大きいほう');
     ok(eq(T.effectiveDay(wx, '2026-10-13', 30), { date: '2026-10-12', min: 1470, shifted: true }) && eq(T.effectiveDay(wx, '2026-10-13', 90), { date: '2026-10-13', min: 90, shifted: false }) && eq(T.effectiveDay(wx, '2026-10-14', 30), { date: '2026-10-14', min: 30, shifted: false }), 'effectiveDay: 前の日の作業時間帯が続く間は前の日(min は +1440)');
-    ok(T.usableMin(wx, '2026-10-12') > T.usableMin(wx, '2026-10-13'), 'usableMin: 深夜にまたぐ日は使える時間が増える');
-    const px = Pn.buildPlan({ settings: { ...S.defaultSettings(), window: wx.window }, date: '2026-10-13', tasks: {}, entries: {}, busy: [] }, PC);
-    const slx = px.blocks.filter((b) => b.type === 'sleep');
-    ok(slx.length && slx[0].start === 60 && slx[0].end === 420, 'buildPlan: 前の日が 1:00 までなら睡眠は 1:00 から');
     const ul = Rp.unlogged({ a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, '2026-10-14', null, 1440);
     ok(ul.loggedMin === 90 && ul.unloggedMin === 0, 'unlogged: 作業時間帯が無い日でも記録した時間は数える');
-    const agx = Rp.aggregate({ entries: { a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, plan: null, date: '2026-10-14', nowMin: 1440, settings: ds });
+    const agx = Rp.aggregate({ entries: { a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, date: '2026-10-14', nowMin: 1440, settings: ds });
     const lx = Rp.reportLines(agx, { date: '2026-10-14' });
     ok(lx.positive[0] === '作業は合計 1時間30分 でした。' && !lx.positive.some((t) => /記録がありません/.test(t)), 'reportLines: 記録があれば作業の合計を言う(「記録なし」とは言わない)');
-    ok(Rp.reportLines(Rp.aggregate({ entries: {}, plan: null, date: '2026-10-14', nowMin: 1440, settings: ds }), { date: '2026-10-14' }).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロの日の文');
+    ok(Rp.reportLines(Rp.aggregate({ entries: {}, date: '2026-10-14', nowMin: 1440, settings: ds }), { date: '2026-10-14' }).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロの日の文');
 
-    // ---- v0.12.3: 見通しでは期限切れを入れない ----
-    log('\n# v0.12.3');
-    const ovT = { z: { id: 'z', name: 'ゼミ準備', kind: 'duty', deadline: '2026-10-12', remainingH: 8, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null }, y: { id: 'y', name: 'y', kind: 'duty', deadline: '2026-10-20', remainingH: 2, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
-    const pv = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [], preview: true }, PC);
-    const prx = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: ovT, entries: {}, busy: [] }, PC);
-    ok(!pv.blocks.some((b) => b.taskId === 'z') && pv.blocks.some((b) => b.taskId === 'y') && !prx.blocks.some((b) => b.taskId === 'z'), 'buildPlan: 期限を過ぎたタスクはどの日の理想にも入れない(v0.13.3)');
-
-    // ---- v0.13 ----
-    log('\n# v0.13');
-    ok(S.migrate({ schema: 1, settings: { startFromLast: true } }).settings.startFromLast === true && S.migrate({ schema: 1, settings: { startFromLast: 'yes' } }).settings.startFromLast === false && S.defaultSettings().startFromLast === false, 'settings.startFromLast: 真偽値だけ・既定オフ');
-
-    // ---- v0.13.1: 期限の時刻 ----
-    log('\n# v0.13.1');
-    ok(T.usableMin(ds, '2026-10-13', [], 720) < T.usableMin(ds, '2026-10-13') && T.usableMin(ds, '2026-10-13', [], 300) === 0, 'usableMin: until で期限の時刻までに切る');
-    ok(Pn.deadlineMin({ deadline: '2026-10-13T15:00' }) === 900 && Pn.deadlineMin({ deadline: '2026-10-13' }) === null && Pn.deadlineKey({ deadline: '2026-10-13T15:00' }, '2026-10-12') === '2026-10-13', 'deadlineMin / deadlineKey: 時刻つきの期限');
-    const tdA = { a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-13', remainingH: 4, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
-    const tdB = { a: { ...tdA.a, deadline: '2026-10-13T09:00' } };
-    ok(Pn.todayShare(tdB, '2026-10-12', ds)[0].todayMin > Pn.todayShare(tdA, '2026-10-12', ds)[0].todayMin, 'todayShare: 期限に時刻があると、その日の枠が減る分だけ今日の分が増える');
-    const pdue = Pn.buildPlan({ settings: ds, date: '2026-10-13', tasks: { a: { ...tdA.a, deadline: '2026-10-13T10:00', remainingH: 3 } }, entries: {}, busy: [] }, PC);
-    const dueBlocks = pdue.blocks.filter((b) => b.taskId === 'a');
-    ok(dueBlocks.length && dueBlocks.every((b) => b.end <= 600) && pdue.shortfall.some((x) => x.taskId === 'a'), 'buildPlan: 期限の時刻より前にしか置かず、入らない分は shortfall');
-
-    // ---- v0.13.2: 日付をまたぐ終了時刻・大きさ 0.5 ----
+    // ---- v0.13.2: 日付をまたぐ終了時刻 ----
     log('\n# v0.13.2');
     const xE = { a: { id: 'a', date: '2026-10-12', start: '23:30', end: '23:50', categoryId: 'research', taskId: 't', note: 'n', plannedMin: null, deletedAt: null } };
     const xR = L.setTimes(xE, 'a', { start: '23:30', end: '00:10' }, 1440, PC);
@@ -524,20 +385,12 @@ document.getElementById('app').addEventListener('load', async () => {
     const xA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC);
     ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も 2 つに分ける');
     ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00 終了の記録は 30 分・翌日分は 10 分と数える');
-    ok(Pn.remainingMin({ id: 'h', remainingH: 0.5 }, {}) === 30 && Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: '2026-10-12', remainingH: 0.5, minUnit: 15, categoryId: 'research', deletedAt: null, doneAt: null } }, '2026-10-12', ds)[0].todayMin === 30, '大きさ 0.5 時間は 30 分として配分される');
 
-    // ---- v0.13.3: 期限切れは理想に入れない・消した/終えたタスクの枠を引き継がない ----
+    // ---- v0.13.3: 期限切れの扱い ----
     log('\n# v0.13.3');
     const ovr = { id: 'o', name: 'o', kind: 'duty', deadline: '2026-10-11', remainingH: 3, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
     ok(!Pn.isEligible(ovr, '2026-10-12') && Pn.isEligible(ovr, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null }, '2026-10-12') && !Pn.isEligible({ ...ovr, doneAt: 'x' }, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null, repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' } }, '2026-10-12'), 'isEligible: 期限がその日以降(期限なし・毎週型は可)・完了/削除/やりたいは不可');
-    ok(Pn.todayShare({ o: ovr }, '2026-10-12', ds).length === 0 && Pn.todayShare({ o: ovr }, '2026-10-11', ds)[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
-    const pov = Pn.buildPlan({ settings: ds, date: '2026-10-12', tasks: { o: ovr }, entries: {}, busy: [], ensureMin: ['o'], first: 'o' }, PC);
-    ok(!pov.blocks.some((b) => b.taskId === 'o'), 'buildPlan: ensureMin や first で指名しても期限切れは入れない');
-    const livek = { k: { id: 'k', name: 'k', kind: 'duty', deadline: '2026-10-20', remainingH: 5, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null } };
-    const prevP = { blocks: [{ id: 'b1', type: 'task', taskId: 'gone', start: 540, end: 600, name: 'gone' }, { id: 'b2', type: 'task', taskId: 'k', start: 600, end: 660, name: 'k' }, { id: 'b3', type: 'task', taskId: 'k', start: 900, end: 960, name: 'k', pinned: true }, { id: 'b4', type: 'task', taskId: 'done', start: 960, end: 1020, name: 'done', pinned: true }], skipped: [] };
-    const pk1 = Pn.buildPlan({ settings: ds, date: '2026-10-12', nowMin: 720, tasks: { ...livek, done: { ...livek.k, id: 'done', doneAt: 'x' } }, entries: {}, busy: [], prev: prevP }, PC);
-    const kids = pk1.blocks.filter((b) => b.type === 'task').map((b) => b.id);
-    ok(!kids.includes('b1') && kids.includes('b2') && kids.includes('b3') && !kids.includes('b4'), 'buildPlan(再計画): 消したタスクの過去の枠と、終えたタスクの pinned は引き継がない。生きているタスクの過去の枠と pinned は残す');
+    ok(Pn.todayShare({ o: ovr }, '2026-10-12').length === 0 && Pn.todayShare({ o: ovr }, '2026-10-11')[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
     ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5 で扱う)');
 
     // ---- v0.13.4: 記録は実効の日に属する(切れ目があれば 24:xx の 1 つの記録) ----
@@ -555,20 +408,6 @@ document.getElementById('app').addEventListener('load', async () => {
     const yPie = Rp.dayPie(yR, '2026-10-12', { start: 420, end: 1500 }, 1560);
     ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24 時間超の nowMin でも合計は 1440');
 
-
-    // ---- v0.14: 最小単位・すき間の埋め・引き継いだ枠のずらし ----
-    ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10 分のタスクは 10・15 分未満は 5 以上・3 時間以上は 30');
-    // 8:00 から 90 分 → 休憩 10 分 → 予定 9:55 までの 15 分は最小単位(30)未満だが埋める
-    const tailP = Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: { s: { id: 's', name: '小', kind: 'duty', deadline: MON, remainingH: 4, minUnit: 30, categoryId: 'research' } }, entries: {}, busy: [{ id: 'B', start: 595, end: 630 }], fill: false }, PC);
-    ok(noOverlap(tailP.blocks) && tailP.blocks.some((b) => b.type === 'task' && b.start === 580 && b.end === 595), 'buildPlan: 予定の前の 15 分以上のすき間(最小単位未満)はタスクで埋める(v0.14・空白を作らない)');
-    ok(!Pn.buildPlan({ settings: ds, date: MON, nowMin: 420, tasks: { s: { id: 's', name: '小', kind: 'duty', deadline: MON, remainingH: 4, minUnit: 30, categoryId: 'research' } }, entries: {}, busy: [{ id: 'B', start: 590, end: 630 }], fill: false }, PC).blocks.some((b) => b.type === 'task' && b.end === 590 && b.end - b.start < 15), 'buildPlan: 15 分未満のすき間は埋めない');
-    const pinPrev = { blocks: [{ id: 'k', type: 'task', start: 600, end: 660, taskId: 't1', name: '修論', pinned: true, categoryId: 'research' }], skipped: [] };
-    const pinP = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, busy: [{ id: 'B', start: 600, end: 630 }], prev: pinPrev, fill: false }, PC);
-    const pinK = pinP.blocks.find((b) => b.id === 'k');
-    ok(noOverlap(pinP.blocks) && pinK && pinK.start === 630 && pinK.end === 690 && pinK.pinned, 'buildPlan: 引き継いだ pinned の枠が予定と重なれば直後の空きへずらす(v0.14・移動時間を変えたあとのずれ)');
-    const pinGone = Pn.buildPlan({ settings: ds, date: MON, nowMin: 540, tasks: { t1: tasksA.t1 }, entries: {}, busy: [{ id: 'B', start: 600, end: 1410 }], prev: pinPrev, fill: false }, PC);
-    ok(noOverlap(pinGone.blocks) && !pinGone.blocks.some((b) => b.id === 'k'), 'buildPlan: ずらす先が無ければ引き継がない');
-
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
@@ -581,7 +420,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const doc = W.document;
     ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4, 'タブは4つ(ホーム/タイムライン/タスク/設定)');
     ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
-    ok(!!doc.querySelector('#view h1'), '画面に見出しが描かれている');
+    ok(!!doc.querySelector('#view h1, #view .today-head'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');

@@ -1,30 +1,12 @@
 // merihari ─ report.js: 日次レポートの集計と文章生成(仕様書 F3・§6.5)。すべて純関数。
-import { hm, mm, addDays, windowFor, usableMin, mergeIntervals, sumMin, fmtMinJa } from './time.js';
+// v0.15: 理想スケジュールとの比較は廃止。比べる相手は「先週の平均(ベースライン)」と「目安(毎日/毎週)」だけ。
+import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa } from './time.js';
 import { entriesOf, totalsByCategory } from './log.js';
+import { goals, lastLoggedDate, daysBetween } from './plan.js';
 
 const alive = (x) => x && !x.deletedAt;
 const kindOf = (categories, id) => (categories || []).find((c) => c.id === id)?.kind || (id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' ? 'life' : 'work');
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
-
-/** plan のブロックが属するカテゴリ(task/habit→categoryId、rest→rest、routine→life、transit→transit、busy はラベルがあればそのカテゴリ、無ければ null) */
-export function blockCategory(b) {
-  if (b.type === 'task' || b.type === 'habit') return b.categoryId || 'other';
-  if (b.type === 'rest') return 'rest';
-  if (b.type === 'routine') return 'life';
-  if (b.type === 'transit') return 'transit';
-  if (b.type === 'busy') return b.categoryId || null;
-  return null;
-}
-/** plan のブロックをカテゴリ別の分に(ラベルの無い busy は数えない)。upto を渡すとそこまでの分だけ(途中経過は「いままでの理想」と比べる・v0.10) */
-export function plannedByCategory(plan, upto = 1440) {
-  const out = {};
-  for (const b of plan?.blocks || []) {
-    const id = blockCategory(b);
-    if (!id || b.start >= upto) continue;
-    out[id] = (out[id] || 0) + (Math.min(b.end, upto) - b.start);
-  }
-  return out;
-}
 
 /** 記録のある日付の集合 */
 export function datesWithEntries(entries) {
@@ -73,34 +55,19 @@ export function streak(entries, date) {
   return n;
 }
 
-/** 休憩ブロックと休憩種別の記録の重なり(分)が最大のブロック */
-function restOverlap(plan, entries, date, categories, nowMin) {
-  let best = null;
-  const restIds = new Set((categories || []).filter((c) => c.kind === 'rest').map((c) => c.id));
-  const restEntries = entriesOf(entries, date).filter((e) => restIds.has(e.categoryId)).map((e) => ({ start: hm(e.start), end: e.end == null ? nowMin : hm(e.end) }));
-  for (const b of (plan?.blocks || []).filter((x) => x.type === 'rest')) {
-    let ov = 0;
-    for (const e of restEntries) ov += Math.max(0, Math.min(b.end, e.end) - Math.max(b.start, e.start));
-    if (ov >= 30 && (!best || ov > best.ov)) best = { block: b, ov };
-  }
-  return best;
-}
-
 /**
- * 集計(F3-1)。opts = { entries, plan, date, nowMin, settings }
- * 戻り値 { byCategory:{id:{planned,actual,baseline}}, workMin, driftMin, restMin, baselineWorkMin, baselineDays, unloggedMin, coverage, loggedMin, streak, restKept }
+ * 集計(F3-1)。opts = { entries, date, nowMin, settings }
+ * 戻り値 { byCategory:{id:{actual,baseline,kind,name}}, workMin, driftMin, restMin, baselineWorkMin, baselineDays, unloggedMin, coverage, loggedMin, streak, dayDone }
  */
-export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
+export function aggregate({ entries, date, nowMin = 1440, settings }) {
   const categories = settings?.categories || [];
-  const planned = plannedByCategory(plan, nowMin);
-  const busyPlanned = plannedByCategory({ blocks: (plan?.blocks || []).filter((b) => b.type === 'busy') }, nowMin); // ラベル付きの予定の分(入らなくても責めない)
   const actual = totalsByCategory(entries, date, nowMin);
   const base = baseline(entries, date);
-  const ids = new Set([...Object.keys(planned), ...Object.keys(actual), ...Object.keys(base?.byCategory || {})]);
+  const ids = new Set([...Object.keys(actual), ...Object.keys(base?.byCategory || {})]);
   const by = {};
   let workMin = 0, driftMin = 0, restMin = 0, baselineWorkMin = 0;
   for (const id of ids) {
-    const row = { planned: planned[id] || 0, busyPlanned: busyPlanned[id] || 0, actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: kindOf(categories, id), name: nameOf(categories, id) };
+    const row = { actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: kindOf(categories, id), name: nameOf(categories, id) };
     by[id] = row;
     if (row.kind === 'work') { workMin += row.actual; baselineWorkMin += row.baseline || 0; }
     if (row.kind === 'drift') driftMin += row.actual;
@@ -108,11 +75,9 @@ export function aggregate({ entries, plan, date, nowMin = 1440, settings }) {
   }
   const W = windowFor(settings, date);
   const u = unlogged(entries, date, W, nowMin);
-  const rk = restOverlap(plan, entries, date, categories, nowMin);
-  const plannedWorkMin = Object.values(by).filter((r) => r.kind === 'work').reduce((a, r) => a + r.planned, 0);
   const dayDone = !W || nowMin >= W.end;
-  return { date, byCategory: by, hasPlan: !!(plan && plan.blocks && plan.blocks.length), workMin, plannedWorkMin, dayDone, driftMin, restMin, baselineWorkMin: base ? baselineWorkMin : null, baselineDays: base?.days || 0,
-    unloggedMin: u.unloggedMin, coverage: u.coverage, loggedMin: u.loggedMin, streak: streak(entries, date), restKept: rk ? mm(rk.block.start) : null };
+  return { date, byCategory: by, workMin, dayDone, driftMin, restMin, baselineWorkMin: base ? baselineWorkMin : null, baselineDays: base?.days || 0,
+    unloggedMin: u.unloggedMin, coverage: u.coverage, loggedMin: u.loggedMin, streak: streak(entries, date) };
 }
 
 /**
@@ -148,6 +113,15 @@ export function untouchedNear(tasks, entries, date, near = 3) {
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
 }
 
+/** やりたいことのうち、idle 日以上ふれていないもの(v0.15: 「やりたいことに取り組む時間を作る」促し)。長くふれていない順 */
+export function idleWishes(tasks, entries, date, idle = 7) {
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind === 'wish')
+    .map((t) => ({ t, last: lastLoggedDate(entries, t.id) }))
+    .filter((x) => !x.last || daysBetween(x.last, date) >= idle)
+    .sort((a, b) => ((a.last || '0') < (b.last || '0') ? -1 : 1))
+    .map((x) => ({ ...x.t, lastDate: x.last }));
+}
+
 /**
  * 文章生成(§6.5)。肯定を先頭に最大 3 文、改善点は事実だけ最大 2 文、明日への一言は 1 件だけ。責める語は使わない。
  * 戻り値 { positive:[], improve:[], tomorrow:string|null, lines:[] }
@@ -155,13 +129,17 @@ export function untouchedNear(tasks, entries, date, near = 3) {
 export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   const pos = [];
   const by = agg.byCategory;
+  const day = date || agg.date;
   // 文体(v0.12.3): ふつうの丁寧な文。事実を一文ずつ。励ましや評価の言葉(「それでも大丈夫」「十分です」)は足さない
-  for (const [id, r] of Object.entries(by)) {
-    if (agg.hasPlan && r.kind === 'work' && r.actual - r.planned >= 15 && r.actual > 0) pos.push({ pri: 1, d: r.actual - r.planned, text: `${r.name}は理想より ${fmtMinJa(r.actual - r.planned)} 多く進みました。` });
+  for (const [, r] of Object.entries(by)) {
     if (r.kind === 'drift' && r.baseline != null && r.baseline - r.actual >= 15) pos.push({ pri: 1, d: r.baseline - r.actual, text: `${r.name}は先週の平均より ${fmtMinJa(r.baseline - r.actual)} 少なくなりました。` });
-    if (agg.hasPlan && r.planned >= 30 && Math.abs(r.actual - r.planned) < 15 && r.kind !== 'rest') pos.push({ pri: 2, d: r.planned, text: `${r.name}は理想どおりに進みました。` });
+    if (r.kind === 'work' && r.baseline != null && r.actual - r.baseline >= 15) pos.push({ pri: 2, d: r.actual - r.baseline, text: `${r.name}は先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多くなりました。` });
   }
-  if (agg.restKept) pos.push({ pri: 2, d: 0, text: `休憩は ${agg.restKept} に取れました。` });
+  // 目安(毎日/毎週)に届いた日(v0.15)
+  for (const g of goals(tasks, entries, day, 1440)) {
+    if (g.kind === 'daily' && g.done) pos.push({ pri: 2, d: g.doneMin, text: `${g.name}は ${fmtMinJa(g.doneMin)} で、毎日の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
+    if (g.kind === 'weekly' && g.done && g.doneMin - g.targetMin < 1440) pos.push({ pri: 2, d: g.doneMin, text: `${g.name}は今週 ${fmtMinJa(g.doneMin)} で、毎週の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
+  }
   if (agg.workMin > 0) pos.push({ pri: 3, d: agg.workMin, text: agg.baselineWorkMin != null ? `作業は合計 ${fmtMinJa(agg.workMin)} でした。先週の平均は ${fmtMinJa(agg.baselineWorkMin)} です。` : `作業は合計 ${fmtMinJa(agg.workMin)} でした。` });
   if (agg.streak >= 2) pos.push({ pri: 4, d: agg.streak, text: `記録は ${agg.streak} 日続いています。` });
   pos.sort((a, b) => a.pri - b.pri || b.d - a.d);
@@ -170,7 +148,6 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
 
   const imp = [];
   for (const [, r] of Object.entries(by)) {
-    if (agg.hasPlan && r.planned - (r.busyPlanned || 0) >= 30 && r.actual === 0 && r.kind === 'work') imp.push({ d: r.planned, text: `${r.name}の枠は使われませんでした。` });
     if (r.kind === 'drift' && r.baseline != null && r.actual - r.baseline >= 15) imp.push({ d: r.actual - r.baseline, text: `${r.name}は ${fmtMinJa(r.actual)} で、先週の平均より ${fmtMinJa(r.actual - r.baseline)} 多めでした。` });
   }
   if (agg.dayDone && agg.unloggedMin >= 60 && agg.coverage < 0.8) imp.push({ d: 0, text: `記録のない時間が ${fmtMinJa(agg.unloggedMin)} ありました。` }); // 途中経過では言わない(v0.10)
@@ -178,14 +155,10 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   const improve = imp.slice(0, 2).map((x) => x.text);
 
   let tomorrow = null;
-  const un = untouchedNear(tasks, entries, date || agg.date);
+  const un = untouchedNear(tasks, entries, day);
   if (un.length) { const t = un[0]; const k = t.deadline.slice(0, 10); tomorrow = `${t.name}はまだ手つかずです(期限 ${+k.slice(5, 7)}月${+k.slice(8, 10)}日)。明日、まず 5 分だけ。`; }
+  else { const w = idleWishes(tasks, entries, day)[0]; if (w) tomorrow = w.lastDate ? `${w.name}(やりたいこと)は ${daysBetween(w.lastDate, day)} 日ふれていません。明日、まず 5 分だけ。` : `${w.name}(やりたいこと)はまだ手つかずです。明日、まず 5 分だけ。`; }
   return { positive, improve, tomorrow, lines: [...positive, ...improve, ...(tomorrow ? [tomorrow] : [])] };
-}
-
-/** ledger[date] の材料(§6.6): 使える時間と作業種別の実績 */
-export function ledgerFor(settings, date, agg) {
-  return { usableMin: usableMin(settings, date), workMin: agg.workMin };
 }
 
 /** 確定スナップショット(F3-5) */
@@ -193,27 +166,9 @@ export function buildReport(opts) {
   const agg = aggregate(opts);
   const lines = reportLines(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date });
   const byCategory = {};
-  for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: r.planned, actual: r.actual, baseline: r.baseline };
-  return { date: opts.date, byCategory, workMin: agg.workMin, plannedWorkMin: agg.plannedWorkMin, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
+  for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: 0, actual: r.actual, baseline: r.baseline };
+  return { date: opts.date, byCategory, workMin: agg.workMin, plannedWorkMin: 0, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, finalizedAt: opts.finalizedAt || null };
-}
-
-/**
- * 「作業に回せる割合」の校正提案(F2-10・§6.6・v0.9)。直近 days 日の ledger(usableMin>0 かつ workMin>0 の日)が minDays 以上あれば、
- * Σwork/Σusable を 5% 刻みに丸めて提案。いまの ratio との差が threshold 未満なら null。純関数
- */
-export function calibrationProposal(ledger, settings, date, { days = 7, minDays = 4, threshold = 0.1 } = {}) {
-  let work = 0, usable = 0, n = 0;
-  for (let i = 1; i <= days; i++) {
-    const r = ledger?.[addDays(date, -i)];
-    if (!r || !(r.usableMin > 0) || !(r.workMin > 0)) continue;
-    work += r.workMin; usable += r.usableMin; n++;
-  }
-  if (n < minDays || !usable) return null;
-  const current = typeof settings?.ratio === 'number' ? settings.ratio : 0.6;
-  const proposed = Math.max(0.2, Math.min(1, Math.round((work / usable) / 0.05) * 0.05));
-  if (Math.abs(proposed - current) < threshold) return null;
-  return { current, proposed: Math.round(proposed * 100) / 100, days: n, avgWorkMin: Math.round(work / n) };
 }
 
 /** 週のまとめ(F3-6・v0.9): date を含む直近 7 日と、その前の 7 日の作業・ダラダラの合計(分)と記録日数。純関数 */

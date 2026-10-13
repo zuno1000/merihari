@@ -1,4 +1,4 @@
-// merihari ─ time.js: 作業時間帯 / 生活ルーティン / 使える時間 / 日付ユーティリティ(仕様書 §6.1・§7)
+// merihari ─ time.js: 作業時間帯 / 1日の切れ目 / 日付ユーティリティ(仕様書 §6.1・§7)
 // すべて純関数。時刻は「その日の 0:00 からの分」(0〜1440)、日付は 'YYYY-MM-DD'(ローカル)で扱う。
 
 export const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -81,27 +81,6 @@ export function effectiveDay(settings, date, min) {
   return min < cut ? { date: prev, min: min + 1440, shifted: true } : { date, min, shifted: false };
 }
 
-/** その日の生活ルーティンを区間 [{id,name,start,end}] で返す(開始順) */
-export function routinesFor(settings, key) {
-  const wd = weekday(key);
-  const out = [];
-  for (const r of settings?.routines || []) {
-    if (r.off) continue;
-    if (Array.isArray(r.days) && !r.days.includes(wd)) continue;
-    const s = hm(r.start);
-    const min = +r.min;
-    if (s == null || !(min > 0)) continue;
-    out.push({ id: r.id, name: r.name, start: s, end: s + min });
-  }
-  return out.sort((a, b) => a.start - b.start);
-}
-
-/** 長い休憩の分(v0.7: 時刻固定ではなく plan が動的に置く)。無ければ 0 */
-export function longRestMin(settings) {
-  const m = +settings?.longRest?.min;
-  return m > 0 ? m : 0;
-}
-
 /** 区間の重なりをまとめて開始順に返す。入力は {start,end} の配列(end<=start は捨てる) */
 export function mergeIntervals(list) {
   const xs = (list || []).filter((x) => x && x.end > x.start).map((x) => ({ start: x.start, end: x.end }))
@@ -132,27 +111,6 @@ export function subtractIntervals(base, cuts) {
 
 export function sumMin(list) {
   return (list || []).reduce((a, x) => a + Math.max(0, x.end - x.start), 0);
-}
-
-/**
- * 使える時間(分)= 作業時間帯 − 生活ルーティン − busy − 移動 − 長い休憩 − 習慣(§6.1)
- * extra: busy/transit などの追加区間 [{start,end}](分)。
- */
-export function usableMin(settings, key, extra = [], until = null) {
-  const w0 = windowFor(settings, key);
-  if (!w0) return 0;
-  const w = until == null ? w0 : { start: w0.start, end: Math.min(w0.end, until) }; // until(分): 期限の時刻まで(v0.13.1)
-  if (w.end <= w.start) return 0;
-  const cuts = [...routinesFor(settings, key), ...extra];
-  const free = sumMin(subtractIntervals([w], cuts));
-  const habitMin = (settings?.habits || []).reduce((a, h) => a + (+h.min > 0 ? +h.min : 0), 0);
-  return Math.max(0, free - habitMin - longRestMin(settings));
-}
-
-/** 作業に回せる時間(分)= usable × ratio(既定 0.6) */
-export function workableMin(settings, key, extra = [], until = null) {
-  const ratio = typeof settings?.ratio === 'number' && settings.ratio >= 0 && settings.ratio <= 1 ? settings.ratio : 0.6;
-  return Math.round(usableMin(settings, key, extra, until) * ratio);
 }
 
 /** 分 → '1h20m' / '45m' / '0m' */

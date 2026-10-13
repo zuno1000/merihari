@@ -6,8 +6,6 @@ export const KEY = 'merihari.v1';
 export const LOCAL_KEY = 'merihari.local';
 export const SCHEMA = 1;
 
-const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-
 import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 
 export const CATEGORY_KINDS = { work: '作業', life: '生活', rest: '休憩', drift: 'ダラダラ' };
@@ -29,7 +27,7 @@ export function defaultCategories() {
   ];
 }
 
-/** 既定の設定(§7・§13-3/4 の既定値) */
+/** 既定の設定(§7)。v0.15: 理想スケジュールの設定(ルーティン・習慣・休憩・移動・割合)は廃止し、記録に関わるものだけ */
 export function defaultSettings() {
   return {
     window: {
@@ -37,30 +35,13 @@ export function defaultSettings() {
       thu: ['07:00', '23:30'], fri: ['07:00', '23:30'],
       sat: ['08:00', '23:00'], sun: ['08:00', '23:00'],
     },
-    routines: [
-      { id: 'r1', name: '朝食', start: '07:00', min: 30, days: ALL_DAYS.slice(), off: false },
-      { id: 'r2', name: '昼食', start: '12:00', min: 45, days: ALL_DAYS.slice(), off: false },
-      { id: 'r3', name: '夕食', start: '19:00', min: 45, days: ALL_DAYS.slice(), off: false },
-      { id: 'r4', name: '入浴', start: '22:30', min: 30, days: ALL_DAYS.slice(), off: false },
-    ],
-    transitMin: 50,
-    outingDefault: 'home',   // 予定は原則 在宅('home')/ 外出('out')/ 曜日で決める('weekday')
-    outingDays: [],          // outingDefault が 'weekday' のとき外出扱いにする曜日(0=日)
-    outingMemory: {},        // '曜日:開始分' → 'home'|'out'(予定をタップしたときに覚える)
-    outingMinBusyMin: 45,
-    transitMemory: {},       // '曜日:開始分' → 片道の分(予定をタップして移動の長さを変えたときに覚える)
-    busyMemory: {},          // '曜日:開始分' → categoryId(予定が何かをテンプレから選んだときに覚える。'' は指定なし)
-    habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }],
-    restEvery: { workMin: 90, restMin: 10 },
-    // 長い休憩(v0.7): 時刻固定ではなく、その日の作業が longAfterMin 進んだところ(作業が少ない日は 6 割あたり)に longMin 置く
-    longRest: { min: 60, afterMin: 240 },
-    ratio: 0.6,
+    busyMemory: {},          // '曜日:開始分' → categoryId(予定の時間を記録したときに覚える。次からその予定の候補にする)
     dayStart: '00:00',       // タイムラインの1日の始まり(v0.11)。'02:00' なら 2:00〜翌 2:00 を1日として描く(26時に寝る人向け)
-    gapAbsorbMin: 10,
-    startFromLast: false,    // 記録を始めるとき最後の記録の終わりから数える(v0.13)        // 記録のすき間(v0.12): この分までの空白は次の記録に含める(0 で無効)
+    gapAbsorbMin: 10,        // 記録のすき間(v0.12): この分までの空白は次の記録に含める(0 で無効)
+    startFromLast: false,    // 記録を始めるとき最後の記録の終わりから数える(v0.13)
     catSchema: 2,            // 既定カテゴリの世代(2: 睡眠を追加)。古いデータに1回だけ足すための印
+    habitsMigrated: true,    // v0.15: 旧「毎日の習慣」をタスク(毎日 ◯分)へ移したか
     categories: defaultCategories(),
-    weeklyReviewDay: 0,
     settingsUpdatedAt: null,
   };
 }
@@ -79,13 +60,14 @@ export function defaultData() {
 }
 
 export function defaultLocal() {
-  return { busyCache: null, outingOverride: {}, transitOverride: {}, busyLabelOverride: {}, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
+  return { busyCache: null, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
 }
 
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const isHM = (s) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);
 const posInt = (v, dflt) => (Number.isFinite(+v) && +v > 0 ? Math.round(+v) : dflt);
 
+const LEGACY_SETTING_KEYS = ['routines', 'transitMin', 'outingDefault', 'outingDays', 'outingMemory', 'outingByBusy', 'outingMinBusyMin', 'transitMemory', 'habits', 'restEvery', 'longRest', 'eveningRest', 'ratio', 'weeklyReviewDay'];
 function normalizeSettings(raw) {
   const d = defaultSettings();
   if (!isObj(raw)) return d;
@@ -97,39 +79,8 @@ function normalizeSettings(raw) {
     w[k] = Array.isArray(v) && isHM(v[0]) && isHM(v[1]) ? [v[0], v[1]] : d.window[k];
   }
   s.window = w;
-  s.routines = Array.isArray(raw.routines)
-    ? raw.routines.filter((r) => isObj(r) && isHM(r.start)).map((r) => ({
-        ...r, id: String(r.id || uid()), name: String(r.name || ''), start: r.start, min: posInt(r.min, 30),
-        days: Array.isArray(r.days) ? r.days.filter((x) => ALL_DAYS.includes(x)) : ALL_DAYS.slice(), off: !!r.off,
-      }))
-    : d.routines;
-  s.transitMin = posInt(raw.transitMin, d.transitMin);
-  s.outingDefault = ['home', 'out', 'weekday'].includes(raw.outingDefault) ? raw.outingDefault : d.outingDefault;
-  s.outingDays = Array.isArray(raw.outingDays) ? raw.outingDays.filter((x) => ALL_DAYS.includes(x)) : [];
-  s.outingMemory = {};
-  if (isObj(raw.outingMemory)) for (const [k, v] of Object.entries(raw.outingMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && (v === 'home' || v === 'out')) s.outingMemory[k] = v;
-  delete s.outingByBusy;
-  s.outingMinBusyMin = posInt(raw.outingMinBusyMin, d.outingMinBusyMin);
   s.busyMemory = {};
   if (isObj(raw.busyMemory)) for (const [k, v] of Object.entries(raw.busyMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && typeof v === 'string' && v.length <= 40) s.busyMemory[k] = v;
-  s.transitMemory = {};
-  if (isObj(raw.transitMemory)) for (const [k, v] of Object.entries(raw.transitMemory)) if (/^[0-6]:\d{1,4}$/.test(k) && Number.isFinite(+v) && +v >= 0 && +v <= 300) s.transitMemory[k] = Math.round(+v);
-  s.habits = Array.isArray(raw.habits)
-    ? raw.habits.filter(isObj).map((h) => ({
-        ...h, id: String(h.id || uid()), name: String(h.name || ''), categoryId: String(h.categoryId || 'other'),
-        min: posInt(h.min, 30), prefer: ['morning', 'afternoon', 'evening', 'any'].includes(h.prefer) ? h.prefer : 'any',
-      }))
-    : d.habits;
-  s.restEvery = isObj(raw.restEvery)
-    ? { ...raw.restEvery, workMin: posInt(raw.restEvery.workMin, 90), restMin: Number.isFinite(+raw.restEvery.restMin) && +raw.restEvery.restMin >= 0 ? Math.round(+raw.restEvery.restMin) : 10 }
-    : d.restEvery;
-  // v0.6 以前の「夜の休憩(時刻固定)」は長さだけ引き継ぎ、長い休憩(配置は動的)にする
-  const legacyLong = isObj(raw.eveningRest) ? posInt(raw.eveningRest.min, d.longRest.min) : d.longRest.min;
-  s.longRest = isObj(raw.longRest)
-    ? { ...raw.longRest, min: Number.isFinite(+raw.longRest.min) && +raw.longRest.min >= 0 ? Math.round(+raw.longRest.min) : legacyLong, afterMin: posInt(raw.longRest.afterMin, d.longRest.afterMin) }
-    : { min: legacyLong, afterMin: d.longRest.afterMin };
-  delete s.eveningRest;
-  s.ratio = typeof raw.ratio === 'number' && raw.ratio >= 0.1 && raw.ratio <= 1 ? raw.ratio : d.ratio;
   s.dayStart = isHM(raw.dayStart) && /^0[0-6]:[0-5]\d$/.test(raw.dayStart) ? raw.dayStart : d.dayStart;
   s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
@@ -146,9 +97,26 @@ function normalizeSettings(raw) {
   // v0.12: 既定カテゴリに「睡眠」を足す(古いデータには1回だけ。消したら戻さない)
   s.catSchema = Number.isFinite(+raw.catSchema) ? +raw.catSchema : 1;
   if (s.catSchema < 2) { if (!s.categories.some((c) => c.id === 'sleep')) s.categories.push({ id: 'sleep', name: '睡眠', kind: 'life', color: DEFAULT_COLORS.sleep, order: s.categories.length + 1 }); s.catSchema = 2; }
-  s.weeklyReviewDay = ALL_DAYS.includes(raw.weeklyReviewDay) ? raw.weeklyReviewDay : d.weeklyReviewDay;
+  // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
+  s.habitsMigrated = raw.habitsMigrated === true;
+  if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
+  for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
   s.settingsUpdatedAt = typeof raw.settingsUpdatedAt === 'string' ? raw.settingsUpdatedAt : null;
   return s;
+}
+
+/** v0.15: 旧 settings.habits({id,name,categoryId,min}) を「毎日 ◯分」のタスクへ移す(1回だけ・同じ id があれば足さない)。純関数 */
+export function migrateHabits(settings, tasks) {
+  const out = { ...tasks };
+  if (settings.habitsMigrated || !Array.isArray(settings.habits)) return { settings: { ...settings, habitsMigrated: true, habits: undefined }, tasks: out };
+  for (const h of settings.habits) {
+    if (!isObj(h) || !h.name) continue;
+    const id = 'habit_' + String(h.id || h.name);
+    if (out[id]) continue;
+    out[id] = { id, name: String(h.name).slice(0, 200), kind: 'duty', deadline: null, remainingH: 0, minUnit: 15, remainingSetAt: null, categoryId: String(h.categoryId || 'other'), starter: '', repeat: { type: 'daily', min: posInt(h.min, 30) }, note: '', doneAt: null, updatedAt: nowISO(), deletedAt: null };
+  }
+  const s2 = { ...settings, habitsMigrated: true }; delete s2.habits;
+  return { settings: s2, tasks: out };
 }
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -177,7 +145,8 @@ export function validateEntry(r, id) {
 }
 export function validateTask(r, id) {
   if (!isObj(r) || typeof r.name !== 'string') return null;
-  const rep = isObj(r.repeat) && r.repeat.type === 'weekly' ? { type: 'weekly', hours: num(r.repeat.hours, 0.5, 200, 5), weekEnd: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].includes(r.repeat.weekEnd) ? r.repeat.weekEnd : 'sun' } : null;
+  const rep = isObj(r.repeat) && r.repeat.type === 'weekly' ? { type: 'weekly', hours: num(r.repeat.hours, 0.5, 200, 5), weekEnd: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].includes(r.repeat.weekEnd) ? r.repeat.weekEnd : 'sun' }
+    : isObj(r.repeat) && r.repeat.type === 'daily' ? { type: 'daily', min: num(r.repeat.min, 5, 600, 30) } : null; // v0.15: 毎日 ◯分(旧「習慣」)
   return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0),
     minUnit: num(r.minUnit, 5, 600, 30), remainingSetAt: optStr(r.remainingSetAt, 40) || optStr(r.updatedAt, 40), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
@@ -208,7 +177,8 @@ export function migrate(raw) {
   out.settings = normalizeSettings(raw.settings);
   out.entries = cleanMap(raw.entries, validateEntry);
   out.tasks = cleanMap(raw.tasks, validateTask);
-  out.plans = cleanMap(raw.plans, validatePlan);
+  if (!out.settings.habitsMigrated) { const m = migrateHabits({ ...out.settings, habits: raw.settings?.habits }, out.tasks); out.settings = m.settings; out.tasks = cleanMap(m.tasks, validateTask); delete out.settings.habits; }
+  out.plans = cleanMap(raw.plans, validatePlan); // 旧データ(理想スケジュール)。v0.15 以降は作らないが、同期のため壊さずに保持する
   out.reports = cleanMap(raw.reports, validateReport);
   out.ledger = cleanMap(raw.ledger, validateLedger);
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };
