@@ -439,6 +439,11 @@ document.getElementById('app').addEventListener('load', async () => {
     const myP = S.migrate({ schema: 1, settings: { palettes: [{ id: 'p1', name: 'mine', colors: { research: '#ABCDEF', sns: 'bad', '__proto__': '#000000' } }, { noId: 1 }, 'x'] } }).settings.palettes;
     ok(myP.length === 1 && myP[0].id === 'p1' && myP[0].colors.research === '#abcdef' && !('sns' in myP[0].colors) && Object.keys(myP[0].colors).length === 1 && S.migrate(null).settings.palettes.length === 0, 'migrate(v0.15.4): 自分の配色セットは id と #RRGGBB の色だけを通す');
 
+    // ---- v0.15.6: 記録にだけ残っているカテゴリの復元 ----
+    const lost = S.migrate({ schema: 1, settings: {}, entries: { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'c_014df50c' }, b: { id: 'b', date: '2026-10-12', start: '10:00', end: '11:00', categoryId: 'c_014df50c' }, c: { id: 'c', date: '2026-10-12', start: '11:00', end: '12:00', categoryId: 'research' }, d: { id: 'd', date: '2026-10-12', start: '12:00', end: '13:00', categoryId: 'c_gone', deletedAt: 'x' } } });
+    const lostC = lost.settings.categories.filter((c) => c.restored);
+    ok(lostC.length === 1 && lostC[0].id === 'c_014df50c' && lostC[0].archived && lostC[0].name === '消したカテゴリ' && eq(S.migrate(lost), lost), 'migrate(v0.15.6): 記録にだけ残るカテゴリを「消したカテゴリ」の非表示カテゴリとして復元(消した記録は見ない・冪等)');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

@@ -11,7 +11,7 @@ import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDa
 import { kindRole } from './store.js';
 
 const S = () => store.state.data.settings;
-function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : id, color: null, kind: 'work' }; }
+function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : '消したカテゴリ', color: null, kind: 'work' }; }
 const colorOf = (id) => displayColor(catOf(id).color);
 const roleOf = (id) => store.catRole(S(), id);
 /** ダラダラ種別の名前(ユーザーが変えられる)。無ければ「ダラダラ」 */

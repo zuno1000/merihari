@@ -125,7 +125,7 @@ function sectionCategories(rerender) {
       s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false });
       store.touchSettings(); rerender();
     }),
-    archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('span.grow', c.name), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
+    archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), el('p.muted.small', '記録は残っています。名前は変えられます(以前の版で消したカテゴリは「消したカテゴリ」の名前で復元されています)。'), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), textInput(c.name, (v) => { c.name = v || c.name; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
 }
 
 /**

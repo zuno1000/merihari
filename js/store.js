@@ -211,6 +211,13 @@ export function migrate(raw) {
   out.schema = SCHEMA;
   out.settings = normalizeSettings(raw.settings);
   out.entries = cleanMap(raw.entries, validateEntry);
+  // v0.15.6: 記録にだけ残っているカテゴリ(「非表示」方式になる前に消したもの)は、名前の無い非表示カテゴリとして復元する(id のまま表示しない。設定で名前を付け直せる)
+  const known = new Set(out.settings.categories.map((c) => c.id));
+  for (const e of Object.values(out.entries)) {
+    if (e.deletedAt || !e.categoryId || known.has(e.categoryId)) continue;
+    known.add(e.categoryId);
+    out.settings.categories.push({ id: e.categoryId, name: '消したカテゴリ', kind: (out.settings.kinds.find((k) => k.id === 'work') || out.settings.kinds[0]).id, color: DEFAULT_COLORS.other, order: out.settings.categories.length + 1, archived: true, restored: true });
+  }
   out.tasks = cleanMap(raw.tasks, validateTask);
   if (!out.settings.habitsMigrated) { const m = migrateHabits({ ...out.settings, habits: raw.settings?.habits }, out.tasks); out.settings = m.settings; out.tasks = cleanMap(m.tasks, validateTask); delete out.settings.habits; }
   out.plans = cleanMap(raw.plans, validatePlan); // 旧データ(理想スケジュール)。v0.15 以降は作らないが、同期のため壊さずに保持する

@@ -29,7 +29,7 @@ const windowEndOf = (date) => windowFor(S(), date)?.end ?? null;
 /** チップに出すカテゴリ(非表示にしたものは除く。記録の表示は catOf で非表示のものも引ける) */
 const cats = () => S().categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
 const md = (key) => fmtMD(key, true);
-export function catOf(id) { const c = S().categories.find((x) => x.id === id) || { id, name: id === 'other' ? 'その他' : id, color: null, kind: 'work' }; return { ...c, color: displayColor(c.color) }; }
+export function catOf(id) { const c = S().categories.find((x) => x.id === id) || { id, name: id === 'other' ? 'その他' : '消したカテゴリ', color: null, kind: 'work' }; return { ...c, color: displayColor(c.color) }; }
 function commit(entries) { store.state.data.entries = entries; store.save(); }
 const gapMin = () => (Number.isFinite(+S().gapAbsorbMin) ? +S().gapAbsorbMin : 10);
 /** 日付の記録のすき間を閉じてから保存(編集・追加・切り出しのあと) */
