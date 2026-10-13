@@ -70,7 +70,8 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(broken.entries, {}) && eq(broken.meta.resetAt, null), 'migrate: entries/meta を補完');
     ok(eq(S.migrate({ schema: 1, settings: { busyMemory: { '1:540': 'class', '2:600': '', 'x': 'a', '3:615': 5 } } }).settings.busyMemory, { '1:540': 'class', '2:600': '' }), 'migrate: 予定のラベルの記憶はキーと文字列を検証');
     const legacy = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2b6cb0', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#123456', order: 2 }, { id: 'new', name: 'x', kind: 'work', color: 'bad', order: 3 }] } });
-    ok(legacy.settings.categories[0].color === '#2a78d6' && legacy.settings.categories[1].color === '#123456' && legacy.settings.categories[2].color === '#718096', 'migrate: 旧既定色は新既定色へ・自分で変えた色は保持・壊れた色は灰');
+    ok(legacy.settings.categories[0].color === '#7fb3e6' && legacy.settings.categories[1].color === '#123456' && legacy.settings.categories[2].color === '#b8c4d3', 'migrate: 旧既定色(v0.4.0)は新既定色(パステル)へ・自分で変えた色は保持・壊れた色は灰');
+    ok(S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#e34948', order: 2 }] } }).settings.categories.slice(0, 2).map((c) => c.color).join() === '#7fb3e6,#f49a9a', 'migrate(v0.15.1): v0.4.1〜v0.15.0 の既定色もパステルへ');
     const once = S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } });
     ok(eq(S.migrate(once), once), 'migrate: 冪等');
     ok(once.settings.gapAbsorbMin === 15, 'migrate: 正しい値は保持');
@@ -407,6 +408,20 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(yC.closed.end === '25:00', 'closeOpen: 日が変わっていたら作業時間帯の終わり(翌 1:00=25:00)で閉じる');
     const yPie = Rp.dayPie(yR, '2026-10-12', { start: 420, end: 1500 }, 1560);
     ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24 時間超の nowMin でも合計は 1440');
+
+    // ---- v0.15.1: 期間のまとめ ----
+    log('\n# period');
+    const pE = toMap([mkE('2026-10-06', '09:00', '10:00', 'research'), mkE('2026-10-08', '09:00', '11:00', 'research'), mkE('2026-10-08', '12:00', '12:30', 'sns'), mkE('2026-10-12', '09:00', '09:30', 'english', 'd'), mkE('2026-10-12', '10:00', '10:20', 'other', 'x'), mkE('2026-10-13', '09:00', '10:00', 'research', 'w'), mkE('2026-10-13', '10:00', null, 'research')]);
+    const ps = Rp.periodSummary(pE, ds, '2026-10-07', '2026-10-13', { nowDate: '2026-10-13', nowMin: 630 });
+    ok(ps.days === 7 && ps.loggedDays === 3 && ps.workMin === 120 + 30 + 20 + 60 + 30 && ps.driftMin === 30 && ps.byCategory.research === 210 && ps.daily.length === 7 && ps.daily[6].workMin === 90, 'periodSummary: 期間のカテゴリ別合計・作業/ダラダラ・記録日数・日ごと(今日の記録中は now まで)');
+    ok(Rp.periodSummary(pE, ds, '2026-10-01', '2026-10-05').loggedDays === 0 && Rp.firstLoggedDate(pE) === '2026-10-06' && Rp.firstLoggedDate({}) === null, 'periodSummary: 記録の無い期間・firstLoggedDate');
+    const wb = Rp.weeklyBuckets(Rp.periodSummary(pE, ds, '2026-10-06', '2026-10-13').daily);
+    ok(wb.length === 2 && wb[0].key === '2026-10-11' && wb[0].workMin === 180 && wb[0].days === 2 && wb[1].key === '2026-10-18' && wb[1].from === '2026-10-12', 'weeklyBuckets: 日曜で終わる週にまとめる');
+    const gsT = { d: { id: 'd', name: '英語', kind: 'duty', categoryId: 'english', repeat: { type: 'daily', min: 30 }, deletedAt: null, doneAt: null }, w: { id: 'w', name: '論文', kind: 'duty', categoryId: 'research', repeat: { type: 'weekly', hours: 1, weekEnd: 'sun' }, deletedAt: null, doneAt: null }, x: { id: 'x', name: 'Blender', kind: 'wish', categoryId: 'other', deletedAt: null, doneAt: null }, t: { id: 't', name: '期限つき', kind: 'duty', deadline: '2026-10-20', remainingH: 1, deletedAt: null, doneAt: null } };
+    const gsum = Rp.goalsSummary(gsT, pE, '2026-10-07', '2026-10-13', { nowDate: '2026-10-13', nowMin: 630 });
+    ok(gsum.map((g) => g.kind).join() === 'daily,weekly,wish' && gsum[0].metDays === 1 && gsum[0].days === 7 && gsum[0].doneMin === 30, 'goalsSummary: 毎日 → 届いた日数 / 日数(期限つきは出さない)');
+    ok(gsum[1].weeks.length === 2 && gsum[1].weeks[0].end === '2026-10-11' && gsum[1].weeks[0].doneMin === 0 && gsum[1].weeks[1].doneMin === 60 && gsum[1].weeks[1].done && gsum[1].weeks[1].current && gsum[1].metWeeks === 1, 'goalsSummary: 毎週 → 期間にかかる週ごとの実績と目安(今週は current)');
+    ok(gsum[2].touchedDays === 1 && gsum[2].doneMin === 20 && gsum[2].lastDate === '2026-10-12', 'goalsSummary: やりたいこと → ふれた日数・合計・最後の日');
 
     // ---- 版規約(§9) ----
     log('\n# version');

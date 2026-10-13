@@ -440,3 +440,28 @@ button.crow:active{background:var(--accent-bg)}
 .quick .qrow .label{font-size:12px}
 .quick .qrow .chips.small{margin-top:0}
 .table.t3 .tr{grid-template-columns:1.6fr 1fr 1fr}
+
+/* ---- v0.15.1: 1 行の自然な改行・目安の促し/▶・パステルのチップ・期間レポート ---- */
+.yline .srow .lbl{display:flex;flex-direction:column;gap:1px;line-height:1.4;word-break:keep-all;overflow-wrap:anywhere}
+.yline .l1{font-size:13px;color:var(--muted);white-space:nowrap}
+.yline .l2{font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px}
+.yline .l2 .dot{width:9px;height:9px}
+.yline .ybody{padding:2px 0}
+.yline .ybody .lbl{color:var(--fg)}
+.yline .btn.sm.primary{flex:none;min-height:38px;padding:6px 12px;font-size:13px;white-space:nowrap}
+.srow.goal{padding-right:4px}
+.srow.goal .gmain{border:0;background:none;color:var(--fg);font-family:inherit;text-align:left;padding:0;cursor:pointer}
+.srow.goal .tplay{width:44px}
+.chip.cat{background:color-mix(in srgb,var(--c) 18%,var(--card));border-color:color-mix(in srgb,var(--c) 55%,var(--card))}
+.chip.cat.on{background:color-mix(in srgb,var(--c) 42%,var(--card));border-color:var(--c);color:var(--fg);font-weight:600}
+.chip.cat .dot{box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+.crow .dot,.gname .dot,.tname .dot,.pie-legend .lg i,.legend .lg i{box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.pie-unlogged{stroke:var(--track)}
+.pie-sleep{stroke:#e3e6ee}
+@media (prefers-color-scheme:dark){.pie-sleep{stroke:#3a3d48}.chip.cat .dot,.crow .dot,.gname .dot,.tname .dot{box-shadow:none}}
+.sheet>.seg{margin:0 0 12px}
+.cols.dense{gap:2px}
+.cols.dense .tcol{max-width:none;border-radius:2px 2px 0 0}
+.cols.dense .col-x{font-size:9px}
+.fig .crows{margin-top:2px}
+.fig .crow{padding:5px 2px;cursor:default}

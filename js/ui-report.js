@@ -1,5 +1,6 @@
-// merihari ─ ui-report.js: 日次レポートの画面(F3-4)。v0.8 で簡素化、v0.11 で「1日の円」を主役に、v0.15 で理想との比較を廃止。
-// 構成: 一言 → 1日の円(24時間を何がどれだけ占めたか)→ 作業の合計(先週比)→ ことば → 「くわしく」(週のまとめ・カテゴリ別・タイル・1日の帯・7日間・表・再計算)
+// merihari ─ ui-report.js: レポートの画面(F3-4)。v0.8 で簡素化、v0.11 で「1日の円」を主役に、v0.15 で理想との比較を廃止。
+// v0.15.1: 上の切替で 今日 / 7日 / 30日 / すべて。ホームに今日の内訳があるので、ホームからは「7日」で開く(昨日の未読があれば昨日)。
+// 今日: 一言 → 1日の円 → 作業の合計(先週比)→ ことば → くわしく。期間: 一言 → 内訳の円(記録した時間の割合)→ カテゴリ別の棒 → 推移(日/週)→ 目安のふり返り。
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
 import { el, svg, sheet, toast } from './ui.js';
 import * as store from './store.js';
@@ -13,6 +14,7 @@ function catOf(id) { return S().categories.find((c) => c.id === id) || { id, nam
 const colorOf = (id) => displayColor(catOf(id).color);
 const kindOf = (id) => catOf(id).kind;
 const md = (key) => fmtMD(key);
+const RANGES = [['day', '今日'], ['week', '7日'], ['month', '30日'], ['all', 'すべて']];
 
 /** その日のサマリ(確定済みならスナップショット、なければいまの集計) */
 function daySummary(date, nowMin) {
@@ -23,12 +25,34 @@ function daySummary(date, nowMin) {
   return { workMin: agg.workMin, driftMin: agg.driftMin, loggedMin: agg.loggedMin };
 }
 
-export function reportSheet(date) {
+/** レポートのシート。range: 'day' | 'week' | 'month' | 'all'。date は「今日」の日付(過去の日を開くときはその日) */
+export function reportSheet(date, range0 = 'day') {
   const d = store.state.data;
   const eff = effectiveDay(d.settings, dateKey(), minuteOfDay());
   const today = eff.date;
   const isToday = date === today;
-  const nowMin = isToday ? eff.min : 1440 + dayCut(d.settings, date); // 記録は実効の日に属する(v0.13.4)
+  const nowMin = isToday ? eff.min : 1440 + dayCut(d.settings, date);
+  let range = range0;
+  let close;
+  const body = el('div');
+  const seg = el('div.seg', RANGES.map(([k, label]) => el('button', { type: 'button', class: k === range ? 'active' : '', onclick: (e) => { range = k; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); draw(); } }, label)));
+  const draw = () => {
+    while (body.firstChild) body.removeChild(body.firstChild);
+    if (range === 'day') body.append(...dayView(date, today, nowMin, () => { close(); reportSheet(date, 'day'); }).filter(Boolean));
+    else body.append(...periodView(range, date, nowMin).filter(Boolean));
+  };
+  draw();
+  close = sheet((c) => { close = c; return [
+    seg,
+    body,
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]; });
+}
+
+// ================= 今日(1 日) =================
+function dayView(date, today, nowMin, reopen) {
+  const d = store.state.data;
+  const isToday = date === today;
   const r = d.reports[date]?.finalizedAt ? d.reports[date]
     : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks });
   const entries = log.entriesOf(d.entries, date);
@@ -36,15 +60,13 @@ export function reportSheet(date) {
   const base = report.baseline(d.entries, date);
   const baseWork = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'work').reduce((a, [, v]) => a + v, 0) : null;
   const baseDrift = base ? Object.entries(base.byCategory).filter(([id]) => kindOf(id) === 'drift').reduce((a, [, v]) => a + v, 0) : null;
-  const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
-
+  const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, label: k === date ? (isToday ? '今日' : `${+k.slice(8, 10)}日`) : DAY_JA[weekday(k)], ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
   const title = isToday ? '今日のレポート' : `${fmtMD(date, true)}のレポート`;
-  let close;
   const recompute = () => {
     d.reports[date] = report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
-    store.save(); toast('いまの記録で計算し直しました'); close(); reportSheet(date);
+    store.save(); toast('いまの記録で計算し直しました'); reopen();
   };
-  close = sheet((c) => { close = c; return [
+  return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点' : '未確定')]),
     el('p.rep-lead', r.positive[0]),
     pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r),
@@ -55,12 +77,98 @@ export function reportSheet(date) {
       bullets(r),
       tiles(r, baseDrift),
       dayStrip(entries, W, nowMin, isToday),
-      trend(days, date),
+      trendFigure(days, '7日間の推移'),
       tables(r, days),
       r.finalizedAt ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: recompute }, 'いまの記録で再計算')) : null,
     ]),
-    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
-  ]; });
+  ];
+}
+
+// ================= 期間(7日・30日・すべて) =================
+function periodView(range, date, nowMin) {
+  const d = store.state.data;
+  const to = date;
+  const first = report.firstLoggedDate(d.entries);
+  const from = range === 'week' ? addDays(to, -6) : range === 'month' ? addDays(to, -29) : (first && first < to ? first : to);
+  const ps = report.periodSummary(d.entries, d.settings, from, to, { nowDate: date, nowMin });
+  const label = range === 'week' ? 'この 7 日' : range === 'month' ? 'この 30 日' : 'これまで';
+  const title = `${label}(${fmtMD(from)}〜${fmtMD(to)})`;
+  const avg = ps.loggedDays ? Math.round(ps.workMin / ps.loggedDays) : 0;
+  const lead = ps.loggedDays ? `作業は合計 ${fmtMinJa(ps.workMin)}、記録した日の平均は ${fmtMinJa(avg)} です(記録 ${ps.loggedDays} 日)。` : 'この期間の記録はありません。';
+  // 前の同じ長さの期間と比べる(7日・30日だけ)
+  let cmp = null;
+  if (range !== 'all') {
+    const prev = report.periodSummary(d.entries, d.settings, addDays(from, -ps.days), addDays(from, -1));
+    cmp = el('section.kpis', el('div.kpi.hero-figure', [
+      el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', '作業'), el('b.kpi-value', fmtMin(ps.workMin) || '0m'), el('span.muted.small', `1日平均 ${fmtMin(avg)}`)]),
+      prev.loggedDays ? deltaText(ps.workMin, prev.workMin, true, `前の ${ps.days} 日比`) : el('span.kpi-delta.muted', `前の ${ps.days} 日の記録なし`),
+    ]));
+  }
+  const rows = Object.entries(ps.byCategory).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min }));
+  const trendItems = range === 'all' && ps.days > 42
+    ? report.weeklyBuckets(ps.daily).map((w) => ({ key: w.key, label: `${+w.key.slice(5, 7)}/${+w.key.slice(8, 10)}`, workMin: w.workMin, driftMin: w.driftMin, loggedMin: w.loggedMin }))
+    : ps.daily.map((x, i) => ({ ...x, label: ps.days <= 8 ? DAY_JA[weekday(x.key)] : (i % 7 === 0 || i === ps.days - 1 ? `${+x.key.slice(8, 10)}` : '') }));
+  const gsum = report.goalsSummary(d.tasks, d.entries, from, to, { nowDate: date, nowMin });
+  return [
+    el('div.rep-head', [el('h2', title)]),
+    el('p.rep-lead', lead),
+    rows.length ? shareDonut(rows, ps.loggedMin) : null,
+    cmp,
+    rows.length ? catBars(rows, ps.loggedDays) : null,
+    rows.length ? trendFigure(trendItems, range === 'all' && ps.days > 42 ? '週ごとの推移' : `${ps.days} 日の推移`) : null,
+    gsum.length ? goalsBox(gsum, ps.days) : null,
+    rows.length ? el('details.rep-details', [el('summary.muted.small', '表'), periodTable(rows, ps)]) : null,
+  ];
+}
+
+/** 記録した時間の内訳の円(期間用): 合計に対する割合。中央は合計。タップで時間と割合 */
+function shareDonut(rows, total) {
+  const SZ = 200, STROKE = 30, R = (SZ - STROKE) / 2, C = 2 * Math.PI * R;
+  const caption = el('p.strip-caption.muted.small', '');
+  const face = svg('svg', { class: 'pie', viewBox: `0 0 ${SZ} ${SZ}`, width: SZ, height: SZ, role: 'img', 'aria-label': '記録の内訳' });
+  const segs = [];
+  let acc = 0;
+  for (const x of rows) {
+    const len = (x.min / Math.max(1, total)) * C;
+    const seg = svg('circle', { class: 'pie-seg', cx: SZ / 2, cy: SZ / 2, r: R, 'stroke-width': STROKE, 'stroke-dasharray': `${Math.max(0, len - 2).toFixed(1)} ${C.toFixed(1)}`, 'stroke-dashoffset': (-acc).toFixed(1), stroke: colorOf(x.id) });
+    seg.addEventListener('click', () => { caption.textContent = `${catOf(x.id).name} ${fmtMinJa(x.min)}(${Math.round((x.min / Math.max(1, total)) * 100)}%)`; segs.forEach((s) => s.classList.toggle('lit', s === seg)); });
+    segs.push(seg); face.append(seg); acc += len;
+  }
+  const center = el('div.pie-center', [el('b', fmtMin(total)), el('span.muted.small', '記録')]);
+  return el('figure.fig.pie-fig', [el('div.pie-wrap', [face, center]), el('div.pie-legend', rows.slice(0, 6).map((x) => el('span.lg', [el('i', { style: { background: colorOf(x.id) } }), `${catOf(x.id).name} ${fmtMin(x.min)}`]))), caption]);
+}
+
+/** カテゴリ別の棒(期間用)。右に合計と 1 日平均 */
+function catBars(rows, loggedDays) {
+  const max = Math.max(1, ...rows.map((r) => r.min));
+  return el('figure.fig', [
+    el('figcaption', 'カテゴリ別(合計・記録した日の平均)'),
+    el('div.crows', rows.map((r) => el('div.crow', [
+      el('i.dot', { style: { background: colorOf(r.id) } }), el('span.cname', catOf(r.id).name), el('span.cval', `${fmtMin(r.min)}・${fmtMin(loggedDays ? Math.round(r.min / loggedDays) : 0)}/日`),
+      el('span.cbar', el('i', { style: { width: `${Math.round((r.min / max) * 100)}%`, background: colorOf(r.id) } })),
+    ]))),
+  ]);
+}
+
+/** 目安のふり返り(期間用): 毎日 → 届いた日 / 日数、毎週 → 週ごと、やりたいこと → ふれた日数 */
+function goalsBox(gsum, days) {
+  const row = (g) => {
+    let meta, pct = 0;
+    if (g.kind === 'daily') { meta = `毎日 ${fmtMinJa(g.targetMin)}・届いた日 ${g.metDays} / ${g.days} 日・合計 ${fmtMinJa(g.doneMin)}`; pct = g.days ? Math.round((g.metDays / g.days) * 100) : 0; }
+    else if (g.kind === 'weekly') { meta = `毎週 ${fmtMinJa(g.targetMin)}・${g.weeks.map((w) => `${fmtMin(w.doneMin)}${w.done ? '✓' : ''}`).join(' / ')}`; pct = g.weeks.length ? Math.round((g.metWeeks / g.weeks.length) * 100) : 0; }
+    else { meta = `やりたいこと・ふれた日 ${g.touchedDays} 日・合計 ${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後 ${fmtMD(g.lastDate)}` : ''}`; pct = days ? Math.round((g.touchedDays / days) * 100) : 0; }
+    return el('div.srow.goal', [el('span.gmain', [el('span.gname', [el('i.dot', { style: { background: colorOf(g.categoryId) } }), g.name]), el('span.gmeta', meta), el('span.meter', el('i', { style: { width: `${pct}%`, background: colorOf(g.categoryId) } }))])]);
+  };
+  return el('section.group', [el('h2', '目安のふり返り'), el('div.list', gsum.map(row))]);
+}
+
+function periodTable(rows, ps) {
+  const cell = (t, cls = '') => el('span', { class: `td ${cls}` }, t);
+  return el('div.table.t3', [
+    el('div.tr.th', [cell('カテゴリ'), cell('合計', 'num'), cell('1日平均', 'num')]),
+    ...rows.map((x) => el('div.tr', [cell(catOf(x.id).name), cell(fmtMin(x.min), 'num'), cell(fmtMin(ps.loggedDays ? Math.round(x.min / ps.loggedDays) : 0), 'num')])),
+    el('div.tr', [cell('記録した時間'), cell(fmtMin(ps.loggedMin), 'num'), cell(`${ps.loggedDays} 日`, 'num')]),
+  ]);
 }
 
 // ---- 1日の円(v0.11・F3-7): 24 時間をカテゴリ・未記録・睡眠・これから で分ける。タップで時間が出る ----
@@ -87,12 +195,15 @@ export function pieFigure(entries, date, W, nowMin, r, { size = 200, stroke = 30
 }
 
 // ---- 作業の合計(ヒーロー数字)と先週比 ----
+function deltaText(cur, base, upGood, label = '先週平均比') {
+  const diff = cur - base;
+  if (Math.abs(diff) < 5) return el('span.kpi-delta.muted', `${label.replace('比', '')}と同じくらい`);
+  const good = upGood ? diff > 0 : diff < 0;
+  return el('span.kpi-delta', { style: { color: statusColor(good ? 'good' : 'bad') } }, `${diff > 0 ? '▲' : '▼'} ${fmtMin(Math.abs(diff))} ${label}`);
+}
 function delta(cur, base, upGood) {
   if (base == null) return el('span.kpi-delta.muted', '先週の記録なし');
-  const diff = cur - base;
-  if (Math.abs(diff) < 5) return el('span.kpi-delta.muted', '先週平均と同じくらい');
-  const good = upGood ? diff > 0 : diff < 0;
-  return el('span.kpi-delta', { style: { color: statusColor(good ? 'good' : 'bad') } }, `${diff > 0 ? '▲' : '▼'} ${fmtMin(Math.abs(diff))} 先週平均比`);
+  return deltaText(cur, base, upGood);
 }
 function heroFigure(r, baseWork) {
   return el('section.kpis', el('div.kpi.hero-figure', [
@@ -143,7 +254,6 @@ function dayStrip(entries, W, nowMin, isToday) {
   };
   const logRow = el('div.strip-track', entries.map((e) => seg(hm(e.start), endOf(e), colorOf(e.categoryId), catOf(e.categoryId).name + (e.note ? `・${e.note}` : ''))));
   if (isToday && nowMin > lo && nowMin < hi) logRow.append(el('span.strip-now', { style: { left: `${pct(nowMin)}%` }, 'aria-hidden': 'true' }));
-  // 目盛(v0.11): 時の数字だけにして重ならないようにする。幅が狭ければ 6 時間ごと
   const ticks = [];
   const step = span > 900 ? 360 : 180;
   let lastTick = lo;
@@ -183,19 +293,20 @@ function bullets(r) {
   ]);
 }
 
-// ---- 7日間の推移(作業 / SNS・動画: 今日を強調、ほかは控えめ) ----
-function trend(days, date) {
+// ---- 推移(作業 / SNS・動画: 最後を強調、ほかは控えめ)。items: [{ key, label, workMin, driftMin }] ----
+function trendFigure(items, caption) {
   const chart = (label, key, color) => {
-    const max = Math.max(30, ...days.map((x) => x[key]));
+    const max = Math.max(30, ...items.map((x) => x[key]));
+    const n = items.length;
     return el('div.trend', [
       el('div.trend-title', label),
-      el('div.cols', days.map((x, i) => {
-        const isLast = i === days.length - 1;
+      el('div.cols', { class: `cols${n > 12 ? ' dense' : ''}` }, items.map((x, i) => {
+        const isLast = i === n - 1;
         const v = x[key];
         return el('div.col-slot', { title: `${md(x.key)} ${fmtMin(v)}` }, [
-          isLast && v ? el('span.col-val', fmtMin(v)) : null,
+          isLast && v && n <= 12 ? el('span.col-val', fmtMin(v)) : null,
           el('i.tcol', { style: { height: `${Math.max(v ? 3 : 1, (v / max) * 100)}%`, background: isLast ? color : 'var(--deemph)' } }),
-          el('span.col-x', { class: `col-x${isLast ? ' on' : ''}` }, isLast ? (x.key === dateKey() ? '今日' : `${+x.key.slice(8, 10)}日`) : DAY_JA[weekday(x.key)]),
+          x.label ? el('span.col-x', { class: `col-x${isLast ? ' on' : ''}` }, x.label) : null,
         ]);
       })),
     ]);
@@ -203,7 +314,7 @@ function trend(days, date) {
   const workColor = displayColor(S().categories.find((c) => c.kind === 'work')?.color);
   const driftColor = displayColor(S().categories.find((c) => c.kind === 'drift')?.color);
   return el('figure.fig', [
-    el('figcaption', '7日間の推移'),
+    el('figcaption', caption),
     el('div.trends', [chart('作業', 'workMin', workColor || 'var(--accent)'), chart('SNS・動画', 'driftMin', driftColor || 'var(--danger)')]),
   ]);
 }

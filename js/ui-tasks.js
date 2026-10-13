@@ -70,7 +70,7 @@ function quickAdd(today, rerender) {
     sizeLabel.textContent = when === 'daily' ? '1日に' : when === 'weekly' ? '1週間に' : 'どれくらい';
     if (o.value) dateIn.value = o.value;
   });
-  const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2${c.id === cid ? ' on' : ''}`, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
+  const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': catOf(c.id).color }, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
   const more = el('div.qmore', { hidden: true }, [el('div.qrow', [el('span.label', 'いつまで'), whenRow]), dateRow, sizeBox, el('div.qrow', [el('span.label', 'カテゴリ'), catRow])]);
   const reveal = () => { more.hidden = false; };
   name.addEventListener('focus', reveal);

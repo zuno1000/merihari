@@ -89,8 +89,8 @@ function normalizeSettings(raw) {
         ...c, id: String(c.id), name: String(c.name || c.id),
         kind: Object.keys(CATEGORY_KINDS).includes(c.kind) ? c.kind : 'work',
         color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
-          ? (LEGACY_COLORS[c.id] && c.color.toLowerCase() === LEGACY_COLORS[c.id] ? DEFAULT_COLORS[c.id] : c.color) // v0.4.0 以前の既定色は新しい既定色へ
-          : (DEFAULT_COLORS[c.id] || '#718096'),
+          ? ((LEGACY_COLORS[c.id] || []).includes(c.color.toLowerCase()) ? DEFAULT_COLORS[c.id] : c.color) // 過去の既定色は新しい既定色へ(自分で選んだ色は保持)
+          : (DEFAULT_COLORS[c.id] || DEFAULT_COLORS.life),
         order: Number.isFinite(+c.order) ? +c.order : i + 1,
       }))
     : d.categories;

@@ -16,7 +16,7 @@ export function el(spec, attrs, ...children) {
     if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
     else if (k === 'class') node.className = v;
     else if (k === 'dataset') Object.assign(node.dataset, v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    else if (k === 'style' && typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) { if (sv == null) continue; if (sk.startsWith('--')) node.style.setProperty(sk, sv); else node.style[sk] = sv; } }
     else if (k in node && typeof v !== 'string') node[k] = v;
     else node.setAttribute(k, v === true ? '' : v);
   }

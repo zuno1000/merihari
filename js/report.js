@@ -1,8 +1,9 @@
 // merihari ─ report.js: 日次レポートの集計と文章生成(仕様書 F3・§6.5)。すべて純関数。
-// v0.15: 理想スケジュールとの比較は廃止。比べる相手は「先週の平均(ベースライン)」と「目安(毎日/毎週)」だけ。
-import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa } from './time.js';
+// v0.15: 理想スケジュールとの比較は廃止。比べる相手は「先週の平均(ベースライン)」と「目安」だけ。
+// v0.15.1: 期間(7日・30日・すべて)のふり返り(periodSummary / goalsSummary / weeklyBuckets)。
+import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory } from './log.js';
-import { goals, lastLoggedDate, daysBetween } from './plan.js';
+import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange } from './plan.js';
 
 const alive = (x) => x && !x.deletedAt;
 const kindOf = (categories, id) => (categories || []).find((c) => c.id === id)?.kind || (id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' ? 'life' : 'work');
@@ -186,3 +187,71 @@ export function weekSummary(entries, settings, date) {
   };
   return { week: sum(date), prev: sum(addDays(date, -7)) };
 }
+
+/**
+ * 期間のまとめ(v0.15.1・F3-8): from〜to(両端含む)のカテゴリ別合計・作業/ダラダラ・記録日数・日ごとの列。
+ * nowDate の日は nowMin までで数える(記録中も)。戻り値 { from, to, days(期間の日数), loggedDays, loggedMin, workMin, driftMin, byCategory:{id:min}, daily:[{key, workMin, driftMin, loggedMin}] }
+ */
+export function periodSummary(entries, settings, from, to, { nowDate = null, nowMin = 1440 } = {}) {
+  const categories = settings?.categories || [];
+  const by = {};
+  const daily = [];
+  let loggedMin = 0, workMin = 0, driftMin = 0, loggedDays = 0;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const t = totalsByCategory(entries, d, d === nowDate ? nowMin : 1440);
+    let w = 0, dr = 0, lg = 0;
+    for (const [id, m] of Object.entries(t)) {
+      by[id] = (by[id] || 0) + m; lg += m;
+      const k = kindOf(categories, id);
+      if (k === 'work') w += m; else if (k === 'drift') dr += m;
+    }
+    if (lg > 0) loggedDays++;
+    loggedMin += lg; workMin += w; driftMin += dr;
+    daily.push({ key: d, workMin: w, driftMin: dr, loggedMin: lg });
+  }
+  return { from, to, days: daily.length, loggedDays, loggedMin, workMin, driftMin, byCategory: by, daily };
+}
+
+/** 日ごとの列を週(weekEnd 曜日で終わる 7 日)にまとめる(「すべて」の推移用)。戻り値 [{ key(週の終わり), from, workMin, driftMin, loggedMin, days }] */
+export function weeklyBuckets(daily, weekEndDow = 0) {
+  const out = [];
+  let cur = null;
+  for (const d of daily) {
+    const diff = (weekEndDow - weekday(d.key) + 7) % 7;
+    const end = addDays(d.key, diff);
+    if (!cur || cur.key !== end) { cur = { key: end, from: d.key, workMin: 0, driftMin: 0, loggedMin: 0, days: 0 }; out.push(cur); }
+    cur.workMin += d.workMin; cur.driftMin += d.driftMin; cur.loggedMin += d.loggedMin; if (d.loggedMin > 0) cur.days++;
+  }
+  return out;
+}
+
+/**
+ * 期間の目安のまとめ(v0.15.1): 毎日 → 届いた日数 / 期間の日数、毎週 → 期間にかかる週ごとの実績と目安、やりたいこと → ふれた日数と合計。
+ * 期限つきは出さない(タスク画面で見る)。戻り値 [{ taskId, name, categoryId, kind, ... }]
+ */
+export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin = 1440 } = {}) {
+  const out = [];
+  const list = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const dayLogged = (t) => { const r = []; for (let d = from; d <= to; d = addDays(d, 1)) r.push({ key: d, min: loggedBetween(entries, t.id, d, d, nowDate, nowMin) }); return r; };
+  for (const t of list) {
+    if (t.kind === 'wish') { const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', touchedDays: ds.filter((x) => x.min > 0).length, doneMin: ds.reduce((a, x) => a + x.min, 0), lastDate: lastLoggedDate(entries, t.id) }); continue; }
+    if (t.repeat?.type === 'daily') { const target = +t.repeat.min > 0 ? +t.repeat.min : 30; const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: target, days: ds.length, metDays: ds.filter((x) => x.min >= target).length, doneMin: ds.reduce((a, x) => a + x.min, 0) }); continue; }
+    if (t.repeat?.type === 'weekly') {
+      const target = Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
+      const weeks = [];
+      let { from: wf, to: wt } = weekRange(t, from);
+      while (wf <= to) { weeks.push({ end: wt, doneMin: loggedBetween(entries, t.id, wf, wt, nowDate, nowMin), targetMin: target, current: nowDate != null && wf <= nowDate && nowDate <= wt }); wf = addDays(wf, 7); wt = addDays(wt, 7); }
+      for (const w of weeks) w.done = w.doneMin >= w.targetMin;
+      out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0) });
+    }
+  }
+  return out.sort((a, b) => ({ daily: 0, weekly: 1, wish: 2 })[a.kind] - ({ daily: 0, weekly: 1, wish: 2 })[b.kind]);
+}
+
+/** 最初に記録した日(無ければ null)。「すべて」の期間の始まり */
+export function firstLoggedDate(entries) {
+  let first = null;
+  for (const e of Object.values(entries || {})) if (alive(e) && e.date && (!first || e.date < first)) first = e.date;
+  return first;
+}
+
