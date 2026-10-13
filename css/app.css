@@ -532,9 +532,13 @@ button.srow.goal:first-child{border-top:0}
 .tl-nav .tl-total{flex:none;margin-left:auto;font-variant-numeric:tabular-nums}
 .tl-nav .undo .undo-t{font-size:12px;white-space:nowrap}
 /* ---- v0.15.8: 取り消し(タイムラインの ↶) ---- */
-.tl-nav .undo{display:inline-flex;align-items:center;gap:3px;min-width:40px;padding:4px 6px;margin-left:-4px}
+.tl-nav .undo{display:inline-flex;align-items:center;gap:2px;min-width:36px;padding:4px 5px;margin-left:-2px;flex:none}
 .tl-nav .undo.redo{margin-left:0}
-.tl-nav{gap:4px}
+.tl-nav{gap:2px;flex-wrap:nowrap}
+.tl-nav .tl-date{flex:none;padding:4px 4px}
+.tl-nav .tl-date b{white-space:nowrap;font-size:16px}
+.tl-nav>.btn.sm.ghost:not(.undo){padding:4px 6px;min-width:32px;flex:none}
+.tl-nav .tl-total{font-size:12px;white-space:nowrap}
 .tl-nav .undo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tl-nav .undo:disabled{opacity:.3}
 .tl-nav .undo .undo-n{font-size:11px;font-variant-numeric:tabular-nums}

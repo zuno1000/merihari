@@ -14,8 +14,9 @@ import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.15.10';
+export const APP_VERSION = '0.15.11';
 export const NEWS = [
+  { v: '0.15.11', text: 'タイムラインの上の段が窮屈で日付が縦に折れていたのを修正。「戻す」「やり直す」はアイコンだけ(戻せる回数は小さな数字)にし、日付は折り返さないようにしました。' },
   { v: '0.15.10', text: 'タイムラインに「やり直す」(↷)を追加。「戻す」で取り消した操作を、戻した順に戻せます(新しい変更をすると「やり直す」は空になります)。「戻す」は少し左に寄せました。' },
   { v: '0.15.9', text: 'タイムラインの日付の横の印(レポートを開く)が iPhone で文字化けしていたのを図形に変え、「戻す」ボタンに文字を添えました。「記録 ◯h」は右端に寄せました。' },
   { v: '0.15.8', text: 'タイムラインの上に「ひとつ前に戻す」(↶)を追加。ドラッグ・時刻の変更・削除・追加・切り出し・カテゴリやメモの変更・記録の開始/終了を、直前のものから順に最大 20 回まで取り消せます(ボタンの数字は戻せる回数。長押し/タップでどの操作を戻すかが読めます)。戻した記録は同期で元に戻されないよう新しい更新時刻を持ちます。' },
