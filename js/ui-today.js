@@ -458,12 +458,12 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const nav = el('div.tl-nav', [
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
-    el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), el('span.muted.small', ' ▤')]),
+    el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), svg('svg', { class: 'tl-rep', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 20V10M10 20V4M16 20v-8M22 20H2' })])]),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
-    el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
-    el('span.muted.small', total ? `記録 ${fmtMin(total)}` : ''),
+    el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), el('span.undo-t', undoCount() ? `戻す ${undoCount()}` : '戻す')]),
     el('span.grow'),
     showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
+    el('span.muted.small.tl-total', total ? `記録 ${fmtMin(total)}` : ''),
   ]);
   const busy = [...google.busyForDate(date), ...(ds > 0 ? google.busyForDate(next).filter((b) => b.start < ds).map((b) => ({ ...b, start: b.start + 1440, end: Math.min(ds, b.end) + 1440 })) : [])];
   const tl = buildTimeline({ date, ds, nowRel, busy, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], showNow, gapUpto, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);

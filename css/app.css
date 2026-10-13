@@ -527,6 +527,10 @@ button.srow.goal:first-child{border-top:0}
 .help-h{font-size:13px;color:var(--muted);margin:14px 0 4px}
 .sheet .col .row.field{margin:0;gap:8px}
 
+/* ---- v0.15.9: 日付の横のレポートの印は SVG(文字 ▤ は iOS で化けた)・合計は右端 ---- */
+.tl-date .tl-rep{width:16px;height:16px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;margin-left:4px;flex:none}
+.tl-nav .tl-total{flex:none;margin-left:auto;font-variant-numeric:tabular-nums}
+.tl-nav .undo .undo-t{font-size:12px;white-space:nowrap}
 /* ---- v0.15.8: 取り消し(タイムラインの ↶) ---- */
 .tl-nav .undo{display:inline-flex;align-items:center;gap:3px;min-width:40px;padding:4px 8px}
 .tl-nav .undo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
