@@ -432,6 +432,20 @@ button.crow:active{background:var(--accent-bg)}
 .tl.one{grid-template-columns:3.2em 1fr}
 .tl.one .lane.log{grid-column:2}
 .tl.one .blk.busy{z-index:0;pointer-events:none;border-left:3px solid var(--accent);opacity:.9}
+.tl.one .blk.gap.busy{pointer-events:auto;opacity:1} /* v0.16: 過去の予定の「予定の時間は?」は押せる(上の行が消していた) */
+
+/* ---- v0.16: ホームの日送り・レポートのふり返り・円の切替(カテゴリ/種別) ---- */
+.today-head{gap:6px}
+.today-head>.btn.sm.ghost{padding:4px 8px;min-width:32px;flex:none;font-size:18px;line-height:1}
+.today-head>.btn.sm:not(.ghost){flex:none;margin-left:4px}
+.home{display:flex;flex-direction:column;touch-action:pan-y}
+.pie-box{display:flex;flex-direction:column;align-items:center}
+.pie-box .seg.pie-seg-toggle{width:auto;min-width:180px;margin:0 0 4px}
+.pie-box .seg.pie-seg-toggle button{height:30px;line-height:30px;font-size:12px;padding:0 14px}
+.report-lines.fb{display:flex;flex-direction:column;gap:10px;margin:4px 0 14px}
+.fb-block{display:flex;flex-direction:column;gap:2px}
+.fb-block .fb-title{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.fb-block p{margin:0;line-height:1.5}
 .tl.one .blk.busy .blk-name{font-weight:500;color:var(--muted);font-size:12px}
 .tl.one .blk.gap{z-index:1}
 .tl.one .blk.drag{z-index:2}

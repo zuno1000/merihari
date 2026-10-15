@@ -3,8 +3,8 @@
 // v0.15.1: 期間(7日・30日・すべて)のふり返り(periodSummary / goalsSummary / weeklyBuckets)。
 import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory } from './log.js';
-import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange } from './plan.js';
-import { catRole } from './store.js';
+import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked } from './plan.js';
+import { catRole, kindRole, defaultKinds } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
@@ -139,8 +139,9 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   }
   // 目安(毎日/毎週)に届いた日(v0.15)
   for (const g of goals(tasks, entries, day, 1440)) {
-    if (g.kind === 'daily' && g.done) pos.push({ pri: 2, d: g.doneMin, text: `${g.name}は ${fmtMinJa(g.doneMin)} で、毎日の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
-    if (g.kind === 'weekly' && g.done && g.doneMin - g.targetMin < 1440) pos.push({ pri: 2, d: g.doneMin, text: `${g.name}は今週 ${fmtMinJa(g.doneMin)} で、毎週の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
+    const byMark = g.checked && g.doneMin < g.targetMin; // 「済んだ」の印で届いた扱い(v0.16): 時間ではなく印を言う
+    if (g.kind === 'daily' && g.done) pos.push({ pri: 2, d: g.doneMin, text: byMark ? `${g.name}は済みました(印)。` : `${g.name}は ${fmtMinJa(g.doneMin)} で、毎日の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
+    if (g.kind === 'weekly' && g.done && g.doneMin - g.targetMin < 1440) pos.push({ pri: 2, d: g.doneMin, text: byMark ? `${g.name}は今週の分が済みました(印)。` : `${g.name}は今週 ${fmtMinJa(g.doneMin)} で、毎週の目安 ${fmtMinJa(g.targetMin)} に届きました。` });
   }
   if (agg.workMin > 0) pos.push({ pri: 3, d: agg.workMin, text: agg.baselineWorkMin != null ? `作業は合計 ${fmtMinJa(agg.workMin)} でした。先週の平均は ${fmtMinJa(agg.baselineWorkMin)} です。` : `作業は合計 ${fmtMinJa(agg.workMin)} でした。` });
   if (agg.streak >= 2) pos.push({ pri: 4, d: agg.streak, text: `記録は ${agg.streak} 日続いています。` });
@@ -163,14 +164,103 @@ export function reportLines(agg, { tasks = {}, entries = {}, date } = {}) {
   return { positive, improve, tomorrow, lines: [...positive, ...improve, ...(tomorrow ? [tomorrow] : [])] };
 }
 
+/** ダラダラ種別の名前(ユーザーが変えられる)。無ければ「ダラダラ」 */
+const driftLabelOf = (settings) => (Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds()).filter((k) => k.drift).map((k) => k.name).join('・') || 'ダラダラ';
+const r5 = (m) => Math.max(5, Math.round(m / 5) * 5);
+
+/**
+ * きょうのふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
+ * 判定の材料: 作業の合計 vs 先週平均(±15 分かつ ±10%)/ ダラダラ vs 先週平均(−15 / +30 分)/ 毎日の目安に届いたか(済んだの印も可)。
+ * 材料が無いとき(先週の記録が 3 日未満で目安も無い・記録が作業時間帯の半分以下・まだ 1 日の途中)は判定しない(judged=false)。
+ * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる 1 件だけ。「明日は」は目安から計算した量 1 件。
+ * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null }
+ */
+export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440 } = {}) {
+  const day = date || agg.date;
+  const by = agg.byCategory;
+  const lines = reportLines(agg, { tasks, entries, date: day });
+  const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin);
+  const dailyGs = gs.filter((g) => g.kind === 'daily');
+  const hasBase = agg.baselineWorkMin != null && agg.baselineDays >= 3;
+  const baseDrift = hasBase ? Object.values(by).filter((r) => r.drift).reduce((a, r) => a + (r.baseline || 0), 0) : 0;
+  const dWork = hasBase ? agg.workMin - agg.baselineWorkMin : 0;
+  const dDrift = hasBase ? agg.driftMin - baseDrift : 0;
+  const drift = driftLabelOf(settings);
+  const reasons = [];
+  let score = 0;
+  if (hasBase) {
+    if (dWork >= 15 && dWork >= agg.baselineWorkMin * 0.1) { score++; reasons.push(`作業は先週の平均より ${fmtMinJa(dWork)} 多め`); }
+    else if (-dWork >= 15 && -dWork >= agg.baselineWorkMin * 0.1) { score--; reasons.push(`作業は先週の平均より ${fmtMinJa(-dWork)} 少なめ`); }
+    if (dDrift <= -15) { score++; reasons.push(`${drift}は ${fmtMinJa(-dDrift)} 少なめ`); }
+    else if (dDrift >= 30) { score--; reasons.push(`${drift}は ${fmtMinJa(dDrift)} 多め`); }
+  }
+  if (dailyGs.length && agg.dayDone) {
+    const met = dailyGs.filter((g) => g.done).length;
+    if (met === dailyGs.length) { score++; reasons.push(dailyGs.length > 1 ? '毎日の目安にすべて届いた' : '毎日の目安に届いた'); }
+    else if (met === 0) { score--; reasons.push('毎日の目安には届かなかった'); }
+  }
+  let judged = false, verdict = null;
+  if (!agg.dayDone) verdict = null; // 途中は判定しない(いまの時点の文は positive[0])
+  else if (agg.coverage < 0.5) verdict = `記録が作業時間帯の ${Math.round(agg.coverage * 100)}% なので、この日の判定は控えます。`;
+  else if (!hasBase && !dailyGs.length) verdict = `比べる材料がまだ少ない日です(先週の記録 ${agg.baselineDays} 日)。`;
+  else {
+    judged = true;
+    const head = score >= 2 ? 'よい一日でした。' : score === 1 ? 'いつもより少し良い日でした。' : score === 0 ? 'いつもどおりの一日でした。' : score === -1 ? '少し控えめな一日でした。' : 'ゆっくりめの一日でした。';
+    verdict = head + (reasons.length ? `(${reasons.join('・')})` : '');
+  }
+  // 良かったこと: 肯定の文(ダラダラの減少 → 作業の増加 → 目安(印も)→ 合計 → 連続)
+  const good = lines.positive.slice();
+  // 良くするには: 数字で裏づけられる 1 件だけ(1 日の終わりだけ)
+  let better = null;
+  if (agg.dayDone) {
+    const unmet = gs.filter((g) => (g.kind === 'daily' || g.kind === 'deadline') && !g.done && g.targetMin).sort((a, b) => (a.targetMin - a.doneMin) - (b.targetMin - b.doneMin));
+    const fit = hasBase && dDrift >= 30 ? unmet.find((g) => g.targetMin - g.doneMin <= dDrift) : null;
+    if (fit) better = `${drift} ${fmtMinJa(agg.driftMin)} のうち ${fmtMinJa(r5(fit.targetMin - fit.doneMin))} を ${fit.name} に回せば、目安に届いていました。`;
+    else if (agg.unloggedMin >= 60 && agg.coverage < 0.8) better = `未記録が ${fmtMinJa(agg.unloggedMin)} あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。`;
+    else { const z = unmet.find((g) => g.kind === 'deadline' && g.doneMin === 0); if (z) better = `${z.name}はきょう手つかずでした(きょうの目安 ${fmtMinJa(z.targetMin)})。残りは明日からの日数で割り直します。`; }
+  }
+  // 明日は(途中なら「きょうはあと」): 期限つきの明日の分 → 届かなかった毎日 → 今週の残り(毎週)→ 近い期限の未着手 / ふれていないやりたいこと
+  let next = null;
+  if (!agg.dayDone) {
+    const g = gs.find((x) => x.targetMin && !x.done && (x.kind === 'deadline' || x.kind === 'daily'));
+    if (g) next = `きょうはあと ${g.name} を ${fmtMinJa(g.targetMin - g.doneMin)}。`;
+  } else {
+    const tomorrow = addDays(day, 1);
+    const sh = todayShare(tasks, tomorrow, entries).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
+    const dl = dailyGs.find((g) => !g.done);
+    const wk = gs.find((g) => g.kind === 'weekly' && !g.done && g.to > day);
+    if (sh) next = `明日は ${tasks[sh.taskId].name} を ${fmtMinJa(sh.todayMin)}(残り ${fmtMinJa(sh.remainingMin)} を ${sh.daysLeft} 日で)。`;
+    else if (dl) next = `明日は ${dl.name}(毎日 ${fmtMinJa(dl.targetMin)})を。きょうは ${fmtMinJa(dl.doneMin)} でした。`;
+    else if (wk) { const left = daysBetween(day, wk.to); next = `${wk.name}は今週あと ${fmtMinJa(wk.targetMin - wk.doneMin)}(残り ${left} 日・1 日 ${fmtMinJa(r5((wk.targetMin - wk.doneMin) / left))})。`; }
+    else next = lines.tomorrow;
+  }
+  return { judged, score, verdict, reasons, good, better, next };
+}
+
+/** 種別ごとの合計(v0.16・F3-10): カテゴリ別の分 {id:min} を種別にまとめる。色は種別の中でいちばん大きいカテゴリのもの。多い順 */
+export function totalsByKind(byCategory, settings) {
+  const cats = settings?.categories || [];
+  const out = {};
+  for (const [id, min] of Object.entries(byCategory || {})) {
+    if (!(min > 0)) continue;
+    const c = cats.find((x) => x.id === id);
+    const kind = c ? c.kind : (id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' || id === 'sleep' ? 'life' : 'work');
+    const k = out[kind] || (out[kind] = { id: kind, name: kindRole(settings, kind).name || kind, min: 0, topCategoryId: id, topMin: 0 });
+    k.min += min;
+    if (min > k.topMin) { k.topMin = min; k.topCategoryId = id; }
+  }
+  return Object.values(out).sort((a, b) => b.min - a.min).map(({ topMin, ...k }) => k);
+}
+
 /** 確定スナップショット(F3-5) */
 export function buildReport(opts) {
   const agg = aggregate(opts);
   const lines = reportLines(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date });
+  const feedback = dayFeedback(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date, settings: opts.settings, nowMin: opts.nowMin });
   const byCategory = {};
   for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: 0, actual: r.actual, baseline: r.baseline };
   return { date: opts.date, byCategory, workMin: agg.workMin, plannedWorkMin: 0, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
-    lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, finalizedAt: opts.finalizedAt || null };
+    lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, feedback, finalizedAt: opts.finalizedAt || null };
 }
 
 /** 週のまとめ(F3-6・v0.9): date を含む直近 7 日と、その前の 7 日の作業・ダラダラの合計(分)と記録日数。純関数 */
@@ -234,13 +324,13 @@ export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin 
   const dayLogged = (t) => { const r = []; for (let d = from; d <= to; d = addDays(d, 1)) r.push({ key: d, min: loggedBetween(entries, t.id, d, d, nowDate, nowMin) }); return r; };
   for (const t of list) {
     if (t.kind === 'wish') { const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', touchedDays: ds.filter((x) => x.min > 0).length, doneMin: ds.reduce((a, x) => a + x.min, 0), lastDate: lastLoggedDate(entries, t.id), dayList: ds }); continue; }
-    if (t.repeat?.type === 'daily') { const target = +t.repeat.min > 0 ? +t.repeat.min : 30; const ds = dayLogged(t); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: target, days: ds.length, metDays: ds.filter((x) => x.min >= target).length, doneMin: ds.reduce((a, x) => a + x.min, 0), dayList: ds }); continue; }
+    if (t.repeat?.type === 'daily') { const target = +t.repeat.min > 0 ? +t.repeat.min : 30; const ds = dayLogged(t).map((x) => ({ ...x, checked: isChecked(t, x.key) })); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: target, days: ds.length, metDays: ds.filter((x) => x.min >= target || x.checked).length, doneMin: ds.reduce((a, x) => a + x.min, 0), dayList: ds }); continue; }
     if (t.repeat?.type === 'weekly') {
       const target = Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
       const weeks = [];
       let { from: wf, to: wt } = weekRange(t, from);
       while (wf <= to) { weeks.push({ end: wt, doneMin: loggedBetween(entries, t.id, wf, wt, nowDate, nowMin), targetMin: target, current: nowDate != null && wf <= nowDate && nowDate <= wt }); wf = addDays(wf, 7); wt = addDays(wt, 7); }
-      for (const w of weeks) w.done = w.doneMin >= w.targetMin;
+      for (const w of weeks) w.done = w.doneMin >= w.targetMin || isChecked(t, w.end);
       out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0), dayList: dayLogged(t) });
     }
   }

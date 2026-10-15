@@ -109,6 +109,20 @@ export function weekRange(t, date) {
   return { from: addDays(to, -6), to };
 }
 
+/**
+ * 習慣の「済んだ」の印(v0.16・F5-8): 毎日/毎週のタスクは完了(doneAt)にせず、その日(毎週は週の終わりの日付)を task.checks に積む。
+ * 記録(時間)が無くても目安に届いた扱いにでき、明日にはまた出る。checks は日付キーの配列(新しい順でなくてよい・最大 400 件)。
+ */
+export function checkKey(t, date) { return t?.repeat?.type === 'weekly' ? deadlineKey(t, date) : date; }
+export function isChecked(t, date) { return Array.isArray(t?.checks) && t.checks.includes(checkKey(t, date)); }
+/** 印を付ける/外す。新しい checks の配列を返す(純関数) */
+export function toggleCheck(t, date) {
+  const key = checkKey(t, date);
+  const cur = Array.isArray(t?.checks) ? t.checks.filter((k) => typeof k === 'string') : [];
+  const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+  return next.sort().slice(-400);
+}
+
 /** タスクに紐づく最後の記録の日付(無ければ null) */
 export function lastLoggedDate(entries, taskId) {
   let last = null;
@@ -139,7 +153,10 @@ export function goals(tasks, entries, date, nowMin = 1440) {
     out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60), doneMin: loggedBetween(entries, t.id, from, to, date, nowMin), from, to });
   }
   for (const t of rest) if (t.kind === 'wish') out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', targetMin: null, doneMin: loggedBetween(entries, t.id, addDays(date, -6), date, date, nowMin), lastDate: lastLoggedDate(entries, t.id) });
-  for (const g of out) g.done = g.targetMin != null && g.doneMin >= g.targetMin;
+  for (const g of out) {
+    g.checked = (g.kind === 'daily' || g.kind === 'weekly') && isChecked(tasks[g.taskId], date); // 「済んだ」の印(v0.16)
+    g.done = g.checked || (g.targetMin != null && g.doneMin >= g.targetMin);
+  }
   return out;
 }
 

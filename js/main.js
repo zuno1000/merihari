@@ -10,12 +10,13 @@ import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import { toast, el } from './ui.js';
 import * as ui from './ui.js';
-import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton } from './ui-today.js';
+import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton, uiBusy } from './ui-today.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings } from './ui-settings.js';
 
-export const APP_VERSION = '0.15.13';
+export const APP_VERSION = '0.16.0';
 export const NEWS = [
+  { v: '0.16.0', text: 'ホームを左にスワイプ(または日付の ‹)で前の日の内訳が見られます。右にスワイプ・› で次の日、「今日」でいつでも今日に戻ります(過去の日はカテゴリの行をタップでその日に記録を足せます。未記録の行はその日のタイムラインへ)。タイムライン: 過去の予定の「予定の時間は?」が押せなかったのを修正。記録を足したり直したりしたあとに画面が現在時刻へ飛ばないようにしました(現在時刻へ動くのはタイムラインを開いたときだけ)。ドラッグの直後にしばらく操作できなかった件: 同期で画面を描き直すタイミングがドラッグ中・シートを開いている最中に当たると途中で消えていたので、その間は描き直しを待たせるようにしました。復帰時や同期のあとも見ていた日・設定の項目はそのままにします(勝手にホームに移っていた一因を直しました。止め忘れの確認のあともいまの画面に残ります)。習慣(毎日/毎週)のチェックは「きょう(今週)は済んだ」の印になり、明日にはまた出ます(これまでは「完了」になって二度と出ませんでした。完了になってしまった習慣は、タスク › 完了 のチェックを外すと戻ります)。レポート「今日」に「ふり返り」: どんな日だったか(自分の先週平均と目安だけで判定。材料が足りない日は判定しません)・よかったこと・良くするには(数字で裏づけられる 1 件だけ)・明日は(目安から計算した量)。円グラフは「カテゴリ / 種別」で切り替えられます(今日・7日・30日・すべて)。' },
   { v: '0.15.13', text: 'タイムラインの上段から「記録 ◯h」の表示を外し(右にはみ出していた。合計はホームの円とレポートで)、「戻す」「やり直す」を右端に揃えました。' },
   { v: '0.15.12', text: '同期の整え: 別の端末で足した記録と時間が重なっていた場合、同じ端末での操作と同じ規則(新しく変えた方を優先し、古い方の端を詰める)で整えます。両方の端末で同時に「記録中」だった場合は、あとから始めた方だけを記録中のまま残します。記録そのものが消えることはありません(消えるのは自分で削除したときだけ)。' },
   { v: '0.15.11', text: 'タイムラインの上の段が窮屈で日付が縦に折れていたのを修正。「戻す」「やり直す」はアイコンだけ(戻せる回数は小さな数字)にし、日付は折り返さないようにしました。' },
@@ -65,9 +66,10 @@ store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
 store.init();
 
 let tickFn = null;
-const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current };
-const screens = { now: () => renderNow(view, ctx), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
+const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw() };
+const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg) };
 let current = 'now';
+let currentArg = undefined; // いまの画面の引数(タイムライン/ホームの日付・設定の項目)。同期や復帰で描き直すときに失わない(v0.16)
 // 画面の描画で例外が起きても真っ白にしない(v0.13.1): メッセージと「もう一度」を出し、console に残す
 function showError(e) {
   console.error(e);
@@ -81,7 +83,8 @@ for (const k of Object.keys(screens)) { const f = screens[k]; screens[k] = (arg)
 function go(tab, arg) {
   if (tab === 'today') tab = 'now';
   if (!screens[tab]) tab = 'now';
-  current = tab;
+  current = tab; currentArg = arg; redrawPending = false;
+  view.dataset.screen = tab; view.dataset.date = ''; // 画面を開き直した印(v0.16: タイムラインは同じ日の描き直しだけスクロール位置を保つ)
   tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   store.state.local.uiState = Object.assign({}, store.state.local.uiState, { tab });
   store.saveLocal();
@@ -90,6 +93,18 @@ function go(tab, arg) {
   window.scrollTo(0, 0);
   sync.autoSync();
 }
+/**
+ * いまの画面を描き直す(同期で他の端末の変更を取り込んだ・予定が変わった・復帰した)。画面と引数(見ている日・設定の項目)はそのまま。
+ * v0.16: ドラッグ中やシートを開いている最中は描き直さない(ドラッグが途中で消える・入力中のシートの下が変わる)。後で 15 秒ごとの更新で描き直す。
+ */
+let redrawPending = false;
+const redraw = () => {
+  if (!store.state.data.meta.setupAt) return;
+  if (uiBusy()) { redrawPending = true; return; }
+  redrawPending = false;
+  screens[current](currentArg);
+};
+sync.hooks.onChanged = redraw;
 tabs.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
   if (b) go(b.dataset.tab);
@@ -128,28 +143,25 @@ function handleParams() {
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
-if (!firstRun) { if (finalizePending()) screens[current](); if (!checkOpenEntry(ctx)) overdueCheck(ctx); }
+if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx)) overdueCheck(ctx); }
 
-// Google: 接続済みなら GIS を先読みし、トークンがあれば静かに予定を取り直す(F6-3)。変わったら今日を描き直す
-const redraw = () => { if (store.state.data.meta.setupAt) screens[current](); };
-sync.hooks.onChanged = redraw; // 同期で他の端末の変更を取り込んだら、いまの画面を描き直す
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
-  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
+  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) redraw(); }).catch(() => {});
 }
 // 自動同期(v0.7・tangoquest 方式): 開いた直後に鍵があれば静かに。無ければ最初のタップで(ユーザー操作の中なので認証ポップアップが通る)
 if (!firstRun) sync.autoSyncOnOpen();
 document.addEventListener('click', () => { sync.autoSyncOnGesture(); }, { capture: true });
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
-setInterval(() => { try { if (tickFn) tickFn(); refreshAddButton(); } catch (e) { console.error(e); } }, 15000);
+setInterval(() => { try { if (redrawPending && !uiBusy()) { redraw(); return; } if (tickFn) tickFn(); refreshAddButton(); } catch (e) { console.error(e); } }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();
   if (!store.state.data.meta.setupAt) return;
   finalizePending();
-  if (!checkOpenEntry(ctx) && (current === 'now' || current === 'timeline')) screens[current]();
-  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) screens[current](); }).catch(() => {});
+  if (!checkOpenEntry(ctx) && (current === 'now' || current === 'timeline')) redraw();
+  google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) redraw(); }).catch(() => {});
   sync.autoSyncOnOpen();
 });
 

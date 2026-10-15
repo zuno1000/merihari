@@ -69,12 +69,15 @@ function dayView(date, today, nowMin, reopen) {
     d.reports[date] = report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
     store.save(); toast('いまの記録で計算し直しました'); reopen();
   };
+  // ふり返り(v0.16・F3-9): 確定済みのレポートに無ければ(v0.16 より前に確定したもの)いまの記録から作る
+  const fb = r.feedback || report.dayFeedback(report.aggregate({ entries: d.entries, date, nowMin, settings: d.settings }), { tasks: d.tasks, entries: d.entries, date, settings: d.settings, nowMin });
+  const lead = fb.verdict || r.positive[0];
   return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点' : '未確定')]),
-    el('p.rep-lead', r.positive[0]),
-    pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r),
+    el('p.rep-lead', lead),
+    pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
-    words(r),
+    feedbackBox(fb, lead === r.positive[0]),
     el('details.rep-details', [el('summary.muted.small', 'くわしく'),
       weekBox(date),
       bullets(r),
@@ -115,7 +118,7 @@ function periodView(range, date, nowMin) {
   return [
     el('div.rep-head', [el('h2', title)]),
     el('p.rep-lead', lead),
-    rows.length ? shareDonut(rows, ps.loggedMin) : null,
+    rows.length ? pieToggle((byKind) => shareDonut(byKind ? kindRows(rows) : rows, ps.loggedMin)) : null,
     cmp,
     rows.length ? catBars(rows, ps.loggedDays) : null,
     rows.length ? trendFigure(trendItems, range === 'all' && ps.days > 42 ? '週ごとの推移' : `${ps.days} 日の推移`) : null,
@@ -124,21 +127,35 @@ function periodView(range, date, nowMin) {
   ];
 }
 
-/** 記録した時間の内訳の円(期間用): 合計に対する割合。中央は合計。タップで時間と割合 */
+/** カテゴリ別の行 [{id,min}] → 種別別の行 [{id(種別), name, color, min}](v0.16・F3-10)。色は種別の中でいちばん大きいカテゴリ */
+function kindRows(rows) {
+  return report.totalsByKind(Object.fromEntries(rows.map((x) => [x.id, x.min])), S()).map((k) => ({ id: k.id, name: k.name, color: colorOf(k.topCategoryId), min: k.min }));
+}
+/** 円の上の「カテゴリ / 種別」の切替(v0.16)。build(byKind) が図を返す。選んだ方を端末に覚える */
+function pieToggle(build) {
+  let byKind = store.state.local.pieByKind === true;
+  const box = el('div');
+  const seg = el('div.seg.pie-seg-toggle', [[false, 'カテゴリ'], [true, '種別']].map(([k, label]) => el('button', { type: 'button', class: k === byKind ? 'active' : '', onclick: (e) => { byKind = k; store.state.local.pieByKind = k; store.saveLocal(); seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); draw(); } }, label)));
+  const draw = () => { while (box.firstChild) box.removeChild(box.firstChild); const f = build(byKind); if (f) box.append(f); };
+  draw();
+  return el('div.pie-box', [seg, box]);
+}
+/** 記録した時間の内訳の円(期間用): 合計に対する割合。中央は合計。タップで時間と割合。rows は [{id,min}](カテゴリ)か [{id,name,color,min}](種別) */
 function shareDonut(rows, total) {
   const SZ = 200, STROKE = 30, R = (SZ - STROKE) / 2, C = 2 * Math.PI * R;
+  const nm = (x) => x.name || catOf(x.id).name, cl = (x) => x.color || colorOf(x.id);
   const caption = el('p.strip-caption.muted.small', '');
   const face = svg('svg', { class: 'pie', viewBox: `0 0 ${SZ} ${SZ}`, width: SZ, height: SZ, role: 'img', 'aria-label': '記録の内訳' });
   const segs = [];
   let acc = 0;
   for (const x of rows) {
     const len = (x.min / Math.max(1, total)) * C;
-    const seg = svg('circle', { class: 'pie-seg', cx: SZ / 2, cy: SZ / 2, r: R, 'stroke-width': STROKE, 'stroke-dasharray': `${Math.max(0, len - 2).toFixed(1)} ${C.toFixed(1)}`, 'stroke-dashoffset': (-acc).toFixed(1), stroke: colorOf(x.id) });
-    seg.addEventListener('click', () => { caption.textContent = `${catOf(x.id).name} ${fmtMinJa(x.min)}(${Math.round((x.min / Math.max(1, total)) * 100)}%)`; segs.forEach((s) => s.classList.toggle('lit', s === seg)); });
+    const seg = svg('circle', { class: 'pie-seg', cx: SZ / 2, cy: SZ / 2, r: R, 'stroke-width': STROKE, 'stroke-dasharray': `${Math.max(0, len - 2).toFixed(1)} ${C.toFixed(1)}`, 'stroke-dashoffset': (-acc).toFixed(1), stroke: cl(x) });
+    seg.addEventListener('click', () => { caption.textContent = `${nm(x)} ${fmtMinJa(x.min)}(${Math.round((x.min / Math.max(1, total)) * 100)}%)`; segs.forEach((s) => s.classList.toggle('lit', s === seg)); });
     segs.push(seg); face.append(seg); acc += len;
   }
   const center = el('div.pie-center', [el('b', fmtMin(total)), el('span.muted.small', '記録')]);
-  return el('figure.fig.pie-fig', [el('div.pie-wrap', [face, center]), el('div.pie-legend', rows.slice(0, 6).map((x) => el('span.lg', [el('i', { style: { background: colorOf(x.id) } }), `${catOf(x.id).name} ${fmtMin(x.min)}`]))), caption]);
+  return el('figure.fig.pie-fig', [el('div.pie-wrap', [face, center]), el('div.pie-legend', rows.slice(0, 6).map((x) => el('span.lg', [el('i', { style: { background: cl(x) } }), `${nm(x)} ${fmtMin(x.min)}`]))), caption]);
 }
 
 /** カテゴリ別の棒(期間用)。右に合計と 1 日平均 */
@@ -216,11 +233,15 @@ function periodTable(rows, ps) {
 }
 
 // ---- 1日の円(v0.11・F3-7): 24 時間をカテゴリ・未記録・睡眠・これから で分ける。タップで時間が出る ----
-export function pieFigure(entries, date, W, nowMin, r, { size = 200, stroke = 30, center = null } = {}) {
-  const rows = report.dayPie(entries, date, W, nowMin);
+export function pieFigure(entries, date, W, nowMin, r, { size = 200, stroke = 30, center = null, byKind = false } = {}) {
+  let rows = report.dayPie(entries, date, W, nowMin);
   if (!rows.some((x) => x.id !== 'future' && x.id !== 'sleep')) return null;
+  const special = { unlogged: 1, sleep: 1, future: 1 };
+  // 種別の円(v0.16・F3-10): カテゴリの部分だけを種別にまとめ、未記録・睡眠・これから はそのまま
+  if (byKind) rows = [...kindRows(rows.filter((x) => !special[x.id])), ...rows.filter((x) => special[x.id])];
   const SZ = size, STROKE = stroke, R = (SZ - STROKE) / 2, C = 2 * Math.PI * R;
-  const nameOf = (id) => ({ unlogged: '未記録', sleep: '睡眠', future: 'これから' })[id] || catOf(id).name;
+  const nameOf = (id) => ({ unlogged: '未記録', sleep: '睡眠', future: 'これから' })[id] || (byKind ? rows.find((x) => x.id === id)?.name : catOf(id).name);
+  const colorOf = (id) => (byKind ? rows.find((x) => x.id === id)?.color : displayColor(catOf(id).color));
   const clsOf = (id) => ({ unlogged: 'pie-unlogged', sleep: 'pie-sleep', future: 'pie-future' })[id] || '';
   const caption = el('p.strip-caption.muted.small', '');
   const centerNode = center || el('div.pie-center', [el('b', fmtMin(r.workMin) || '0m'), el('span.muted.small', '作業')]);
@@ -363,14 +384,15 @@ function trendFigure(items, caption) {
   ]);
 }
 
-// ---- ことば ----
-function words(r) {
-  const rest = r.positive.slice(1);
-  if (!rest.length && !r.improve.length && !r.tomorrow) return null;
-  return el('section.report-lines', [
-    ...rest.map((t) => el('p', t)),
-    ...r.improve.map((t) => el('p.muted', t)),
-    r.tomorrow ? el('p.tomorrow', r.tomorrow) : null,
+// ---- ふり返り(v0.16・F3-9): よかったこと / 良くするには / 明日は(途中なら きょうはあと) ----
+function feedbackBox(fb, leadIsFirstGood) {
+  const good = leadIsFirstGood ? fb.good.slice(1) : fb.good;
+  if (!good.length && !fb.better && !fb.next) return null;
+  const block = (title, items, cls = '') => (items.length ? el('div.fb-block', [el('span.fb-title', title), ...items.map((t) => el('p', { class: cls }, t))]) : null);
+  return el('section.report-lines.fb', [
+    block('よかったこと', good),
+    block('良くするには', fb.better ? [fb.better] : [], 'muted'),
+    block(fb.next && fb.next.startsWith('きょうはあと') ? 'このあと' : '明日は', fb.next ? [fb.next] : [], 'tomorrow'),
   ]);
 }
 

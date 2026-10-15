@@ -155,8 +155,8 @@ export function renderTasks(view, ctx) {
   const row = (t) => {
     const g = goalOf[t.id];
     const meta = [];
-    if (t.repeat?.type === 'daily') meta.push(`毎日 ${fmtMinJa(t.repeat.min)}`, `きょう ${fmtMinJa(g?.doneMin || 0)}`);
-    else if (t.repeat?.type === 'weekly') meta.push(`毎週 ${t.repeat.hours}h`, `今週 ${fmtH(g?.doneMin || 0)}${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)})` : ''}`);
+    if (t.repeat?.type === 'daily') meta.push(`毎日 ${fmtMinJa(t.repeat.min)}`, `きょう ${fmtMinJa(g?.doneMin || 0)}${g?.checked ? '・済' : ''}`);
+    else if (t.repeat?.type === 'weekly') meta.push(`毎週 ${t.repeat.hours}h`, `今週 ${fmtH(g?.doneMin || 0)}${g?.checked ? '・済' : ''}${t.lastWeek ? `(先週 ${fmtH(t.lastWeek.doneMin)})` : ''}`);
     else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後 ${fmtMD(g.lastDate)}` : 'まだ手つかず', `この 7 日 ${fmtH(g?.doneMin || 0)}`);
     else {
       meta.push(fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));
@@ -165,9 +165,15 @@ export function renderTasks(view, ctx) {
     }
     const over = !t.doneAt && !t.repeat && t.deadline && t.deadline.slice(0, 10) < today;
     const recording = open && open.taskId === t.id;
+    // 習慣(毎日/毎週)のチェックは「きょう(今週)は済んだ」の印(v0.16・F5-8): 明日にはまた出る。完了にはしない(やめるときは編集から削除)
+    const habit = !!t.repeat && !t.doneAt;
+    const checked = habit ? plan.isChecked(t, today) : !!t.doneAt;
+    const span = t.repeat?.type === 'weekly' ? '今週' : 'きょう';
+    const onCheck = habit
+      ? () => { t.checks = plan.toggleCheck(t, today); saveTask(t); toast(plan.isChecked(t, today) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); }
+      : () => { t.doneAt = t.doneAt ? null : store.nowISO(); saveTask(t); toast(t.doneAt ? '完了' : '戻しました'); rerender(); };
     return el('div.trow', [
-      el('button.check', { type: 'button', 'aria-label': `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${t.doneAt ? ' on' : ''}`,
-        onclick: () => { t.doneAt = t.doneAt ? null : store.nowISO(); saveTask(t); toast(t.doneAt ? '完了' : '戻しました'); rerender(); } }, t.doneAt ? '✓' : ''),
+      el('button.check', { type: 'button', 'aria-label': habit ? `${t.name} を${checked ? `${span}の済みから外す` : `${span}は済んだことにする`}` : `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${checked ? ' on' : ''}`, onclick: onCheck }, checked ? '✓' : ''),
       el('button.tmain', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, [
         el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null, g?.done ? el('span.gok', '✓') : null]),
         el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, meta.join('・')),

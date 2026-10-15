@@ -244,9 +244,11 @@ export async function syncDrive({ interactive = false } = {}) {
     data.meta.lastSyncAt = nowISO;
     store.state.data = data;
     store.save();
+    const seq = store.state.saveSeq;
     const body = await encrypt(data, pass, hint || local.syncHint || '');
     await upload(file?.id || null, body, interactive);
-    local.lastSyncAt = Date.now(); local.pendingSync = false; local.syncHint = hint || local.syncHint || '';
+    local.lastSyncAt = Date.now(); local.syncHint = hint || local.syncHint || '';
+    if (store.state.saveSeq === seq) local.pendingSync = false; // v0.16: アップロード中に記録を変えていたら「未同期の変更あり」のまま(次の同期で上がる)
     store.saveLocal();
     if (changed) { try { hooks.onChanged?.(); } catch (e) { console.warn(e); } }
     return changed ? 'ok' : 'same';

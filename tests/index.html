@@ -218,6 +218,13 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(gs[3].targetMin === null && gs[3].doneMin === 0 && gs[3].lastDate === '2026-10-01' && !gs[3].done, 'goals(やりたい): 目安なし・直近 7 日 0・最後にふれた日');
     ok(Pn.goals(gTasks, { ...gE, e: { date: MON, start: '12:00', end: '12:15', taskId: 'd' } }, MON, 800)[1].done === true, 'goals: 目安に届けば done');
     ok(Pn.goals({}, {}, MON, 600).length === 0, 'goals: タスクが無ければ空');
+    // v0.16: 習慣の「済んだ」の印(F5-8)
+    const chkD = { ...gTasks.d, checks: [MON] }, chkW = { ...gTasks.w, checks: ['2026-10-18'] };
+    ok(Pn.checkKey(chkD, MON) === MON && Pn.checkKey(chkW, MON) === '2026-10-18' && Pn.isChecked(chkD, MON) && !Pn.isChecked(chkD, '2026-10-13') && Pn.isChecked(chkW, '2026-10-15') && !Pn.isChecked(gTasks.d, MON), 'checkKey / isChecked: 毎日はその日・毎週は週の終わりの日付');
+    ok(eq(Pn.toggleCheck(gTasks.d, MON), [MON]) && eq(Pn.toggleCheck(chkD, MON), []) && eq(Pn.toggleCheck({ checks: ['2026-10-13', 5] }, MON), [MON, '2026-10-13']), 'toggleCheck: 付ける/外す・壊れた値は捨てる・日付順');
+    const gsChk = Pn.goals({ d: chkD, w: chkW }, {}, MON, 600);
+    ok(gsChk[0].checked && gsChk[0].done && gsChk[0].doneMin === 0 && gsChk[1].checked && gsChk[1].done, 'goals: 印があれば記録が無くても done(明日はまた出る)');
+    ok(!Pn.goals({ d: chkD }, {}, '2026-10-13', 600)[0].done, 'goals: 印は翌日には効かない');
     ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]) && eq(Pn.freeSlots([{ start: 500, end: 560 }, { start: 550, end: 580 }], 540, 600), [{ start: 580, end: 600 }]), 'freeSlots: 空き区間(重なる区間も扱う)');
     ok(Pn.isEligible(tasksA.t1, MON) && !Pn.isEligible(tasksA.w1, MON) && !Pn.isEligible(tasksA.d1, MON) && !Pn.isEligible({ ...tasksA.t1, deadline: '2026-10-11' }, MON) && Pn.isEligible({ ...tasksA.t1, deadline: null }, MON), 'isEligible: 期限がその日以降(期限なしは可)・完了/削除/やりたいは不可');
 
@@ -261,6 +268,40 @@ document.getElementById('app').addEventListener('load', async () => {
     const hobbyS = { ...ds, kinds: [{ id: 'hobby', name: '趣味', work: false, drift: false }, { id: 'w', name: '仕事', work: true, drift: false }, { id: 'd', name: 'だらだら', work: false, drift: true }], categories: [{ id: 'g', name: 'ギター', kind: 'hobby', color: '#000000', order: 1 }, { id: 'j', name: '仕事', kind: 'w', color: '#000000', order: 2 }, { id: 'tv', name: 'TV', kind: 'd', color: '#000000', order: 3 }] };
     const aggH = Rp.aggregate({ entries: toMap([mkE(RD, '09:00', '10:00', 'g'), mkE(RD, '10:00', '10:30', 'j'), mkE(RD, '11:00', '11:10', 'tv')]), date: RD, nowMin: 1440, settings: hobbyS });
     ok(aggH.workMin === 30 && aggH.driftMin === 10 && aggH.byCategory.g.work === false && Rp.periodSummary(toMap([mkE(RD, '09:00', '10:00', 'g'), mkE(RD, '10:00', '10:30', 'j')]), hobbyS, RD, RD).workMin === 30, 'aggregate / periodSummary(v0.15.2): 作業・ダラダラは種別の役割で数える(趣味は作業に入れない)');
+
+    // ---- v0.16: 種別ごとの合計(F3-10)・きょうのふり返り(F3-9) ----
+    log('\n# report v0.16');
+    const tk = Rp.totalsByKind({ research: 100, english: 20, sns: 30, rest: 20, zzz: 0 }, ds);
+    ok(tk.map((k) => `${k.id}:${k.name}:${k.min}:${k.topCategoryId}`).join() === 'work:作業:120:research,drift:ダラダラ:30:sns,rest:休憩:20:rest', 'totalsByKind: カテゴリ別を種別にまとめ多い順・色はいちばん大きいカテゴリ・0 は出さない');
+    ok(Rp.totalsByKind({ c_gone: 40 }, ds)[0].id === 'work' && Rp.totalsByKind({}, ds).length === 0, 'totalsByKind: 消したカテゴリは作業として数える・空なら空');
+    const fbBase = [mkE('2026-10-09', '09:00', '11:00', 'research'), mkE('2026-10-09', '12:00', '13:00', 'sns'), mkE('2026-10-10', '09:00', '11:00', 'research'), mkE('2026-10-10', '12:00', '13:00', 'sns'), mkE('2026-10-11', '09:00', '11:00', 'research'), mkE('2026-10-11', '12:00', '13:00', 'sns')];
+    const fbGood = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research'), mkE(RD, '12:00', '12:30', 'sns'), mkE(RD, '12:30', '23:30', 'life')]);
+    const fbAggGood = Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: ds });
+    const fb1 = Rp.dayFeedback(fbAggGood, { tasks: {}, entries: fbGood, date: RD, settings: ds });
+    ok(fbAggGood.baselineDays === 3 && fb1.judged && fb1.score === 2 && fb1.verdict === 'よい一日でした。(作業は先週の平均より 1時間 多め・ダラダラは 30分 少なめ)', 'dayFeedback: 自分の先週平均(3 日以上)と比べて 作業が多め・ダラダラが少なめ → よい一日(理由つき)');
+    ok(fb1.good[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && fb1.better === null && fb1.next === null, 'dayFeedback: よかったことは肯定文・裏づけの無い「良くするには」「明日は」は出さない');
+    const fbGap = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research'), mkE(RD, '12:00', '12:30', 'sns'), mkE(RD, '12:30', '20:30', 'life')]);
+    ok(Rp.dayFeedback(Rp.aggregate({ entries: fbGap, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbGap, date: RD, settings: ds }).better === '未記録が 5時間 あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。', 'dayFeedback: 未記録が 1 時間以上でカバー率 80% 未満なら「埋めると正確になる」と言う(責めない)');
+    const fbMid = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 600, settings: ds }), { tasks: dailyT, entries: fbGood, date: RD, settings: ds, nowMin: 600 });
+    ok(!fbMid.judged && fbMid.verdict === null && fbMid.better === null && fbMid.next === 'きょうはあと 英語 を 30分。', 'dayFeedback: 1 日の途中は判定せず「きょうはあと ◯◯ を ◯分」だけ');
+    const fbThin = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research')]);
+    const fb2 = Rp.dayFeedback(Rp.aggregate({ entries: fbThin, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbThin, date: RD, settings: ds });
+    ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の 18% なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
+    const fbFew = toMap([mkE('2026-10-11', '09:00', '11:00', 'research'), mkE(RD, '07:00', '20:00', 'research')]);
+    const fb3 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew, date: RD, settings: ds });
+    ok(!fb3.judged && fb3.verdict === '比べる材料がまだ少ない日です(先週の記録 1 日)。', 'dayFeedback: 先週の記録が 3 日未満で目安も無ければ比べない');
+    const fbSlow = toMap([...fbBase, mkE(RD, '09:00', '10:00', 'research'), mkE(RD, '10:00', '12:00', 'sns'), mkE(RD, '12:00', '20:00', 'life')]);
+    const fb4 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: fbSlow, date: RD, settings: ds });
+    ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より 1時間 少なめ・ダラダラは 1時間 多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
+    ok(fb4.better === 'ダラダラ 2時間 のうち 30分 を 英語 に回せば、目安に届いていました。' && fb4.next === '明日は 英語(毎日 30分)を。きょうは 0分 でした。', 'dayFeedback: 良くするには=数字で裏づけられる 1 件(ダラダラの一部を届かなかった目安へ)・明日は=届かなかった毎日');
+    const fb5 = Rp.dayFeedback(fbAggGood, { tasks: tasksR, entries: fbGood, date: RD, settings: ds });
+    ok(fb5.next === '明日は 面談資料 を 30分(残り 1時間 を 2 日で)。', 'dayFeedback: 明日は=期限つきの明日の分(残り ÷ 期限までの日数)が最優先');
+    const fbChk = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: ds }), { tasks: { d: { ...dailyT.d, checks: [RD] } }, entries: fbGood, date: RD, settings: ds });
+    ok(fbChk.reasons.includes('毎日の目安に届いた') && fbChk.good.includes('英語は済みました(印)。') && fbChk.next === null, 'dayFeedback: 「済んだ」の印は目安に届いた扱い');
+    const bre = Rp.buildReport({ entries: fbGood, date: RD, nowMin: 1440, settings: ds, tasks: {} });
+    ok(bre.feedback && bre.feedback.verdict === fb1.verdict, 'buildReport: ふり返りを確定スナップショットに持つ');
+    const gsSumChk = Rp.goalsSummary({ d: { ...dailyT.d, checks: ['2026-10-10'] } }, dailyE, '2026-10-09', RD);
+    ok(gsSumChk[0].metDays === 2 && gsSumChk[0].dayList.find((x) => x.key === '2026-10-10').checked === true, 'goalsSummary: 印の日も「届いた日」に数える');
     const aggZero = Rp.aggregate({ entries: {}, date: RD, nowMin: 1440, settings: ds });
     ok(Rp.reportLines(aggZero, {}).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロでも必ず 1 文');
     const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), date: RD, nowMin: 1440, settings: ds });
@@ -489,6 +530,12 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
     ok(!!doc.querySelector('#view h1, #view .today-head'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');
+    // v0.16: 過去の予定の「予定の時間は?」が押せる(.tl.one .blk.busy の pointer-events:none が .blk.gap.busy にも効いていた)
+    const tlProbe = W.document.createElement('div'); tlProbe.className = 'tl one';
+    const gapBusy = W.document.createElement('button'); gapBusy.className = 'blk gap busy'; tlProbe.append(gapBusy);
+    const bgBusy = W.document.createElement('div'); bgBusy.className = 'blk busy'; tlProbe.append(bgBusy);
+    doc.body.append(tlProbe);
+    try { ok(getComputedStyle(gapBusy).pointerEvents === 'auto' && getComputedStyle(bgBusy).pointerEvents === 'none', 'CSS: 予定の時間のボタン(.blk.gap.busy)は押せる・背景の予定(.blk.busy)は押せない'); } finally { tlProbe.remove(); }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
