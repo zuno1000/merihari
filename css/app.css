@@ -689,3 +689,8 @@ button.hc-cell.dcal{border:0;font-family:inherit;cursor:pointer;padding:0}
 .sheet .quick .row:first-child{margin-top:0}
 .today-head .head-side{flex:0 0 auto;min-width:40px}
 .today-head .head-side .dsave{white-space:nowrap;font-size:11px}
+
+/* ---- v0.20.1: 金額欄とメモ欄の間隔 ---- */
+.mquick .yenrow{margin-bottom:14px}
+.mquick .mnoterow{margin-top:0}
+.mquick .chips{margin-top:12px}

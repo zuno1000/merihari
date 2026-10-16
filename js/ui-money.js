@@ -56,7 +56,7 @@ export function renderMoney(view, ctx, ymArg = null) {
     bs ? el('div.budget', { class: `budget${bs.over ? ' over' : ''}` }, [
       el('div.meter', { role: 'img', 'aria-label': `予算の ${Math.round(bs.pct * 100)}%` }, el('i', { style: { width: `${Math.min(100, Math.round(bs.pct * 100))}%` } })),
       el('div.row.between.small', [el('span.muted', `予算 ${money.fmtYen(bs.budget)}`), el('span', { class: bs.over ? 'bad' : '' }, bs.over ? `${money.fmtYen(-bs.remaining)} 超えています` : `残り ${money.fmtYen(bs.remaining)}${bs.perDay != null && isThis ? `・1 日 ${money.fmtYen(bs.perDay)} まで(あと ${bs.daysLeft} 日)` : ''}`)]),
-    ]) : el('p.muted.small', sum.count ? `1 日平均 ${money.fmtYen(avg)}・${sum.count} 件(月の予算は 設定 › お金 で)` : (isThis ? 'まだ記録がありません。下の金額から 2 タップで。' : 'この月の記録はありません。')),
+    ]) : el('p.muted.small', sum.count ? `1 日平均 ${money.fmtYen(avg)}・${sum.count} 件` : (isThis ? 'まだ記録がありません。' : 'この月の記録はありません。')),
   ]);
 
   // 2 タップ入力(今月だけ): 金額 → カテゴリ。日時は「きょう・いま」が既定、触ると変えられる
@@ -108,10 +108,10 @@ function wantsSheet(today, sum, rerender) {
         el('span.myen', money.fmtYen(w.price)),
       ]);
     };
-    body.append(
-      el('section.group', [el('h2', open.length ? `ほしいもの ${open.length} 件・合計 ${money.fmtYen(total)}` : 'ほしいもの'), open.length ? el('div.list', open.map(row)) : el('p.muted.small.pad', 'まだありません。下から追加できます。')]),
+    body.append(...[
+      el('section.group', [el('h2', open.length ? `ほしいもの ${open.length} 件・合計 ${money.fmtYen(total)}` : 'ほしいもの'), open.length ? el('div.list', open.map(row)) : el('p.muted.small.pad', 'まだありません。')]),
       done.length ? el('details.group', [el('summary.muted.small', `買ったもの(${done.length})`), el('div.list', done.slice(0, 20).map(row))]) : null,
-    );
+    ].filter(Boolean)); // v0.20.1: null を渡すと "null" の文字が出る
   };
   // 追加の欄
   const name = el('input.text', { type: 'text', placeholder: 'ほしいもの(例: ノイズキャンセリングのイヤホン)', maxlength: 100, autocomplete: 'off' });
@@ -127,7 +127,6 @@ function wantsSheet(today, sum, rerender) {
   draw();
   close = sheet((c) => { close = c; return [
     el('h2', 'ほしいもの'),
-    el('p.muted.small', '買いたいものと値段を置いておく場所。目標日を決めると月いくら貯めればいいかが出ます。'),
     body,
     el('section.card.quick', [el('div.row', [name]), el('div.row.yenrow', [el('span.yen-mark.sm', '¥'), price, target]), el('div.row', [note, el('button.btn.primary', { type: 'button', onclick: add }, '追加')])]),
     el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
@@ -183,8 +182,7 @@ function quickInput(today, rerender) {
   amount.addEventListener('keydown', (e) => { if (e.key === 'Enter') { note.focus(); } });
   return el('section.card.quick.mquick', [
     el('div.row.yenrow', [el('span.yen-mark', '¥'), amount, whenBtn]),
-    el('div.row', [note]),
-    el('p.muted.small.mhint', '金額を入れて、カテゴリをタップすると記録します。'),
+    el('div.row.mnoterow', [note]),
     chips,
   ]);
 }
