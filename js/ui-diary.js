@@ -1,7 +1,7 @@
 // merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1 日 1 件。気分(5 つのタップ)+ 3 行(よかったこと / ひっかかったこと / 明日は)+ メモ(折りたたみ)。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。「きょうの材料」(その日の記録・ふり返り・昨日の「明日は」)はタップで欄に入る。
 // 下に続いた日数と最近 14 日の一覧(気分の点・1 行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
-import { el, clear, toast, svg } from './ui.js';
+import { el, clear, toast, svg, sheet } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
@@ -47,9 +47,9 @@ export function moodPicker(value, onpick) {
   return node;
 }
 
-/** 自動で伸びる textarea(入力のたびに高さを合わせる) */
+/** 自動で伸びる textarea(入力のたびに高さを合わせる)。rows=1 から(v0.20: 2 行ぶんの空白が「謎の改行」に見えた) */
 function growArea(value, placeholder, oninput) {
-  const ta = el('textarea.dtext', { rows: 2, placeholder, maxlength: 2000, autocomplete: 'off' });
+  const ta = el('textarea.dtext', { rows: 1, placeholder, maxlength: 2000, autocomplete: 'off' });
   ta.value = value || '';
   const fit = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(320, ta.scrollHeight + 2)}px`; };
   ta.addEventListener('input', () => { fit(); oninput(ta.value); });
@@ -75,12 +75,17 @@ export function renderDiary(view, ctx, dateArg = null) {
   const queue = () => { status.textContent = '…'; clearTimeout(timer); timer = setTimeout(commit, 500); };
   window.addEventListener('pagehide', commit, { once: true });
 
+  // v0.20: 右上のカレンダー(月のカレンダー・気分の色でさかのぼる)
+  const calBtn = el('button.btn.sm.ghost.gear.cal', { type: 'button', 'aria-label': 'カレンダー', title: 'カレンダー', onclick: () => { commit(); calendarSheet(date, e.date, (k) => goDate(k)); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('rect', { x: 3, y: 5, width: 18, height: 16, rx: 3 }), svg('path', { d: 'M3 10h18M8 3v4M16 3v4' }), svg('circle', { cx: 12, cy: 15.5, r: 1.6, fill: 'currentColor', stroke: 'none' })]));
   const head = el('div.today-head', [
+    el('span.head-side', status),
+    el('span.grow'),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => { commit(); goDate(addDays(date, -1)); } }, '‹'),
     el('b', md(date)),
     isToday ? null : el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => { commit(); goDate(addDays(date, 1)); } }, '›'),
     isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => { commit(); goDate(e.date); } }, '今日'),
-    el('span.grow'), status,
+    el('span.grow'),
+    el('span.head-side', calBtn),
   ]);
 
   // きょうの材料(ルールベース): その日の集計・ふり返り・目安・昨日の「明日は」
@@ -103,10 +108,10 @@ export function renderDiary(view, ctx, dateArg = null) {
   const card = el('section.card.dcard', [
     el('div.row.between', [el('span.dlabel', isToday ? 'きょうの気分' : 'この日の気分'), null]),
     moodPicker(draft.mood, (v) => { draft.mood = v; queue(); }),
-    field('good', 'よかったこと', isToday ? 'きょう、よかったこと・できたこと' : 'よかったこと・できたこと'),
-    field('hard', 'ひっかかったこと', 'うまくいかなかったこと・気づき(なければ空でいい)'),
-    field('tomorrow', '明日は', 'ひとつだけ。明日の自分へ'),
-    el('details.dmore', [el('summary.muted.small', draft.note ? 'メモ' : 'メモ(自由に)'), growArea(draft.note, 'ほかに書いておきたいこと', (v) => { draft.note = v; queue(); })]),
+    field('good', 'よかったこと', isToday ? 'きょう、よかったこと' : 'よかったこと'),
+    field('hard', 'ひっかかったこと', '気づき。なければ空でいい'),
+    field('tomorrow', '明日は', 'ひとつだけ'),
+    field('note', 'メモ', '自由に'), // v0.20: 折りたたみをやめて最初から開いておく
     seedChips,
   ].filter(Boolean));
 
@@ -135,6 +140,38 @@ export function renderDiary(view, ctx, dateArg = null) {
   view.append(el('h1', '日記'), head, card, listBox);
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
 }
+
+/**
+ * 月のカレンダー(v0.20・F9-6): 月曜始まり。書いた日は気分の色(気分なしは薄い印)。タップでその日の日記へ。‹ › で前後の月(未来の月は無し)。
+ */
+export function calendarSheet(date, today, onpick) {
+  let ym = date.slice(0, 7);
+  const thisYM = today.slice(0, 7);
+  const body = el('div');
+  const title = el('b', '');
+  const nextBtn = el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の月', onclick: () => { ym = addMonthsYM(ym, 1); draw(); } }, '›');
+  let close;
+  const draw = () => {
+    clear(body);
+    title.textContent = `${+ym.slice(0, 4)}年${+ym.slice(5, 7)}月`;
+    nextBtn.disabled = ym >= thisYM;
+    const g = diary.monthCells(Dy(), ym, today);
+    const head = el('div.hc-row.hc-head', ['月', '火', '水', '木', '金', '土', '日'].map((d) => el('div.hc-cell.hc-h', d)));
+    const rows = g.weeks.map((w) => el('div.hc-row', w.map((c) => {
+      const cls = `hc-cell dcal${c.inMonth ? '' : ' out'}${c.future ? ' future' : ''}${c.written ? (c.mood ? ` m${c.mood}` : ' written') : ''}${c.key === today ? ' today' : ''}${c.key === date ? ' cur' : ''}`;
+      const cell = el(c.inMonth && !c.future ? 'button.hc-cell' : 'div.hc-cell', { type: c.inMonth && !c.future ? 'button' : null, class: cls, 'aria-label': c.inMonth ? `${fmtMD(c.key)}${c.written ? `・${diary.moodLabel(c.mood) || '書いた日'}` : ''}` : null, onclick: c.inMonth && !c.future ? () => { close(); onpick(c.key); } : null }, [el('span.hc-d', String(+c.key.slice(8, 10)))]);
+      return cell;
+    })));
+    body.append(head, ...rows, el('p.muted.small.center', g.days ? `この月は ${g.days} 日書きました${g.moodDays ? `・色は気分(${diary.MOODS.map((m) => m.label).join(' → ')})` : ''}` : 'この月はまだ書いていません。'));
+  };
+  draw();
+  close = sheet((c) => { close = c; return [
+    el('div.today-head', [el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の月', onclick: () => { ym = addMonthsYM(ym, -1); draw(); } }, '‹'), title, nextBtn]),
+    el('div.hc.dcal-grid', body),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]; });
+}
+function addMonthsYM(ym, n) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
 /** レポート「今日」の抜粋(ui-report から): 書いてあれば 気分と 3 行、無ければ「日記を書く ›」(1 日の終わり近くだけ) */
 export function diaryExcerptBox(date, ctx, { dayDone = false } = {}) {

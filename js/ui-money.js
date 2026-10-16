@@ -29,16 +29,30 @@ export function renderMoney(view, ctx, ymArg = null) {
   const bs = money.budgetStatus(sum, S().budget?.monthMax, today);
   const avg = money.perDayAverage(sum, today);
 
+  // v0.20: 右上の貯金箱(ほしいもの)
+  const wantsN = Object.values(W()).filter((w) => w && !w.deletedAt && !w.doneAt).length;
+  const piggy = el('button.btn.sm.ghost.gear.piggy', { type: 'button', 'aria-label': 'ほしいもの', title: 'ほしいもの', onclick: () => wantsSheet(today, sum, rerender) }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M5 11a7 7 0 0 1 7-5h3a5 5 0 0 1 5 5v2a4 4 0 0 1-2 3.5V19a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H9v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-3.2A5 5 0 0 1 4 12H3v-2h1.3' }), svg('path', { d: 'M10 6V4.5a1.5 1.5 0 0 1 3 0V6' }), svg('circle', { cx: 16.5, cy: 11, r: .9, fill: 'currentColor', stroke: 'none' })]), wantsN ? el('span.undo-n', String(wantsN)) : null]);
   const head = el('div.today-head', [
+    el('span.head-side'),
+    el('span.grow'),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の月', onclick: () => goYM(money.addMonths(ym, -1)) }, '‹'),
     el('b', money.fmtYM(ym)),
     isThis ? null : el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の月', onclick: () => goYM(money.addMonths(ym, 1)) }, '›'),
     isThis ? null : el('button.btn.sm', { type: 'button', onclick: () => goYM(thisYM) }, '今月'),
+    el('span.grow'),
+    el('span.head-side', piggy),
   ]);
 
-  // まとめ: 支出(大きく)・収入・予算の残りと 1 日あたり(または 1 日平均)
+  // まとめ: 支出(大きく)・収入と差し引き・資産(開始残高があれば)・予算の残りと 1 日あたり(または 1 日平均)
+  const all = money.netAll(M(), isThis ? null : sum.to);
+  const sbal = S().budget?.startBalance;
+  const signed = (n) => (n >= 0 ? '+' : '') + money.fmtYen(n).replace('−', '-');
   const summary = el('section.card.mcard', [
-    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', isThis ? '今月の支出' : '支出'), el('b.kpi-value.big.yen', money.fmtYen(sum.out)), sum.in ? el('span.muted.small', `収入 ${money.fmtYen(sum.in)}`) : null]),
+    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', isThis ? '今月の支出' : '支出'), el('b.kpi-value.big.yen', money.fmtYen(sum.out))]),
+    sum.in || sbal != null ? el('div.row.between.small.mnet', [
+      sum.in ? el('span.muted', `収入 ${money.fmtYen(sum.in)}・差し引き ${signed(sum.net)}`) : el('span.muted', `差し引き ${signed(sum.net)}`),
+      sbal != null ? el('span', { class: sbal + all.net < 0 ? 'bad' : '' }, `資産 ${money.fmtYen(sbal + all.net)}`) : null,
+    ]) : null,
     bs ? el('div.budget', { class: `budget${bs.over ? ' over' : ''}` }, [
       el('div.meter', { role: 'img', 'aria-label': `予算の ${Math.round(bs.pct * 100)}%` }, el('i', { style: { width: `${Math.min(100, Math.round(bs.pct * 100))}%` } })),
       el('div.row.between.small', [el('span.muted', `予算 ${money.fmtYen(bs.budget)}`), el('span', { class: bs.over ? 'bad' : '' }, bs.over ? `${money.fmtYen(-bs.remaining)} 超えています` : `残り ${money.fmtYen(bs.remaining)}${bs.perDay != null && isThis ? `・1 日 ${money.fmtYen(bs.perDay)} まで(あと ${bs.daysLeft} 日)` : ''}`)]),
@@ -62,9 +76,85 @@ export function renderMoney(view, ctx, ymArg = null) {
     ])),
   ]))]) : null;
   const trend = money.monthlyTrend(M(), ym, 6);
-  const trendBox = trend.some((t) => t.out > 0) ? el('details.rep-details', [el('summary.muted.small', '月ごとの推移'), monthBars(trend, ym)]) : null;
+  const trendBox = trend.some((t) => t.out > 0) ? el('details.rep-details', [el('summary.muted.small', '月ごとの推移'), monthBars(trend, ym), el('p.muted.small.center', `これまでの差し引き ${signed(money.netAll(M()).net)}(収入 ${money.fmtYen(money.netAll(M()).in)} − 支出 ${money.fmtYen(money.netAll(M()).out)})`)]) : null;
 
-  view.append(el('h1', 'お金'), head, summary, quick, donut, list, trendBox);
+  view.append(...[el('h1', 'お金'), head, summary, quick, donut, list, trendBox].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20 修正)
+}
+
+const W = () => (store.state.data.wants = store.state.data.wants || {});
+function saveWant(w) { w.updatedAt = store.nowISO(); W()[w.id] = w; store.save(); sync.autoSync(); }
+/**
+ * ほしいもの(v0.20・F10-8): 名前・値段・目標日(任意)・メモ。目標日があれば「月いくら」、今月の差し引きが正なら「今のペースで何か月」。
+ * 「買った」で支出として記録(カテゴリを選ぶ)か記録せずに済みに。済んだものは折りたたみ。
+ */
+function wantsSheet(today, sum, rerender) {
+  let close;
+  const body = el('div');
+  const monthlyNet = sum.net;
+  const draw = () => {
+    clear(body);
+    const list = Object.values(W()).filter((w) => w && !w.deletedAt).sort((a, b) => ((a.targetDate || '9999') < (b.targetDate || '9999') ? -1 : (a.targetDate || '9999') > (b.targetDate || '9999') ? 1 : (a.updatedAt || '') < (b.updatedAt || '') ? 1 : -1));
+    const open = list.filter((w) => !w.doneAt), done = list.filter((w) => w.doneAt);
+    const total = open.reduce((a, w) => a + (+w.price || 0), 0);
+    const row = (w) => {
+      const p = money.wantPlan(w, today, monthlyNet);
+      const meta = [];
+      if (w.targetDate) meta.push(`${fmtMD(w.targetDate)}まで${p.daysLeft != null ? (p.daysLeft < 0 ? '(過ぎています)' : `(あと ${p.daysLeft} 日)`) : ''}`);
+      if (p.perMonth && p.daysLeft >= 0) meta.push(`月 ${money.fmtYen(p.perMonth)} ずつ`);
+      if (!w.doneAt && p.monthsAtPace != null) meta.push(`今月のペース(差し引き ${money.fmtYen(monthlyNet)})なら ${p.monthsAtPace} か月`);
+      if (w.note) meta.push(w.note);
+      return el('button.srow.wrow', { type: 'button', class: `srow wrow${w.doneAt ? ' done' : ''}`, onclick: () => editWantSheet(w, today, () => { draw(); rerender(); }) }, [
+        el('span.gmain', [el('span.gname', [w.name, w.doneAt ? el('span.gok', ' ✓ 買った') : null]), el('span.gmeta', meta.join('・'))]),
+        el('span.myen', money.fmtYen(w.price)),
+      ]);
+    };
+    body.append(
+      el('section.group', [el('h2', open.length ? `ほしいもの ${open.length} 件・合計 ${money.fmtYen(total)}` : 'ほしいもの'), open.length ? el('div.list', open.map(row)) : el('p.muted.small.pad', 'まだありません。下から追加できます。')]),
+      done.length ? el('details.group', [el('summary.muted.small', `買ったもの(${done.length})`), el('div.list', done.slice(0, 20).map(row))]) : null,
+    );
+  };
+  // 追加の欄
+  const name = el('input.text', { type: 'text', placeholder: 'ほしいもの(例: ノイズキャンセリングのイヤホン)', maxlength: 100, autocomplete: 'off' });
+  const price = el('input.yenin.sm', { type: 'text', inputmode: 'numeric', placeholder: '0', 'aria-label': '値段(円)' });
+  const target = el('input.date', { type: 'date', min: today, 'aria-label': '目標日(任意)' });
+  const note = el('input.text', { type: 'text', placeholder: 'メモ・計画(任意)', maxlength: 200, autocomplete: 'off' });
+  const add = () => {
+    const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); name.focus(); return; }
+    const yen = money.parseYen(price.value) ?? 0;
+    saveWant({ id: store.uid(), name: nm, price: yen, targetDate: target.value || null, categoryId: 'hobby', note: note.value.trim(), doneAt: null, updatedAt: null, deletedAt: null });
+    name.value = ''; price.value = ''; target.value = ''; note.value = ''; draw(); rerender(); toast('追加しました');
+  };
+  draw();
+  close = sheet((c) => { close = c; return [
+    el('h2', 'ほしいもの'),
+    el('p.muted.small', '買いたいものと値段を置いておく場所。目標日を決めると月いくら貯めればいいかが出ます。'),
+    body,
+    el('section.card.quick', [el('div.row', [name]), el('div.row.yenrow', [el('span.yen-mark.sm', '¥'), price, target]), el('div.row', [note, el('button.btn.primary', { type: 'button', onclick: add }, '追加')])]),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]; });
+}
+/** ほしいものの編集: 名前・値段・目標日・メモ・買った(支出として記録 / 記録しない)・戻す・削除 */
+function editWantSheet(w, today, rerender) {
+  const name = el('input.text', { type: 'text', value: w.name, maxlength: 100 });
+  const price = el('input.yenin.sm', { type: 'text', inputmode: 'numeric', value: String(w.price || ''), 'aria-label': '値段(円)' });
+  const target = el('input.date', { type: 'date', value: w.targetDate || '', 'aria-label': '目標日' });
+  const note = el('input.text', { type: 'text', value: w.note || '', placeholder: 'メモ・計画', maxlength: 200 });
+  let cid = w.categoryId || 'hobby';
+  const chips = el('div.chips.small', mcats().filter((c) => !c.income).map((c) => el('button.chip.sm2.cat', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': mcatOf(c.id).color }, onclick: (e) => { cid = c.id; chips.querySelectorAll('.chip').forEach((k) => k.classList.toggle('on', k === e.currentTarget)); } }, [el('span.dot', { style: { background: mcatOf(c.id).color } }), c.name])));
+  const apply = () => { const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); return false; } Object.assign(w, { name: nm, price: money.parseYen(price.value) ?? 0, targetDate: target.value || null, categoryId: cid, note: note.value.trim() }); return true; };
+  sheet((close) => [
+    el('h2', w.name),
+    el('div.col', [el('div.row', [name]), el('div.row.yenrow', [el('span.yen-mark.sm', '¥'), price, target]), el('div.row', [note]), el('p.muted.small', { style: { margin: '6px 0 0' } }, '買ったときの支出のカテゴリ'), chips]),
+    el('div.row.wrap', [
+      el('button.btn.danger', { type: 'button', onclick: () => confirmSheet('消しますか?', w.name, '消す', () => { w.deletedAt = store.nowISO(); saveWant(w); close(); rerender(); }, true) }, '消す'),
+      w.doneAt ? el('button.btn', { type: 'button', onclick: () => { if (!apply()) return; w.doneAt = null; saveWant(w); close(); rerender(); toast('ほしいものに戻しました'); } }, '戻す')
+        : el('button.btn', { type: 'button', onclick: () => { if (!apply()) return; w.doneAt = store.nowISO(); saveWant(w); const yen = w.price; close();
+          if (yen > 0) confirmSheet(`${money.fmtYen(yen)} を支出に記録しますか?`, `${mcatOf(cid).name}・きょう・いま`, '記録する', () => { saveItem({ id: store.uid(), date: today, time: mm(minuteOfDay()), amount: yen, type: 'out', categoryId: cid, note: w.name, entryId: money.linkEntry(E(), today, mm(minuteOfDay()), minuteOfDay()), updatedAt: null, deletedAt: null }); toast(`${w.name} ${money.fmtYen(yen)} を記録しました`); rerender(); });
+          rerender(); } }, '買った'),
+      el('span.grow'),
+      el('button.btn.primary', { type: 'button', onclick: () => { if (!apply()) return; saveWant(w); close(); rerender(); toast('保存しました'); } }, '保存'),
+    ]),
+  ]);
 }
 
 /** 金額 → カテゴリの 2 タップ入力。日時は既定「きょう・いま」。長押しは無し(お金は後からの修正が少ない) */

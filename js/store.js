@@ -68,7 +68,7 @@ export function defaultMoneyCategories() {
 export function defaultSettings() {
   return {
     moneyCategories: defaultMoneyCategories(), // v0.19: お金のカテゴリ(id ごとに同期で統合)
-    budget: { monthMax: null },                 // v0.19: 月の支出の上限(円・null=決めない)
+    budget: { monthMax: null, startBalance: null }, // v0.19: 月の支出の上限(円・null=決めない)。v0.20: 開始残高(null=資産は出さない)
     window: {
       mon: ['07:00', '23:30'], tue: ['07:00', '23:30'], wed: ['07:00', '23:30'],
       thu: ['07:00', '23:30'], fri: ['07:00', '23:30'],
@@ -104,6 +104,7 @@ export function defaultData() {
     ledger: {},
     diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
     money: {},   // v0.19: お金(id → { id, date, time, amount, type, categoryId, note, entryId, updatedAt, deletedAt })
+    wants: {},   // v0.20: ほしいもの(id → { id, name, price, targetDate, categoryId, note, doneAt, updatedAt, deletedAt })
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -167,7 +168,8 @@ function normalizeSettings(raw) {
   const mcRaw = Array.isArray(raw.moneyCategories) ? normMC(raw.moneyCategories) : [];
   s.moneyCategories = mcRaw.length ? mcRaw : normMC(defaultMoneyCategories()); // 既定も同じ形に(migrate の冪等性)
   const bm = isObj(raw.budget) && raw.budget.monthMax != null && raw.budget.monthMax !== '' && Number.isFinite(+raw.budget.monthMax) && +raw.budget.monthMax > 0 && +raw.budget.monthMax <= 100000000 ? Math.round(+raw.budget.monthMax) : null;
-  s.budget = { monthMax: bm };
+  const sb = isObj(raw.budget) && raw.budget.startBalance != null && raw.budget.startBalance !== '' && Number.isFinite(+raw.budget.startBalance) && Math.abs(+raw.budget.startBalance) <= 1000000000 ? Math.round(+raw.budget.startBalance) : null;
+  s.budget = { monthMax: bm, startBalance: sb }; // v0.20: 開始残高(資産 = 開始残高 + これまでの収入 − 支出)
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
@@ -245,6 +247,11 @@ export function validateMoney(r, id) {
   if (!isObj(r) || !isDate(r.date) || !(Number.isFinite(+r.amount) && +r.amount > 0 && +r.amount <= 100000000)) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: isHM(r.time) ? r.time : null, amount: Math.round(+r.amount), type: r.type === 'in' ? 'in' : 'out', categoryId: str(r.categoryId, 40, 'misc'), note: str(r.note, 200), entryId: optStr(r.entryId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
+/** ほしいもの(v0.20・F10-8): 名前は必須、値段は 0〜1 億の整数、目標日は任意 */
+export function validateWant(r, id) {
+  if (!isObj(r) || typeof r.name !== 'string' || !r.name.trim()) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 100), price: Number.isFinite(+r.price) && +r.price >= 0 && +r.price <= 100000000 ? Math.round(+r.price) : 0, targetDate: isDate(r.targetDate) ? r.targetDate : null, categoryId: str(r.categoryId, 40, 'hobby'), note: str(r.note, 500), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 /** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
@@ -273,6 +280,7 @@ export function migrate(raw) {
   out.reports = cleanMap(raw.reports, validateReport);
   out.ledger = cleanMap(raw.ledger, validateLedger);
   out.money = cleanMap(raw.money, validateMoney);
+  out.wants = cleanMap(raw.wants, validateWant);
   out.diary = cleanMap(raw.diary, validateDiary);
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };

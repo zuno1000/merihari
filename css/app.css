@@ -658,3 +658,34 @@ button.srow.goal:first-child{border-top:0}
 .mrow .myen.in{color:#2f8f5b}
 @media (prefers-color-scheme:dark){.mrow .myen.in{color:#7fd1a3}}
 .fab,.fab2,.tab-add{display:none}
+
+/* ---- v0.20: 入力欄の見た目を揃える(iOS の二重枠)・日記のカレンダー・ほしいもの ---- */
+input.text,input.date,input.num,select,textarea,.yenin,.tfield{-webkit-appearance:none;appearance:none}
+input.date{min-height:44px}
+.dtext{min-height:30px}
+.today-head .cal svg,.today-head .piggy svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.today-head .piggy{display:inline-flex;align-items:center;gap:2px}
+.today-head .piggy .undo-n{font-size:11px;font-variant-numeric:tabular-nums}
+.dcal-grid{margin:4px 0 8px}
+.hc-cell.dcal{background:var(--bg);color:var(--fg)}
+button.hc-cell.dcal{border:0;font-family:inherit;cursor:pointer;padding:0}
+.hc-cell.dcal.future{opacity:.35}
+.hc-cell.dcal.written{background:color-mix(in srgb,var(--accent) 18%,var(--card))}
+.hc-cell.dcal.m1{background:#c9d2e3}.hc-cell.dcal.m2{background:#b8c9ea}.hc-cell.dcal.m3{background:#a9d4ea}.hc-cell.dcal.m4{background:#a4dec4}.hc-cell.dcal.m5{background:#ffd98a}
+@media (prefers-color-scheme:dark){.hc-cell.dcal.m1{background:#4b5566}.hc-cell.dcal.m2{background:#415a86}.hc-cell.dcal.m3{background:#3b6f86}.hc-cell.dcal.m4{background:#3b7d62}.hc-cell.dcal.m5{background:#9a7a2e}}
+.hc-cell.dcal.today .hc-d{font-weight:700;color:var(--accent)}
+.hc-cell.dcal.cur{outline:2px solid var(--accent);outline-offset:-2px}
+.hc-cell.dcal.m1 .hc-d,.hc-cell.dcal.m2 .hc-d,.hc-cell.dcal.m3 .hc-d,.hc-cell.dcal.m4 .hc-d,.hc-cell.dcal.m5 .hc-d{color:var(--fg)}
+.sheet .today-head{margin:0 0 4px}
+.mnet{margin-top:4px}
+.wrow{gap:10px;padding:10px 12px 10px 14px}
+.wrow .gmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.wrow .gname{font-size:15px}
+.wrow .gmeta{font-size:12px;color:var(--muted)}
+.wrow.done .gname{color:var(--muted)}
+.wrow .myen{flex:none;font-variant-numeric:tabular-nums;font-weight:600}
+.sheet .quick{margin:10px 0 0;padding:10px 12px}
+.sheet .quick .row{margin-top:8px}
+.sheet .quick .row:first-child{margin-top:0}
+.today-head .head-side{flex:0 0 auto;min-width:40px}
+.today-head .head-side .dsave{white-space:nowrap;font-size:11px}

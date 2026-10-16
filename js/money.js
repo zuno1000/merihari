@@ -108,6 +108,32 @@ export function monthlyTrend(money, ym, n = 6) {
   return out;
 }
 
+/** これまでの差し引き(全期間の収入 − 支出)。upto があればその日まで */
+export function netAll(money, upto = null) {
+  let out = 0, inc = 0;
+  for (const x of Object.values(money || {})) {
+    if (!alive(x) || (upto && x.date > upto)) continue;
+    if (x.type === 'in') inc += x.amount; else out += x.amount;
+  }
+  return { out, in: inc, net: inc - out };
+}
+
+/**
+ * ほしいもの(v0.20・F10-8)の計画: want = { price, targetDate|null }。today と「今月の差し引き(monthlyNet・円/月)」から
+ * { daysLeft|null, monthsLeft|null(目標までの月数・0.5 刻み・最低 0.5), perMonth|null(目標までに月いくら), monthsAtPace|null(今のペースで何か月・差し引きが 0 以下なら null) }
+ */
+export function wantPlan(want, today, monthlyNet = 0) {
+  const price = Math.max(0, Math.round(+want?.price || 0));
+  let daysLeft = null, monthsLeft = null, perMonth = null;
+  if (typeof want?.targetDate === 'string' && want.targetDate.length >= 10) {
+    daysLeft = Math.round((new Date(want.targetDate.slice(0, 10) + 'T00:00') - new Date(today + 'T00:00')) / 86400000);
+    monthsLeft = Math.max(0.5, Math.round((Math.max(0, daysLeft) / 30.4) * 2) / 2);
+    perMonth = Math.ceil(price / monthsLeft / 100) * 100;
+  }
+  const monthsAtPace = monthlyNet > 0 && price > 0 ? Math.max(0.5, Math.round((price / monthlyNet) * 2) / 2) : null;
+  return { price, daysLeft, monthsLeft, perMonth, monthsAtPace };
+}
+
 /** 金額の文字列 → 整数(円)。'1,200' '1200円' '¥1200' を受け、0 以下や壊れていれば null。上限 1 億 */
 export function parseYen(s) {
   const v = String(s ?? '').replace(/[¥,円\s]/g, '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));

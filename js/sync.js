@@ -74,7 +74,7 @@ export function merge(a, b) {
   const fresh = (rec) => rec != null && (!resetAt || (rec.updatedAt || rec.finalizedAt || '') >= resetAt);
   const out = {};
   // 未知のトップレベルキーも決定的に残す
-  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'meta']);
+  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'meta']);
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) if (!known.has(k)) out[k] = pick(a[k], b[k], () => '');
   out.schema = Math.max(+a.schema || 1, +b.schema || 1);
   const sa = fresh({ updatedAt: a.settings.settingsUpdatedAt }) || !resetAt ? a.settings : null;
@@ -87,6 +87,7 @@ export function merge(a, b) {
   out.ledger = mergeById(a.ledger, b.ledger, (r) => `${String(r.workMin || 0).padStart(6, '0')}${String(r.usableMin || 0).padStart(6, '0')}`, () => true);
   out.diary = mergeById(a.diary, b.diary, (r) => r.updatedAt, fresh); // v0.18: 日記は日付ごとに updatedAt の LWW
   out.money = mergeById(a.money, b.money, (r) => r.updatedAt, fresh); // v0.19: お金は id ごとに updatedAt の LWW
+  out.wants = mergeById(a.wants, b.wants, (r) => r.updatedAt, fresh); // v0.20: ほしいもの
   out.meta = {
     ...pick(a.meta, b.meta, () => ''),
     resetAt,
@@ -154,7 +155,7 @@ export function mergeSettings(sa, sb) {
 export function pruneTombstones(data, nowISO, days = TOMBSTONE_DAYS) {
   const limit = new Date(new Date(nowISO).getTime() - days * 86400000).toISOString();
   const out = { ...data };
-  for (const k of ['entries', 'tasks', 'diary', 'money']) {
+  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants']) {
     out[k] = {};
     for (const [id, r] of Object.entries(data[k] || {})) if (!(r.deletedAt && r.deletedAt < limit)) out[k][id] = r;
   }

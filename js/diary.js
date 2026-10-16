@@ -40,6 +40,36 @@ export function summarize(diary, from, to) {
   return { days, moodAvg: moodN ? Math.round((moodSum / moodN) * 10) / 10 : null, list };
 }
 
+/**
+ * 月のカレンダー(v0.20・F9-6): 月曜始まりの週で 'YYYY-MM' の日を並べる。各セル { key, inMonth, mood|null, written, future }。
+ * today より後は future(書けない)。戻り値 { weeks: [[cell×7]…], days: 書いた日数, moodDays: 気分のある日数 }
+ */
+export function monthCells(diary, ym, today) {
+  const [y, m] = ym.split('-').map(Number);
+  const first = `${ym}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const last = `${ym}-${String(lastDay).padStart(2, '0')}`;
+  let start = first;
+  while (new Date(start + 'T00:00').getDay() !== 1) start = addDays(start, -1);
+  let end = last;
+  while (new Date(end + 'T00:00').getDay() !== 0) end = addDays(end, 1);
+  const weeks = [];
+  let days = 0, moodDays = 0;
+  for (let w = start; w <= end; w = addDays(w, 7)) {
+    const row = [];
+    for (let i = 0; i < 7; i++) {
+      const k = addDays(w, i);
+      const d = diary?.[k];
+      const inMonth = k >= first && k <= last;
+      const written = inMonth && isWritten(d);
+      if (written) { days++; if (d.mood != null) moodDays++; }
+      row.push({ key: k, inMonth, written, mood: written && d.mood != null ? d.mood : null, future: today ? k > today : false });
+    }
+    weeks.push(row);
+  }
+  return { weeks, days, moodDays };
+}
+
 /** 一覧用の 1 行(よかったこと → 明日は → ひっかかったこと → メモ の順で最初の文字列を 60 字まで) */
 export function excerpt(d, max = 60) {
   if (!alive(d)) return '';
