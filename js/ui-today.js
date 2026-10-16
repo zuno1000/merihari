@@ -11,6 +11,7 @@ import { displayColor } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
 import { diaryCue } from './ui-diary.js';
+import * as money from './money.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
 
@@ -87,15 +88,23 @@ function pastDefault(date) {
   const m = last ? hm(last.end) : 540;
   return m >= 1380 ? 1380 : m;
 }
-/** タブバーの ＋ の見た目(記録中なら ●) */
-export function refreshAddButton() {
-  const b = document.getElementById('tab-add');
-  if (!b) return;
-  const o = store.state.data ? log.openEntry(E()) : null;
+/** 記録の ＋ ボタン(v0.19: ホームの左上・タイムラインの右上)。記録中は ●。見た目は refreshAddButton が揃える */
+export function addButton(ctx) {
+  const b = el('button.add-btn', { type: 'button', 'aria-label': '記録する', title: '記録する', onclick: () => ctx.openAdd?.() });
+  paintAdd(b, store.state.data ? log.openEntry(E()) : null);
+  return b;
+}
+function paintAdd(b, o) {
   b.classList.toggle('rec', !!o);
-  // 文字の ＋ は字面の中で上に寄るので SVG で描く(v0.15.4)
-  b.replaceChildren(svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, o ? [svg('circle', { cx: 12, cy: 12, r: 6 })] : [svg('path', { d: 'M12 5v14M5 12h14' })]));
+  b.replaceChildren(svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, o ? [svg('circle', { cx: 12, cy: 12, r: 6 })] : [svg('path', { d: 'M12 5v14M5 12h14' })])); // 文字の ＋ は字面の中で上に寄るので SVG(v0.15.4)
   b.setAttribute('aria-label', o ? '記録中(タップで切り替え・終了)' : '記録する');
+}
+/** 画面にある ＋ の見た目(記録中なら ●)を揃える */
+export function refreshAddButton() {
+  const bs = document.querySelectorAll('.add-btn');
+  if (!bs.length) return;
+  const o = store.state.data ? log.openEntry(E()) : null;
+  bs.forEach((b) => paintAdd(b, o));
 }
 const taskName = (taskId, cid) => (taskId && T()[taskId] ? T()[taskId].name : catOf(cid).name);
 /**
@@ -240,7 +249,7 @@ export function renderNow(view, ctx, dateArg = null) {
   // v0.18: 設定はタブから外し、ホーム右上の歯車に(タブは 日記 に)
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   const head = el('div.today-head', [
-    el('span.head-side'),
+    el('span.head-side', addButton(ctx)), // v0.19: 記録の ＋(タブバー中央は「お金」に)
     el('span.grow'),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
     el('b', md(date)),
@@ -548,6 +557,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('span.grow'),
     el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
     el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), redoCount() ? el('span.undo-n', String(redoCount())) : null]),
+    addButton(ctx), // v0.19: 記録の ＋(過去の日ならその日に足す)
   ]);
   const busy = [...google.busyForDate(date), ...(ds > 0 ? google.busyForDate(next).filter((b) => b.start < ds).map((b) => ({ ...b, start: b.start + 1440, end: Math.min(ds, b.end) + 1440 })) : [])];
   const tl = buildTimeline({ date, ds, nowRel, busy, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], showNow, gapUpto, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
@@ -622,11 +632,12 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], entries, nextEn
       if (past.end - past.start >= 15) gapButton(past, null);
     }
   }
+  const yenBy = money.totalsByEntry(store.state.data.money); // v0.19: 記録に紐づく支出の ¥ 印
   for (const x of items) {
     const c = catOf(x.e.categoryId);
     const t = x.e.taskId ? T()[x.e.taskId] : null;
     const open = x.e.end == null;
-    const node = block(x.start, x.end, { name: t ? t.name : c.name, color: c.color, open, note: x.e.note, onclick: () => editEntrySheet(x.e.id, { date: x.date, min: n.min }, rerender) });
+    const node = block(x.start, x.end, { name: t ? t.name : c.name, color: c.color, open, note: x.e.note, yen: yenBy[x.e.id] || 0, onclick: () => editEntrySheet(x.e.id, { date: x.date, min: n.min }, rerender) });
     attachDrag(node, {
       start: x.start, end: x.end, lo, hi: Math.min(hi, x.off ? 1440 + x.off : dayEndOf(x.date)),
       resizeTop: true, resizeBottom: !open, move: true, edges: sameEdges.filter((m) => m !== x.start && m !== x.end), keepEnd: open,
@@ -654,6 +665,7 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], entries, nextEn
     if (hgt >= 26) b.append(el('span.blk-name', `${o.name}${o.open ? ' ▶' : ''}`), el('span.blk-dur', fmtMin(end - start)));
     else if (hgt >= 14) b.append(el('span.blk-name', o.name));
     if (o.note && hgt >= 44) b.append(el('span.blk-note', o.note));
+    if (o.yen) b.append(el('span.blk-yen', { title: `支出 ${money.fmtYen(o.yen)}` }, hgt >= 26 ? money.fmtYen(o.yen) : '¥'));
     return b;
   }
 

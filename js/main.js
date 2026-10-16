@@ -16,9 +16,12 @@ import { renderSettings } from './ui-settings.js';
 import { renderDiary } from './ui-diary.js';
 import * as diary from './diary.js';
 import * as uiReport from './ui-report.js';
+import { renderMoney } from './ui-money.js';
+import * as money from './money.js';
 
-export const APP_VERSION = '0.18.0';
+export const APP_VERSION = '0.19.0';
 export const NEWS = [
+  { v: '0.19.0', text: 'タブバー中央の ＋ を「お金」タブに替えました(記録の ＋ はホームの左上とタイムラインの右上に移りました。記録中は ●)。お金は 1 つのタブで完結: 今月の支出(収入があれば並記)、設定 › お金 で月の予算を決めると「残り ◯円・1 日 ◯円 まで(あと ◯日)」のメーター(決めなければ 1 日平均だけ)。入力は 2 タップ: 金額を入れてカテゴリをタップすると「きょう・いま」で記録します(「きょう・いま」をタップすると きょう / きのう / おととい / 日付 と時刻を選べます)。支出の時刻はタイムラインのその時間の記録に自動で紐づき(「研究の最中」)、タイムラインのブロックに ¥ の印、レポート「今日」に支出の行が出ます。内訳の円とカテゴリ別の棒、日ごとの一覧(タップで金額・カテゴリ・日時・メモの修正・削除)、月ごとの推移(折りたたみ)。‹ › で前の月。カテゴリは 食費 / 日用品 / 交通 / 交際 / 趣味 / 学び / 医療・健康 / 固定費 / その他 / 収入 の 10 個から始め、設定 › お金 で名前・色・並び・非表示・追加ができます。お金も記録と同じく端末で暗号化して Drive に同期します。参考にした他アプリ: おカネレコ(金額 → カテゴリで完了の 2 秒入力)、Zaim(月予算と残り・1 日あたり)、調査「家計簿が続かない要因の 1 位はカテゴリ分類」(カテゴリは少なく)。' },
   { v: '0.18.0', text: '「日記」タブを追加し、「設定」はホーム右上の歯車に移しました。日記は 1 日 1 件: 気分(5 つから 1 タップ)と 3 行(よかったこと / ひっかかったこと / 明日は)、メモは折りたたみ。書くたびに自動で保存します(1 行でも「書いた日」。空欄は責めません)。「きょうの材料」: その日の記録(作業の合計・いちばん多かったカテゴリ・済ませたタスクや習慣)、レポートのふり返り、昨日の「明日は」を短い文で並べ、タップすると欄に入ります(白紙から書かなくていい)。‹ › で前の日の日記も書けます。下に続いた日数と最近 14 日の一覧。レポート「今日」にその日の日記の抜粋が出て、書いていなければ 1 日の終わりに「この日の日記を書く ›」。ホームには作業時間帯の終わりの 2 時間前から「きょうの日記 › 1 行だけ書く」の 1 行(書けば消えます)。日記は記録と同じく端末で暗号化して Drive に同期します。参考にした他アプリ: 3 行日記(失敗・感動・明日の目標)、Five Minute Journal(夜の 2 問)、Daylio(気分のタップ)、Apple ジャーナル(その日の材料からの提案)。' },
   { v: '0.17.0', text: 'タスクの追加で 種類(タスク / 習慣 / やりたいこと)を先に選べるようにしました。タスクには「毎週 繰り返す」(毎週の課題: 済ませると完了に入り、期限を過ぎた朝に翌週の同じ曜日が期限になって戻ります)と、どれくらいに「時間なし」(用事: 銀行・メールのように時間を計らないもの。チェックで済ませ、期限が明日までならホームにも出ます)を追加。習慣にも「時間なし」(チェックだけの習慣)。1日の切れ目を 2:00 にしているとき、タイムラインで 0:00〜2:00 の未記録を埋めても画面に出なかった不具合を修正(その日の朝 0:10 として保存されていました。既に入ってしまった分はタイムラインを前の日に送ると朝の位置にあります)。同期で「1日の始まり」などが他の端末の初期値に戻されていた不具合を修正(作業時間帯・1日の始まり・すき間・目標は項目ごとに新しい方を採ります)。レポートはホームの円をタップすると「今日」から開きます(7日は上の切替で)。昨日のふり返りが未読のときの赤い点を、小さな札「昨日のふり返り」に変えました。設定 › 1 日の目標: 作業の合計の目標とダラダラの上限を決めると、ふり返りは先週の平均ではなく目標と比べ、ホームの円の下に細いメーターが出ます。' },
   { v: '0.16.0', text: 'ホームを左にスワイプ(または日付の ‹)で前の日の内訳が見られます。右にスワイプ・› で次の日、「今日」でいつでも今日に戻ります(過去の日はカテゴリの行をタップでその日に記録を足せます。未記録の行はその日のタイムラインへ)。タイムライン: 過去の予定の「予定の時間は?」が押せなかったのを修正。記録を足したり直したりしたあとに画面が現在時刻へ飛ばないようにしました(現在時刻へ動くのはタイムラインを開いたときだけ)。ドラッグの直後にしばらく操作できなかった件: 同期で画面を描き直すタイミングがドラッグ中・シートを開いている最中に当たると途中で消えていたので、その間は描き直しを待たせるようにしました。復帰時や同期のあとも見ていた日・設定の項目はそのままにします(勝手にホームに移っていた一因を直しました。止め忘れの確認のあともいまの画面に残ります)。習慣(毎日/毎週)のチェックは「きょう(今週)は済んだ」の印になり、明日にはまた出ます(これまでは「完了」になって二度と出ませんでした。完了になってしまった習慣は、タスク › 完了 のチェックを外すと戻ります)。レポート「今日」に「ふり返り」: どんな日だったか(自分の先週平均と目安だけで判定。材料が足りない日は判定しません)・よかったこと・良くするには(数字で裏づけられる 1 件だけ)・明日は(目安から計算した量)。円グラフは「カテゴリ / 種別」で切り替えられます(今日・7日・30日・すべて)。' },
@@ -72,7 +75,7 @@ store.init();
 
 let tickFn = null;
 const ctx = { version: APP_VERSION, news: NEWS, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw() };
-const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg), diary: (arg) => renderDiary(view, ctx, arg) };
+const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg), diary: (arg) => renderDiary(view, ctx, arg), money: (arg) => renderMoney(view, ctx, arg) };
 uiReport.hooks.go = (tab, arg) => go(tab, arg); // レポートの中から日記へ(v0.18)
 let current = 'now';
 let currentArg = undefined; // いまの画面の引数(タイムライン/ホームの日付・設定の項目)。同期や復帰で描き直すときに失わない(v0.16)
@@ -115,8 +118,8 @@ tabs.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
   if (b) go(b.dataset.tab);
 });
-// 記録の入口はタブバー中央の ＋(v0.15.3: 右下の浮いたボタンは行の ▶ と重なるのでやめた)
-document.getElementById('tab-add').addEventListener('click', () => { if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return; } openAdd(current, () => screens[current]()); });
+// 記録の入口 ＋(v0.19: タブバー中央の ＋ は「お金」になり、ホームの左上とタイムラインの右上に移した。ボタンは ui-today.addButton が描く)
+ctx.openAdd = () => { if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return; } openAdd(current, () => screens[current](currentArg)); };
 
 // 最後に触った時刻(F1-4 の候補に使う)。分が変わったときだけ保存
 function markActive() {
@@ -198,9 +201,10 @@ window.M = {
   plan,
   report,
   diary,
+  money,
   ui: { timeField: ui.timeField },
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

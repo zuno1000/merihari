@@ -49,9 +49,26 @@ export function defaultCategories() {
   ];
 }
 
+/** お金のカテゴリ(v0.19・F10)。続かない理由の 1 位は「カテゴリ分類」なので少なく。id は固定・名前と色は編集可・消す代わりに非表示 */
+export function defaultMoneyCategories() {
+  return [
+    { id: 'food', name: '食費', color: '#f9cfa8', order: 1 },
+    { id: 'daily', name: '日用品', color: '#cfe9c3', order: 2 },
+    { id: 'transport', name: '交通', color: '#dbe1e8', order: 3 },
+    { id: 'social', name: '交際', color: '#f7bdbd', order: 4 },
+    { id: 'hobby', name: '趣味', color: '#cfc3ef', order: 5 },
+    { id: 'study', name: '学び', color: '#9ccbee', order: 6 },
+    { id: 'health', name: '医療・健康', color: '#b4e3d2', order: 7 },
+    { id: 'fixed', name: '固定費', color: '#e0dcd3', order: 8 },
+    { id: 'misc', name: 'その他', color: '#cfd7e1', order: 9 },
+    { id: 'income', name: '収入', color: '#f7e6a8', order: 10, income: true },
+  ];
+}
 /** 既定の設定(§7)。v0.15: 理想スケジュールの設定(ルーティン・習慣・休憩・移動・割合)は廃止し、記録に関わるものだけ */
 export function defaultSettings() {
   return {
+    moneyCategories: defaultMoneyCategories(), // v0.19: お金のカテゴリ(id ごとに同期で統合)
+    budget: { monthMax: null },                 // v0.19: 月の支出の上限(円・null=決めない)
     window: {
       mon: ['07:00', '23:30'], tue: ['07:00', '23:30'], wed: ['07:00', '23:30'],
       thu: ['07:00', '23:30'], fri: ['07:00', '23:30'],
@@ -74,7 +91,7 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget'];
 
 export function defaultData() {
   return {
@@ -86,6 +103,7 @@ export function defaultData() {
     reports: {},
     ledger: {},
     diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
+    money: {},   // v0.19: お金(id → { id, date, time, amount, type, categoryId, note, entryId, updatedAt, deletedAt })
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -144,6 +162,12 @@ function normalizeSettings(raw) {
   s.goals = { workMin: gw != null && gw >= 15 ? gw : null, driftMax: isObj(raw.goals) ? gMin(raw.goals.driftMax, 720) : null };
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
+  // v0.19: お金のカテゴリ(無ければ既定)と月の予算
+  const normMC = (list) => list.filter((c) => isObj(c) && c.id).map((c, i) => ({ id: String(c.id).slice(0, 40), name: String(c.name || c.id).slice(0, 40), color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color.toLowerCase() : '#cfd7e1', order: Number.isFinite(+c.order) ? +c.order : i + 1, archived: c.archived === true, ...(c.income === true ? { income: true } : {}), ...(typeof c.updatedAt === 'string' ? { updatedAt: c.updatedAt.slice(0, 40) } : {}) }));
+  const mcRaw = Array.isArray(raw.moneyCategories) ? normMC(raw.moneyCategories) : [];
+  s.moneyCategories = mcRaw.length ? mcRaw : normMC(defaultMoneyCategories()); // 既定も同じ形に(migrate の冪等性)
+  const bm = isObj(raw.budget) && raw.budget.monthMax != null && raw.budget.monthMax !== '' && Number.isFinite(+raw.budget.monthMax) && +raw.budget.monthMax > 0 && +raw.budget.monthMax <= 100000000 ? Math.round(+raw.budget.monthMax) : null;
+  s.budget = { monthMax: bm };
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
@@ -216,6 +240,11 @@ export function validateReport(r, id) {
     workMin: num(r.workMin, 0, 1440, 0), plannedWorkMin: num(r.plannedWorkMin, 0, 1440, 0), driftMin: num(r.driftMin, 0, 1440, 0), unloggedMin: num(r.unloggedMin, 0, 1440, 0), coverage: num(r.coverage, 0, 1, 0), loggedMin: num(r.loggedMin, 0, 1440, 0), streak: num(r.streak, 0, 100000, 0), finalizedAt: optStr(r.finalizedAt, 40) };
 }
 export function validateLedger(r) { return isObj(r) ? { usableMin: num(r.usableMin, 0, 1440, 0), workMin: num(r.workMin, 0, 1440, 0) } : null; }
+/** お金(v0.19・F10): 金額は 1〜1 億の整数(円)。type は out/in。time は 'HH:MM' か null */
+export function validateMoney(r, id) {
+  if (!isObj(r) || !isDate(r.date) || !(Number.isFinite(+r.amount) && +r.amount > 0 && +r.amount <= 100000000)) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: isHM(r.time) ? r.time : null, amount: Math.round(+r.amount), type: r.type === 'in' ? 'in' : 'out', categoryId: str(r.categoryId, 40, 'misc'), note: str(r.note, 200), entryId: optStr(r.entryId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 /** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
@@ -243,6 +272,7 @@ export function migrate(raw) {
   out.plans = cleanMap(raw.plans, validatePlan); // 旧データ(理想スケジュール)。v0.15 以降は作らないが、同期のため壊さずに保持する
   out.reports = cleanMap(raw.reports, validateReport);
   out.ledger = cleanMap(raw.ledger, validateLedger);
+  out.money = cleanMap(raw.money, validateMoney);
   out.diary = cleanMap(raw.diary, validateDiary);
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };
@@ -297,7 +327,7 @@ export function saveLocal() {
  * touchSettings のたびに、前回保存時から内容が変わった項目にだけ押す(UI のどこで変えたかを知らなくてよい)。
  */
 const itemSnap = new Map();
-const ITEM_LISTS = [['categories', 'cat'], ['kinds', 'kind'], ['palettes', 'pal']];
+const ITEM_LISTS = [['categories', 'cat'], ['kinds', 'kind'], ['palettes', 'pal'], ['moneyCategories', 'mcat']];
 const itemJSON = (x) => { const c = { ...x }; delete c.updatedAt; return JSON.stringify(c, Object.keys(c).sort()); };
 const fieldJSON = (v) => JSON.stringify(v === undefined ? null : v);
 function refreshItemSnap() {

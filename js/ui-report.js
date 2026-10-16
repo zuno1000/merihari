@@ -11,6 +11,7 @@ import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDa
 import { kindRole } from './store.js';
 
 import { diaryExcerptBox } from './ui-diary.js';
+import { daySpendLine } from './ui-money.js';
 
 const S = () => store.state.data.settings;
 /** main.js が画面遷移を登録する(レポートの中から日記へ・v0.18) */
@@ -422,6 +423,7 @@ function tables(r, days) {
     el('div.list', [
       el('div.srow.plain', [el('span.lbl', '記録できた時間'), el('span.val', fmtMinJa(r.loggedMin))]),
       el('div.srow.plain', [el('span.lbl', '未記録'), el('span.val', fmtMinJa(r.unloggedMin))]),
+      daySpendLine(r.date), // v0.19: その日の支出
     ]),
   ]);
 }

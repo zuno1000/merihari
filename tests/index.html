@@ -586,17 +586,51 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(mD.diary['2026-10-11'].good === 'b' && mD.diary['2026-10-10'].mood === 2 && eq(mD, Sy.merge(dB2, dA2)), 'merge: 日記は日付ごとに updatedAt の新しい方・片側だけのものは残る・対称');
     ok(!Sy.pruneTombstones({ entries: {}, tasks: {}, diary: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: { deletedAt: null } } }, '2026-10-11T00:00:00+09:00').diary.a, 'pruneTombstones: 日記の古い削除も掃除');
 
+
+    // ---- v0.19: お金(F10) ----
+    log('\n# money');
+    const Mn = M.money;
+    ok(Mn.fmtYen(1234567) === '¥1,234,567' && Mn.fmtYen(0) === '¥0' && Mn.fmtYen(-500) === '−¥500' && Mn.fmtYen(999) === '¥999', 'fmtYen: 3 桁区切り・負は −');
+    ok(Mn.parseYen('1,200') === 1200 && Mn.parseYen('¥１２００円') === 1200 && Mn.parseYen('0') === null && Mn.parseYen('abc') === null && Mn.parseYen('') === null && Mn.parseYen('200000000') === null, 'parseYen: 区切り・¥・円・全角を受け、0 以下・壊れた値・1 億超は null');
+    ok(eq(Mn.monthRange('2026-02'), { from: '2026-02-01', to: '2026-02-28', days: 28 }) && Mn.monthRange('2024-02').days === 29 && Mn.addMonths('2026-01', -1) === '2025-12' && Mn.addMonths('2026-12', 1) === '2027-01' && Mn.fmtYM('2026-10') === '2026年10月' && Mn.monthOf('2026-10-16') === '2026-10', 'monthRange / addMonths / fmtYM / monthOf');
+    const mny = { a: { id: 'a', date: '2026-10-03', time: '12:10', amount: 800, type: 'out', categoryId: 'food', entryId: 'e1', deletedAt: null, updatedAt: '1' }, b: { id: 'b', date: '2026-10-03', time: '19:00', amount: 1200, type: 'out', categoryId: 'food', entryId: null, deletedAt: null, updatedAt: '2' }, c: { id: 'c', date: '2026-10-10', time: null, amount: 3000, type: 'out', categoryId: 'hobby', entryId: 'e1', deletedAt: null, updatedAt: '3' }, d: { id: 'd', date: '2026-10-25', time: '10:00', amount: 50000, type: 'in', categoryId: 'income', deletedAt: null, updatedAt: '4' }, e: { id: 'e', date: '2026-09-30', amount: 999, type: 'out', categoryId: 'food', deletedAt: null }, f: { id: 'f', date: '2026-10-05', amount: 5000, type: 'out', categoryId: 'food', deletedAt: 'x' } };
+    const ms = Mn.summarize(mny, '2026-10');
+    ok(ms.out === 5000 && ms.in === 50000 && ms.net === 45000 && ms.count === 4 && ms.byCategory.food === 2000 && ms.byCategory.hobby === 3000 && ms.byDay['2026-10-03'] === 2000 && !ms.byDay['2026-10-25'], 'summarize: 月の支出・収入・カテゴリ別・日別(削除・他の月・収入はカテゴリ別に入れない)');
+    ok(Mn.summarize(mny, '2026-10', '2026-10-05').out === 2000, 'summarize: upto でその日まで');
+    const bs = Mn.budgetStatus(ms, 30000, '2026-10-16');
+    ok(bs.remaining === 25000 && bs.daysLeft === 16 && bs.perDay === 1562 && !bs.over && Math.abs(bs.pct - 5000 / 30000) < 1e-9, 'budgetStatus: 残り・残り日数(今日を含む)・1 日あたり');
+    ok(Mn.budgetStatus(ms, 4000, '2026-10-16').over && Mn.budgetStatus(ms, 4000, '2026-10-16').perDay === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').daysLeft === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').perDay === null && Mn.budgetStatus(ms, null, '2026-10-16') === null, 'budgetStatus: 超過は over・月が過ぎれば残り日数 0・予算なしは null');
+    ok(Mn.perDayAverage(ms, '2026-10-10') === 500 && Mn.perDayAverage(ms, '2026-11-05') === Math.round(5000 / 31) && Mn.perDayAverage(ms, '2026-09-01') === 0, 'perDayAverage: 月初からの日数で割る');
+    const lE = { e1: { id: 'e1', date: '2026-10-03', start: '12:00', end: '13:00', deletedAt: null }, e2: { id: 'e2', date: '2026-10-03', start: '18:00', end: null, deletedAt: null }, e3: { id: 'e3', date: '2026-10-02', start: '23:00', end: '25:00', deletedAt: null } };
+    ok(Mn.linkEntry(lE, '2026-10-03', '12:10') === 'e1' && Mn.linkEntry(lE, '2026-10-03', '13:00') === null && Mn.linkEntry(lE, '2026-10-03', '18:30', 1200) === 'e2' && Mn.linkEntry(lE, '2026-10-03', '21:00', 1200) === null && Mn.linkEntry(lE, '2026-10-03', '00:30') === 'e3' && Mn.linkEntry(lE, '2026-10-03', null) === null, 'linkEntry: その時刻の記録(記録中は now まで・前の日の深夜 24:xx にも当たる)');
+    ok(eq(Mn.totalsByEntry(mny), { e1: 3800 }), 'totalsByEntry: 記録ごとの支出(収入・削除は除く)');
+    const gb = Mn.groupByDay(mny, '2026-10-01', '2026-10-31');
+    ok(gb.map((g) => `${g.date}:${g.total}:${g.items.length}`).join() === '2026-10-25:0:1,2026-10-10:3000:1,2026-10-03:2000:2' && gb[2].items[0].id === 'b', 'groupByDay: 新しい日が先・日の合計は支出だけ・日の中は時刻の遅い順');
+    ok(Mn.monthlyTrend(mny, '2026-10', 3).map((t) => `${t.ym}:${t.out}`).join() === '2026-08:0,2026-09:999,2026-10:5000', 'monthlyTrend: 直近 n か月の支出(古い順)');
+    const vm = S.migrate({ schema: 1, money: { a: { id: 'a', date: '2026-10-03', time: '12:10', amount: '800', type: 'in', categoryId: 'food', note: 'x'.repeat(300) }, b: { date: 'x', amount: 1 }, c: { date: '2026-10-03', amount: 0 }, d: { date: '2026-10-03', amount: 500, time: 'zz' } } });
+    ok(Object.keys(vm.money).sort().join() === 'a,d' && vm.money.a.amount === 800 && vm.money.a.type === 'in' && vm.money.a.note.length === 200 && vm.money.d.time === null && vm.money.d.type === 'out' && vm.money.d.categoryId === 'misc' && vm.money.d.id === 'd', 'validateMoney: 金額は正の整数・type は out/in・時刻は HH:MM だけ・壊れた日付や 0 円は捨てる');
+    ok(S.defaultSettings().moneyCategories.length === 10 && S.defaultMoneyCategories().find((c) => c.id === 'income').income === true && eq(S.defaultSettings().budget, { monthMax: null }) && eq(S.migrate(null).money, {}), 'お金の既定: カテゴリ 10 件(収入 1 つ)・予算なし・money は空');
+    const bud = S.migrate({ schema: 1, settings: { budget: { monthMax: '30000' }, moneyCategories: [{ id: 'food', name: '食', color: 'bad', order: 1 }, { noId: 1 }] } }).settings;
+    ok(bud.budget.monthMax === 30000 && bud.moneyCategories.length === 1 && bud.moneyCategories[0].color === '#cfd7e1' && S.migrate({ schema: 1, settings: { budget: { monthMax: -5 } } }).settings.budget.monthMax === null && S.migrate({ schema: 1, settings: { moneyCategories: [] } }).settings.moneyCategories.length === 10, 'settings(v0.19): 予算は正の整数だけ・カテゴリは id のあるものだけ(空なら既定)・壊れた色は灰');
+    const mcA = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-14T10:00:00+09:00', moneyCategories: S.defaultMoneyCategories().map((c) => (c.id === 'food' ? { ...c, name: 'ごはん', updatedAt: '2026-10-14T10:00:00+09:00' } : c)).concat([{ id: 'm_x', name: 'ペット', color: '#9ccbee', order: 11 }]), budget: { monthMax: 40000 }, fieldStamps: { budget: '2026-10-14T10:00:00+09:00' } };
+    const mcB = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-16T09:00:00+09:00' };
+    const mcM = Sy.merge(mkD(mcA), mkD(mcB)).settings;
+    ok(mcM.moneyCategories.find((c) => c.id === 'food').name === 'ごはん' && mcM.moneyCategories.some((c) => c.id === 'm_x') && mcM.budget.monthMax === 40000 && eq(mcM, Sy.merge(mkD(mcB), mkD(mcA)).settings), 'mergeSettings(v0.19): お金のカテゴリは id ごと・予算は項目の印・対称');
+    const mA = { ...dA, money: { a: { id: 'a', date: '2026-10-03', amount: 800, type: 'out', categoryId: 'food', updatedAt: '2026-10-03T12:00:00+09:00', deletedAt: null } } };
+    const mB = { ...dB, money: { a: { id: 'a', date: '2026-10-03', amount: 900, type: 'out', categoryId: 'food', updatedAt: '2026-10-03T13:00:00+09:00', deletedAt: null }, b: { id: 'b', date: '2026-10-04', amount: 100, type: 'out', categoryId: 'misc', updatedAt: 'x', deletedAt: null } } };
+    ok(Sy.merge(mA, mB).money.a.amount === 900 && Sy.merge(mA, mB).money.b && eq(Sy.merge(mA, mB), Sy.merge(mB, mA)) && !Sy.pruneTombstones({ entries: {}, tasks: {}, money: { z: { deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-11T00:00:00+09:00').money.z, 'merge: お金は id ごとに updatedAt の LWW・対称・古い削除は掃除');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary', 'money', 'ui-money']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');
     const doc = W.document;
-    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4 && doc.querySelector('#tabs #tab-add') && doc.querySelector('#tabs button[data-tab=diary]') && !doc.querySelector('#tabs button[data-tab=settings]'), 'タブは4つ(ホーム/タイムライン/タスク/日記)+ 中央の ＋(v0.18: 設定はホーム右上の歯車)');
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 5 && !doc.querySelector('#tabs #tab-add') && doc.querySelector('#tabs button[data-tab=money]') && doc.querySelector('#tabs button[data-tab=diary]') && !doc.querySelector('#tabs button[data-tab=settings]'), 'タブは5つ(ホーム/タイムライン/お金/タスク/日記)。＋ は無く(v0.19: ホーム左上とタイムライン右上)、設定はホーム右上の歯車(v0.18)');
     ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
     ok(!!doc.querySelector('#view h1, #view .today-head'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');

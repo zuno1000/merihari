@@ -48,6 +48,7 @@ const summary = {
   categories() { const c = S().categories.filter((x) => !x.archived).sort((a, b) => a.order - b.order); return `${c.slice(0, 4).map((x) => x.name).join('・')}${c.length > 4 ? ` …全${c.length}件` : ''}`; },
   kinds() { const k = S().kinds || []; return `${k.slice(0, 4).map((x) => x.name).join('・')}${k.length > 4 ? ` …全${k.length}件` : ''}`; },
   palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット ${(s.palettes || []).length} 件`; },
+  money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ ${n} 件`; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); return [g.workMin > 0 ? `作業 ${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; },
 };
 
@@ -105,6 +106,38 @@ function sectionGoals() {
     el('p.muted.small', '「作業として数える」種別のカテゴリ(研究・授業など)の 1 日の合計。'),
     el('div.row.field', [el('span.label', `${drift}の上限`), select(opts(driftList), s.goals.driftMax == null ? '' : String(s.goals.driftMax), (v) => { s.goals.driftMax = v === '' ? null : +v; store.touchSettings(); })]),
     el('p.muted.small', '「ダラダラとして数える」種別(SNS・動画など)の 1 日の合計がこれ以内なら、ふり返りで「上限の中」と言います。'));
+}
+/** お金(v0.19・F10): 月の予算と、お金のカテゴリ(名前・色・並び・非表示・追加)。時間のカテゴリとは別 */
+function sectionMoney(rerender) {
+  const s = S();
+  s.budget = s.budget || { monthMax: null };
+  s.moneyCategories = s.moneyCategories && s.moneyCategories.length ? s.moneyCategories : store.defaultMoneyCategories();
+  const live = s.moneyCategories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
+  const archived = s.moneyCategories.filter((c) => c.archived);
+  const renumber = () => { live.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
+  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
+  const budgetIn = el('input.text', { type: 'text', inputmode: 'numeric', value: s.budget.monthMax == null ? '' : String(s.budget.monthMax), placeholder: '決めない', 'aria-label': '月の予算(円)', style: { maxWidth: '10em' },
+    onchange: (e) => { const v = e.target.value.replace(/[¥,円\s]/g, ''); if (v === '') { s.budget.monthMax = null; store.touchSettings(); return; } if (/^\d+$/.test(v) && +v > 0 && +v <= 100000000) { s.budget.monthMax = +v; store.touchSettings(); } else { toast('円の数字で入れてください'); e.target.value = s.budget.monthMax == null ? '' : String(s.budget.monthMax); } } });
+  const rows = live.map((c, i) => {
+    const dot = el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' });
+    const setColor = (v, persist = true) => { c.color = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
+    const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード', onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
+    const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
+    return el('div.item', [
+      el('div.row', [dot, textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), c.income ? el('span.gtag', '収入') : null,
+        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${c.name} を非表示にする`, disabled: live.length <= 1, onclick: () => confirmSheet(`「${c.name}」を非表示にしますか?`, '記録は消えません。チップに出なくなるだけで、あとから「表示に戻す」こともできます。', '非表示にする', () => { c.archived = true; renumber(); }) }, '非表示')]),
+      el('div.row.colorrow', [el('span.label', '色'), pick, hex, el('span.grow'),
+        el('button.btn.sm', { type: 'button', 'aria-label': '上へ', disabled: i === 0, onclick: () => { [live[i - 1], live[i]] = [live[i], live[i - 1]]; renumber(); } }, '↑'),
+        el('button.btn.sm', { type: 'button', 'aria-label': '下へ', disabled: i === live.length - 1, onclick: () => { [live[i + 1], live[i]] = [live[i], live[i + 1]]; renumber(); } }, '↓')]),
+    ]);
+  });
+  return card('お金', 'お金タブの月の予算とカテゴリ。カテゴリは少ないほど続きます(家計簿が続かない要因の 1 位は「カテゴリ分類」)。時間のカテゴリとは別です。',
+    el('div.row.field', [el('span.label', '月の予算(支出)'), el('span.yen-mark.sm', '¥'), budgetIn]),
+    el('p.muted.small', '決めると、お金タブに「残り ◯円・1 日 ◯円 まで」のメーターが出ます。決めなければ 1 日平均だけを出します。'),
+    el('h3.help-h', 'カテゴリ'),
+    ...rows,
+    addBtn('カテゴリを追加', () => { s.moneyCategories.push({ id: 'm_' + store.uid().slice(0, 8), name: '新しいカテゴリ', color: EXTRA_COLORS[(live.length + 3) % EXTRA_COLORS.length], order: live.length + 1, archived: false }); store.touchSettings(); rerender(); }),
+    archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), textInput(c.name, (v) => { c.name = v || c.name; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
 }
 function sectionCategories(rerender) {
   const s = S();
@@ -263,9 +296,9 @@ function sectionHelp() {
   const p = (t) => el('p.help-p', t);
   const li = (items) => el('ul.help-ul', items.map((t) => el('li', t)));
   return el('div.help', [
-    h('4つの画面'),
-    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。円をタップするとレポート(7日/30日/すべて/今日。昨日が未読なら赤い点が付き、最初のタップで昨日を開きます)。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。下に「タスクと習慣」: 期限・毎日・毎週・やりたい のタグ付きで、きょうの分の目安と済んだ分。行のタップで後から記録、右の ▶ でいまから記録。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。日付をタップするとその日のレポート。開くと現在時刻の位置に移ります。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。', 'タスク: 名前を入れて Enter。触ると いつまで / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '設定: 作業時間帯・カテゴリ(名前・色・種別・非表示)・種別(作業/ダラダラとして数えるか)・配色(セットの保存・編集・適用)・すき間・Google。']),
-    h('記録する(下の ＋)'),
+    h('5つのタブと設定'),
+    li(['ホーム: きょうの内訳(円とカテゴリ別の一覧)。円をタップするとレポート(今日 / 7日 / 30日 / すべて。昨日が未読なら「昨日のふり返り」の札が付き、最初のタップで昨日を開きます)。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。下に「タスクと習慣」: 期限・用事・毎日・毎週・やりたい のタグ付きで、きょうの分の目安と済んだ分。行のタップで後から記録、右の ▶ でいまから記録(用事はチェック)。左上の ＋ が記録の入口、右上の歯車が設定。', 'タイムライン: 実績を 1 日分、縦に。左右にスワイプ(または ‹ ›)で前後の日。日付をタップするとその日のレポート。開くと現在時刻の位置に移ります。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。右上の ＋ でその日に記録を足せます。支出が紐づく記録には ¥ の印。', 'お金: 今月の支出と予算の残り。金額を入れてカテゴリをタップで記録(きょう・いま。「きょう・いま」をタップで日時を変更)。内訳の円・日ごとの一覧(タップで修正)・月ごとの推移。', 'タスク: 名前を入れて Enter。触ると 種類(タスク / 習慣 / やりたいこと)と いつまで / 繰り返す / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', '日記: 気分と 3 行(よかったこと / ひっかかったこと / 明日は)。書くたびに自動保存。「きょうの材料」をタップすると欄に入ります。', '設定(ホーム右上の歯車): 作業時間帯・カテゴリ・種別・配色・すき間・1 日の目標・お金(予算・カテゴリ)・Google・データ。']),
+    h('記録する(ホーム左上・タイムライン右上の ＋)'),
     li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを 1 回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、タスクと習慣の行、タイムラインの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが 10 分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00 など)なら、0:00 を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分 の順にタップ。分はなぞると 1 分刻み、下の −5/−1/+1/+5 でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5 分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
@@ -292,6 +325,7 @@ const SECTIONS = {
   palettes: { title: '配色', build: (re) => sectionPalettes(re) },
   logging: { title: '記録のすき間', build: () => sectionLogging() },
   goals: { title: '1 日の目標', build: () => sectionGoals() },
+  money: { title: 'お金', build: (re) => sectionMoney(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -388,6 +422,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('すき間', summary.logging(), open('logging')),
       srow('1 日の目標', summary.goals(), open('goals')),
     ]),
+    group('お金・日記', [srow('お金', summary.money(), open('money'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', null, () => {
