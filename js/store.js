@@ -110,7 +110,7 @@ export function defaultData() {
 }
 
 export function defaultLocal() {
-  return { busyCache: null, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '' };
+  return { busyCache: null, uiState: { tab: 'today' }, pendingSync: false, gAuthed: false, lastSyncAt: 0, syncHint: '', clientIdOverride: '', ai: { enabled: false, shortcutName: 'メリハリ' } }; // ai(v0.21): 端末ごとの任意機能(同期しない)
 }
 
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);

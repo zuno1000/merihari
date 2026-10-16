@@ -636,12 +636,32 @@ document.getElementById('app').addEventListener('load', async () => {
     const wA = { ...dA, wants: { a: { id: 'a', name: 'A', price: 100, updatedAt: '2026-10-11T10:00:00+09:00', deletedAt: null } } }, wB = { ...dB, wants: { a: { id: 'a', name: 'A2', price: 200, updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null } } };
     ok(Sy.merge(wA, wB).wants.a.price === 200 && eq(Sy.merge(wA, wB), Sy.merge(wB, wA)), 'merge: ほしいものも id ごとの LWW・対称');
 
+
+    // ---- v0.21: AI(ショートカット)に渡す文(F11) ----
+    log('\n# ai');
+    const Ai = M.ai;
+    ok(Ai.clip('abc', 5) === 'abc' && Ai.clip('a'.repeat(10), 5).length === 5 && Ai.clip('一行目\n二行目\n三行目はとても長い', 12).endsWith('…') && Ai.clip('一行目\n二行目\n三行目はとても長い', 12).startsWith('一行目\n二行目'), 'clip: 上限で切る(行の途中で切らない)');
+    const su = Ai.shortcutURL('メリハリ', 'やあ');
+    ok(su.url === 'shortcuts://run-shortcut?name=%E3%83%A1%E3%83%AA%E3%83%8F%E3%83%AA&input=text&text=%E3%82%84%E3%81%82' && su.viaClipboard === false, 'shortcutURL: 短い文は URL に乗せる');
+    const suL = Ai.shortcutURL('x', 'あ'.repeat(1600));
+    ok(suL.url === 'shortcuts://run-shortcut?name=x&input=clipboard' && suL.viaClipboard === true && Ai.shortcutURL('', 'a').url.includes(encodeURIComponent('メリハリ')), 'shortcutURL: 長い文はクリップボード経由・名前が空なら既定');
+    const st = Ai.summaryText({ date: RD, agg: fbAggGood, fb: fb1, gs: [{ kind: 'daily', name: '英語', done: true, targetMin: 30, doneMin: 30 }, { kind: 'deadline', name: '修論', done: false, targetMin: 60, doneMin: 20 }, { kind: 'todo', name: '銀行', done: false }], diary: { mood: 4, good: '進んだ', hard: '', tomorrow: '早く寝る' }, categories: ds.categories, goals: { workMin: 240, driftMax: null }, nowMin: 1440, dayDone: true });
+    ok(st.length <= 1800 && st.includes('【10月12日(月)の記録】') && st.includes('内訳: 生活 11時間・研究 3時間') && st.includes('作業の合計 3時間(目標 4時間)') && st.includes('済ませたもの: 英語') && st.includes('目安に届いていないもの: 修論(あと 40分)') && st.includes('残っている用事: 銀行') && st.includes('【アプリのふり返り(規則で作った文)】') && st.includes('よかったこと: 進んだ') && st.includes('気分: よい') && st.endsWith('きょうを 3 文でふり返り、よかった点を 1 つと明日の一歩を 1 つ。'), 'summaryText: 役割 → 記録(内訳・合計と目標・済/未達/用事)→ アプリのふり返り → 日記 → お願い');
+    const stMid = Ai.summaryText({ date: RD, agg: Rp.aggregate({ entries: fbGood, date: RD, nowMin: 600, settings: ds }), fb: null, gs: [], diary: null, categories: ds.categories, goals: {}, nowMin: 600, dayDone: false });
+    ok(stMid.includes('いまは 10:00(1 日の途中)') && !stMid.includes('【日記】') && stMid.endsWith('ここまでを 3 文でふり返り、きょうの残りの一歩を 1 つ。') && stMid.includes('(先週の平均 2時間)'), 'summaryText: 途中の日は「いま」と残りの一歩・日記が無ければ省く・目標が無ければ先週平均');
+    ok(Ai.summaryText({ date: RD, agg: null, fb: null, gs: [], diary: null, categories: [], goals: {}, nowMin: 1440, dayDone: true }).length < 400, 'summaryText: 材料が無くても短い文になる');
+    const ct = Ai.consultText({ question: 'やる気が出ない', nowMin: 1300, open: { name: '研究', elapsedMin: 32 }, workMin: 200, goals: { workMin: 360 }, gs: [{ kind: 'daily', name: '英語', done: false, targetMin: 30, doneMin: 0 }, { kind: 'todo', name: 'メール', done: false }], near: [{ name: '面談資料', deadline: '2026-10-14' }], mood: 2 });
+    ok(ct.includes('時刻 21:40') && ct.includes('記録中: 研究(32分)') && ct.includes('きょうの作業 3時間20分(目標 6時間)') && ct.includes('きょうの目安の残り: 英語(あと 30分)') && ct.includes('残っている用事: メール') && ct.includes('期限が近いもの: 面談資料(10月14日まで)') && ct.includes('きょうの気分: いまいち') && ct.includes('【相談】\nやる気が出ない') && ct.includes('いま 10 分でできる一歩を 1 つ'), 'consultText: いまの状況(時刻・記録中・作業・目安・用事・期限・気分)+ 質問 + お願い');
+    ok(Ai.consultText({ question: '  ', nowMin: 600, open: null }).includes('いまは何も記録していない') && Ai.consultText({ question: '', nowMin: 600, open: null }).includes('【相談】\nいま何をするといい?'), 'consultText: 記録中でない・質問が空なら既定の問い');
+    ok(Ai.QUICK_QUESTIONS.length === 5 && Ai.MAX_CHARS === 1800 && Ai.URL_MAX_CHARS === 1500 && Ai.DEFAULT_SHORTCUT === 'メリハリ', 'ai の定数');
+    ok(S.defaultData && JSON.stringify(Object.keys(S.defaultData())).includes('wants') && true, 'defaultData に wants');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary', 'money', 'ui-money']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary', 'money', 'ui-money', 'ai']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

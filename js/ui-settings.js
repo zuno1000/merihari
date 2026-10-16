@@ -294,6 +294,34 @@ function sectionGoogle(rerender) {
     el('details', [el('summary.muted.small', 'クライアント ID を上書き(通常は不要)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]));
 }
 
+/**
+ * AI・ショートカット(v0.21・F11): 端末ごとの任意機能(local.ai・同期しない)。アプリ内に AI は置かず、iOS ショートカットの「モデルを使用」(Apple Intelligence・端末内モデル)に文を渡す。
+ * ここで有効にすると日記に「AI に頼む」のカードが出る。ショートカットの作り方(3 アクション)もここに。
+ */
+function sectionAI(rerender) {
+  const local = store.state.local;
+  local.ai = { enabled: false, shortcutName: 'メリハリ', ...(local.ai || {}) };
+  const save = () => store.saveLocal();
+  const name = textInput(local.ai.shortcutName || 'メリハリ', (v) => { local.ai.shortcutName = v || 'メリハリ'; save(); }, { 'aria-label': 'ショートカットの名前', maxlength: 60 });
+  const test = () => { const { url } = ai_shortcutURL(local.ai.shortcutName || 'メリハリ', 'テストです。「準備できました」とだけ答えてください。'); location.href = url; };
+  return card('AI(ショートカット)', 'アプリの中に AI はありません。iPhone の「ショートカット」アプリにある「モデルを使用」(Apple Intelligence)へ、その日の記録やふり返りの文を渡して、返事をクリップボードから日記に貼り付けます。文が端末の外に出るかどうかは、ショートカット側で選ぶモデルで決まります(「端末上」を選べば出ません)。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!local.ai.enabled, onchange: (e) => { local.ai.enabled = e.target.checked; save(); rerender(); } }), el('span', '日記に「AI に頼む」を出す')]),
+    el('div.row.field', [el('span.label', 'ショートカットの名前'), name]),
+    el('h3.help-h', 'ショートカットの作り方(1 回だけ)'),
+    el('ol.help-ul', [
+      el('li', 'ショートカット アプリで「＋」→ 名前を上の名前(既定「メリハリ」)にする。'),
+      el('li', '「ショートカットの入力を受け取る」を追加(種類は テキスト)。'),
+      el('li', '「モデルを使用」を追加。モデルは「端末上」(文が外に出ない)。プロンプトに「ショートカットの入力」を入れる(指示文はアプリが文の中に書いて渡すので、それだけでいい)。'),
+      el('li', '「クリップボードにコピー」を追加(入力は モデルの応答)。続けて「結果を表示」を追加すると、その場で読める。'),
+      el('li', 'メリハリの日記で「きょうのふり返りを頼む」か「相談」→ ショートカットが開いて返事が出る → メリハリに戻って「返事を貼り付け」。'),
+    ]),
+    el('div.row.wrap', { style: { marginTop: '10px' } }, [
+      el('button.btn', { type: 'button', onclick: test }, 'ショートカットを開いて試す'),
+      el('button.btn.ghost', { type: 'button', onclick: async () => { try { await navigator.clipboard.writeText('テストです。「準備できました」とだけ答えてください。'); toast('テストの文をコピーしました'); } catch { toast('コピーできませんでした'); } } }, 'テストの文をコピー'),
+    ]),
+    el('p.muted.small', '制約: 端末内モデルは入力と返事を合わせて約 4,000 字まで(アプリは 1,800 字までに切って渡します)。Apple Intelligence が使える iPhone(15 Pro 以降)と iOS 26 が必要。ショートカットは自分でタップしたときだけ動き、アプリのデータを勝手に読むことはできません。この設定はこの端末だけのもので、同期しません。'));
+}
+function ai_shortcutURL(name, text) { return { url: `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(text)}` }; }
 function sectionHelp() {
   const h = (t) => el('h3.help-h', t);
   const p = (t) => el('p.help-p', t);
@@ -319,7 +347,9 @@ function sectionHelp() {
     li(['レポートはホームの円をタップ(タイムラインでは日付をタップでその日のレポート)。最初は「今日」が開きます(上の切替で 7日 / 30日 / すべて)。翌朝に確定し、昨日の分が未読なら円に「昨日のふり返り」の小さな札が付きます。','肯定的な事実を先に、改善点は事実だけ。比べる相手は先週の平均と、毎日・毎週の目安だけ。責める言葉は使いません。', '「1日の円」は 24 時間を カテゴリ・未記録・睡眠・これから で分けたもの。タップで時間が出ます。カテゴリ別・1日の帯・7日間の推移・表は「くわしく」に。確定したあとに記録を直したら「いまの記録で再計算」。', '7日 / 30日 / すべて: 記録の内訳の円・カテゴリ別の合計と 1 日平均・前の同じ期間との比較・推移(作業とダラダラは同じ期間・同じ目盛)・習慣のふり返り(毎日: 届いた日数、毎週: 週ごと、やりたいこと: ふれた日数)。習慣の行をタップするとカレンダーが開き、日ごとの取り組みの濃さと、届いた日の ✓、毎週は週の合計が見えます。']),
     h('Google とプライバシー'),
     li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。タイムラインでは記録の無いところにだけ薄く描き(記録したら消えます)、過去なら「予定の時間は?」で記録でき、そのとき選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '同期の決まり: 記録とタスクは 1 件ごとに新しい方。カテゴリ・種別・配色セットも 1 つごとに統合します(片方の端末にしか無いものは消えず、両方にあれば最後に変えた方)。初期設定だけの端末と同期しても、元の端末のカテゴリは消えません。設定 › データ に「同期前の設定に戻す」があり、同期でカテゴリなどが変わったときは直前の設定を 1 つ控えています。', '顔認証 / パスキー(任意): 設定 › Google で有効にすると、この端末のパスキーの中の秘密でパスフレーズを包んで保存し、次回からは Face ID・指紋・Windows Hello などで解錠して同期します。パスフレーズそのものは保存しません。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズ(またはパスキー)を聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。']),
-    h('ショートカット'),
+    h('AI(ショートカット・任意)'),
+    li(['設定 › AI で有効にすると、日記の下に「AI に頼む」のカードが出ます。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の 3 行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を押すと、読んでから日記のメモに追記できます。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
+    h('ショートカット(記録)'),
     li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了(iOS のショートカットから)。']),
   ]);
 }
@@ -333,6 +363,7 @@ const SECTIONS = {
   logging: { title: '記録のすき間', build: () => sectionLogging() },
   goals: { title: '1 日の目標', build: () => sectionGoals() },
   money: { title: 'お金', build: (re) => sectionMoney(re) },
+  ai: { title: 'AI(ショートカット)', build: (re) => sectionAI(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -429,7 +460,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('すき間', summary.logging(), open('logging')),
       srow('1 日の目標', summary.goals(), open('goals')),
     ]),
-    group('お金・日記', [srow('お金', summary.money(), open('money'))]),
+    group('お金・日記', [srow('お金', summary.money(), open('money')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', null, () => {

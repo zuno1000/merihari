@@ -7,6 +7,7 @@ import * as log from './log.js';
 import * as plan from './plan.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
+import * as ai from './ai.js';
 import * as sync from './sync.js';
 import { dateKey, minuteOfDay, windowFor, fmtMD, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
 
@@ -137,8 +138,60 @@ export function renderDiary(view, ctx, dateArg = null) {
   }
   refreshList();
 
-  view.append(el('h1', '日記'), head, card, listBox);
+  // AI(v0.21・F11): 設定 › AI で有効にした人だけ。文をショートカットへ渡し、返事はクリップボードから貼り付ける(アプリ内に AI は無い)
+  const aiBox = store.state.local.ai?.enabled ? aiCard({ date, isToday, nowMin, agg, fb, gs, draft, fields, queue, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) }) : null;
+  view.append(...[el('h1', '日記'), head, card, aiBox, listBox].filter(Boolean));
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
+}
+
+/**
+ * AI に頼む(v0.21・F11): 「きょうのふり返りを頼む」と「相談」(定型のチップ+自由入力)。文は ai.js の純関数で作り、ショートカット(端末内モデル)へ。
+ * 返事は「返事を貼り付け」でクリップボードから読み、シートで見せてからメモに追記できる。PC など開けない環境のために「文をコピー」も。
+ */
+function aiCard(o) {
+  const local = store.state.local;
+  const name = local.ai?.shortcutName || ai.DEFAULT_SHORTCUT;
+  const n = effectiveDay(S(), dateKey(), minuteOfDay());
+  const send = async (text) => {
+    const { url, viaClipboard } = ai.shortcutURL(name, text);
+    try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした(文をコピー → ショートカットで「クリップボード」を入力に)'); return; }
+    local.aiLastSentAt = Date.now(); store.saveLocal();
+    location.href = url;
+  };
+  const copyOnly = async (text) => { try { await navigator.clipboard.writeText(text); toast('文をコピーしました(ショートカットに貼って使えます)'); } catch { toast('コピーできませんでした'); } };
+  const summary = () => ai.summaryText({ date: o.date, agg: o.agg, fb: o.fb, gs: o.gs, diary: o.draft, categories: S().categories, goals: S().goals, nowMin: o.nowMin, dayDone: o.dayDone });
+  const question = el('input.text', { type: 'text', placeholder: '相談(例: やる気が出ない)', maxlength: 200, autocomplete: 'off' });
+  const consult = () => {
+    const open = log.openEntry(E());
+    const openInfo = open ? { name: (open.taskId && T()[open.taskId]?.name) || (S().categories.find((c) => c.id === open.categoryId)?.name) || '記録', elapsedMin: log.elapsedMin(open, n.date, n.min) } : null;
+    const workMin = Object.entries(log.totalsByCategory(E(), n.date, n.min)).filter(([id]) => store.catRole(S(), id).work).reduce((a, [, v]) => a + v, 0);
+    const near = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'wish' && !t.repeat && t.deadline && t.deadline.slice(0, 10) >= n.date && t.deadline.slice(0, 10) <= addDays(n.date, 3)).sort((a, b) => (a.deadline < b.deadline ? -1 : 1)).map((t) => ({ name: t.name, deadline: t.deadline.slice(0, 10) }));
+    return ai.consultText({ question: question.value, nowMin: n.min, open: openInfo, workMin, goals: S().goals, gs: plan.goals(T(), E(), n.date, n.min), near, mood: entryFor(n.date).mood });
+  };
+  const chips = el('div.chips.small', ai.QUICK_QUESTIONS.map((q) => el('button.chip.sm2', { type: 'button', onclick: () => { question.value = q; send(consult()); } }, q)));
+  const paste = async () => {
+    let text = '';
+    try { text = (await navigator.clipboard.readText()) || ''; } catch { toast('貼り付けの許可が要ります(もう一度タップして「ペースト」を選ぶ)'); return; }
+    text = text.trim();
+    if (!text) { toast('クリップボードが空です'); return; }
+    sheet((close) => [
+      el('h2', 'AI の返事'),
+      el('p.aireply', text.slice(0, 2000)),
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, '閉じる'), el('button.btn.primary.grow', { type: 'button', onclick: () => {
+        const ta = o.fields.note; const cur = (ta.value || '').trim();
+        ta.value = cur ? `${cur}\n${text}` : text; o.draft.note = ta.value; ta.fit(); o.queue(); close(); toast('メモに追記しました');
+      } }, 'メモに追記')]),
+    ]);
+  };
+  return el('section.card.aicard', [
+    el('div.row.between', [el('span.dlabel', `AI に頼む(ショートカット「${name}」)`), el('button.btn.sm.ghost', { type: 'button', onclick: () => copyOnly(summary()) }, '文をコピー')]),
+    el('div.row', [
+      el('button.btn.grow', { type: 'button', onclick: () => send(summary()) }, o.isToday ? 'きょうのふり返りを頼む' : 'この日のふり返りを頼む'),
+      el('button.btn', { type: 'button', onclick: paste }, '返事を貼り付け'),
+    ]),
+    o.isToday ? el('div.row', [question, el('button.btn.primary', { type: 'button', onclick: () => send(consult()) }, '相談')]) : null,
+    o.isToday ? chips : null,
+  ].filter(Boolean));
 }
 
 /**
