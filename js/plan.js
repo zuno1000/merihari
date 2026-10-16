@@ -67,7 +67,7 @@ export function isEligible(t, date) {
 export function todayShare(tasks, date, entries = {}) {
   const out = [];
   for (const t of Object.values(tasks || {})) {
-    if (!isEligible(t, date) || t.repeat) continue;
+    if (!isEligible(t, date) || t.repeat || t.noTime) continue; // 時間を計らない用事(v0.17)は量を持たない
     const deadline = deadlineKey(t, date);
     if (!deadline) continue;
     const remMin = remainingMin(t, entries, date);
@@ -146,18 +146,44 @@ export function goals(tasks, entries, date, nowMin = 1440) {
     const t = tasks[s.taskId];
     out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'deadline', targetMin: s.todayMin, doneMin: logged[t.id] || 0, deadline: s.deadline, daysLeft: s.daysLeft });
   }
+  // 用事(v0.17・時間を計らない期限つき): 期限が明日まで(過ぎたものも)なら出す。その日に済ませたものも ✓ で残す
+  const todos = Object.values(tasks || {}).filter((t) => alive(t) && t.noTime && t.kind !== 'wish' && !t.repeat && deadlineKey(t, date) && deadlineKey(t, date) <= addDays(date, 1) && (!t.doneAt || t.doneAt.slice(0, 10) === date))
+    .sort((a, b) => (deadlineKey(a, date) < deadlineKey(b, date) ? -1 : deadlineKey(a, date) > deadlineKey(b, date) ? 1 : (a.name || '').localeCompare(b.name || '')));
+  for (const t of todos) { const dl = deadlineKey(t, date); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'todo', targetMin: null, doneMin: logged[t.id] || 0, deadline: dl, daysLeft: daysBetween(date, dl) + 1, doneAt: t.doneAt || null }); }
   const rest = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  for (const t of rest) if (t.repeat?.type === 'daily' && t.kind !== 'wish') out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: +t.repeat.min > 0 ? +t.repeat.min : 30, doneMin: logged[t.id] || 0 });
+  for (const t of rest) if (t.repeat?.type === 'daily' && t.kind !== 'wish') out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'daily', targetMin: t.noTime ? null : (+t.repeat.min > 0 ? +t.repeat.min : 30), doneMin: logged[t.id] || 0, noTime: !!t.noTime });
   for (const t of rest) if (t.repeat?.type === 'weekly' && t.kind !== 'wish') {
     const { from, to } = weekRange(t, date);
-    out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60), doneMin: loggedBetween(entries, t.id, from, to, date, nowMin), from, to });
+    out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: t.noTime ? null : Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60), doneMin: loggedBetween(entries, t.id, from, to, date, nowMin), from, to, noTime: !!t.noTime });
   }
   for (const t of rest) if (t.kind === 'wish') out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'wish', targetMin: null, doneMin: loggedBetween(entries, t.id, addDays(date, -6), date, date, nowMin), lastDate: lastLoggedDate(entries, t.id) });
   for (const g of out) {
     g.checked = (g.kind === 'daily' || g.kind === 'weekly') && isChecked(tasks[g.taskId], date); // 「済んだ」の印(v0.16)
-    g.done = g.checked || (g.targetMin != null && g.doneMin >= g.targetMin);
+    g.done = g.kind === 'todo' ? !!g.doneAt : g.checked || (g.targetMin != null && g.doneMin >= g.targetMin);
   }
   return out;
+}
+
+/**
+ * 繰り返す期限つきタスク(v0.17・F5-9): recur:'weekly' のタスクは、済んで(doneAt)期限を過ぎたら、期限を 7 日ずつ送って(today 以降になるまで)未完了に戻す。
+ * 残り見積は remainingH のまま、remainingSetAt を送った時刻にして前の週の記録を引かない。済んだ期限は checks に残す(ふり返り用)。
+ * 済んでいないまま期限を過ぎたものは触らない(期限切れの出口 F5-5 で +1週 などを選ぶ)。純関数。戻り値 { tasks, rolled:[taskId] }
+ */
+export function rollRecurring(tasks, today, ctx) {
+  const out = { ...tasks };
+  const rolled = [];
+  for (const t of Object.values(tasks || {})) {
+    if (!alive(t) || t.recur !== 'weekly' || !t.doneAt || t.repeat) continue;
+    const dl = deadlineKey(t, today);
+    if (!dl || dl >= today) continue;
+    let next = dl;
+    while (next < today) next = addDays(next, 7);
+    const time = typeof t.deadline === 'string' && t.deadline.length >= 16 ? t.deadline.slice(10) : '';
+    const checks = [...(Array.isArray(t.checks) ? t.checks : []), dl].filter((k, i, a) => a.indexOf(k) === i).sort().slice(-400);
+    out[t.id] = { ...t, deadline: next + time, doneAt: null, remainingSetAt: ctx.nowISO(), checks, updatedAt: ctx.nowISO() };
+    rolled.push(t.id);
+  }
+  return { tasks: out, rolled };
 }
 
 /** 空き区間 [{start,end}](from〜to の中で blocks が無いところ) */
@@ -200,6 +226,6 @@ export function rollWeekly(tasks, entries, today, ctx) {
 
 /** 期限超過かつ残りがある義務タスク(F5-5)。期限順。残りは記録を自動で引いたもの(v0.12) */
 export function overdueTasks(tasks, today, entries = {}) {
-  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && remainingMin(t, entries) > 0)
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && (t.noTime || remainingMin(t, entries) > 0)) // 用事(v0.17)は済んでいなければ期限切れ
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
 }

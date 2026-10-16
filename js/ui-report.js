@@ -271,9 +271,13 @@ function delta(cur, base, upGood) {
   return deltaText(cur, base, upGood);
 }
 function heroFigure(r, baseWork) {
+  // 1 日の目標(v0.17・F3-11)があれば先週平均ではなく目標と比べる(メーターつき)
+  const goal = S().goals?.workMin > 0 ? S().goals.workMin : null;
+  const pct = goal ? Math.min(100, Math.round((r.workMin / goal) * 100)) : 0;
   return el('section.kpis', el('div.kpi.hero-figure', [
-    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', '作業'), el('b.kpi-value', fmtMin(r.workMin) || '0m')]),
-    delta(r.workMin, baseWork, true),
+    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', '作業'), el('b.kpi-value', fmtMin(r.workMin) || '0m'), goal ? el('span.muted.small', `目標 ${fmtMin(goal)}`) : null]),
+    goal ? el('div.meter', { role: 'img', 'aria-label': `目標の ${pct}%` }, el('i', { style: { width: `${pct}%` } })) : null,
+    goal ? (r.workMin >= goal ? el('span.kpi-delta', { style: { color: statusColor('good') } }, `目標に届きました(＋${fmtMin(r.workMin - goal)})`) : el('span.kpi-delta.muted', `目標まであと ${fmtMin(goal - r.workMin)}`)) : delta(r.workMin, baseWork, true),
   ]));
 }
 // ---- 週のまとめ(F3-6) ----

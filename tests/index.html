@@ -289,7 +289,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の 18% なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
     const fbFew = toMap([mkE('2026-10-11', '09:00', '11:00', 'research'), mkE(RD, '07:00', '20:00', 'research')]);
     const fb3 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew, date: RD, settings: ds });
-    ok(!fb3.judged && fb3.verdict === '比べる材料がまだ少ない日です(先週の記録 1 日)。', 'dayFeedback: 先週の記録が 3 日未満で目安も無ければ比べない');
+    ok(!fb3.judged && fb3.verdict.startsWith('比べる材料がまだ少ない日です(先週の記録 1 日)。'), 'dayFeedback: 先週の記録が 3 日未満で目安も無ければ比べない');
     const fbSlow = toMap([...fbBase, mkE(RD, '09:00', '10:00', 'research'), mkE(RD, '10:00', '12:00', 'sns'), mkE(RD, '12:00', '20:00', 'life')]);
     const fb4 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: fbSlow, date: RD, settings: ds });
     ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より 1時間 少なめ・ダラダラは 1時間 多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
@@ -515,6 +515,51 @@ document.getElementById('app').addEventListener('load', async () => {
     const lost = S.migrate({ schema: 1, settings: {}, entries: { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'c_014df50c' }, b: { id: 'b', date: '2026-10-12', start: '10:00', end: '11:00', categoryId: 'c_014df50c' }, c: { id: 'c', date: '2026-10-12', start: '11:00', end: '12:00', categoryId: 'research' }, d: { id: 'd', date: '2026-10-12', start: '12:00', end: '13:00', categoryId: 'c_gone', deletedAt: 'x' } } });
     const lostC = lost.settings.categories.filter((c) => c.restored);
     ok(lostC.length === 1 && lostC[0].id === 'c_014df50c' && lostC[0].archived && lostC[0].name === '消したカテゴリ' && eq(S.migrate(lost), lost), 'migrate(v0.15.6): 記録にだけ残るカテゴリを「消したカテゴリ」の非表示カテゴリとして復元(消した記録は見ない・冪等)');
+
+
+    // ---- v0.17: タスクの種類(用事・繰り返す期限)・深夜の記録・設定の項目ごとの同期・1 日の目標 ----
+    log('\n# v0.17');
+    const v17 = S.migrate({ schema: 1, tasks: { a: { id: 'a', name: 'a', noTime: true, recur: 'weekly' }, b: { id: 'b', name: 'b', noTime: 'yes', recur: 'monthly' } }, settings: { goals: { workMin: 360, driftMax: 60 }, fieldStamps: { dayStart: '2026-10-16T10:00:00+09:00', nope: 'x', window: 5 } } });
+    ok(v17.tasks.a.noTime === true && v17.tasks.a.recur === 'weekly' && v17.tasks.b.noTime === false && v17.tasks.b.recur === null, 'validateTask(v0.17): noTime は真偽値・recur は weekly だけ');
+    ok(v17.settings.goals.workMin === 360 && v17.settings.goals.driftMax === 60 && eq(S.migrate({ schema: 1, settings: { goals: { workMin: 5, driftMax: 'x' } } }).settings.goals, { workMin: null, driftMax: null }) && eq(S.defaultSettings().goals, { workMin: null, driftMax: null }) && S.migrate({ schema: 1, settings: { goals: { driftMax: 0 } } }).settings.goals.driftMax === 0, 'settings.goals(v0.17): 作業は 15 分以上・上限は 0 以上・他は null(0 は「ダラダラなし」の上限として通す)');
+    ok(eq(v17.settings.fieldStamps, { dayStart: '2026-10-16T10:00:00+09:00' }) && eq(S.migrate(null).settings.fieldStamps, {}), 'settings.fieldStamps(v0.17): 知っている項目の文字列だけ');
+    const todoT = { u: { id: 'u', name: '銀行', kind: 'duty', deadline: MON, remainingH: 0, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, v: { id: 'v', name: '明日の用事', kind: 'duty', deadline: '2026-10-13', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, w: { id: 'w', name: '先の用事', kind: 'duty', deadline: '2026-10-14', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, x: { id: 'x', name: '過ぎた用事', kind: 'duty', deadline: '2026-10-10', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, y: { id: 'y', name: '済んだ用事', kind: 'duty', deadline: MON, noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-12T09:00:00+09:00' }, z: { id: 'z', name: '昨日済んだ', kind: 'duty', deadline: '2026-10-11', noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-11T09:00:00+09:00' } };
+    ok(Pn.todayShare({ ...todoT, t: { id: 't', name: 't', kind: 'duty', deadline: MON, remainingH: 2, noTime: true } }, MON).length === 0, 'todayShare: 用事(noTime)は量を持たない');
+    const gTodo = Pn.goals(todoT, {}, MON, 600);
+    ok(gTodo.map((g) => `${g.kind}:${g.taskId}${g.done ? '✓' : ''}`).join() === 'todo:x,todo:u,todo:y✓,todo:v', 'goals(用事): 期限が明日までのもの(過ぎたものも・その日に済ませたものは ✓)を期限順に。先の用事・前に済んだものは出さない');
+    ok(gTodo[0].daysLeft === -1 && gTodo[1].daysLeft === 1 && gTodo[1].targetMin === null && gTodo[1].deadline === MON, 'goals(用事): 目安は持たない・期限と残り日数');
+    const ntHabit = Pn.goals({ h: { id: 'h', name: '薬', kind: 'duty', repeat: { type: 'daily', min: 30 }, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null, checks: [MON] } }, {}, MON, 600)[0];
+    ok(ntHabit.kind === 'daily' && ntHabit.targetMin === null && ntHabit.noTime && ntHabit.done && ntHabit.checked, 'goals(時間なしの習慣): 目安は無く、印で done');
+    ok(Pn.overdueTasks(todoT, MON).map((t) => t.id).join() === 'x' && Pn.overdueTasks({ ...todoT, z: { ...todoT.z, doneAt: null } }, MON).map((t) => t.id).join() === 'x,z', 'overdueTasks: 用事は残りが無くても、済んでいなければ期限切れ');
+    const recT = { r: { id: 'r', name: '課題', kind: 'duty', deadline: '2026-10-09T15:00', remainingH: 2, remainingSetAt: '2026-10-01T00:00:00+09:00', recur: 'weekly', categoryId: 'class', deletedAt: null, doneAt: '2026-10-08T20:00:00+09:00', checks: [] }, s: { id: 's', name: '未完', kind: 'duty', deadline: '2026-10-09', recur: 'weekly', deletedAt: null, doneAt: null }, t: { id: 't', name: '先', kind: 'duty', deadline: '2026-10-16', recur: 'weekly', deletedAt: null, doneAt: 'x' }, u: { id: 'u', name: '繰り返さない', kind: 'duty', deadline: '2026-10-09', deletedAt: null, doneAt: 'x' } };
+    const rr = Pn.rollRecurring(recT, MON, PC);
+    ok(rr.rolled.join() === 'r' && rr.tasks.r.deadline === '2026-10-16T15:00' && rr.tasks.r.doneAt === null && rr.tasks.r.remainingH === 2 && rr.tasks.r.remainingSetAt === PC.nowISO() && eq(rr.tasks.r.checks, ['2026-10-09']) && recT.r.doneAt !== null, 'rollRecurring: 済んで期限を過ぎた繰り返しタスクは翌週の同じ曜日(時刻つき)に送って未完了へ・済んだ期限は checks に・入力は変えない');
+    ok(rr.tasks.s.doneAt === null && rr.tasks.s.deadline === '2026-10-09' && rr.tasks.t.doneAt === 'x' && rr.tasks.u.doneAt === 'x', 'rollRecurring: 済んでいないもの(期限切れの出口へ)・期限が先のもの・繰り返さないものは触らない');
+    ok(Pn.rollRecurring({ r: { ...recT.r, deadline: '2026-09-18' } }, MON, PC).tasks.r.deadline === '2026-10-16', 'rollRecurring: 何週も過ぎていれば today 以降になるまで送る');
+    ok(eq(Pn.rollRecurring(recT, '2026-10-09', PC).rolled, []), 'rollRecurring: 期限の当日はまだ送らない');
+    // 1 日の目標(F3-11)
+    const gS = { ...ds, goals: { workMin: 240, driftMax: 60 } };
+    const fbG1 = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: gS }), { tasks: {}, entries: fbGood, date: RD, settings: gS });
+    ok(fbG1.judged && fbG1.score === 0 && fbG1.verdict === 'いつもどおりの一日でした。(作業は目標 4時間 のうち 3時間・ダラダラは上限 1時間 の中)', 'dayFeedback(目標): 作業は目標と比べ(8 割未満は −1)、ダラダラは上限と比べる(先週平均は使わない)');
+    ok(fbG1.good.includes('ダラダラは 30分 で、上限の 1時間 におさまりました。') && fbG1.next === '明日は作業 4時間 を(きょうは 3時間)。', 'dayFeedback(目標): 上限におさまった文・明日は目標の量');
+    const gS2 = { ...ds, goals: { workMin: 150, driftMax: 30 } };
+    const fbG2 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: gS2 }), { tasks: {}, entries: fbSlow, date: RD, settings: gS2 });
+    ok(fbG2.score === -2 && fbG2.reasons.join() === '作業は目標 2時間30分 のうち 1時間,ダラダラは上限より 1時間30分 多め' && fbG2.better === 'ダラダラ 2時間 のうち 1時間30分 を作業に回せば、目標の 2時間30分 に届いていました。', 'dayFeedback(目標): 届かず上限超え → 「良くするには」は上限を超えた分を作業へ');
+    const gS3 = { ...ds, goals: { workMin: 120, driftMax: null } };
+    const fbG3 = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: gS3 }), { tasks: {}, entries: fbGood, date: RD, settings: gS3 });
+    ok(fbG3.score === 2 && fbG3.reasons[0] === '作業は目標の 2時間 に届いた' && fbG3.reasons[1] === 'ダラダラは 30分 少なめ' && fbG3.good[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && fbG3.good.includes('作業は 3時間 で、目標の 2時間 に届きました。'), 'dayFeedback(目標): 作業だけ目標があればダラダラは先週平均と比べる・届いた文は肯定に');
+    const fewG = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: gS }), { tasks: {}, entries: fbFew, date: RD, settings: gS });
+    ok(fewG.judged && fewG.verdict.startsWith('よい一日でした。'), 'dayFeedback(目標): 先週の記録が少なくても目標があれば判定する');
+    // 設定の項目ごとの同期(F7-8)
+    const devA = { ...S.defaultSettings(), dayStart: '02:00', settingsUpdatedAt: '2026-10-14T10:00:00+09:00', fieldStamps: { dayStart: '2026-10-14T10:00:00+09:00' } };
+    const devB = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-16T09:00:00+09:00', busyMemory: { '1:540': 'class' } }; // 初期値のまま、あとから settingsUpdatedAt だけ進んだ端末
+    const mAB17 = Sy.merge(mkD(devA), mkD(devB)).settings, mBA17 = Sy.merge(mkD(devB), mkD(devA)).settings;
+    ok(mAB17.dayStart === '02:00' && mBA17.dayStart === '02:00' && mAB17.fieldStamps.dayStart === '2026-10-14T10:00:00+09:00' && mAB17.settingsUpdatedAt === '2026-10-16T09:00:00+09:00', 'mergeSettings(v0.17): 1日の始まりは項目の印が新しい方(初期値のまま settingsUpdatedAt だけ新しい端末に負けない)');
+    const devC = { ...devB, dayStart: '01:00', fieldStamps: { dayStart: '2026-10-15T10:00:00+09:00' } };
+    ok(Sy.merge(mkD(devA), mkD(devC)).settings.dayStart === '01:00' && Sy.merge(mkD(devC), mkD(devA)).settings.dayStart === '01:00', 'mergeSettings(v0.17): 両方で変えていれば印の新しい方');
+    const noStampA = { ...S.defaultSettings(), gapAbsorbMin: 20, settingsUpdatedAt: '2026-10-14T10:00:00+09:00' };
+    ok(Sy.merge(mkD(noStampA), mkD(devB)).settings.gapAbsorbMin === 20 && Sy.merge(mkD(devB), mkD(noStampA)).settings.gapAbsorbMin === 20, 'mergeSettings(v0.17): 印が無ければ「既定のまま」でない方');
+    ok(eq(Sy.merge(mkD({ ...devA, goals: { workMin: 300, driftMax: null }, fieldStamps: { goals: '2026-10-14T10:00:00+09:00' } }), mkD(devB)).settings.goals, { workMin: 300, driftMax: null }), 'mergeSettings(v0.17): 目標も項目ごと');
 
     // ---- 版規約(§9) ----
     log('\n# version');

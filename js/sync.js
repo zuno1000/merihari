@@ -124,8 +124,20 @@ export function mergeSettings(sa, sb) {
     for (const y of lo || []) { if (!y || !y.id || seen.has(y.id)) continue; seen.add(y.id); out.push(y); }
     return sortByOrder ? out.sort((p, q) => ((+p.order || 0) - (+q.order || 0)) || (p.id < q.id ? -1 : p.id > q.id ? 1 : 0)) : out;
   };
+  // v0.17: スカラー設定(作業時間帯・1日の始まり・すき間・最後から数える・目標)は項目ごとに fieldStamps の新しい方。印が無ければ「既定のまま」でない方。それも同じなら base
+  const dflt = store.defaultSettings();
+  const out = { ...base, fieldStamps: {} };
+  for (const k of store.SCALAR_FIELDS) {
+    const sb = base.fieldStamps?.[k] || '', so = other.fieldStamps?.[k] || '';
+    let pickBase;
+    if (sb !== so) pickBase = sb > so;
+    else { const db = str(base[k]) === str(dflt[k]), dOther = str(other[k]) === str(dflt[k]); pickBase = db === dOther ? true : !db; }
+    out[k] = pickBase ? base[k] : other[k];
+    const stamp = pickBase ? sb : so;
+    if (stamp) out.fieldStamps[k] = stamp;
+  }
   return {
-    ...base,
+    ...out,
     categories: mergeItems('cat', base.categories, other.categories, true),
     kinds: mergeItems('kind', base.kinds, other.kinds, false),
     palettes: mergeItems('pal', base.palettes, other.palettes, false),

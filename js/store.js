@@ -67,10 +67,14 @@ export function defaultSettings() {
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
+    goals: { workMin: null, driftMax: null }, // v0.17: 1 日の目標(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
+    fieldStamps: {},         // v0.17: スカラー設定(window/dayStart/gapAbsorbMin/startFromLast/goals)ごとの updatedAt。同期で項目ごとに新しい方を採る(「1日の始まり」が他端末の初期値に戻されていた)
     categories: defaultCategories(),
     settingsUpdatedAt: null,
   };
 }
+/** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals'];
 
 export function defaultData() {
   return {
@@ -133,6 +137,12 @@ function normalizeSettings(raw) {
   // v0.15: 理想スケジュール用の設定は捨てる(習慣は migrate でタスクへ移してから habitsMigrated を立てる)
   s.palette = typeof raw.palette === 'string' && raw.palette.length <= 40 ? raw.palette : null;
   s.palettes = Array.isArray(raw.palettes) ? raw.palettes.filter((p) => isObj(p) && p.id).slice(0, 50).map((p) => { const colors = {}; if (isObj(p.colors)) for (const [k, v] of Object.entries(p.colors)) if (safeKey(k) && typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) colors[k] = v.toLowerCase(); return { id: String(p.id).slice(0, 40), name: String(p.name || '配色').slice(0, 40), colors, ...(typeof p.updatedAt === 'string' ? { updatedAt: p.updatedAt.slice(0, 40) } : {}) }; }) : [];
+  // v0.17: 1 日の目標(分)。作業は 15 分〜16 時間、ダラダラの上限は 0〜12 時間。他は null
+  const gMin = (v, max) => (v != null && v !== '' && Number.isFinite(+v) && +v >= 0 && +v <= max ? Math.round(+v) : null);
+  const gw = isObj(raw.goals) ? gMin(raw.goals.workMin, 960) : null;
+  s.goals = { workMin: gw != null && gw >= 15 ? gw : null, driftMax: isObj(raw.goals) ? gMin(raw.goals.driftMax, 720) : null };
+  s.fieldStamps = {};
+  if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
   s.habitsMigrated = raw.habitsMigrated === true;
   if (s.habitsMigrated || !Array.isArray(raw.habits) || !raw.habits.length) s.habitsMigrated = true;
   for (const k of LEGACY_SETTING_KEYS) if (k !== 'habits' || s.habitsMigrated) delete s[k];
@@ -184,7 +194,9 @@ export function validateTask(r, id) {
     : isObj(r.repeat) && r.repeat.type === 'daily' ? { type: 'daily', min: num(r.repeat.min, 5, 600, 30) } : null; // v0.15: 毎日 ◯分(旧「習慣」)
   return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0),
     minUnit: num(r.minUnit, 5, 600, 30), remainingSetAt: optStr(r.remainingSetAt, 40) || optStr(r.updatedAt, 40), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40),
-    checks: Array.isArray(r.checks) ? r.checks.filter(isDate).slice(-400) : [] }; // v0.16: 習慣の「済んだ」の印(日付キー)
+    checks: Array.isArray(r.checks) ? r.checks.filter(isDate).slice(-400) : [], // v0.16: 習慣の「済んだ」の印(日付キー)
+    noTime: r.noTime === true,                       // v0.17: 時間を計らないタスク(用事: 銀行・メール。チェックで済ませる)
+    recur: r.recur === 'weekly' ? 'weekly' : null }; // v0.17: 期限つきタスクの繰り返し(毎週の課題: 済んで期限を過ぎたら翌週の同じ曜日が期限になって戻る)
 }
 export function validatePlan(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
@@ -278,10 +290,12 @@ export function saveLocal() {
 const itemSnap = new Map();
 const ITEM_LISTS = [['categories', 'cat'], ['kinds', 'kind'], ['palettes', 'pal']];
 const itemJSON = (x) => { const c = { ...x }; delete c.updatedAt; return JSON.stringify(c, Object.keys(c).sort()); };
+const fieldJSON = (v) => JSON.stringify(v === undefined ? null : v);
 function refreshItemSnap() {
   itemSnap.clear();
   const s = state.data?.settings; if (!s) return;
   for (const [list, pre] of ITEM_LISTS) for (const x of s[list] || []) if (x && x.id) itemSnap.set(`${pre}:${x.id}`, itemJSON(x));
+  for (const k of SCALAR_FIELDS) itemSnap.set(`field:${k}`, fieldJSON(s[k])); // v0.17: スカラー設定も項目ごとに印を押す
 }
 export function stampChangedItems(now = nowISO()) {
   const s = state.data?.settings; if (!s) return [];
@@ -291,6 +305,8 @@ export function stampChangedItems(now = nowISO()) {
     const key = `${pre}:${x.id}`;
     if (itemSnap.get(key) !== itemJSON(x)) { x.updatedAt = now; stamped.push(key); }
   }
+  s.fieldStamps = s.fieldStamps || {};
+  for (const k of SCALAR_FIELDS) if (itemSnap.get(`field:${k}`) !== fieldJSON(s[k])) { s.fieldStamps[k] = now; stamped.push(`field:${k}`); }
   return stamped;
 }
 export function touchSettings() {
