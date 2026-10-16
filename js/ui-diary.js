@@ -160,7 +160,7 @@ function aiCard(o) {
   };
   const copyOnly = async (text) => { try { await navigator.clipboard.writeText(text); toast('文をコピーしました(ショートカットに貼って使えます)'); } catch { toast('コピーできませんでした'); } };
   const summary = () => ai.summaryText({ date: o.date, agg: o.agg, fb: o.fb, gs: o.gs, diary: o.draft, categories: S().categories, goals: S().goals, nowMin: o.nowMin, dayDone: o.dayDone });
-  const question = el('input.text', { type: 'text', placeholder: '相談(例: やる気が出ない)', maxlength: 200, autocomplete: 'off' });
+  const question = el('input.text', { type: 'text', placeholder: '相談(例: 次に何をやる?)', maxlength: 200, autocomplete: 'off' });
   const consult = () => {
     const open = log.openEntry(E());
     const openInfo = open ? { name: (open.taskId && T()[open.taskId]?.name) || (S().categories.find((c) => c.id === open.categoryId)?.name) || '記録', elapsedMin: log.elapsedMin(open, n.date, n.min) } : null;

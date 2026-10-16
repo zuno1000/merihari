@@ -319,6 +319,7 @@ function sectionAI(rerender) {
       el('button.btn', { type: 'button', onclick: test }, 'ショートカットを開いて試す'),
       el('button.btn.ghost', { type: 'button', onclick: async () => { try { await navigator.clipboard.writeText('テストです。「準備できました」とだけ答えてください。'); toast('テストの文をコピーしました'); } catch { toast('コピーできませんでした'); } } }, 'テストの文をコピー'),
     ]),
+    el('p.muted.small', '「モデルでこのリクエストに対する応答を提供できません」と出たら、端末内モデルが文の中の言葉を安全側に判定したものです(気持ちの言葉で起きやすい)。アプリは相談を「作業の進め方」の枠で渡し、「やる気が出ない」は「手がつかない」に言い換えてから渡しますが、それでも出るときは質問を作業の言葉(「次に何をやる?」「最初の 5 分は?」)で書き直してください。'),
     el('p.muted.small', '制約: 端末内モデルは入力と返事を合わせて約 4,000 字まで(アプリは 1,800 字までに切って渡します)。Apple Intelligence が使える iPhone(15 Pro 以降)と iOS 26 が必要。ショートカットは自分でタップしたときだけ動き、アプリのデータを勝手に読むことはできません。この設定はこの端末だけのもので、同期しません。'));
 }
 function ai_shortcutURL(name, text) { return { url: `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(text)}` }; }

@@ -25,6 +25,13 @@ export function shortcutURL(name, text) {
 }
 
 const ROLE = 'あなたは時間管理アプリ「メリハリ」の相棒です。責めず、短く(3 文まで)、具体的に。数字はこの文の中のものだけを使い、書いていないことは言わない。励ましの決まり文句より、次の一歩を 1 つ。';
+// 端末内モデルは気持ちの言葉(やる気・つらい など)を含む相談を「応答できません」と断ることがある(安全側の判定)。相談は「作業の進め方」の枠で渡し、気分も調子の言葉にする(v0.21.1)
+const MOOD_WORDS = ['', '低め', 'やや低め', 'ふつう', '良い', 'とても良い'];
+export function reframe(q) {
+  const t = String(q || '').trim();
+  if (!t) return '次に何をやるといい?';
+  return t.replace(/やる気が(出ない|でない|起きない|ない)/g, '手がつかない').replace(/つらい|しんどい|疲れた|だるい/g, '調子が上がらない').replace(/無理|限界/g, 'きつい');
+}
 
 /**
  * きょうのふり返りを頼む文。
@@ -62,7 +69,7 @@ export function summaryText(o) {
   const d = o.diary;
   if (d && (d.mood || d.good || d.hard || d.tomorrow)) {
     lines.push('', '【日記】');
-    if (d.mood) lines.push(`気分: ${['', 'つらい', 'いまいち', 'ふつう', 'よい', '最高'][d.mood] || ''}`);
+    if (d.mood) lines.push(`調子: ${MOOD_WORDS[d.mood] || ''}`);
     if (d.good) lines.push(`よかったこと: ${d.good.trim()}`);
     if (d.hard) lines.push(`ひっかかったこと: ${d.hard.trim()}`);
     if (d.tomorrow) lines.push(`明日は: ${d.tomorrow.trim()}`);
@@ -87,11 +94,11 @@ export function consultText(o) {
   const todo = gs.filter((g) => !g.done && g.kind === 'todo').map((g) => g.name).slice(0, 4);
   if (todo.length) lines.push(`残っている用事: ${todo.join('・')}`);
   if (o.near && o.near.length) lines.push(`期限が近いもの: ${o.near.slice(0, 4).map((t) => `${t.name}(${fmtMD(t.deadline)}まで)`).join('・')}`);
-  if (o.mood) lines.push(`きょうの気分: ${['', 'つらい', 'いまいち', 'ふつう', 'よい', '最高'][o.mood] || ''}`);
-  lines.push('', '【相談】', String(o.question || '').trim() || 'いま何をするといい?');
-  lines.push('', '【お願い】', '説教も長い励ましもいらない。状況に合わせて、いま 10 分でできる一歩を 1 つ。3 文まで。');
+  if (o.mood) lines.push(`きょうの調子: ${MOOD_WORDS[o.mood] || ''}`);
+  lines.push('', '【作業の進め方の相談】', reframe(o.question));
+  lines.push('', '【お願い】', '時間管理の助言として、上の状況に合わせて いま 10 分でできる作業の一歩を 1 つ。3 文まで。');
   return clip(lines.join('\n'));
 }
 
 /** 相談の定型(チップ) */
-export const QUICK_QUESTIONS = ['やる気が出ない。どうすればいい?', 'いま何をやるといい?', '集中が切れた。切り替え方は?', 'きょうはもう終わりにしていい?', '明日の最初の一歩は?'];
+export const QUICK_QUESTIONS = ['手がつかない。最初の 5 分は何をする?', '次に何をやるといい?', '集中が切れた。切り替えの一手は?', 'きょうはここまでにしていい?', '明日の最初の一歩は?'];
