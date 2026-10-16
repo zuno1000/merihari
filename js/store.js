@@ -85,6 +85,7 @@ export function defaultData() {
     plans: {},
     reports: {},
     ledger: {},
+    diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -215,6 +216,12 @@ export function validateReport(r, id) {
     workMin: num(r.workMin, 0, 1440, 0), plannedWorkMin: num(r.plannedWorkMin, 0, 1440, 0), driftMin: num(r.driftMin, 0, 1440, 0), unloggedMin: num(r.unloggedMin, 0, 1440, 0), coverage: num(r.coverage, 0, 1, 0), loggedMin: num(r.loggedMin, 0, 1440, 0), streak: num(r.streak, 0, 100000, 0), finalizedAt: optStr(r.finalizedAt, 40) };
 }
 export function validateLedger(r) { return isObj(r) ? { usableMin: num(r.usableMin, 0, 1440, 0), workMin: num(r.workMin, 0, 1440, 0) } : null; }
+/** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
+export function validateDiary(r, id) {
+  if (!isObj(r) || !isDate(r.date || id)) return null;
+  const mood = Number.isInteger(+r.mood) && +r.mood >= 1 && +r.mood <= 5 && r.mood != null ? +r.mood : null;
+  return { ...stripUnsafe(r), date: r.date || id, mood, good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 
 /** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数)。レコードは型を検証する */
 export function migrate(raw) {
@@ -236,6 +243,8 @@ export function migrate(raw) {
   out.plans = cleanMap(raw.plans, validatePlan); // 旧データ(理想スケジュール)。v0.15 以降は作らないが、同期のため壊さずに保持する
   out.reports = cleanMap(raw.reports, validateReport);
   out.ledger = cleanMap(raw.ledger, validateLedger);
+  out.diary = cleanMap(raw.diary, validateDiary);
+  for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };
   return out;
 }

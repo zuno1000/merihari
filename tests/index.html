@@ -561,17 +561,42 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Sy.merge(mkD(noStampA), mkD(devB)).settings.gapAbsorbMin === 20 && Sy.merge(mkD(devB), mkD(noStampA)).settings.gapAbsorbMin === 20, 'mergeSettings(v0.17): 印が無ければ「既定のまま」でない方');
     ok(eq(Sy.merge(mkD({ ...devA, goals: { workMin: 300, driftMax: null }, fieldStamps: { goals: '2026-10-14T10:00:00+09:00' } }), mkD(devB)).settings.goals, { workMin: 300, driftMax: null }), 'mergeSettings(v0.17): 目標も項目ごと');
 
+
+    // ---- v0.18: 日記(F9) ----
+    log('\n# diary');
+    const Dg = M.diary;
+    const dOk = S.validateDiary({ date: '2026-10-12', mood: 4, good: 'よかった', hard: '', tomorrow: '早く寝る', note: 'x'.repeat(5000), updatedAt: 'u' }, '2026-10-12');
+    ok(dOk.mood === 4 && dOk.good === 'よかった' && dOk.note.length === 4000 && dOk.deletedAt === null, 'validateDiary: 気分 1〜5・文字列は長さを切る');
+    ok(S.validateDiary({ mood: 9, good: 1 }, '2026-10-12').mood === null && S.validateDiary({ mood: 9 }, '2026-10-12').good === '' && S.validateDiary({ mood: 3 }, 'x') === null && S.validateDiary({ date: '2026-10-12', mood: '3' }, '2026-10-12').mood === 3, 'validateDiary: 範囲外の気分は null・壊れた日付は捨てる・文字列の数字は通す');
+    const dM = S.migrate({ schema: 1, diary: { '2026-10-12': { mood: 2 }, wrong: { date: '2026-10-11', good: 'a' }, bad: { good: 'b' } } });
+    ok(Object.keys(dM.diary).sort().join() === '2026-10-11,2026-10-12' && dM.diary['2026-10-11'].good === 'a' && eq(S.migrate(null).diary, {}), 'migrate: diary はキー=日付に正規化・壊れたものは捨てる・既定は空');
+    const dy = { '2026-10-10': { date: '2026-10-10', mood: 3, good: 'a', deletedAt: null }, '2026-10-11': { date: '2026-10-11', mood: null, good: '', hard: '', tomorrow: '論文を 1 本', note: '', deletedAt: null }, '2026-10-09': { date: '2026-10-09', mood: 5, deletedAt: 'x' }, '2026-10-08': { date: '2026-10-08', mood: null, good: '  ', deletedAt: null } };
+    ok(Dg.isWritten(dy['2026-10-10']) && Dg.isWritten(dy['2026-10-11']) && !Dg.isWritten(dy['2026-10-09']) && !Dg.isWritten(dy['2026-10-08']) && !Dg.isWritten(undefined), 'isWritten: 気分か 1 行でもあれば書いた日・空白だけ・削除は書いていない');
+    ok(Dg.streak(dy, '2026-10-12') === 2 && Dg.streak(dy, '2026-10-11') === 2 && Dg.streak(dy, '2026-10-13') === 0 && Dg.streak({}, '2026-10-12') === 0, 'streak: 続いた日数(きょう書いていなくても昨日から数える)');
+    const dsum = Dg.summarize({ ...dy, '2026-10-12': { date: '2026-10-12', mood: 5, deletedAt: null } }, '2026-10-08', '2026-10-12');
+    ok(dsum.days === 3 && dsum.moodAvg === 4 && dsum.list.length === 5 && dsum.list[4].mood === 5 && dsum.list[0].written === false, 'summarize: 書いた日数・気分の平均・日ごと');
+    ok(Dg.excerpt(dy['2026-10-11']) === '論文を 1 本' && Dg.excerpt({ good: 'あ'.repeat(80), deletedAt: null }).length === 60 && Dg.excerpt(dy['2026-10-09']) === '', 'excerpt: 最初の文字列を 60 字まで');
+    ok(Dg.moodLabel(5) === '最高' && Dg.moodLabel(null) === '' && Dg.MOODS.length === 5, 'MOODS / moodLabel');
+    const sd = Dg.seeds({ agg: fbAggGood, fb: fb1, gs: [{ kind: 'daily', name: '英語', done: true }, { kind: 'deadline', name: '修論', done: false, targetMin: 60 }, { kind: 'todo', name: '銀行', done: false }], prev: dy['2026-10-11'], categories: ds.categories });
+    ok(sd[0].field === 'good' && sd[0].text === '昨日の「明日は」: 論文を 1 本' && sd[1].text === '研究を 3時間(作業は合計 3時間)' && sd.some((x) => x.text === '英語を済ませた') && sd.some((x) => x.field === 'tomorrow' && x.text === '修論を 1時間') && sd.some((x) => x.field === 'tomorrow' && x.text === '銀行を済ませる') && sd.length <= 8, 'seeds: 昨日の「明日は」→ 作業 → 済ませたもの → ふり返り → 明日の分(欄つき・重複なし・8 件まで)');
+    ok(eq(Dg.seeds({}), []) && Dg.seeds({ fb: { next: 'きょうはあと 英語 を 30分。', good: [] } }).length === 0 && Dg.seeds({ fb: { next: '明日は 面談資料 を 30分。', good: [] } })[0].text === '面談資料 を 30分。', 'seeds: 材料が無ければ空・途中の「きょうはあと」は出さない・「明日は」の頭を落とす');
+    const dA2 = { ...dA, diary: { '2026-10-11': { date: '2026-10-11', mood: 3, good: 'a', updatedAt: '2026-10-11T22:00:00+09:00', deletedAt: null } } };
+    const dB2 = { ...dB, diary: { '2026-10-11': { date: '2026-10-11', mood: 4, good: 'b', updatedAt: '2026-10-11T23:00:00+09:00', deletedAt: null }, '2026-10-10': { date: '2026-10-10', mood: 2, updatedAt: 'x', deletedAt: null } } };
+    const mD = Sy.merge(dA2, dB2);
+    ok(mD.diary['2026-10-11'].good === 'b' && mD.diary['2026-10-10'].mood === 2 && eq(mD, Sy.merge(dB2, dA2)), 'merge: 日記は日付ごとに updatedAt の新しい方・片側だけのものは残る・対称');
+    ok(!Sy.pruneTombstones({ entries: {}, tasks: {}, diary: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: { deletedAt: null } } }, '2026-10-11T00:00:00+09:00').diary.a, 'pruneTombstones: 日記の古い削除も掃除');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
     ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');
     const doc = W.document;
-    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4 && doc.querySelector('#tabs #tab-add'), 'タブは4つ(ホーム/タイムライン/タスク/設定)+ 中央の ＋(v0.15.3)');
+    ok(doc.querySelectorAll('#tabs button[data-tab]').length === 4 && doc.querySelector('#tabs #tab-add') && doc.querySelector('#tabs button[data-tab=diary]') && !doc.querySelector('#tabs button[data-tab=settings]'), 'タブは4つ(ホーム/タイムライン/タスク/日記)+ 中央の ＋(v0.18: 設定はホーム右上の歯車)');
     ok(doc.querySelector('#tabs button[data-tab=now] span').textContent === 'ホーム', 'タブ名は「ホーム」(v0.11)');
     ok(!!doc.querySelector('#view h1, #view .today-head'), '画面に見出しが描かれている');
     ok(getComputedStyle(doc.body).touchAction === 'manipulation', 'touch-action: manipulation');

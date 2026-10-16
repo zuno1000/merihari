@@ -10,7 +10,11 @@ import { displayColor, statusColor } from './palette.js';
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, DAY_JA, weekday, effectiveDay, dayCut } from './time.js';
 import { kindRole } from './store.js';
 
+import { diaryExcerptBox } from './ui-diary.js';
+
 const S = () => store.state.data.settings;
+/** main.js が画面遷移を登録する(レポートの中から日記へ・v0.18) */
+export const hooks = { go: null };
 function catOf(id) { return S().categories.find((c) => c.id === id) || { id, name: id === 'other' ? 'その他' : '消したカテゴリ', color: null, kind: 'work' }; }
 const colorOf = (id) => displayColor(catOf(id).color);
 const roleOf = (id) => store.catRole(S(), id);
@@ -41,7 +45,7 @@ export function reportSheet(date, range0 = 'day') {
   const seg = el('div.seg', RANGES.map(([k, label]) => el('button', { type: 'button', class: k === range ? 'active' : '', onclick: (e) => { range = k; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); draw(); } }, label)));
   const draw = () => {
     while (body.firstChild) body.removeChild(body.firstChild);
-    if (range === 'day') body.append(...dayView(date, today, nowMin, () => { close(); reportSheet(date, 'day'); }).filter(Boolean));
+    if (range === 'day') body.append(...dayView(date, today, nowMin, () => { close(); reportSheet(date, 'day'); }, () => close()).filter(Boolean));
     else body.append(...periodView(range, date, nowMin).filter(Boolean));
   };
   draw();
@@ -53,7 +57,7 @@ export function reportSheet(date, range0 = 'day') {
 }
 
 // ================= 今日(1 日) =================
-function dayView(date, today, nowMin, reopen) {
+function dayView(date, today, nowMin, reopen, close = () => {}) {
   const d = store.state.data;
   const isToday = date === today;
   const r = d.reports[date]?.finalizedAt ? d.reports[date]
@@ -78,6 +82,8 @@ function dayView(date, today, nowMin, reopen) {
     pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
     feedbackBox(fb, lead === r.positive[0]),
+    diaryExcerptBox(date, { go: (tab, arg) => { close(); hooks.go?.(tab, arg); } }, { dayDone: !!r.finalizedAt || !isToday || (windowFor(d.settings, date) ? nowMin >= windowFor(d.settings, date).end - 120 : true) }), // v0.18: その日の日記の抜粋
+
     el('details.rep-details', [el('summary.muted.small', 'くわしく'),
       weekBox(date),
       bullets(r),

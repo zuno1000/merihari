@@ -10,6 +10,7 @@ import { reportSheet, pieFigure } from './ui-report.js';
 import { displayColor } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
+import { diaryCue } from './ui-diary.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
 
@@ -236,11 +237,17 @@ export function renderNow(view, ctx, dateArg = null) {
   const goDate = (d) => ctx.go('now', d >= e.date ? undefined : d);
   const o = isToday ? log.openEntry(E()) : null;
   const hero = o ? recordingCard(o, e, rerender) : null;
+  // v0.18: 設定はタブから外し、ホーム右上の歯車に(タブは 日記 に)
+  const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   const head = el('div.today-head', [
+    el('span.head-side'),
+    el('span.grow'),
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
     el('b', md(date)),
     isToday ? null : el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
+    el('span.grow'),
+    el('span.head-side', gear),
   ]);
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {
@@ -251,6 +258,7 @@ export function renderNow(view, ctx, dateArg = null) {
   } }, [
     head,
     hero?.node, breakdown(v, rerender, { isToday, ctx }), goalsBox(v, rerender, isToday), isToday ? freshLine(e, rerender) : null,
+    isToday ? (() => { const c = diaryCue(e, ctx); return c ? el('div.list.freshline', c) : null; })() : null, // v0.18: 夕方以降「きょうの日記 › 1 行だけ書く」
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す
