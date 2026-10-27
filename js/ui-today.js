@@ -301,35 +301,88 @@ function homeKey(n) {
 export function pressKiai({ rerender = null, openSheet = true } = {}) {
   const n = effNow();
   const o = log.openEntry(E());
-  const r = kiai.press(store.state.data.kiai, { date: n.date, min: n.min, categoryId: o ? o.categoryId : null, entryId: o ? o.id : null }, LCTX);
+  // v0.25.1: タイムラインの記録は始めない。押した瞬間に時刻だけで保存し、タグ(記録中ならそのカテゴリが既定)とメモは任意のシートで
+  const r = kiai.press(store.state.data.kiai, { date: n.date, min: n.min, categoryId: o ? o.categoryId : null }, LCTX);
   store.state.data.kiai = r.kiai;
   if (!r.dup) { store.save(); sync.autoSync(); }
   const count = kiai.listOf(r.kiai, n.date).length;
-  const nm = o ? taskName(o.taskId, o.categoryId) : null;
-  toast(r.dup ? '気合、入ってます' : nm ? `気合、入った(${count}回目)。${nm} を続ける` : `気合、入った(${count}回目)`);
+  toast(r.dup ? '気合、入ってます' : `気合、入った(きょう${count}回目)`);
+  litKiai();
   if (rerender) rerender();
-  if (openSheet && !o && !r.dup) chipsSheet(n, rerender || (() => {}), 'now', { title: '気合、入った。何を始める?' });
+  if (openSheet) kiaiTagSheet(r.rec, rerender || (() => {}), { fresh: !r.dup });
   return r;
 }
-/** ホームの気合の箱: ボタン(きょうだけ)+ きょうの回数と時刻の 1 行(タップで一覧・消す)。前の日は回数だけ(無ければ出さない) */
+/** 押した直後のきらめき(1.2 秒)。描き直しても消えないよう時刻で持つ */
+let kiaiLitUntil = 0;
+function litKiai() { kiaiLitUntil = performance.now() + 1200; }
+const KIAI_BOLT = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })]);
+/**
+ * ホームの気合のカード(v0.25.1): 上=大きな押し場(丸い稲妻+「気合を入れる」+ひと言)。下=きょうの回数と、1 回ごとの小さな札(時刻+タグ)。
+ * 札をタップで タグ・メモ を直す。回数をタップで一覧。前の日は下の段だけ(無ければ出さない)。
+ */
 function kiaiBox(n, rerender, isToday) {
   const list = kiai.listOf(store.state.data.kiai, n.date);
   if (!isToday && !list.length) return null;
-  const text = list.length ? `${isToday ? 'きょう' : 'この日'}${list.length}回・${kiai.line(list, (id) => catOf(id).name)}` : 'やる気がいることに取りかかるとき、押す';
-  const btn = isToday ? el('button.kiai-btn', { type: 'button', 'aria-label': '気合を入れる', onclick: () => pressKiai({ rerender }) }, [
-    svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })]), el('span', '気合を入れる')]) : null;
-  const info = list.length ? el('button.kiai-info', { type: 'button', 'aria-label': 'きょうの気合の一覧', onclick: () => kiaiSheet(n, rerender) }, text) : el('span.kiai-info.muted', text);
-  return el('section.kiai', [btn, info].filter(Boolean));
+  const lit = isToday && performance.now() < kiaiLitUntil;
+  const sub = list.length ? `${['', 'ひとつ目。', 'ふたつ目。', 'みっつ目。'][Math.min(3, list.length)] || ''}いい調子` : 'やる気がいることに取りかかるとき、押す';
+  const hit = isToday ? el('button.kiai-hit', { type: 'button', 'aria-label': '気合を入れる', onclick: () => pressKiai({ rerender }) }, [
+    el('span.kiai-ico', KIAI_BOLT()),
+    el('span.kiai-txt', [el('b', lit ? '気合、入った' : '気合を入れる'), el('span', lit ? 'タグとメモは任意' : sub)]),
+  ]) : null;
+  const pill = (r) => el('button.kiai-pill', { type: 'button', 'aria-label': `${r.time} の気合を直す`, onclick: () => kiaiTagSheet(r, rerender, { fresh: false }) }, [
+    el('time', r.time.replace(/^0/, '')),
+    r.categoryId ? el('i.dot', { style: { background: catOf(r.categoryId).color } }) : null,
+    el('span', r.categoryId ? catOf(r.categoryId).name : (r.note ? r.note : 'タグなし')),
+  ].filter(Boolean));
+  const pills = el('div.kiai-pills', list.map(pill));
+  const foot = list.length ? el('div.kiai-foot', [
+    el('button.kiai-count', { type: 'button', 'aria-label': `${isToday ? 'きょう' : 'この日'}の気合の一覧`, onclick: () => kiaiSheet(n, rerender) }, [el('b', String(list.length)), el('span', `回${isToday ? '' : '(この日)'}`)]),
+    pills,
+  ]) : null;
+  if (isToday && list.length > 2) setTimeout(() => { pills.scrollLeft = pills.scrollWidth; }, 0); // いちばん新しい札が見えるように右端へ
+  const card = el('section.kiai-card', { class: `kiai-card${lit ? ' lit' : ''}${isToday ? '' : ' past'}` }, [hit, foot].filter(Boolean));
+  if (lit) setTimeout(() => { if (card.isConnected) { card.classList.remove('lit'); const b = card.querySelector('.kiai-txt b'), s = card.querySelector('.kiai-txt span'); if (b) b.textContent = '気合を入れる'; if (s) s.textContent = kiai.listOf(store.state.data.kiai, n.date).length ? 'いい調子' : 'やる気がいることに取りかかるとき、押す'; } }, Math.max(0, kiaiLitUntil - performance.now()));
+  return card;
 }
+/**
+ * タグとメモのシート(v0.25.1): 「何に気合?」。カテゴリのチップをタップ=タグを付けて閉じる(1 タップ)。メモは任意(「保存」)。
+ * fresh=押した直後(閉じても印は残る)。既存の札からは「消す」も。
+ */
+function kiaiTagSheet(rec0, rerender, { fresh = false } = {}) {
+  sheet((close) => {
+    const rec = store.state.data.kiai[rec0.id] || rec0;
+    let cid = rec.categoryId || null;
+    const noteIn = el('input.text.note-in', { type: 'text', placeholder: 'メモ(任意・例: 面談資料)', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ', value: rec.note || '' });
+    const save = (patch) => { store.state.data.kiai = kiai.update(store.state.data.kiai, rec.id, patch, LCTX); store.save(); sync.autoSync(); close(); rerender(); };
+    const chips = el('div.chips', { role: 'group', 'aria-label': 'タグ' }, cats().map((c) => el('button.chip', { type: 'button', class: `chip cat${c.id === cid ? ' on' : ''}`, 'aria-pressed': c.id === cid ? 'true' : 'false', style: { '--c': c.color },
+      onclick: () => { cid = c.id === cid ? null : c.id; save({ categoryId: cid, note: noteIn.value.trim() }); toast(cid ? `${c.name} に気合` : 'タグを外しました'); } },
+      [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), c.name])));
+    return [
+      el('h2', fresh ? '何に気合?' : `${rec.time.replace(/^0/, '')} の気合`),
+      el('p.muted.small', fresh ? `${rec.time.replace(/^0/, '')} に入れた気合。タグもメモも任意です(閉じても残ります)。` : 'タグをタップで付け替え。もう一度タップで外す。'),
+      el('span.chips-cap', 'タグ'),
+      chips,
+      el('div.row.field', [el('span.label', 'メモ'), noteIn]),
+      el('div.row', [
+        fresh ? null : el('button.btn.ghost', { type: 'button', onclick: () => { store.state.data.kiai = kiai.remove(store.state.data.kiai, rec.id, LCTX); store.save(); sync.autoSync(); close(); toast('消しました'); rerender(); } }, '消す'),
+        el('span.grow'),
+        el('button.btn.primary', { type: 'button', onclick: () => save({ note: noteIn.value.trim() }) }, fresh ? 'これでOK' : '保存'),
+      ].filter(Boolean)),
+    ];
+  });
+}
+/** 一覧(v0.25.1): その日の気合を 時刻・タグ・メモ で。行をタップで直す */
 function kiaiSheet(n, rerender) {
   sheet((close) => {
     const list = kiai.listOf(store.state.data.kiai, n.date);
-    const del = (r) => { store.state.data.kiai = kiai.remove(store.state.data.kiai, r.id, LCTX); store.save(); sync.autoSync(); close(); toast('消しました'); rerender(); };
     return [
       el('h2', `${n.date === effNow().date ? 'きょう' : md(n.date)}の気合 ${list.length}回`),
-      el('p.muted.small', '押した時刻と、そのとき記録していたもの。'),
-      el('div.list', list.map((r) => el('div.srow.plain.kiai-row', [el('span.lbl', r.time.replace(/^0/, '')), el('span.val.left', r.categoryId ? catOf(r.categoryId).name : '(記録なし)'),
-        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${r.time} の気合を消す`, onclick: () => del(r) }, '消す')]))),
+      el('div.list.kiai-list', list.map((r) => el('button.krow', { type: 'button', onclick: () => { close(); kiaiTagSheet(r, rerender, { fresh: false }); } }, [
+        el('time', r.time.replace(/^0/, '')),
+        el('span.ktag', r.categoryId ? [el('i.dot', { style: { background: catOf(r.categoryId).color } }), catOf(r.categoryId).name] : [el('span.muted', 'タグなし')]),
+        el('span.knote', r.note || ''),
+        el('span.chev', { 'aria-hidden': 'true' }, '›'),
+      ]))),
     ];
   });
 }

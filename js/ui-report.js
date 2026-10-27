@@ -88,9 +88,9 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
     el('p.rep-lead', lead),
     sub ? el('p.rep-sub', sub) : null,
     glance(r),
-    kiaiLine(date), // v0.25・F13: 気合の回数と時刻(押した日だけ)
     pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
+    kiaiBox(date), // v0.25.1・F13-4: 気合(時刻・タグ・メモ。押した日だけ)
     planFigure(date, nowMin, r), // v0.23・F12-4: 予定を置いた日だけ
     feedbackBox(fb, lead === r.positive[0]),
     diaryExcerptBox(date, { go: (tab, arg) => { close(); hooks.go?.(tab, arg); } }, { dayDone: !!r.finalizedAt || !isToday || (windowFor(d.settings, date) ? nowMin >= windowFor(d.settings, date).end - 120 : true) }), // v0.18: その日の日記の抜粋
@@ -297,17 +297,24 @@ function workKinds(r) {
   return Object.entries(out).sort((a, b) => b[1] - a[1]).map(([k, min]) => ({ id: k, name: kindRole(S(), k).name, min }));
 }
 /** パッと見の1行(v0.24・v0.24.1 実機 FB): 作業の種別(作業 / 決まった作業 … 設定の種別の順・0 でも出す)と ダラダラ。記録率は「くわしく」のタイルに */
-/** 気合(v0.25・F13): その日に押した回数と時刻・そのとき記録していたもの。押していない日は出さない(責めない) */
-function kiaiLine(date) {
+/** 気合(v0.25.1・F13-4): その日の気合を 時刻・タグ・メモ の行で。押していない日は出さない(責めない) */
+function kiaiBox(date) {
   const list = kiaiMod.listOf(store.state.data.kiai, date);
   if (!list.length) return null;
-  return el('p.small.kiai-line', `気合${list.length}回: ${kiaiMod.line(list, (id) => catOf(id).name)}`);
+  const row = (r) => el('div.krow', [
+    el('time', r.time.replace(/^0/, '')),
+    el('span.ktag', r.categoryId ? [el('i.dot', { style: { background: displayColor(catOf(r.categoryId).color) } }), catOf(r.categoryId).name] : [el('span.muted', 'タグなし')]),
+    el('span.knote', r.note || ''),
+  ]);
+  return el('section.group.kiai-rep', [el('h2', `気合 ${list.length}回`), el('div.card.kiai-list', list.map(row))]);
 }
-/** 期間の気合(v0.25): 回数・押した日数・いちばん多かった日。無ければ出さない */
+/** 期間の気合(v0.25.1): 回数・押した日数・いちばん多かった日と、タグごとの回数の札。無ければ出さない */
 function kiaiPeriod(from, to) {
   const sm = kiaiMod.summarize(store.state.data.kiai, from, to);
   if (!sm.count) return null;
-  return el('p.small.kiai-line', `気合${sm.count}回(${sm.days}日)${sm.best && sm.best.count >= 2 ? `・いちばん多かった日は${fmtMD(sm.best.date, true)}の${sm.best.count}回` : ''}`);
+  const lead = `${sm.count}回(${sm.days}日)${sm.best && sm.best.count >= 2 ? `・いちばん多かった日は${fmtMD(sm.best.date, true)}の${sm.best.count}回` : ''}`;
+  const pills = sm.tags.map((t) => el('span.kiai-pill', [t.id === 'none' ? null : el('i.dot', { style: { background: displayColor(catOf(t.id).color) } }), el('span', t.id === 'none' ? 'タグなし' : catOf(t.id).name), el('b', String(t.count))].filter(Boolean)));
+  return el('section.group.kiai-rep', [el('h2', '気合'), el('div.card', [el('p.small.plan-lead', lead), el('div.kiai-pills.wrap', pills)])]);
 }
 function glance(r) {
   const got = Object.fromEntries(workKinds(r).map((k) => [k.id, k.min]));

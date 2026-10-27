@@ -276,10 +276,10 @@ export function validateBusyNote(r, id) {
   if (!m || !isDate(m[1]) || +m[2] >= 1440) return null;
   return { ...stripUnsafe(r), id: `${m[1]}:${+m[2]}`, date: m[1], start: +m[2], text: str(r.text, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
-/** 気合(v0.25・F13): 日付と時刻('HH:MM'・深夜は 30:00 まで)。カテゴリ・記録の id は任意(押したとき記録中だったもの) */
+/** 気合(v0.25・F13): 日付と時刻('HH:MM'・深夜は 30:00 まで)。タグ(カテゴリ id)とメモ(200 字)は任意(v0.25.1) */
 export function validateKiai(r, id) {
   if (!isObj(r) || !isDate(r.date) || !isHM(r.time)) return null;
-  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: r.time, categoryId: optStr(r.categoryId, 40), entryId: optStr(r.entryId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: r.time, categoryId: optStr(r.categoryId, 40), note: str(r.note, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 /** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {

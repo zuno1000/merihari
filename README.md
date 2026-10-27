@@ -37,7 +37,7 @@ python -m http.server 8000
 URL を開くだけで記録できる(iOS の「ショートカット」や「オートメーション」、ホーム画面のブックマークで使う):
 - `https://zuno1000.github.io/merihari/?log=研究` … そのカテゴリの記録を開始(名前か id)
 - `https://zuno1000.github.io/merihari/?log=stop` … 記録を終了
-- `https://zuno1000.github.io/merihari/?kiai=1` … 気合を入れる(開いた瞬間に押したことになる。記録中でなければ「何を始める?」が開く)
+- `https://zuno1000.github.io/merihari/?kiai=1` … 気合を入れる(開いた瞬間に押したことになり、「何に気合?」でタグとメモを添えられる。記録は始めない)
 
 外部サイトのリンクから開いたとき(referrer が別のサイト)は無視する。
 

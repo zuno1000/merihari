@@ -731,8 +731,10 @@ document.getElementById('app').addEventListener('load', async () => {
     log('\n# kiai(気合)');
     {
       const K = M.kiai; let kn = 0; const kctx = { uid: () => 'k' + (++kn), nowISO: () => '2026-10-28T09:00:00+09:00' };
-      let km = K.press({}, { date: '2026-10-28', min: 552, categoryId: 'research', entryId: 'e1' }, kctx);
-      ok(!km.dup && km.rec.time === '09:12' && km.rec.categoryId === 'research' && km.rec.entryId === 'e1' && km.kiai.k1 && km.kiai.k1.deletedAt === null, 'kiai.press: 時刻・カテゴリ・記録 id を持つ印を足す');
+      let km = K.press({}, { date: '2026-10-28', min: 552, categoryId: 'research' }, kctx);
+      ok(!km.dup && km.rec.time === '09:12' && km.rec.categoryId === 'research' && km.rec.note === '' && km.kiai.k1 && km.kiai.k1.deletedAt === null, 'kiai.press: 時刻とタグ(任意)を持つ印を足す・メモは空');
+      const ku = K.update(km.kiai, 'k1', { note: '  面談資料 ', categoryId: 'english' }, kctx);
+      ok(ku.k1.note === '  面談資料 ' && ku.k1.categoryId === 'english' && km.kiai.k1.categoryId === 'research' && eq(K.update(ku, 'none', { note: 'x' }, kctx), ku) && K.update(ku, 'k1', { categoryId: null }, kctx).k1.categoryId === null && K.update(ku, 'k1', { categoryId: null }, kctx).k1.note === '  面談資料 ', 'kiai.update(v0.25.1): タグとメモを直す・無い id はそのまま・片方だけの更新は他方を保つ・元は変えない');
       const dup = K.press(km.kiai, { date: '2026-10-28', min: 552 }, kctx);
       ok(dup.dup && Object.keys(dup.kiai).length === 1 && dup.rec.id === 'k1', 'kiai.press: 同じ分に 2 回は 1 回(二重タップ・?kiai の二度開き)');
       km = K.press(km.kiai, { date: '2026-10-28', min: 843 }, kctx);
@@ -745,8 +747,9 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(rm.k2.deletedAt && K.listOf(rm, '2026-10-28').length === 2 && eq(K.remove(rm, 'nope', kctx), rm) && K.listOf(km.kiai, '2026-10-28').length === 3, 'kiai.remove: tombstone・無い id はそのまま・元は変えない');
       const sm = K.summarize(km.kiai, '2026-10-22', '2026-10-28');
       ok(sm.count === 4 && sm.days === 2 && sm.byDate['2026-10-28'] === 3 && sm.best.date === '2026-10-28' && sm.best.count === 3 && K.summarize(km.kiai, '2026-01-01', '2026-01-31').count === 0, 'kiai.summarize: 回数・日数・日ごと・最多の日');
-      const vk = S.validateKiai({ date: '2026-10-28', time: '09:12', categoryId: 'research', updatedAt: 'x' }, 'a');
-      ok(vk.id === 'a' && vk.date === '2026-10-28' && vk.time === '09:12' && vk.categoryId === 'research' && vk.entryId === null && vk.updatedAt === 'x' && vk.deletedAt === null
+      ok(sm.byTag.none === 2 && sm.byTag.research === 1 && sm.byTag.english === 1 && sm.tags[0].id === 'none' && sm.tags[0].count === 2 && sm.tags.length === 3, 'kiai.summarize(v0.25.1): タグごとの回数(多い順・タグ無しは none)');
+      const vk = S.validateKiai({ date: '2026-10-28', time: '09:12', categoryId: 'research', note: 'x'.repeat(300), updatedAt: 'x' }, 'a');
+      ok(vk.id === 'a' && vk.date === '2026-10-28' && vk.time === '09:12' && vk.categoryId === 'research' && vk.note.length === 200 && vk.updatedAt === 'x' && vk.deletedAt === null
         && S.validateKiai({ date: 'bad', time: '09:12' }, 'b') === null && S.validateKiai({ date: '2026-10-28', time: '9' }, 'c') === null, 'validateKiai: 日付と時刻が要る・id はキーから・任意の欄は null');
       const kd = S.migrate({ schema: 1, settings: {}, kiai: { a: { date: '2026-10-28', time: '09:12' }, b: { date: 'x' }, __proto__: { date: '2026-10-28', time: '09:00' } } });
       ok(Object.keys(kd.kiai).length === 1 && kd.kiai.a.id === 'a' && eq(S.defaultData().kiai, {}), 'migrate: kiai を検証して持つ・既定は空');
