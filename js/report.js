@@ -1,6 +1,7 @@
 // merihari ─ report.js: 日次レポートの集計と文章生成(仕様書 F3・§6.5)。すべて純関数。
 // v0.15: 理想スケジュールとの比較は廃止。比べる相手は「先週の平均(ベースライン)」と「目安」だけ。
 // v0.15.1: 期間(7日・30日・すべて)のふり返り(periodSummary / goalsSummary / weeklyBuckets)。
+import { planCompare } from './plan.js';
 import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory } from './log.js';
 import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked } from './plan.js';
@@ -179,12 +180,13 @@ const r5 = (m) => Math.max(5, Math.round(m / 5) * 5);
  * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる 1 件だけ。「明日は」は目安から計算した量 1 件。
  * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null }
  */
-export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440 } = {}) {
+export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440, planBlocks = null } = {}) {
   const day = date || agg.date;
   const by = agg.byCategory;
   const lines = reportLines(agg, { tasks, entries, date: day, settings });
   const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin);
   const dailyGs = gs.filter((g) => g.kind === 'daily');
+  const pc = planBlocks ? planCompare(planBlocks, entries, day, agg.dayDone ? 1800 : nowMin) : null; // v0.23・F12-4: 予定を置いた日だけ
   const hasBase = agg.baselineWorkMin != null && agg.baselineDays >= 3;
   const baseDrift = hasBase ? Object.values(by).filter((r) => r.drift).reduce((a, r) => a + (r.baseline || 0), 0) : 0;
   const dWork = hasBase ? agg.workMin - agg.baselineWorkMin : 0;
@@ -216,6 +218,10 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     if (met === dailyGs.length) { score++; reasons.push(dailyGs.length > 1 ? '毎日の目安にすべて届いた' : '毎日の目安に届いた'); }
     else if (met === 0) { score--; reasons.push('毎日の目安には届かなかった'); }
   }
+  if (pc && agg.dayDone && pc.endedCount >= 2) {
+    if (pc.rate >= 0.7) { score++; reasons.push(`予定 ${pc.endedCount} 件のうち ${pc.doneCount} 件はその時間に`); }
+    else if (pc.rate < 0.3) { score--; reasons.push(`予定 ${pc.endedCount} 件のうちその時間にできたのは ${pc.doneCount} 件`); }
+  }
   let judged = false, verdict = null;
   if (!agg.dayDone) verdict = null; // 途中は判定しない(いまの時点の文は positive[0])
   else if (agg.coverage < 0.5) verdict = `記録が作業時間帯の ${Math.round(agg.coverage * 100)}% なので、この日の判定は控えます。`;
@@ -227,6 +233,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   }
   // 良かったこと: 肯定の文(ダラダラの減少 → 作業の増加 → 目安(印も)→ 合計 → 連続)
   const good = lines.positive.slice();
+  if (pc && pc.doneCount) good.push(`予定 ${pc.endedCount} 件のうち ${pc.doneCount} 件は、その時間に予定どおりできました。`); // v0.23
   // 良くするには: 数字で裏づけられる 1 件だけ(1 日の終わりだけ)
   let better = null;
   if (agg.dayDone) {
@@ -277,9 +284,11 @@ export function totalsByKind(byCategory, settings) {
 export function buildReport(opts) {
   const agg = aggregate(opts);
   const lines = reportLines(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date, settings: opts.settings });
-  const feedback = dayFeedback(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date, settings: opts.settings, nowMin: opts.nowMin });
+  const feedback = dayFeedback(agg, { tasks: opts.tasks, entries: opts.entries, date: opts.date, settings: opts.settings, nowMin: opts.nowMin, planBlocks: opts.planBlocks || null });
+  const pc = opts.planBlocks ? planCompare(opts.planBlocks, opts.entries, opts.date, opts.nowMin) : null; // v0.23: 予定の分を planned に
   const byCategory = {};
-  for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: 0, actual: r.actual, baseline: r.baseline };
+  for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: pc?.byCategory[id]?.planned || 0, actual: r.actual, baseline: r.baseline };
+  if (pc) for (const [id, v] of Object.entries(pc.byCategory)) if (!byCategory[id]) byCategory[id] = { planned: v.planned, actual: 0, baseline: null };
   return { date: opts.date, byCategory, workMin: agg.workMin, plannedWorkMin: 0, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, feedback, finalizedAt: opts.finalizedAt || null };
 }

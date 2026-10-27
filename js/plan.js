@@ -222,6 +222,45 @@ export function habitStreak(t, entries, date) {
   return n;
 }
 
+// ---- 予定(v0.23・F12): 朝に自分で置く予定ブロック。自動生成はしない。planBlocks[id] = { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt } ----
+/** その日の予定(生きているもの・開始順)。s/e は分(深夜は 1440 超) */
+export function planBlocksOf(blocks, date) {
+  return Object.values(blocks || {}).filter((b) => alive(b) && b.date === date && hm(b.end) > hm(b.start)).map((b) => ({ ...b, s: hm(b.start), e: hm(b.end) })).sort((a, b) => (a.s - b.s) || (a.id < b.id ? -1 : 1));
+}
+/**
+ * 予定と実際(v0.23・F12-4): 予定ブロックごとに、同じカテゴリ(タスクを決めていればそのタスク)の記録がその時間にどれだけ重なったか。
+ * status: upcoming(まだ)/ now(進行中)/ done(半分以上その時間に)/ missed(過ぎたが半分未満)。rate=過ぎた予定の分のうち重なった分。
+ * byCategory の actual はその日のカテゴリ別の合計(予定の時間に限らない)。純関数
+ */
+export function planCompare(blocks, entries, date, nowMin = 1440) {
+  const list = planBlocksOf(blocks, date);
+  const es = Object.values(entries || {}).filter((x) => alive(x) && x.date === date).map((x) => ({ ...x, s: hm(x.start), e: x.end == null ? Math.max(nowMin, hm(x.start)) : hm(x.end) }));
+  const out = [];
+  const byCategory = {};
+  let plannedEnded = 0, kept = 0, doneCount = 0, endedCount = 0;
+  for (const b of list) {
+    const len = b.e - b.s;
+    let actual = 0;
+    for (const x of es) { if (b.taskId ? x.taskId !== b.taskId : x.categoryId !== b.categoryId) continue; actual += Math.max(0, Math.min(b.e, x.e) - Math.max(b.s, x.s)); }
+    actual = Math.min(len, actual);
+    const status = nowMin < b.s ? 'upcoming' : actual >= len / 2 ? 'done' : nowMin < b.e ? 'now' : 'missed';
+    const c = byCategory[b.categoryId] || (byCategory[b.categoryId] = { planned: 0, actual: 0 });
+    c.planned += len;
+    if (nowMin >= b.e) { plannedEnded += len; kept += actual; endedCount++; if (status === 'done') doneCount++; }
+    out.push({ ...b, len, actualMin: actual, status });
+  }
+  for (const x of es) { const c = byCategory[x.categoryId]; if (c) c.actual += Math.max(0, x.e - x.s); }
+  return { blocks: out, byCategory, plannedMin: list.reduce((a, b) => a + b.e - b.s, 0), plannedEnded, keptMin: kept, rate: plannedEnded ? kept / plannedEnded : null, endedCount, doneCount };
+}
+/** 別の日の予定を写す(新しい id・updatedAt)。写す先に予定があれば何もしない。純関数(ctx.uid / ctx.nowISO)。戻り値 { blocks, copied } */
+export function copyPlan(blocks, fromDate, toDate, ctx) {
+  const out = { ...blocks };
+  if (planBlocksOf(out, toDate).length) return { blocks: out, copied: 0 };
+  let n = 0;
+  for (const b of planBlocksOf(out, fromDate)) { const id = ctx.uid(); out[id] = { id, date: toDate, start: b.start, end: b.end, categoryId: b.categoryId, taskId: b.taskId || null, note: b.note || '', updatedAt: ctx.nowISO(), deletedAt: null }; n++; }
+  return { blocks: out, copied: n };
+}
+
 /** 空き区間 [{start,end}](from〜to の中で blocks が無いところ) */
 export function freeSlots(blocks, from, to) {
   if (to <= from) return [];

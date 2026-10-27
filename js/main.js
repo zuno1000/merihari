@@ -20,8 +20,9 @@ import { renderMoney } from './ui-money.js';
 import * as money from './money.js';
 import * as ai from './ai.js';
 
-export const APP_VERSION = '0.22.1';
+export const APP_VERSION = '0.23.0';
 export const NEWS = [
+  { v: '0.23.0', text: '実機 FB ④ 予定(朝に自分で置く): タイムラインの未来の空き時間(「ここに予定」)かホームの「きょうの予定」から、カテゴリ(かタスク)と時間を決めて予定を置けます。同じレーンに枠線だけで描き、長押しで動かせます。明日以降はタイムラインの › で先の日に置けます。自動では作りませんが、前の日や先週の同じ曜日の予定を「写す」ことはできます。予定の時間に同じことを記録すると ✓、過ぎた予定で未記録のところは「◯◯ だった?」の 1 タップで記録。レポート「今日」に「予定と実際」(カテゴリごとに予定 / 実際)、ふり返りに「予定 n 件のうち m 件はその時間に」。予定は同期します。' },
   { v: '0.22.1', text: 'タスクの追加で、入力欄を開いたあとに 種類(メモ / タスク / 習慣 / やりたいこと)やチップを押すとキーボードが閉じていたのを直しました。日記の「きょうの材料」も同じです(書いている途中に押しても閉じません)。メモの名前は編集でも 200 字まで。' },
   { v: '0.22.0', text: '実機 FB 4 点。①タスクの追加は「メモ」が既定に: 名前を入れて Enter で書き残せます(期限・量・カテゴリは持ちません)。タスク画面の先頭「メモ」に新しい順で並び、タップして 期限 / 毎日 / 毎週 / やりたい を選ぶとそのままタスクや習慣になります。②習慣・やりたいことを始めやすく: ▶ で始めると「あと ◯分で区切り」(習慣は目安の残り・やりたいことは 15 分)がカードに出ます。習慣には「◯日続いてる」。タスク画面の習慣は まだのものが先、やりたいことは長くふれていない順(「◯日ぶり」)。③タイムラインの予定(しましま)をタップすると何の予定かをひと言メモできます。予定の時間を記録するシートにも「予定のメモ」の欄があり、記録のメモにもなります。⑤同期の「Maximum call stack size exceeded」は v0.21.2 で修正済み。④(朝の予定と実際の比較)は次の版で。' },
   { v: '0.21.2', text: '同期で「同期できませんでした: Maximum call stack size exceeded」と出る不具合を直しました。記録・日記・お金が増えて同期ファイルが大きくなると、暗号化したデータを文字列にするところで落ちていました。端末内のデータは失われていません。アプリを開き直してから、設定 › Google › カレンダー・Drive の「Drive と同期」で同期し直してください。' },
@@ -215,5 +216,5 @@ window.M = {
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, validatePlanBlock: store.validatePlanBlock, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

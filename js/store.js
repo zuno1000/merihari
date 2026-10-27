@@ -105,6 +105,7 @@ export function defaultData() {
     diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
     money: {},   // v0.19: お金(id → { id, date, time, amount, type, categoryId, note, entryId, updatedAt, deletedAt })
     wants: {},   // v0.20: ほしいもの(id → { id, name, price, targetDate, categoryId, note, doneAt, updatedAt, deletedAt })
+    planBlocks: {}, // v0.23: 自分で置く予定(id → { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt })。自動生成はしない(F12)
     busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
@@ -253,6 +254,13 @@ export function validateWant(r, id) {
   if (!isObj(r) || typeof r.name !== 'string' || !r.name.trim()) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 100), price: Number.isFinite(+r.price) && +r.price >= 0 && +r.price <= 100000000 ? Math.round(+r.price) : 0, targetDate: isDate(r.targetDate) ? r.targetDate : null, categoryId: str(r.categoryId, 40, 'hobby'), note: str(r.note, 500), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
+/** 予定(v0.23・F12): 自分で置く予定ブロック。開始・終了は 'HH:MM'(深夜は 30:00 まで)・終了は開始より後 */
+export function validatePlanBlock(r, id) {
+  if (!isObj(r) || !isDate(r.date) || !isHM(r.start) || !isHM(r.end)) return null;
+  const min = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  if (!(min(r.end) > min(r.start)) || min(r.end) > 1800) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, start: r.start, end: r.end, categoryId: str(r.categoryId, 40, 'other'), taskId: optStr(r.taskId, 80), note: str(r.note, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 /** 予定のメモのキー(v0.22・F6-6): 日付と開始分。1440 以上(その日の深夜=暦では翌日)は翌日の分に正規化する(純関数) */
 export function busyNoteKey(date, startMin) {
   let d = date, m = Math.round(+startMin || 0);
@@ -297,6 +305,7 @@ export function migrate(raw) {
   out.money = cleanMap(raw.money, validateMoney);
   out.wants = cleanMap(raw.wants, validateWant);
   out.diary = cleanMap(raw.diary, validateDiary);
+  out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
   out.busyNotes = {}; for (const [k, v] of Object.entries(cleanMap(raw.busyNotes, validateBusyNote))) if (!out.busyNotes[v.id] || k === v.id) out.busyNotes[v.id] = v; // v0.22: キーは id(日付:開始分)
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };

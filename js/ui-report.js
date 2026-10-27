@@ -2,6 +2,7 @@
 // v0.15.1: 上の切替で 今日 / 7日 / 30日 / すべて。ホームに今日の内訳があるので、ホームからは「7日」で開く(昨日の未読があれば昨日)。
 // 今日: 一言 → 1日の円 → 作業の合計(先週比)→ ことば → くわしく。期間: 一言 → 内訳の円(記録した時間の割合)→ カテゴリ別の棒 → 推移(日/週)→ 目安のふり返り。
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
+import * as planMod from './plan.js';
 import { el, svg, sheet, toast } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
@@ -62,7 +63,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
   const d = store.state.data;
   const isToday = date === today;
   const r = d.reports[date]?.finalizedAt ? d.reports[date]
-    : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks });
+    : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks });
   const entries = log.entriesOf(d.entries, date);
   const W = windowFor(d.settings, date) || { start: 420, end: 1410 };
   const base = report.baseline(d.entries, date);
@@ -71,17 +72,18 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
   const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, label: k === date ? (isToday ? '今日' : `${+k.slice(8, 10)}日`) : DAY_JA[weekday(k)], ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
   const title = isToday ? '今日のレポート' : `${fmtMD(date, true)}のレポート`;
   const recompute = () => {
-    d.reports[date] = report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, finalizedAt: store.nowISO() });
+    d.reports[date] = report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks, finalizedAt: store.nowISO() });
     store.save(); toast('いまの記録で計算し直しました'); reopen();
   };
   // ふり返り(v0.16・F3-9): 確定済みのレポートに無ければ(v0.16 より前に確定したもの)いまの記録から作る
-  const fb = r.feedback || report.dayFeedback(report.aggregate({ entries: d.entries, date, nowMin, settings: d.settings }), { tasks: d.tasks, entries: d.entries, date, settings: d.settings, nowMin });
+  const fb = r.feedback || report.dayFeedback(report.aggregate({ entries: d.entries, date, nowMin, settings: d.settings }), { tasks: d.tasks, entries: d.entries, date, settings: d.settings, nowMin, planBlocks: d.planBlocks });
   const lead = fb.verdict || r.positive[0];
   return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点' : '未確定')]),
     el('p.rep-lead', lead),
     pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
+    planFigure(date, nowMin, r), // v0.23・F12-4: 予定を置いた日だけ
     feedbackBox(fb, lead === r.positive[0]),
     diaryExcerptBox(date, { go: (tab, arg) => { close(); hooks.go?.(tab, arg); } }, { dayDone: !!r.finalizedAt || !isToday || (windowFor(d.settings, date) ? nowMin >= windowFor(d.settings, date).end - 120 : true) }), // v0.18: その日の日記の抜粋
 
@@ -393,6 +395,19 @@ function trendFigure(items, caption) {
     el('figcaption', caption),
     el('div.trends', [chart('作業', 'workMin', workColor || 'var(--accent)'), chart(driftLabel(), 'driftMin', driftColor || 'var(--danger)')]),
   ]);
+}
+
+// ---- 予定と実際(v0.23・F12-4): 予定を置いた日だけ。カテゴリごとに 予定 / 実際 の 2 本と、過ぎた予定のうちその時間にできた件数 ----
+function planFigure(date, nowMin, r) {
+  const d = store.state.data;
+  const pc = planMod.planCompare(d.planBlocks, d.entries, date, r.finalizedAt ? 1800 : nowMin);
+  if (!pc.blocks.length) return null;
+  const rows = Object.entries(pc.byCategory).sort((a, b) => b[1].planned - a[1].planned);
+  const max = Math.max(1, ...rows.map(([, v]) => Math.max(v.planned, v.actual)));
+  const bar = (label, v, color) => el('div.goal-line', [el('span.gl-k', label), el('span.meter', el('i', { style: { width: `${Math.round((v / max) * 100)}%`, background: color } })), el('span.gl-v', fmtMin(v))]);
+  const lead = pc.endedCount ? `過ぎた予定 ${pc.endedCount} 件のうち ${pc.doneCount} 件はその時間に。予定の時間の ${Math.round((pc.rate || 0) * 100)}% を同じことに使いました。` : `予定 ${pc.blocks.length} 件。まだこれからです。`;
+  return el('section.group.planfig', [el('h2', '予定と実際'), el('div.card', [el('p.small.plan-lead', lead),
+    ...rows.map(([id, v]) => el('div.plan-cat', [el('span.plan-cat-name', [el('i.dot', { style: { background: catOf(id).color } }), catOf(id).name]), bar('予定', v.planned, 'var(--deemph)'), bar('実際', v.actual, catOf(id).color)]))])]);
 }
 
 // ---- ふり返り(v0.16・F3-9): よかったこと / 良くするには / 明日は(途中なら きょうはあと) ----

@@ -91,7 +91,7 @@ export function renderDiary(view, ctx, dateArg = null) {
 
   // きょうの材料(ルールベース): その日の集計・ふり返り・目安・昨日の「明日は」
   const agg = report.aggregate({ entries: E(), date, nowMin, settings: S() });
-  const fb = report.dayFeedback(agg, { tasks: T(), entries: E(), date, settings: S(), nowMin });
+  const fb = report.dayFeedback(agg, { tasks: T(), entries: E(), date, settings: S(), nowMin, planBlocks: store.state.data.planBlocks });
   const gs = plan.goals(T(), E(), date, nowMin);
   const seeds = diary.seeds({ agg, fb, gs, prev: Dy()[addDays(date, -1)], categories: S().categories });
   const fields = {};
