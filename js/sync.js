@@ -15,7 +15,21 @@ const TOMBSTONE_DAYS = 60;           // F5-4
 /** Uint8Array → base64。v0.21.2: スプレッド(fromCharCode(...u8))は引数の上限(Safari は数万)を超えると RangeError「Maximum call stack size exceeded」になる(記録・日記・お金が増えて暗号文が大きくなった端末で同期が落ちた)。32K ずつに分けて変換する */
 const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-const ITERATIONS = 310000; // §8.2
+const ITERATIONS = 600000; // §8.2。v0.25: 310,000 → 600,000(OWASP 2023 の SHA-256 推奨)。kdf に回数を埋めるので古いファイルはそのまま読める
+/**
+ * パスフレーズの簡易チェック(v0.25・レビュー B-2・純関数)。問題があればその説明、無ければ null。
+ * 8 文字未満・同じ文字の繰り返し・連番(1234…/abcd…/qwerty)・推測されやすい言葉を弾く。12 文字以上をおすすめ(強制はしない)
+ */
+export function passIssue(p) {
+  const s = String(p || '');
+  if (s.length < 8) return '8文字以上にしてください';
+  if (/^(.)\1+$/.test(s)) return '同じ文字の繰り返しは避けてください';
+  const low = s.toLowerCase();
+  const seqs = ['0123456789', 'abcdefghijklmnopqrstuvwxyz', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+  if (seqs.some((q) => q.includes(low) || [...q].reverse().join('').includes(low))) return '並びの数字・文字は避けてください';
+  if (['password', 'passphrase', 'merihari', 'iloveyou', 'letmein', 'welcome1'].some((w) => low.replace(/[0-9!@#$%^&*._-]/g, '') === w.replace(/[0-9]/g, ''))) return '推測されやすい言葉は避けてください';
+  return null;
+}
 async function deriveKey(pass, salt, iterations = ITERATIONS) {
   const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -46,13 +60,27 @@ export function readHint(txt) { try { const h = JSON.parse(txt).hint; return typ
 // ---- マージ(純関数・対称) ----
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const str = (x) => JSON.stringify(x);
-const later = (a, b) => ((a || '') > (b || '') ? a : b);
-/** 決定的に片方を選ぶ: キーの値が大きいほう、同点なら JSON 文字列が大きいほう */
+/**
+ * 時刻の印の比較(v0.25・レビュー A-1): updatedAt は store.nowISO() のローカルオフセット付き('2026-10-27T09:00:00+09:00')。
+ * 文字列のまま大小比較すると、端末のタイムゾーンが違う(旅行中・PC が UTC)とき実時刻と逆転して古い方が勝つ。
+ * ISO 8601 の日時なら Date.parse の数値で比べ、それ以外(版番号・'1'+日時 の合成キー)は従来どおり文字列で比べる。
+ */
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const ts = (s) => (typeof s === 'string' && ISO_RE.test(s) ? Date.parse(s) : NaN);
+/** a が b より新しければ正、古ければ負、同じなら 0。片方だけ日時なら日時を新しいとみなす */
+export function cmpStamp(a, b) {
+  const ta = ts(a), tb = ts(b);
+  if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta === tb ? 0 : ta > tb ? 1 : -1;
+  const sa = a || '', sb = b || '';
+  return sa === sb ? 0 : sa > sb ? 1 : -1;
+}
+const later = (a, b) => (cmpStamp(a, b) >= 0 ? a : b);
+/** 決定的に片方を選ぶ: キーの値が新しい(大きい)ほう、同点なら JSON 文字列が大きいほう */
 function pick(a, b, keyOf) {
   if (a == null) return b;
   if (b == null) return a;
-  const ka = keyOf(a) || '', kb = keyOf(b) || '';
-  if (ka !== kb) return ka > kb ? a : b;
+  const c = cmpStamp(keyOf(a) || '', keyOf(b) || '');
+  if (c !== 0) return c > 0 ? a : b;
   return str(a) >= str(b) ? a : b;
 }
 function mergeById(ca, cb, keyOf, fresh) {
@@ -72,10 +100,10 @@ function mergeById(ca, cb, keyOf, fresh) {
 export function merge(a, b) {
   a = store.migrate(a); b = store.migrate(b);
   const resetAt = later(a.meta.resetAt, b.meta.resetAt) || null;
-  const fresh = (rec) => rec != null && (!resetAt || (rec.updatedAt || rec.finalizedAt || '') >= resetAt);
+  const fresh = (rec) => rec != null && (!resetAt || cmpStamp(rec.updatedAt || rec.finalizedAt || '', resetAt) >= 0);
   const out = {};
   // 未知のトップレベルキーも決定的に残す
-  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks', 'meta']);
+  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks', 'kiai', 'meta']);
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) if (!known.has(k)) out[k] = pick(a[k], b[k], () => '');
   out.schema = Math.max(+a.schema || 1, +b.schema || 1);
   const sa = fresh({ updatedAt: a.settings.settingsUpdatedAt }) || !resetAt ? a.settings : null;
@@ -91,6 +119,7 @@ export function merge(a, b) {
   out.wants = mergeById(a.wants, b.wants, (r) => r.updatedAt, fresh); // v0.20: ほしいもの
   out.busyNotes = mergeById(a.busyNotes, b.busyNotes, (r) => r.updatedAt, fresh); // v0.22: 予定のメモ(日付:開始分 ごとの LWW)
   out.planBlocks = mergeById(a.planBlocks, b.planBlocks, (r) => r.updatedAt, fresh); // v0.23: 予定(id ごとの LWW・記録と同じ)
+  out.kiai = mergeById(a.kiai, b.kiai, (r) => r.updatedAt, fresh); // v0.25: 気合(F13・id ごとの LWW)
   out.meta = {
     ...pick(a.meta, b.meta, () => ''),
     resetAt,
@@ -121,8 +150,8 @@ export function mergeSettings(sa, sb) {
     const out = [];
     const seen = new Set();
     const choose = (x, y) => {
-      const ux = x.updatedAt || '', uy = y.updatedAt || '';
-      if (ux !== uy) return ux > uy ? x : y;
+      const c = cmpStamp(x.updatedAt || '', y.updatedAt || '');
+      if (c !== 0) return c > 0 ? x : y;
       const dx = isDefault(kind, x), dy = isDefault(kind, y);
       if (dx !== dy) return dx ? y : x;
       return x; // どちらも同じ扱いなら settingsUpdatedAt の勝者(base)側
@@ -137,7 +166,7 @@ export function mergeSettings(sa, sb) {
   for (const k of store.SCALAR_FIELDS) {
     const sb = base.fieldStamps?.[k] || '', so = other.fieldStamps?.[k] || '';
     let pickBase;
-    if (sb !== so) pickBase = sb > so;
+    if (sb !== so) pickBase = cmpStamp(sb, so) > 0;
     else { const db = str(base[k]) === str(dflt[k]), dOther = str(other[k]) === str(dflt[k]); pickBase = db === dOther ? true : !db; }
     out[k] = pickBase ? base[k] : other[k];
     const stamp = pickBase ? sb : so;
@@ -156,11 +185,11 @@ export function mergeSettings(sa, sb) {
 
 /** 60 日より前に削除されたレコードを掃除(F5-4) */
 export function pruneTombstones(data, nowISO, days = TOMBSTONE_DAYS) {
-  const limit = new Date(new Date(nowISO).getTime() - days * 86400000).toISOString();
+  const limit = new Date(nowISO).getTime() - days * 86400000; // v0.25: 数値で比べる(deletedAt はオフセット付き・limit は UTC だった)
   const out = { ...data };
-  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks']) {
+  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks', 'kiai']) {
     out[k] = {};
-    for (const [id, r] of Object.entries(data[k] || {})) if (!(r.deletedAt && r.deletedAt < limit)) out[k][id] = r;
+    for (const [id, r] of Object.entries(data[k] || {})) if (!(r.deletedAt && ts(r.deletedAt) < limit)) out[k][id] = r;
   }
   return out;
 }
@@ -172,7 +201,7 @@ export const forgetPass = () => { try { sessionStorage.removeItem(PASS_KEY); } c
 
 function askPass({ hint = '', isNew = false } = {}) {
   return new Promise((res, rej) => {
-    const inp = el('input.text', { type: 'password', autocomplete: 'off', placeholder: '8文字以上' });
+    const inp = el('input.text', { type: 'password', autocomplete: 'off', placeholder: isNew ? '12文字以上がおすすめ(8文字以上)' : '8文字以上' });
     const hintIn = isNew ? el('input.text', { type: 'text', autocomplete: 'off', placeholder: '例: いつもの合言葉', maxlength: 80 }) : null;
     const pk = passkey.supported() && !passkey.enrolled() ? el('input', { type: 'checkbox', checked: true }) : null;
     let done = false;
@@ -185,7 +214,8 @@ function askPass({ hint = '', isNew = false } = {}) {
       el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
         el('button.btn.primary.grow', { type: 'button', onclick: async () => {
           const v = inp.value;
-          if (v.length < 8) { toast('8文字以上にしてください'); return; }
+          const issue = isNew ? passIssue(v) : (v.length < 8 ? '8文字以上にしてください' : null); // v0.25: 新しく決めるときだけ簡易チェック(既存のパスフレーズは弾かない)
+          if (issue) { toast(issue); return; }
           if (pk?.checked) { try { if (!(await passkey.enroll(v))) toast('このブラウザのパスキーは対応していません(今回は手入力のみ)'); } catch (e) { toast(e.name === 'NotAllowedError' ? 'パスキーは登録しませんでした' : e.message); } }
           done = true; setPass(v); close(); res({ pass: v, hint: hintIn ? hintIn.value.trim() : hint });
         } }, '続ける')]),
@@ -201,6 +231,8 @@ async function findFile(interactive) {
   return j.files?.[0] || null;
 }
 async function download(id, interactive) { return (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {}, { interactive })).text(); }
+/** いまの modifiedTime(v0.25・レビュー A-2: アップロード直前に、取ってから別の端末が上げていないかを見る) */
+async function fileMeta(id, interactive) { return (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,modifiedTime`, {}, { interactive })).json(); }
 async function upload(id, body, interactive) {
   if (id) {
     await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }, { interactive });
@@ -234,39 +266,49 @@ export async function syncDrive({ interactive = false } = {}) {
     if (!interactive && (!isConnected() || !savedToken() || !getPass())) return 'skip';
     const tk = await getToken({ interactive });
     if (!tk) return 'skip';
-    const file = await findFile(interactive);
-    let remoteTxt = null, hint = '';
-    if (file) { remoteTxt = await download(file.id, interactive); hint = readHint(remoteTxt); }
-    let pass = getPass();
-    if (!pass && interactive && passkey.enrolled()) {
-      // v0.8: 顔認証/パスキーで包んだパスフレーズをほどく(ユーザー操作の中)。キャンセルや失敗なら手入力へ
-      try { pass = await passkey.unlock(); if (pass) setPass(pass); } catch (e) { console.warn('passkey unlock', e); toast(e.name === 'NotAllowedError' ? 'パスキーをキャンセルしました。手入力へ' : e.message); }
+    let file = await findFile(interactive);
+    let pass = getPass(), hint = '';
+    const before = stableJSON(sansMeta(store.migrate(store.state.data)));
+    let seq, changed = false;
+    // v0.25(レビュー A-2): download → merge → upload の間に別の端末が先に上げていたら、その版を取り込み直してから上げる(最大 3 回)
+    for (let attempt = 0; ; attempt++) {
+      let remoteTxt = null;
+      if (file) { remoteTxt = await download(file.id, interactive); hint = readHint(remoteTxt); }
+      if (!pass && interactive && passkey.enrolled()) {
+        // v0.8: 顔認証/パスキーで包んだパスフレーズをほどく(ユーザー操作の中)。キャンセルや失敗なら手入力へ
+        try { pass = await passkey.unlock(); if (pass) setPass(pass); } catch (e) { console.warn('passkey unlock', e); toast(e.name === 'NotAllowedError' ? 'パスキーをキャンセルしました。手入力へ' : e.message); }
+      }
+      if (!pass) {
+        if (!interactive) return 'skip';
+        ({ pass, hint } = await askPass({ hint, isNew: !file }));
+      }
+      let data = store.state.data;
+      if (remoteTxt) {
+        let remote;
+        try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
+        data = merge(data, remote);
+        data.entries = normalizeAfterMerge(data.entries, { uid: store.uid, nowISO: store.nowISO }); // v0.15.12: 別端末の記録との重なり・二重の記録中を整える
+        // v0.15.7: 同期でカテゴリ・種別・配色が変わるときは、同期前の設定を端末に 1 つ控える(設定 › データ「同期前の設定に戻す」)
+        const keys = ['categories', 'kinds', 'palettes', 'palette', 'moneyCategories'];
+        const prev = store.state.data.settings;
+        if (keys.some((k) => stableJSON(prev[k]) !== stableJSON(data.settings[k]))) { local.settingsBackup = { at: store.nowISO(), settings: JSON.parse(JSON.stringify(prev)) }; }
+      }
+      changed = stableJSON(sansMeta(data)) !== before;
+      const nowISO = store.nowISO();
+      data = pruneTombstones(data, nowISO);
+      data.meta.lastSyncAt = nowISO;
+      store.state.data = data;
+      store.save();
+      seq = store.state.saveSeq;
+      const body = await encrypt(data, pass, hint || local.syncHint || '');
+      if (file && attempt < 2) {
+        let cur = null;
+        try { cur = await fileMeta(file.id, interactive); } catch (e) { console.warn('fileMeta', e); }
+        if (cur && cur.modifiedTime && cur.modifiedTime !== file.modifiedTime) { console.warn('sync: 別の端末が先に上げていたので取り込み直す'); file = cur; continue; }
+      }
+      await upload(file?.id || null, body, interactive);
+      break;
     }
-    if (!pass) {
-      if (!interactive) return 'skip';
-      ({ pass, hint } = await askPass({ hint, isNew: !file }));
-    }
-    let data = store.state.data;
-    const before = stableJSON(sansMeta(store.migrate(data)));
-    if (remoteTxt) {
-      let remote;
-      try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
-      data = merge(data, remote);
-      data.entries = normalizeAfterMerge(data.entries, { uid: store.uid, nowISO: store.nowISO }); // v0.15.12: 別端末の記録との重なり・二重の記録中を整える
-      // v0.15.7: 同期でカテゴリ・種別・配色が変わるときは、同期前の設定を端末に 1 つ控える(設定 › データ「同期前の設定に戻す」)
-      const keys = ['categories', 'kinds', 'palettes', 'palette', 'moneyCategories'];
-      const prev = store.state.data.settings;
-      if (keys.some((k) => stableJSON(prev[k]) !== stableJSON(data.settings[k]))) { local.settingsBackup = { at: store.nowISO(), settings: JSON.parse(JSON.stringify(prev)) }; }
-    }
-    const changed = stableJSON(sansMeta(data)) !== before;
-    const nowISO = store.nowISO();
-    data = pruneTombstones(data, nowISO);
-    data.meta.lastSyncAt = nowISO;
-    store.state.data = data;
-    store.save();
-    const seq = store.state.saveSeq;
-    const body = await encrypt(data, pass, hint || local.syncHint || '');
-    await upload(file?.id || null, body, interactive);
     local.lastSyncAt = Date.now(); local.syncHint = hint || local.syncHint || '';
     if (store.state.saveSeq === seq) local.pendingSync = false; // v0.16: アップロード中に記録を変えていたら「未同期の変更あり」のまま(次の同期で上がる)
     store.saveLocal();

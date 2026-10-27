@@ -12,6 +12,8 @@ import * as google from './google.js';
 import * as sync from './sync.js';
 import { diaryCue } from './ui-diary.js';
 import * as money from './money.js';
+import * as kiai from './kiai.js';
+import { exportJSONFile, shouldRemindExport } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
 
@@ -268,7 +270,9 @@ export function renderNow(view, ctx, dateArg = null) {
     if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) goDate(addDays(date, -1)); else if (!isToday) goDate(addDays(date, 1)); } // 左へスワイプ=前の日・右へ=次の日
   } }, [
     head,
+    kiaiBox(v, rerender, isToday), // v0.25・F13: 気合(ワンタップ・主役のカードより上。押すだけ)
     hero?.node, breakdown(v, rerender, { isToday, ctx }), goalsBox(v, rerender, isToday), planBox(v, rerender, isToday, ctx), isToday ? freshLine(e, rerender) : null, // v0.23: きょうの予定
+    isToday ? exportLine(e, rerender) : null, // v0.25: 控えの書き出し(30 日)
     isToday ? (() => { const c = diaryCue(e, ctx); return c ? el('div.list.freshline', c) : null; })() : null, // v0.18: 夕方以降「きょうの日記 › 1行だけ書く」
   ].filter(Boolean));
   view.append(home);
@@ -286,6 +290,48 @@ export function renderNow(view, ctx, dateArg = null) {
 function homeKey(n) {
   const o = log.openEntry(E());
   return (o ? 'rec:' + o.id : 'idle') + ':' + Math.floor(n.min / 5);
+}
+
+/**
+ * 気合(v0.25・F13): 「やる気がいることに、気合を入れて取りかかる(取りかかった)」瞬間の印をワンタップで残す。
+ * - 入力は無し。押した瞬間に保存してトースト。記録中ならそのカテゴリを添える(「◯◯ を続ける」)。
+ * - 記録中でなければ、そのまま記録のシート(いまから)を開いて「何を始める?」(気合 → 取りかかる の流れ。閉じても印は残る)。
+ * - 同じ分に 2 回は 1 回(二重タップ・?kiai の二度開き)。?kiai=1(main.js)からも同じ処理。
+ */
+export function pressKiai({ rerender = null, openSheet = true } = {}) {
+  const n = effNow();
+  const o = log.openEntry(E());
+  const r = kiai.press(store.state.data.kiai, { date: n.date, min: n.min, categoryId: o ? o.categoryId : null, entryId: o ? o.id : null }, LCTX);
+  store.state.data.kiai = r.kiai;
+  if (!r.dup) { store.save(); sync.autoSync(); }
+  const count = kiai.listOf(r.kiai, n.date).length;
+  const nm = o ? taskName(o.taskId, o.categoryId) : null;
+  toast(r.dup ? '気合、入ってます' : nm ? `気合、入った(${count}回目)。${nm} を続ける` : `気合、入った(${count}回目)`);
+  if (rerender) rerender();
+  if (openSheet && !o && !r.dup) chipsSheet(n, rerender || (() => {}), 'now', { title: '気合、入った。何を始める?' });
+  return r;
+}
+/** ホームの気合の箱: ボタン(きょうだけ)+ きょうの回数と時刻の 1 行(タップで一覧・消す)。前の日は回数だけ(無ければ出さない) */
+function kiaiBox(n, rerender, isToday) {
+  const list = kiai.listOf(store.state.data.kiai, n.date);
+  if (!isToday && !list.length) return null;
+  const text = list.length ? `${isToday ? 'きょう' : 'この日'}${list.length}回・${kiai.line(list, (id) => catOf(id).name)}` : 'やる気がいることに取りかかるとき、押す';
+  const btn = isToday ? el('button.kiai-btn', { type: 'button', 'aria-label': '気合を入れる', onclick: () => pressKiai({ rerender }) }, [
+    svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })]), el('span', '気合を入れる')]) : null;
+  const info = list.length ? el('button.kiai-info', { type: 'button', 'aria-label': 'きょうの気合の一覧', onclick: () => kiaiSheet(n, rerender) }, text) : el('span.kiai-info.muted', text);
+  return el('section.kiai', [btn, info].filter(Boolean));
+}
+function kiaiSheet(n, rerender) {
+  sheet((close) => {
+    const list = kiai.listOf(store.state.data.kiai, n.date);
+    const del = (r) => { store.state.data.kiai = kiai.remove(store.state.data.kiai, r.id, LCTX); store.save(); sync.autoSync(); close(); toast('消しました'); rerender(); };
+    return [
+      el('h2', `${n.date === effNow().date ? 'きょう' : md(n.date)}の気合 ${list.length}回`),
+      el('p.muted.small', '押した時刻と、そのとき記録していたもの。'),
+      el('div.list', list.map((r) => el('div.srow.plain.kiai-row', [el('span.lbl', r.time.replace(/^0/, '')), el('span.val.left', r.categoryId ? catOf(r.categoryId).name : '(記録なし)'),
+        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${r.time} の気合を消す`, onclick: () => del(r) }, '消す')]))),
+    ];
+  });
 }
 
 /** 記録中のカード: カテゴリ色・名前・経過(タイマー)・「別のことへ」「終わる」。タップで直す */
@@ -422,6 +468,12 @@ function freshLine(n, rerender) {
   } }, [el('span.lbl', '未同期の変更あり'), el('span.grow'), el('span.val', '同期'), el('span.chev', '›')]));
   return rows.length ? el('div.list.freshline', rows) : null;
 }
+/** 書き出しの 1 行(v0.25・レビュー D): 記録が 14 日以上あり、最後の書き出しから 30 日以上たったら。タップで JSON を書き出す(Google に接続していなくても出す) */
+function exportLine(n, rerender) {
+  if (!shouldRemindExport({ firstDate: report.firstLoggedDate(E()), today: n.date, lastExportAt: store.state.local.lastExportAt || 0, now: Date.now() })) return null;
+  return el('div.list.freshline', el('button.srow.fresh', { type: 'button', onclick: () => { exportJSONFile(); rerender(); } },
+    [el('span.lbl', store.state.local.lastExportAt ? '控え(JSON)の書き出しから30日' : '控え(JSON)をまだ書き出していません'), el('span.grow'), el('span.val', '書き出す'), el('span.chev', '›')]));
+}
 
 /** 昨日のレポートがまだ見られていなければその日付(v0.14: バッジ。v0.15.3: ホームの円に赤い点) */
 function unseenYesterday(n) {
@@ -434,7 +486,7 @@ function unseenYesterday(n) {
  * 時刻を決めて(既定・記録中でないとき): 開始(最後の記録の終わり)〜終了(いま)を先に見せ、カテゴリをタップするとその時間を記録する(1タップ)。終了を「なし」にすると、その時刻から記録中にする。
  * いまから(記録中のときの既定): タップで即開始(連続記録)。SNS・動画は「あと何分?」。チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。
  */
-function chipsSheet(n0, rerender, mode0 = null) {
+function chipsSheet(n0, rerender, mode0 = null, opts = {}) {
   const n = effNow();
   const o = log.openEntry(E());
   let mode = mode0 || (o ? 'now' : 'timed');
@@ -480,7 +532,7 @@ function chipsSheet(n0, rerender, mode0 = null) {
   const title = el('h2', '');
   const seg = el('div.seg', [['timed', '時刻を決めて'], ['now', 'いまから']].map(([k, label]) => el('button', { type: 'button', class: k === mode ? 'active' : '', onclick: (e) => { mode = k; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); show(); } }, label)));
   const show = () => {
-    title.textContent = mode === 'timed' ? 'いつ、何をしていた?' : (o ? `${catOf(o.categoryId).name} を記録中。次は?` : 'いま何してる?');
+    title.textContent = mode === 'timed' ? 'いつ、何をしていた?' : (o ? `${catOf(o.categoryId).name} を記録中。次は?` : (opts.title || 'いま何してる?')); // opts.title: 気合のあと(v0.25)
     timeBox.hidden = mode !== 'timed';
   };
   show();

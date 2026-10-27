@@ -727,12 +727,68 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(fbh.judged && typeof fbh.head === 'string' && fbh.head.endsWith('。') && !fbh.head.includes('(') && fbh.verdict.startsWith(fbh.head), 'dayFeedback(v0.24): head は判定の見出しだけ・verdict は head + 理由');
     ok(!/[぀-ヿ一-鿿]\s\d|\d\s[぀-ヿ一-鿿]/.test([fbh.verdict, ...fbh.good, fbh.better || '', fbh.next || ''].join('')), 'ふり返りの文(v0.24): 数字の前後にスペースが無い');
 
+    // ---- v0.25: 気合(F13) ----
+    log('\n# kiai(気合)');
+    {
+      const K = M.kiai; let kn = 0; const kctx = { uid: () => 'k' + (++kn), nowISO: () => '2026-10-28T09:00:00+09:00' };
+      let km = K.press({}, { date: '2026-10-28', min: 552, categoryId: 'research', entryId: 'e1' }, kctx);
+      ok(!km.dup && km.rec.time === '09:12' && km.rec.categoryId === 'research' && km.rec.entryId === 'e1' && km.kiai.k1 && km.kiai.k1.deletedAt === null, 'kiai.press: 時刻・カテゴリ・記録 id を持つ印を足す');
+      const dup = K.press(km.kiai, { date: '2026-10-28', min: 552 }, kctx);
+      ok(dup.dup && Object.keys(dup.kiai).length === 1 && dup.rec.id === 'k1', 'kiai.press: 同じ分に 2 回は 1 回(二重タップ・?kiai の二度開き)');
+      km = K.press(km.kiai, { date: '2026-10-28', min: 843 }, kctx);
+      km = K.press(km.kiai, { date: '2026-10-28', min: 1500 }, kctx);
+      km = K.press(km.kiai, { date: '2026-10-27', min: 600, categoryId: 'english' }, kctx);
+      const lst = K.listOf(km.kiai, '2026-10-28');
+      ok(lst.length === 3 && lst.map((r) => r.time).join(',') === '09:12,14:03,25:00' && K.listOf(km.kiai, '2026-10-26').length === 0, 'kiai.listOf: その日のものだけ時刻順(深夜 25:00 も)');
+      ok(K.line(lst, (id) => ({ research: '研究' })[id] || null) === '9:12 研究・14:03・25:00', 'kiai.line: 「9:12 研究・14:03・25:00」(先頭の 0 を落とす・カテゴリ無しは時刻だけ)');
+      const rm = K.remove(km.kiai, 'k2', kctx);
+      ok(rm.k2.deletedAt && K.listOf(rm, '2026-10-28').length === 2 && eq(K.remove(rm, 'nope', kctx), rm) && K.listOf(km.kiai, '2026-10-28').length === 3, 'kiai.remove: tombstone・無い id はそのまま・元は変えない');
+      const sm = K.summarize(km.kiai, '2026-10-22', '2026-10-28');
+      ok(sm.count === 4 && sm.days === 2 && sm.byDate['2026-10-28'] === 3 && sm.best.date === '2026-10-28' && sm.best.count === 3 && K.summarize(km.kiai, '2026-01-01', '2026-01-31').count === 0, 'kiai.summarize: 回数・日数・日ごと・最多の日');
+      const vk = S.validateKiai({ date: '2026-10-28', time: '09:12', categoryId: 'research', updatedAt: 'x' }, 'a');
+      ok(vk.id === 'a' && vk.date === '2026-10-28' && vk.time === '09:12' && vk.categoryId === 'research' && vk.entryId === null && vk.updatedAt === 'x' && vk.deletedAt === null
+        && S.validateKiai({ date: 'bad', time: '09:12' }, 'b') === null && S.validateKiai({ date: '2026-10-28', time: '9' }, 'c') === null, 'validateKiai: 日付と時刻が要る・id はキーから・任意の欄は null');
+      const kd = S.migrate({ schema: 1, settings: {}, kiai: { a: { date: '2026-10-28', time: '09:12' }, b: { date: 'x' }, __proto__: { date: '2026-10-28', time: '09:00' } } });
+      ok(Object.keys(kd.kiai).length === 1 && kd.kiai.a.id === 'a' && eq(S.defaultData().kiai, {}), 'migrate: kiai を検証して持つ・既定は空');
+      const ka = { ...S.defaultData(), kiai: { a: { id: 'a', date: '2026-10-28', time: '09:12', updatedAt: '2026-10-28T09:12:00+09:00' }, c: { id: 'c', date: '2026-10-28', time: '10:00', updatedAt: '2026-10-28T10:00:00+09:00', deletedAt: '2026-10-28T10:30:00+09:00' } } };
+      const kb = { ...S.defaultData(), kiai: { b: { id: 'b', date: '2026-10-28', time: '14:03', updatedAt: '2026-10-28T14:03:00+09:00' }, c: { id: 'c', date: '2026-10-28', time: '10:00', updatedAt: '2026-10-28T10:00:00+09:00' } } };
+      const kmg = Sy.merge(ka, kb);
+      ok(kmg.kiai.a && kmg.kiai.b && kmg.kiai.c.deletedAt && eq(kmg, Sy.merge(kb, ka)) && !Sy.pruneTombstones({ entries: {}, tasks: {}, kiai: { z: { deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-28T00:00:00+09:00').kiai.z, 'merge: 気合は id ごとの LWW・対称・古い削除は掃除');
+    }
+
+    // ---- v0.25: レビュー対応(A-1 時刻の比較・B-2 パスフレーズ) ----
+    log('\n# review v0.25');
+    {
+      ok(Sy.cmpStamp('2026-10-27T01:00:00+09:00', '2026-10-26T20:00:00-05:00') < 0 && Sy.cmpStamp('2026-10-26T20:00:00-05:00', '2026-10-27T01:00:00+09:00') > 0, 'cmpStamp(A-1): オフセットが違う印は実時刻で比べる(文字列では逆転していた)');
+      ok(Sy.cmpStamp('2026-10-27T09:00:00+09:00', '2026-10-27T00:00:00Z') === 0 && Sy.cmpStamp(null, '2026-10-27T00:00:00Z') < 0 && Sy.cmpStamp('b', 'a') > 0 && Sy.cmpStamp('', '') === 0, 'cmpStamp: 同時刻は 0・空は古い・日時でなければ文字列');
+      const za = { ...S.defaultData(), entries: { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '10:00', categoryId: 'research', updatedAt: '2026-10-27T01:00:00+09:00' } } };
+      const zb = { ...S.defaultData(), entries: { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '10:00', categoryId: 'english', updatedAt: '2026-10-26T20:00:00-05:00' } } };
+      ok(Sy.merge(za, zb).entries.e.categoryId === 'english' && Sy.merge(zb, za).entries.e.categoryId === 'english', 'merge(A-1): タイムゾーンをまたいだ更新でも実時刻が新しい方が勝つ');
+      const zs = { ...S.defaultData(), settings: { ...S.defaultSettings(), dayStart: '02:00', fieldStamps: { dayStart: '2026-10-27T01:00:00+09:00' } } };
+      const zt = { ...S.defaultData(), settings: { ...S.defaultSettings(), dayStart: '03:00', fieldStamps: { dayStart: '2026-10-26T20:00:00-05:00' } } };
+      ok(Sy.merge(zs, zt).settings.dayStart === '03:00' && Sy.merge(zt, zs).settings.dayStart === '03:00', 'mergeSettings(A-1): スカラー設定の印も実時刻で比べる');
+      const rs = { ...S.defaultData(), meta: { ...S.defaultData().meta, resetAt: '2026-10-27T01:00:00+09:00' }, entries: {} };
+      const rt = { ...S.defaultData(), entries: { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '10:00', categoryId: 'research', updatedAt: '2026-10-26T20:00:00-05:00' } } };
+      ok(Sy.merge(rs, rt).entries.e && !Sy.merge(rs, { ...rt, entries: { e: { ...rt.entries.e, updatedAt: '2026-10-26T10:00:00-05:00' } } }).entries.e, 'merge(A-1): resetAt の世代もオフセットをそろえて比べる');
+      ok(!Sy.pruneTombstones({ entries: { a: { deletedAt: '2026-08-01T00:00:00+09:00' }, b: { deletedAt: '2026-10-20T00:00:00-05:00' } }, tasks: {} }, '2026-10-27T00:00:00+09:00').entries.a && Sy.pruneTombstones({ entries: { a: { deletedAt: '2026-08-01T00:00:00+09:00' }, b: { deletedAt: '2026-10-20T00:00:00-05:00' } }, tasks: {} }, '2026-10-27T00:00:00+09:00').entries.b, 'pruneTombstones(A-1): 削除の時刻も実時刻で比べる');
+      ok(Sy.passIssue('abc') && Sy.passIssue('aaaaaaaa') && Sy.passIssue('12345678') && Sy.passIssue('87654321') && Sy.passIssue('password1') && Sy.passIssue('qwertyui'), 'passIssue(B-2): 短い・同じ文字・連番・推測されやすい言葉は弾く');
+      ok(Sy.passIssue('tsukue-no-ue-no-neko') === null && Sy.passIssue('Asahi7!Kaze') === null, 'passIssue: ふつうのパスフレーズは通る');
+      const enc600 = await Sy.encrypt({ a: 1 }, 'tsukue-no-ue-no-neko', '', { iterations: 1000 });
+      ok(JSON.parse(enc600).kdf === 'PBKDF2-SHA256-1000' && (await Sy.decrypt(enc600, 'tsukue-no-ue-no-neko')).a === 1, 'encrypt/decrypt: kdf の回数をファイルから読む(310k で保存した古いファイルもそのまま開ける)');
+      ok(typeof W.M.loadNews === 'function', 'window.M は localhost で公開(A-7)');
+    }
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
     ok(sw.includes(`'merihari-v${M.APP_VERSION}'`), `sw.js の CACHE 名が APP_VERSION(${M.APP_VERSION})と一致`);
-    ok(M.NEWS && M.NEWS[0] && M.NEWS[0].v === M.APP_VERSION, 'NEWS の先頭が APP_VERSION');
-    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary', 'money', 'ui-money', 'ai']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
+    const news = await (await fetch('../news.json', { cache: 'no-store' })).json();
+    ok(Array.isArray(news) && news[0] && news[0].v === M.APP_VERSION && news.every((n) => typeof n.v === 'string' && typeof n.text === 'string'), 'news.json の先頭が APP_VERSION(v0.25: NEWS は news.json へ)');
+    ok(sw.includes(`'./news.json'`), 'sw.js の ASSETS に news.json がある');
+    const idx = await (await fetch('../index.html', { cache: 'no-store' })).text();
+    ok(!/<main[^>]*aria-live/.test(idx) && /object-src 'none'/.test(idx) && /name="color-scheme"/.test(idx) && /<noscript>/.test(idx), 'index.html(C-1/B-3/C-5): main に aria-live 無し・CSP に object-src・color-scheme・noscript');
+    ok(!/caches\.match\('\.\/index\.html'\)\)/.test(sw) && /mode === 'navigate'/.test(sw), 'sw.js(A-3): index.html へのフォールバックは navigate だけ');
+    for (const f of ['main', 'store', 'time', 'log', 'plan', 'report', 'palette', 'ui-report', 'google', 'sync', 'passkey', 'ui', 'ui-today', 'ui-tasks', 'ui-settings', 'diary', 'ui-diary', 'money', 'ui-money', 'ai', 'kiai']) ok(sw.includes(`'./js/${f}.js'`), `sw.js の ASSETS に js/${f}.js がある`);
 
     // ---- 画面(骨組み) ----
     log('\n# ui');

@@ -136,6 +136,9 @@ export function clockSheet(value, { onpick, allowEmpty = false, title = null } =
 }
 
 let toastTimer = null;
+/** 開発・テストの印(v0.25・レビュー A-7/B-4): localhost か ?test のときだけ window.M と クライアント ID の上書き欄を出す */
+export const DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || new URLSearchParams(location.search).has('test');
+
 export function toast(msg) {
   const t = document.getElementById('toast');
   if (!t) return;

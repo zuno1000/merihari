@@ -7,6 +7,7 @@ import * as log from './log.js';
 import * as plan from './plan.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
+import * as kiaiMod from './kiai.js';
 import * as ai from './ai.js';
 import * as sync from './sync.js';
 import { dateKey, minuteOfDay, windowFor, fmtMD, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
@@ -93,7 +94,8 @@ export function renderDiary(view, ctx, dateArg = null) {
   const agg = report.aggregate({ entries: E(), date, nowMin, settings: S() });
   const fb = report.dayFeedback(agg, { tasks: T(), entries: E(), date, settings: S(), nowMin, planBlocks: store.state.data.planBlocks });
   const gs = plan.goals(T(), E(), date, nowMin);
-  const seeds = diary.seeds({ agg, fb, gs, prev: Dy()[addDays(date, -1)], categories: S().categories });
+  const kl = kiaiMod.listOf(store.state.data.kiai, date); // v0.25・F13: 気合の回数も材料に
+  const seeds = diary.seeds({ agg, fb, gs, prev: Dy()[addDays(date, -1)], categories: S().categories, kiai: { count: kl.length, text: kiaiMod.line(kl, (id) => S().categories.find((c) => c.id === id)?.name || null) } });
   const fields = {};
   const field = (key, label, placeholder) => {
     const ta = growArea(draft[key], placeholder, (v) => { draft[key] = v; queue(); });

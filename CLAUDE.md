@@ -16,7 +16,7 @@
 - 素の HTML/CSS/JS(ES2020+)、ビルド無し、npm 依存ゼロ。`js/` は役割別(main/store/time/plan/log/report/ui-*/google/sync)。
 - ユーザー文字列は textContent で描画。innerHTML にユーザー入力を入れない。
 - 純関数は `window.M` に載せ `tests/index.html`(iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件)で検証。
-- 版: `APP_VERSION`(js/main.js)・NEWS(設定内)・`sw.js` の CACHE 名を同じコミットで更新。
+- 版: `APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新(tests が一致を確認)。
 - ローカル確認: `python -m http.server 8000` → http://localhost:8000(file:// では SW 不可)。
 - `*{touch-action:manipulation}`。毎秒 innerHTML しない(秒は textContent のみ)。幅 390px を確認。
 

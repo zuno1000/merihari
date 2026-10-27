@@ -107,6 +107,7 @@ export function defaultData() {
     wants: {},   // v0.20: ほしいもの(id → { id, name, price, targetDate, categoryId, note, doneAt, updatedAt, deletedAt })
     planBlocks: {}, // v0.23: 自分で置く予定(id → { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt })。自動生成はしない(F12)
     busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
+    kiai: {},    // v0.25: 気合(F13・id → { id, date, time:'HH:MM', categoryId|null, entryId|null, updatedAt, deletedAt })。「気合を入れた」瞬間の印。ワンタップ・中身は持たない
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -275,6 +276,11 @@ export function validateBusyNote(r, id) {
   if (!m || !isDate(m[1]) || +m[2] >= 1440) return null;
   return { ...stripUnsafe(r), id: `${m[1]}:${+m[2]}`, date: m[1], start: +m[2], text: str(r.text, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
+/** 気合(v0.25・F13): 日付と時刻('HH:MM'・深夜は 30:00 まで)。カテゴリ・記録の id は任意(押したとき記録中だったもの) */
+export function validateKiai(r, id) {
+  if (!isObj(r) || !isDate(r.date) || !isHM(r.time)) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: r.time, categoryId: optStr(r.categoryId, 40), entryId: optStr(r.entryId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 /** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
@@ -306,6 +312,7 @@ export function migrate(raw) {
   out.wants = cleanMap(raw.wants, validateWant);
   out.diary = cleanMap(raw.diary, validateDiary);
   out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
+  out.kiai = cleanMap(raw.kiai, validateKiai); // v0.25
   out.busyNotes = {}; for (const [k, v] of Object.entries(cleanMap(raw.busyNotes, validateBusyNote))) if (!out.busyNotes[v.id] || k === v.id) out.busyNotes[v.id] = v; // v0.22: キーは id(日付:開始分)
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };

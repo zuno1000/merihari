@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:; style-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; upgrade-insecure-requests">
+<meta name="description" content="メリハリ ─ ワンタップで実績を記録し、日次レポートでふり返る個人用の時間管理 PWA(サーバー無し・データは端末と暗号化した Drive だけ)">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="メリハリ">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161718" media="(prefers-color-scheme: dark)">
 <title>メリハリ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
@@ -15,9 +19,10 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<main id="view" aria-live="polite"></main>
+<noscript><p style="padding:24px;font-family:system-ui,sans-serif">メリハリは JavaScript が必要です。ブラウザの設定で有効にしてください。</p></noscript>
+<main id="view"></main>
 <nav id="tabs" aria-label="画面">
-  <button type="button" data-tab="now" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></svg><span>ホーム</span></button>
+  <button type="button" data-tab="now" class="on" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></svg><span>ホーム</span></button>
   <button type="button" data-tab="timeline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M9 6h10M9 12h7M9 18h10"/></svg><span>タイムライン</span></button>
   <button type="button" data-tab="tasks"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg><span>タスク</span></button>
   <button type="button" data-tab="money"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l5 7 5-7M12 11v9M8 14h8M8 17h8"/></svg><span>お金</span></button>

@@ -1,6 +1,6 @@
 // merihari ─ ui-settings.js: 初回ウィザード(3ステップ・既定値で「次へ」3回)と設定画面(仕様書 §4.3)
 // 設定画面は「一覧(ラベル+いまの値)→ 行をタップで項目ごとの編集画面」。編集部品はウィザードと共有する。
-import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField } from './ui.js';
+import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField, DEV } from './ui.js';
 import * as store from './store.js';
 import { hm, dayStartMin, mm } from './time.js';
 import { EXTRA_COLORS, PALETTES } from './palette.js';
@@ -260,7 +260,24 @@ function sectionKinds(rerender) {
     addBtn('種別を追加', () => { s.kinds.push({ id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false }); store.touchSettings(); rerender(); }));
 }
 
-const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }; // v0.25: 日付と時刻の間の空き(スペース除去で消えて「10/2723:41」になっていた)
+/** JSON の書き出し(F8-4)。v0.25(レビュー D): 最後の書き出しの時刻を端末に控え、30 日たつとホームに 1 行(パスフレーズを忘れると Drive 側は戻せないため) */
+export function exportJSONFile() {
+  const b = new Blob([store.exportJSON()], { type: 'application/json' });
+  const a = el('a', { href: URL.createObjectURL(b), download: `merihari-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.appendChild(a); a.click(); a.remove();
+  store.state.local.lastExportAt = Date.now(); store.saveLocal();
+  toast('書き出しました');
+}
+export const EXPORT_REMIND_DAYS = 30;
+/** 書き出しを促すか(純関数): 記録が 14 日以上あり、最後の書き出しから 30 日以上(一度も無ければ最初の記録から 30 日以上) */
+export function shouldRemindExport({ firstDate, today, lastExportAt, now }) {
+  if (!firstDate || !today) return false;
+  const days = Math.round((Date.parse(today) - Date.parse(firstDate)) / 86400000);
+  if (days < 14) return false;
+  const since = lastExportAt ? (now - lastExportAt) / 86400000 : days;
+  return since >= EXPORT_REMIND_DAYS;
+}
 function sectionGoogle(rerender) {
   const local = store.state.local;
   const connected = google.isConnected();
@@ -291,7 +308,7 @@ function sectionGoogle(rerender) {
       sync.getPass() ? el('button.btn.ghost', { type: 'button', onclick: () => { sync.forgetPass(); toast('忘れました'); rerender(); } }, 'このセッションから忘れる') : null,
     ]) : null,
     connected ? el('p.muted.small', 'パスフレーズは通常このセッションの間だけ記憶します。「顔認証 / パスキー」を有効にすると、この端末のパスキー(Face ID・指紋・Windows Hello など)の中の秘密でパスフレーズを包んで保存し、次回からは認証だけで同期できます(パスフレーズそのものは保存しません。古いブラウザでは使えません)。') : null,
-    el('details', [el('summary.muted.small', 'クライアント ID を上書き(通常は不要)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]));
+    DEV ? el('details', [el('summary.muted.small', 'クライアント ID を上書き(開発用)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]) : null); // v0.25(レビュー B-4): localhost / ?test のときだけ
 }
 
 /**
@@ -356,8 +373,10 @@ function sectionHelp() {
     li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。タイムラインでは記録の無いところにだけ薄く描き(記録したら消えます)、過去なら「予定の時間は?」で記録でき、そのとき選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '同期の決まり: 記録とタスクは1件ごとに新しい方。カテゴリ・種別・配色セットも1つごとに統合します(片方の端末にしか無いものは消えず、両方にあれば最後に変えた方)。初期設定だけの端末と同期しても、元の端末のカテゴリは消えません。設定 › データ に「同期前の設定に戻す」があり、同期でカテゴリなどが変わったときは直前の設定を1つ控えています。', '顔認証 / パスキー(任意): 設定 › Google で有効にすると、この端末のパスキーの中の秘密でパスフレーズを包んで保存し、次回からは Face ID・指紋・Windows Hello などで解錠して同期します。パスフレーズそのものは保存しません。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズ(またはパスキー)を聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。']),
     h('AI(ショートカット・任意)'),
     li(['設定 › AI で有効にすると、日記の下に「AI に頼む」のカードが出ます。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の3行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を押すと、読んでから日記のメモに追記できます。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
-    h('ショートカット(記録)'),
-    li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了(iOS のショートカットから)。']),
+    h('気合'),
+    li(['ホームの上の「気合を入れる」は、やる気がいることに取りかかるとき(取りかかったとき)に押すだけのボタンです。入力はありません。押した瞬間に残り、記録中でなければそのまま「何を始める?」が開きます(閉じても印は残ります)。', 'きょうの回数と時刻がボタンの横に出ます(タップで一覧・消す)。レポート「今日」と 7 日 / 30 日、日記の材料にも出ます。押さない日があっても何も言いません。', 'いちばん速いのは ?kiai=1 をホーム画面やショートカットに置くこと: 開いた瞬間に押したことになります(下の「ショートカット」)。']),
+    h('ショートカット(記録・気合)'),
+    li(['?log=研究 でそのカテゴリの記録を開始、?log=stop で終了、?kiai=1 で気合(iOS のショートカットやホーム画面のブックマークから)。外部サイトのリンクからは効きません。']),
   ]);
 }
 
@@ -450,12 +469,23 @@ export function renderSettings(view, ctx, section = null) {
   const fileInput = el('input', { type: 'file', accept: 'application/json', hidden: true, onchange: async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try {
+      if (f.size > 8 * 1024 * 1024) throw new Error('ファイルが大きすぎます(8MB まで)'); // v0.25(レビュー A-5): decrypt と同じ上限
       const obj = JSON.parse(await f.text());
       confirmSheet('読み込みますか?', 'この端末のデータをファイルの内容で置き換えます。', '読み込む', () => { store.importData(obj); toast('読み込みました'); ctx.go('settings'); }, true);
     } catch (err) { toast('読み込めません: ' + err.message); }
     e.target.value = '';
   } });
-  const newsBox = el('div.list.news-box', { hidden: true }, ctx.news.map((n) => el('div.srow.plain', [el('span.lbl', `v${n.v}`), el('span.val.left', n.text)])));
+  // v0.25(レビュー A-6): 更新履歴は news.json。開いたときだけ読む
+  const newsBox = el('div.list.news-box', { hidden: true });
+  let newsLoaded = false;
+  const toggleNews = async () => {
+    newsBox.hidden = !newsBox.hidden;
+    if (newsBox.hidden || newsLoaded) return;
+    try { const list = await ctx.news(); clear(newsBox); newsBox.append(...list.map((n) => el('div.srow.plain', [el('span.lbl', `v${n.v}`), el('span.val.left', n.text)]))); newsLoaded = true; }
+    catch (e) { clear(newsBox); newsBox.append(el('div.srow.plain', el('span.val.left', `読めませんでした: ${e.message}`))); }
+  };
+  const dataBytes = (() => { try { return (localStorage.getItem(store.KEY) || '').length; } catch { return 0; } })(); // v0.25(レビュー A-4): 文字数 ≒ バイト(UTF-16 で 2 倍だが目安)
+  const fmtKB = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.round(n / 1024)}KB`);
   view.append(
     el('h1', '設定'),
     group(null, [srow('使い方', null, open('help'))]),
@@ -470,11 +500,11 @@ export function renderSettings(view, ctx, section = null) {
     group('お金・日記', [srow('お金', summary.money(), open('money')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
-      srow('書き出し(JSON)', null, () => {
-        const b = new Blob([store.exportJSON()], { type: 'application/json' });
-        const a = el('a', { href: URL.createObjectURL(b), download: `merihari-${new Date().toISOString().slice(0, 10)}.json` });
-        document.body.appendChild(a); a.click(); a.remove();
+      srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後の書き出し ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {
+        exportJSONFile();
+        ctx.go('settings');
       }),
+      srow('データの大きさ', `${fmtKB(dataBytes)}(端末内の上限はおよそ 5MB)`, null), // v0.25(レビュー A-4)
       srow('読み込み(JSON)', null, () => fileInput.click()), fileInput,
       store.state.local.settingsBackup ? srow('同期前の設定に戻す', `${fmtTs(Date.parse(store.state.local.settingsBackup.at))} の控え`, () => confirmSheet('同期前の設定に戻しますか?', 'カテゴリ・種別・配色・作業時間帯などを、直近の同期の前の状態に戻します(記録やタスクはそのまま)。戻した設定は次の同期で他の端末にも広がります。', '戻す', () => {
         const bk = store.state.local.settingsBackup;
@@ -491,7 +521,7 @@ export function renderSettings(view, ctx, section = null) {
     ]),
     group('アプリ', [
       srow('バージョン', `v${ctx.version}・タップで更新を確認`, () => ctx.checkUpdate()),
-      srow('更新履歴', null, () => { newsBox.hidden = !newsBox.hidden; }), newsBox,
+      srow('更新履歴', null, toggleNews), newsBox,
       srow('初期設定をやり直す', null, () => { d.meta.setupAt = null; store.save(); ctx.go('settings'); }),
     ]),
   );

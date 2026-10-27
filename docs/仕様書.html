@@ -207,6 +207,7 @@ v0.13.4 改訂(ユーザー FB「23:40〜0:10 が直せない」「切れ目の�
 <p class="rev"><b>v0.18 改訂(2026-10-16・実機 FB ⑨ 日記):</b> <b>F9(新)日記</b>。タブ「設定」を「日記」に替え、設定はホーム右上の歯車(§2-1 改訂)。データ <code>diary[date] = { date, mood(1〜5|null), good, hard, tomorrow, note, updatedAt, deletedAt }</code>(store.validateDiary・同期は日付ごとに updatedAt の LWW・tombstone 60 日・Drive は従来どおり端末側暗号化)。画面(§4.4): ‹ 日付 ›(未来は無し)→ 気分 5 つ(タップ・もう一度で外す)→ 3 行(よかったこと / ひっかかったこと / 明日は)→ メモ(折りたたみ)→ 「きょうの材料」(<code>diary.seeds</code>: 昨日の「明日は」→ 作業の合計といちばん多いカテゴリ → 済ませた習慣/タスク/用事 → ふり返りの肯定 2 件・良くするには(ひっかかったこと欄)・明日は(明日は欄)→ 期限つきの明日の分・残った用事。最大 8 件・タップで欄に追記・使ったチップは薄く)→ 続いた日数(<code>diary.streak</code>・きょう未記入でも昨日から数える)と最近 14 日の一覧(気分の点・1 行目)。入力は 500ms 後に自動保存(<code>diary.isWritten</code> が偽になれば tombstone)。レポート「今日」に抜粋(気分・3 行・「開く ›」)、無ければ 1 日の終わり近く(作業時間帯の終わり 2 時間前〜・確定済み・過去の日)だけ「この日の日記を書く ›」。ホームは同じ時間帯に「きょうの日記 › 1 行だけ書く」の 1 行(書けば消える)。文言は責めない(「なければ空でいい」「1 行でも書いた日」)。設計の参考: 小林弘幸「3 行日記」(失敗・感動・明日の目標)/ Five Minute Journal(夜: うまくいったこと・良くするには)/ Daylio(気分のタップ・連続日数)/ Apple ジャーナル(その日の活動からの提案)/ Day One(一覧と連続記録)。テスト 284 件。</p>
 <p class="rev"><b>v0.19 改訂(2026-10-16・実機 FB ⑦ お金):</b> <b>F10(新)お金</b>。タブ中央の ＋ を「お金」に替え、記録の ＋ はホーム左上(today-head の左)とタイムライン右上(tl-nav)へ(<code>ui-today.addButton</code>・記録中は ●・<code>refreshAddButton</code> は .add-btn を全部揃える)。データ <code>money[id] = { id, date(暦日), time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }</code>(store.validateMoney・id ごとに updatedAt の LWW・tombstone 60 日)。<code>settings.moneyCategories</code>(既定 10: 食費/日用品/交通/交際/趣味/学び/医療・健康/固定費/その他/収入(income:true)・id ごとに統合・非表示方式)と <code>settings.budget.monthMax</code>(項目の印で同期・F7-8)。画面(§4.5): ‹ 年月 ›(未来は無し)→ まとめ(支出を大きく・収入・予算があれば <code>money.budgetStatus</code> の「残り ◯円・1 日 ◯円 まで(あと ◯日)」のメーター、無ければ <code>perDayAverage</code>)→ 2 タップ入力(金額 → カテゴリのチップで保存。日時は「きょう・いま」が既定、タップで きょう/きのう/おととい/日付 と時刻)→ 内訳の円とカテゴリ別の棒 → 日ごとの一覧(<code>groupByDay</code>・タップで編集/削除)→ 月ごとの推移(<code>monthlyTrend</code>・折りたたみ)。<b>タイムラインとの紐づけ</b>: 保存時に <code>money.linkEntry(entries, date, time)</code> でその時刻の記録(前の日の深夜 24:xx も)を entryId に持ち、一覧に「研究の最中」、タイムラインのブロックに ¥ の印(<code>totalsByEntry</code>)、レポート「今日」の表に支出の行(<code>ui-money.daySpendLine</code>)。お金は暦日で扱う(1日の切れ目は使わない)。設計の参考: おカネレコ(金額 → カテゴリの 2 秒入力)、Zaim(月予算・残り・1 日あたり)、調査「続かない要因 1 位はカテゴリ分類」(カテゴリは少なく・自由に増減)。テスト 303 件。</p>
 <p class="rev"><b>v0.20.1 改訂(2026-10-16):</b> ほしいものが 0 件のときのシートに「null」(wantsSheet の body.append に null・v0.20 の規約どおり filter(Boolean))。金額欄の下線とメモ欄の間隔(14px)。お金タブ内の補足説明(予算の案内・2 タップの案内・ほしいものの説明)を消し、設定 › 使い方 に「お金」「日記」の項を追加(§2-3 文字を減らす)。</p>
+<p class="rev"><b>v0.25 改訂(2026-10-27・外部レビュー対応+F13 気合):</b> Mythos によるコードレビュー(機能 A-1〜A-7・セキュリティ B-1〜B-6・UI C-1〜C-7・運用 D)に対応。<b>A-1</b> 同期の時刻の印の比較を文字列から実時刻(<code>sync.cmpStamp</code>: ISO なら Date.parse・それ以外は文字列)に。保存形式(ローカルオフセット付き)は変えない(日付の切り出しに使っている箇所があるため)。later / pick / fresh / mergeSettings(項目・fieldStamps)/ pruneTombstones が対象。<b>A-2</b> syncDrive をループにし、upload 直前に <code>files.get(modifiedTime)</code> で取得時と比べ、違えば download → merge からやり直す(最大 3 回)。<b>A-3</b> SW の index.html フォールバックは <code>mode==='navigate'</code> だけ。あわせてネットワーク待ちを 2 秒で見切る(F13-3)。<b>A-4</b> 設定 › データ に「データの大きさ」。<b>A-5</b> 読み込みは 8MB まで。<b>A-6</b> NEWS を <code>news.json</code> に分離(設定 › 更新履歴 を開いたときだけ fetch・SW の ASSETS に追加・版規約のテストは news.json を読む)。<b>A-7/B-4</b> <code>window.M</code> とクライアント ID の上書き欄は <code>ui.DEV</code>(localhost か ?test)のときだけ。<b>B-1</b> 見送り(§12)。<b>B-2</b> PBKDF2 600,000 回・<code>passIssue</code>・12 文字以上をおすすめ(8 文字の最小は既存のパスフレーズのため据え置き)。<b>B-3</b> CSP に object-src 'none' / base-uri / form-action / manifest-src / upgrade-insecure-requests。<b>B-5</b> ?log= / ?kiai= は referrer が別 origin なら無視。<b>C-1</b> main の aria-live を外す。<b>C-2</b> ボタン類に :focus-visible(入力欄は従来どおり下線で示す)。<b>C-3</b> --muted #7a7f8c → #6b7080(4.6:1)・--accent #4f8fdc → #2f6fc0(5.0:1・白文字 5.0:1)。<b>C-4</b> aria-current="page"・タブ 11px。<b>C-5</b> color-scheme・ダークの theme-color・mobile-web-app-capable・noscript・description。<b>C-6</b> prefers-reduced-motion で transition/animation を止める。<b>D</b> 書き出しの時刻を端末に控え、記録 14 日以上かつ 30 日書き出していなければホームに 1 行(<code>shouldRemindExport</code>)。<b>F13 気合</b>(新): 上の F13 と §7。テスト 359 → 382。</p>
 <p class="rev"><b>v0.24.2 改訂(2026-10-27・UI の磨き):</b> ユーザー提示の記事(mexess「UI デザイン参考ギャラリーサイト 5 選」: UI Pocket / UI Library / Parts. / Mobbin / Figma Community)は参考サイトの紹介で原則は載っていないため、ギャラリーで多数派の定石と iOS HIG(44pt のタップ領域・8pt グリッド・本文 17pt・空の状態)に照らして 390px のスクリーンショット 8 画面を点検。直したもの: シートのつまみ(<code>.sheet::before</code>)、＋ のシートのチップ群の見出し(タスク / カテゴリ)、タスク画面の空の区分を出さない(タスクが無いときだけ案内 1 行)、日付の ‹ › とチップのタップ領域(40px / 36px)、記録中カードの数字の頭ぞろえ、タグ 11px。見送ったもの: 文字サイズの体系の統一(9〜44px の 20 段階 → 影響範囲が広い・実機 FB が無い)、ホームの「1h30m」と「1時間30分」の混在(幅の都合で意図的)、ダークモードの点検(ヘッドレスで再現できず・実機で)。</p>
 <p class="rev"><b>v0.24.1 改訂(2026-10-27・実機 FB 2 点):</b> ①レポートのタイルを <b>作業 / 決まった作業 / ダラダラ</b> に固定(作業の種別は settings.kinds の work:true を設定の順で・0 でも出す。記録率は「くわしく」のタイルへ)。②<b>実態に合わない説明と残骸の点検</b>: 使い方(ホーム「左上の ＋」・タイムライン「右上の ＋」→ 右下、レポートの比べる相手に 1 日の目標と予定)、README(理想スケジュール時代の v0.6 の説明 → 現状)、§4 見出し「4画面」→「5タブ+設定」、§2-1 の ＋ の位置、URL パラメータ <code>?ctx=</code>(v0.3 の外出判定・未使用)を撤去、CSS の旧 FAB を隠す規則(<code>.fab{display:none}</code>・v0.24 の右下 ＋ を隠していたので削除)。点検して問題なしと判断したもの: 旧データ(plans・ledger)は同期のため保持、NEWS は履歴として残す、F1-8 の ?log= は使用中。</p>
 <p class="rev"><b>v0.24 改訂(2026-10-27・実機 FB 5 点):</b> ①<b>F12-1 改: カレンダーの予定の上にも予定</b>。予定(busy)のメモのシートに「この時間に予定を置く(カテゴリ・タスク)」→ planSheet(開始〜終了は busy の区間)。②<b>F1-5/F1-7 改: 時計で決めた時刻はそのまま</b>。entrySheet / chipsSheet で開始か終了を時計で変えたときは closeSmallGaps(すき間の吸収)を通さない(<code>addClosed({ tidy:false })</code>・<code>startCategory(…, { tidy:false })</code>)。既定の時刻(最後の記録の終わり〜いま・未記録の区間)のままなら従来どおり吸収。実機 FB「前日の後入力で ✕時が反映されない」への対処(原因の候補: すき間の吸収で開始が前の記録の終わりに揃っていた。再発したら日付と時刻を控えてもらう)。③<b>F3 改: パッと見</b>。<code>dayFeedback</code> が <code>head</code>(判定の見出しだけ)を返し、レポート「今日」は 見出しを大きく・理由(reasons)を小さく(古い確定レポートは verdict を '(' で分ける)。その下に <code>glance</code>: 作業の種別ごと(作業 / 決まった作業 … work:true の種別を分けて)・ダラダラ・記録率 のタイル。数字の前後のスペースを UI の文から消した(report / ui-report / ui-today / ui-tasks / diary / ui-diary / ui-money / money / ai / ui-settings / plan・テストも同じ規則)。④<b>F9-7(新)あのころのきょう</b>: <code>diary.memories</code>(1 週間前・1 か月前・1 年前に書いた日)を日記の一覧の上に。<b>F3-12(新)気分の推移</b>: レポート 7 日 / 30 日に日記の気分の棒(<code>diary.summarize</code>・書いた日数・平均・いちばん良かった日)。調査: muute(週・月のインサイト、ムードフロー、毎日の問い)・Daylio(2 タップ記録、気分グラフ、Year in Pixels、連続日数)・Day One(On This Day、朝/夜のテンプレ)。取り入れたのは ムードフロー → 気分の推移、On This Day → あのころのきょう。毎日の問い・連続日数・2 タップは既にある(材料・続いた日数・お金)。AI の手紙は F11 で任意。⑤<b>§2-1 / §4.1 改: 記録の ＋</b>。タイムライン上部の ＋ は右下の丸ボタン(<code>.add-btn.fab</code>・記録中は ●)に。「今日」や 戻す/やり直す の数が入っても上部がはみ出さない。ホーム左上の ＋ は廃止(使われなかった)。記録の入口は タイムライン右下の ＋・未記録の「この時間は?」・ホームの内訳の行・タスクの ▶・予定の「いまから」。テスト 355 → 359。</p>
@@ -409,7 +410,7 @@ v0.7 追加(tangoquest 方式): <b>開いたとき・戻ったとき</b>は未�
 <h3>F8. PWA・オフライン・端末連携 <span class="tag must">MUST</span></h3>
 <ul>
 <li>F8-1 manifest + Service Worker(ネットワーク優先・キャッシュ名 <code>merihari-vN</code>)。オフラインでも記録・plan 生成・レポートが動く(Google 連携だけ不可)。</li>
-<li>F8-2 設定に「アップデートを確認」(ホーム画面起動は SW 更新が届きにくい)。<code>APP_VERSION</code>・NEWS・キャッシュ名を同時更新する規約(§10)。</li>
+<li>F8-2 設定に「アップデートを確認」(ホーム画面起動は SW 更新が届きにくい)。<code>APP_VERSION</code>・news.json(v0.25 までは main.js の NEWS)・キャッシュ名を同時更新する規約(§10)。</li>
 <li>F8-3 iOS: <code>*{touch-action:manipulation}</code>、スタンドアロン表示、ダークモード対応。振動 API・定時通知は無い前提(ショートカット/時計で代替し README に明記)。</li>
 <li>F8-4 データの書き出し/読み込み(JSON)、端末データ消去。</li>
 </ul>
@@ -460,6 +461,18 @@ v0.7 追加(tangoquest 方式): <b>開いたとき・戻ったとき</b>は未�
 <tr><td>F12-5</td><td>データ・同期: <code>data.planBlocks[id]</code>(§7)。記録と同じ id ごとの updatedAt の LWW・tombstone 60 日。旧 <code>plans</code> は触らない。</td><td>MUST</td></tr>
 </table>
 
+<h3>F13. 気合(ワンタップのスイッチ) <span class="tag should">SHOULD</span>(v0.25)</h3>
+<p class="note">やる気がいることに「気合を入れて取りかかる(取りかかった)」瞬間の印。目的は 2 つ: ①後から「きょうはこれだけ気合を入れた」と見返せる ②押す動作そのものを取りかかりのスイッチにする。<b>押すためにやる気が要る設計にしない</b>(入力無し・1 タップ・起動の待ちを短く・押さない日を責めない)。</p>
+<table>
+<tr><th>ID</th><th>要件</th><th>優先</th></tr>
+<tr><td>F13-1</td><td>押す: ホームの日付の下(主役のカードより上)に「気合を入れる」。押した瞬間に保存してトースト(「気合、入った(n 回目)」)。入力・確認は無し。記録中ならそのカテゴリと記録 id を添える(「◯◯ を続ける」)。</td><td>MUST</td></tr>
+<tr><td>F13-2</td><td>取りかかりへ: 記録中でなければ、そのまま記録のシート(いまから・見出し「気合、入った。何を始める?」)を開く。閉じても印は残る。同じ分に 2 回は 1 回(<code>kiai.press</code> の dup)。</td><td>MUST</td></tr>
+<tr><td>F13-3</td><td>速さ: <code>?kiai=1</code> で起動と同時に押したことになる(ホーム画面のブックマーク・ショートカット)。Service Worker はネットワークを最長 2 秒で見切ってキャッシュから出す(起動が電波で止まらない)。外部サイトからのリンク(referrer が別 origin)は無視(?log= も同じ)。</td><td>MUST</td></tr>
+<tr><td>F13-4</td><td>見返す: ホームにきょうの回数と時刻の 1 行(「きょう 3 回・9:12 研究・14:03・20:30」。タップで一覧・消す)。レポート「今日」に「気合 n 回: …」、7 日 / 30 日に回数・日数・最多の日(<code>kiai.summarize</code>)。日記の材料に「気合を n 回入れた(…)」。押していない日は何も出さない。</td><td>SHOULD</td></tr>
+<tr><td>F13-5</td><td>データ・同期: <code>data.kiai[id] = { id, date, time:'HH:MM', categoryId|null, entryId|null, updatedAt, deletedAt }</code>(§7)。記録と同じ id ごとの LWW・tombstone 60 日。純関数は <code>js/kiai.js</code>(listOf / press / remove / summarize / line)。</td><td>MUST</td></tr>
+</table>
+
+<!-- ============================================================ -->
 <h2 id="s6">6. アルゴリズム仕様</h2>
 <p class="note bad">v0.15: §6.1(使える時間 usableMin/workableMin)・§6.2(plan 生成)・§6.3(外出判定)・§6.6(割合の校正)・§6.7(ヒーローの状態機械)は<b>廃止</b>(time.js から routinesFor/usableMin/workableMin を削除)。§6.4 は「残り ÷ 期限までの日数」に置き換え(F5-2)。§6.5 は F3 の注記のとおり改訂。新しい純関数: <code>plan.goals(tasks, entries, date, nowMin)</code>(期限 → 毎日 → 毎週 → やりたい の順に {targetMin, doneMin, done})、<code>plan.loggedBetween</code>、<code>plan.weekRange</code>、<code>plan.lastLoggedDate</code>、<code>plan.daysBetween</code>、<code>report.idleWishes</code>。以下は歴史として残す。</p>
 
@@ -599,6 +612,8 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
   "ledger":  { "2026-10-10": {"usableMin":540,"workMin":230} },
   "meta":    { "resetAt": null, "lastSyncAt": null, "appVersion":"0.1.0" }
 }
+// v0.25: "kiai": { "<id>": { "id":"…","date":"2026-10-28","time":"09:12","categoryId":"research"|null,"entryId":"…"|null,"updatedAt":"…","deletedAt":null } }(気合・F13)
+// v0.25: updatedAt などの印はローカルオフセット付き ISO のまま。同期の比較は Date.parse の実時刻(sync.cmpStamp)。文字列比較はしない(タイムゾーンが違う端末で逆転するため・レビュー A-1)
 // v0.23: "planBlocks": { "<id>": { "id":"…","date":"2026-10-27","start":"09:00","end":"10:00","categoryId":"research","taskId":null,"note":"","updatedAt":"…","deletedAt":null } }(自分で置く予定・F12)
 // v0.22: "busyNotes": { "2026-10-27:540": { "id":"2026-10-27:540","date":"2026-10-27","start":540,"text":"ゼミ","updatedAt":"…","deletedAt":null } }(予定のメモ・F6-6)
 // 端末ローカル(同期しない・別キー merihari.local): busyCache, outingOverride, uiState, pendingSync
@@ -617,12 +632,12 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
 <table>
 <tr><th>懸念</th><th>対策</th></tr>
 <tr><td>カレンダーの内容漏えい</td><td>free/busy のみ。タイトル等を取得できるスコープを要求しない。busy は端末内のみ・Drive へ送らない。</td></tr>
-<tr><td>Drive 上のデータ閲覧(Google 側・端末紛失)</td><td>端末側で AES-256-GCM 暗号化。鍵は PBKDF2(310k 回)で導出しパスフレーズは sessionStorage のみ(閉じれば消える)。</td></tr>
+<tr><td>Drive 上のデータ閲覧(Google 側・端末紛失)</td><td>端末側で AES-256-GCM 暗号化。鍵は PBKDF2(v0.25: 600k 回・OWASP 2023。回数は <code>kdf</code> 欄に埋めるので古いファイルも読める)で導出しパスフレーズは sessionStorage のみ(閉じれば消える)。新しく決めるときは簡易チェック(<code>sync.passIssue</code>: 8 文字未満・同じ文字・連番・推測されやすい言葉を弾く・12 文字以上をおすすめ)。</td></tr>
 <tr><td>トークン漏えい</td><td>sessionStorage(タブ単位・閉じれば消える)。localStorage には置かない。スコープ最小。リダイレクト無し(token model)。</td></tr>
 <tr><td>XSS(自由入力: タスク名・メモ・LLM 貼り戻し)</td><td>描画は <code>textContent</code>/テンプレート要素のみ。<code>innerHTML</code> にユーザー文字列を入れない。JSON 読み込みはスキーマ検証。CSP は meta で <code>default-src 'self'; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com</code> を基本に実機で調整。</td></tr>
 <tr><td>公開リポジトリ</td><td>データはコードに含まれない(端末+暗号化 Drive のみ)。クライアント ID 以外の秘密は無い。コミット前に個人情報(氏名・予定)が入らないよう、サンプルデータは架空にする。</td></tr>
 <tr><td>依存ライブラリ</td><td>GIS(<code>accounts.google.com/gsi/client</code>)以外の外部スクリプトを使わない。npm 依存ゼロ。</td></tr>
-<tr><td>多端末の競合</td><td>LWW+tombstone+決定的同点規則。マージの対称性をテストで固定。</td></tr>
+<tr><td>多端末の競合</td><td>LWW+tombstone+決定的同点規則。マージの対称性をテストで固定。v0.25(レビュー A-2): アップロード直前に Drive の <code>modifiedTime</code> を取り直し、取得時と違えば(別の端末が先に上げた)取り込み直してから上げる(最大 3 回)。</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -636,7 +651,7 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
 <tr><td>オフライン</td><td>Google 連携以外はすべて動く。</td></tr>
 <tr><td>アクセシビリティ</td><td>チップは 44px 以上のタップ領域。色だけで意味を伝えない(種別はラベルでも示す)。ダーク/ライト両対応。</td></tr>
 <tr><td>テスト</td><td><code>tests/index.html</code>(iframe 方式・localhost ガード・<code>ok()</code> の後片付けは try/finally・ネガティブコントロール 1 件)。純関数を <code>window.M</code> に載せる: buildPlan / groupOuting / todayShare / usable / reportLines / merge / encrypt↔decrypt / entry 重なり解消。</td></tr>
-<tr><td>版管理</td><td><code>APP_VERSION</code>(semver)・設定内 NEWS・SW キャッシュ名を 1 コミットで同時更新。</td></tr>
+<tr><td>版管理</td><td><code>APP_VERSION</code>(semver)・<code>news.json</code> の先頭(v0.25 までは main.js の NEWS)・SW キャッシュ名を 1 コミットで同時更新。tests が 3 つの一致を確認。</td></tr>
 <tr><td>ログ</td><td>サーバー無し。エラーは console のみ。解析・トラッキング無し。</td></tr>
 </table>
 
@@ -682,6 +697,7 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
 <tr><td>13 FB 反映</td><td>v0.21.2〜v0.22</td><td>実機 FB 5 点のうち ①②③⑤(2026-10-27): 同期の base64 の修正(v0.21.2)・F5-11 メモ・F5-12 小さく始める/続いた日数・F6-6 予定のメモ。テスト 337 件</td><td>メモが 1 日 1 件以上たまる・習慣の ▶ が「区切り」で使われる・予定のメモが同期先にも出る</td></tr>
 <tr><td>14 予定</td><td>v0.23</td><td>実機 FB ④(2026-10-27): F12 予定を手で置く(同じレーンに枠線だけ・入口はタイムラインとホーム・明日以降も・写す・「◯◯ だった?」・レポートの「予定と実際」)。テスト 353 件</td><td>朝に 3〜5 個置く日が週の半分以上・レポートの「予定と実際」を見て翌朝の置き方が変わる</td></tr>
 <tr><td>15 磨き</td><td>v0.24</td><td>実機 FB 5 点(2026-10-27): カレンダーの予定に予定・時計の時刻をそのまま・レポートのパッと見と種別分け・スペース除去・あのころのきょう・気分の推移・＋ の整理(右下)。テスト 359 件</td><td>レポートを開いて 3 秒で「どんな日か」が分かる・気分の推移を週に 1 回見る</td></tr>
+<tr><td>16 レビュー+気合</td><td>v0.25</td><td>外部レビュー(Mythos・2026-10-27)への対応: A-1 時刻の比較を実時刻に・A-2 同期の競合リトライ・A-3 SW のフォールバック・A-4/A-5/A-6/A-7・B-2〜B-5・C-1〜C-6・D(書き出しの 1 行)。B-1(パスフレーズを持たない設計)は §2-6 の約束と衝突するので見送り(§12)。<b>F13 気合</b>(ワンタップのスイッチ・?kiai=1・SW の 2 秒見切り)</td><td>実機で気合を数日押して「押すのに気合が要らない」か・両端末の同期が通るか</td></tr>
 </table>
 <div class="note ok">Phase 1 を先にして「記録だけで価値がある」状態を早く作る(提案より記録のほうが日々の習慣化に効くため)。Google 連携は Phase 4 まで後回しにし、それまでは busy なし・在宅として plan を組む。</div>
 
@@ -695,6 +711,8 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
 <li><b>ドラッグ&ドロップでの plan 編集</b>: iOS で誤操作しやすい。タップのメニューで足りる。</li>
 <li><b>4 つ目のタブ・統計ダッシュボード</b>: 画面が増えると「どれで何をするか」が分からなくなる。レポートは「今日」画面の中。</li>
 <li><b>複数ユーザー・共有・アカウント</b>: 個人用。</li>
+<li><b>パスフレーズを持ち続けない設計(レビュー B-1: 固定 salt + 非抽出 CryptoKey を IndexedDB に・あるいはモジュール内変数だけ)</b>(2026-10-27): §2-6「パスフレーズは sessionStorage のみ」の約束と、同期ファイルの形式(毎回ランダム salt)を変えることになる。XSS 対策(textContent のみ・CSP)で現実的な危険は低いと評価されているので見送り。必要になったら v1.x で形式ごと移行する。</li>
+<li><b>localStorage → IndexedDB(レビュー A-4)</b>(2026-10-27): 全データが 1 キー(目安 5MB)。設定 › データ に「データの大きさ」を出して様子を見る。数年分で近づいたら移す。</li>
 <li><b>リポジトリの private 化</b>: GH Pages 無料枠は Public 限定。データはコードに含まれない。</li>
 </ul>
 

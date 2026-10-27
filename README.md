@@ -31,12 +31,15 @@ python -m http.server 8000
 セルフテスト: http://localhost:8000/tests/ (localhost でのみ動く)。ネガティブコントロール 1 件を含むので「1 failed」が合格。
 
 ## 版の上げ方
-`APP_VERSION`(js/main.js)・NEWS(設定 › 更新情報)・`sw.js` の CACHE 名を同じコミットで更新する。
+`APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新する。テストが 3 つの一致を確認する。
 
 ## iOS ショートカットから記録する
-URL を開くだけで記録できる(iOS の「ショートカット」や「オートメーション」で使う):
+URL を開くだけで記録できる(iOS の「ショートカット」や「オートメーション」、ホーム画面のブックマークで使う):
 - `https://zuno1000.github.io/merihari/?log=研究` … そのカテゴリの記録を開始(名前か id)
 - `https://zuno1000.github.io/merihari/?log=stop` … 記録を終了
+- `https://zuno1000.github.io/merihari/?kiai=1` … 気合を入れる(開いた瞬間に押したことになる。記録中でなければ「何を始める?」が開く)
+
+外部サイトのリンクから開いたとき(referrer が別のサイト)は無視する。
 
 ## Google 連携(任意)
 設定 › Google から接続。カレンダーは freeBusy(空き/予定あり)だけを読み、書き込まない。Drive は appDataFolder に暗号化した 1 ファイル。

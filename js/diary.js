@@ -89,11 +89,12 @@ export function excerpt(d, max = 60) {
  * agg = report.aggregate の結果、fb = report.dayFeedback の結果、gs = plan.goals の行、prev = 前日の日記。
  * 戻り値 [{ field:'good'|'hard'|'tomorrow', text, src }](最大8件・同じ文は1回)
  */
-export function seeds({ agg = null, fb = null, gs = [], prev = null, categories = [] } = {}) {
+export function seeds({ agg = null, fb = null, gs = [], prev = null, categories = [], kiai = null } = {}) {
   const out = [];
   const push = (field, text, src) => { if (text && !out.some((x) => x.text === text) && out.length < 8) out.push({ field, text, src }); };
   const nameOf = (id) => categories.find((c) => c.id === id)?.name || id;
   if (prev && txt(prev.tomorrow)) push('good', `昨日の「明日は」: ${txt(prev.tomorrow)}`, 'prev');
+  if (kiai && kiai.count > 0) push('good', `気合を${kiai.count}回入れた${kiai.text ? `(${kiai.text})` : ''}`, 'kiai'); // v0.25・F13
   if (agg && agg.workMin > 0) {
     const top = Object.entries(agg.byCategory || {}).filter(([, r]) => r.work && r.actual > 0).sort((a, b) => b[1].actual - a[1].actual)[0];
     push('good', top ? `${nameOf(top[0])}を${fmtMinJa(top[1].actual)}(作業は合計${fmtMinJa(agg.workMin)})` : `作業は合計${fmtMinJa(agg.workMin)}`, 'work');

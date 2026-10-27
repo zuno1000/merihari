@@ -4,6 +4,7 @@
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
 import * as diaryMod from './diary.js';
 import * as planMod from './plan.js';
+import * as kiaiMod from './kiai.js';
 import { el, svg, sheet, toast } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
@@ -87,6 +88,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
     el('p.rep-lead', lead),
     sub ? el('p.rep-sub', sub) : null,
     glance(r),
+    kiaiLine(date), // v0.25・F13: 気合の回数と時刻(押した日だけ)
     pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
     planFigure(date, nowMin, r), // v0.23・F12-4: 予定を置いた日だけ
@@ -136,6 +138,7 @@ function periodView(range, date, nowMin) {
     el('p.rep-lead', lead),
     rows.length ? pieToggle((byKind) => shareDonut(byKind ? kindRows(rows) : rows, ps.loggedMin)) : null,
     cmp,
+    kiaiPeriod(from, to), // v0.25・F13
     mood,
     rows.length ? catBars(rows, ps.loggedDays) : null,
     rows.length ? trendFigure(trendItems, range === 'all' && ps.days > 42 ? '週ごとの推移' : `${ps.days}日の推移`) : null,
@@ -294,6 +297,18 @@ function workKinds(r) {
   return Object.entries(out).sort((a, b) => b[1] - a[1]).map(([k, min]) => ({ id: k, name: kindRole(S(), k).name, min }));
 }
 /** パッと見の1行(v0.24・v0.24.1 実機 FB): 作業の種別(作業 / 決まった作業 … 設定の種別の順・0 でも出す)と ダラダラ。記録率は「くわしく」のタイルに */
+/** 気合(v0.25・F13): その日に押した回数と時刻・そのとき記録していたもの。押していない日は出さない(責めない) */
+function kiaiLine(date) {
+  const list = kiaiMod.listOf(store.state.data.kiai, date);
+  if (!list.length) return null;
+  return el('p.small.kiai-line', `気合${list.length}回: ${kiaiMod.line(list, (id) => catOf(id).name)}`);
+}
+/** 期間の気合(v0.25): 回数・押した日数・いちばん多かった日。無ければ出さない */
+function kiaiPeriod(from, to) {
+  const sm = kiaiMod.summarize(store.state.data.kiai, from, to);
+  if (!sm.count) return null;
+  return el('p.small.kiai-line', `気合${sm.count}回(${sm.days}日)${sm.best && sm.best.count >= 2 ? `・いちばん多かった日は${fmtMD(sm.best.date, true)}の${sm.best.count}回` : ''}`);
+}
 function glance(r) {
   const got = Object.fromEntries(workKinds(r).map((k) => [k.id, k.min]));
   const kinds = (S().kinds || []).filter((k) => k.work).map((k) => ({ id: k.id, name: k.name, min: got[k.id] || 0 }));
