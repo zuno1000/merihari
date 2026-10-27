@@ -20,8 +20,9 @@ import { renderMoney } from './ui-money.js';
 import * as money from './money.js';
 import * as ai from './ai.js';
 
-export const APP_VERSION = '0.21.2';
+export const APP_VERSION = '0.22.0';
 export const NEWS = [
+  { v: '0.22.0', text: '実機 FB 4 点。①タスクの追加は「メモ」が既定に: 名前を入れて Enter で書き残せます(期限・量・カテゴリは持ちません)。タスク画面の先頭「メモ」に新しい順で並び、タップして 期限 / 毎日 / 毎週 / やりたい を選ぶとそのままタスクや習慣になります。②習慣・やりたいことを始めやすく: ▶ で始めると「あと ◯分で区切り」(習慣は目安の残り・やりたいことは 15 分)がカードに出ます。習慣には「◯日続いてる」。タスク画面の習慣は まだのものが先、やりたいことは長くふれていない順(「◯日ぶり」)。③タイムラインの予定(しましま)をタップすると何の予定かをひと言メモできます。予定の時間を記録するシートにも「予定のメモ」の欄があり、記録のメモにもなります。⑤同期の「Maximum call stack size exceeded」は v0.21.2 で修正済み。④(朝の予定と実際の比較)は次の版で。' },
   { v: '0.21.2', text: '同期で「同期できませんでした: Maximum call stack size exceeded」と出る不具合を直しました。記録・日記・お金が増えて同期ファイルが大きくなると、暗号化したデータを文字列にするところで落ちていました。端末内のデータは失われていません。アプリを開き直してから、設定 › Google › カレンダー・Drive の「Drive と同期」で同期し直してください。' },
   { v: '0.21.1', text: '相談で「モデルでこのリクエストに対する応答を提供できません」と出る件: 端末内モデルが「やる気が出ない」などの気持ちの言葉を安全側に判定していました。相談は「作業の進め方の相談」の枠で渡し、「やる気が出ない」→「手がつかない」、「つらい」→「調子が上がらない」のように言い換えてから渡します。気分も「つらい」ではなく「調子: 低め」の言葉に。定型は「手がつかない。最初の 5 分は何をする?」「次に何をやるといい?」「集中が切れた。切り替えの一手は?」「きょうはここまでにしていい?」「明日の最初の一歩は?」に変えました。' },
   { v: '0.21.0', text: 'AI(任意・ショートカット): 設定 › AI で有効にすると、日記の下に「AI に頼む」のカードが出ます。「きょうのふり返りを頼む」(その日の記録・アプリのふり返り・日記の 3 行をまとめた文)と「相談」(いまの状況+質問。「やる気が出ない」「いま何をやるといい?」などの定型も)を、iPhone のショートカット「モデルを使用」(Apple Intelligence)へ渡します。返事はショートカットの中で表示され、メリハリに戻って「返事を貼り付け」で読んでから日記のメモに追記できます。アプリの中に AI は置きません。文が端末の外に出るかどうかはショートカット側で選ぶモデルで決まり、「端末上」を選べば出ません。ショートカットの作り方(3 アクション)は設定 › AI に。この設定はこの端末だけのもので同期しません。' },
@@ -213,5 +214,5 @@ window.M = {
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

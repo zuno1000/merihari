@@ -105,6 +105,7 @@ export function defaultData() {
     diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
     money: {},   // v0.19: お金(id → { id, date, time, amount, type, categoryId, note, entryId, updatedAt, deletedAt })
     wants: {},   // v0.20: ほしいもの(id → { id, name, price, targetDate, categoryId, note, doneAt, updatedAt, deletedAt })
+    busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -219,7 +220,7 @@ export function validateTask(r, id) {
   if (!isObj(r) || typeof r.name !== 'string') return null;
   const rep = isObj(r.repeat) && r.repeat.type === 'weekly' ? { type: 'weekly', hours: num(r.repeat.hours, 0.5, 200, 5), weekEnd: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].includes(r.repeat.weekEnd) ? r.repeat.weekEnd : 'sun' }
     : isObj(r.repeat) && r.repeat.type === 'daily' ? { type: 'daily', min: num(r.repeat.min, 5, 600, 30) } : null; // v0.15: 毎日 ◯分(旧「習慣」)
-  return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0),
+  return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 200), kind: r.kind === 'wish' ? 'wish' : r.kind === 'memo' ? 'memo' : 'duty', deadline: optStr(r.deadline, 20), remainingH: num(r.remainingH, 0, 10000, 0), // v0.22: kind 'memo'=メモ(雑に書き残す・目安を持たない)
     minUnit: num(r.minUnit, 5, 600, 30), remainingSetAt: optStr(r.remainingSetAt, 40) || optStr(r.updatedAt, 40), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40),
     checks: Array.isArray(r.checks) ? r.checks.filter(isDate).slice(-400) : [], // v0.16: 習慣の「済んだ」の印(日付キー)
     noTime: r.noTime === true,                       // v0.17: 時間を計らないタスク(用事: 銀行・メール。チェックで済ませる)
@@ -252,6 +253,20 @@ export function validateWant(r, id) {
   if (!isObj(r) || typeof r.name !== 'string' || !r.name.trim()) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 100), price: Number.isFinite(+r.price) && +r.price >= 0 && +r.price <= 100000000 ? Math.round(+r.price) : 0, targetDate: isDate(r.targetDate) ? r.targetDate : null, categoryId: str(r.categoryId, 40, 'hobby'), note: str(r.note, 500), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
+/** 予定のメモのキー(v0.22・F6-6): 日付と開始分。1440 以上(その日の深夜=暦では翌日)は翌日の分に正規化する(純関数) */
+export function busyNoteKey(date, startMin) {
+  let d = date, m = Math.round(+startMin || 0);
+  while (m >= 1440) { m -= 1440; d = nextDate(d); }
+  return `${d}:${m}`;
+}
+function nextDate(key) { const d = new Date(key + 'T00:00'); d.setDate(d.getDate() + 1); const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
+/** 予定のメモ(v0.22・F6-6): キー=日付:開始分。本文は 200 字まで */
+export function validateBusyNote(r, id) {
+  if (!isObj(r)) return null;
+  const m = /^(\d{4}-\d{2}-\d{2}):(\d{1,4})$/.exec(String(r.id || id));
+  if (!m || !isDate(m[1]) || +m[2] >= 1440) return null;
+  return { ...stripUnsafe(r), id: `${m[1]}:${+m[2]}`, date: m[1], start: +m[2], text: str(r.text, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 /** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
@@ -282,6 +297,7 @@ export function migrate(raw) {
   out.money = cleanMap(raw.money, validateMoney);
   out.wants = cleanMap(raw.wants, validateWant);
   out.diary = cleanMap(raw.diary, validateDiary);
+  out.busyNotes = {}; for (const [k, v] of Object.entries(cleanMap(raw.busyNotes, validateBusyNote))) if (!out.busyNotes[v.id] || k === v.id) out.busyNotes[v.id] = v; // v0.22: キーは id(日付:開始分)
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };
   return out;

@@ -433,6 +433,9 @@ button.crow:active{background:var(--accent-bg)}
 .tl.one .lane.log{grid-column:2}
 .tl.one .blk.busy{z-index:0;pointer-events:none;border-left:3px solid var(--accent);opacity:.9}
 .tl.one .blk.gap.busy{pointer-events:auto;opacity:1} /* v0.16: 過去の予定の「予定の時間は?」は押せる(上の行が消していた) */
+.tl.one button.blk.busy{pointer-events:auto;cursor:pointer} /* v0.22: 予定の背景はタップでメモ(F6-6)。div の背景(記録と重なる部分)は触れないまま */
+.tl.one button.blk.busy:active{opacity:.7}
+.quick .qhint{margin:0}
 
 /* ---- v0.16: ホームの日送り・レポートのふり返り・円の切替(カテゴリ/種別) ---- */
 .today-head{gap:6px}

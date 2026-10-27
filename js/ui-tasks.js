@@ -1,5 +1,6 @@
 // merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1)。かんたん追加(名前 1 行+種類/いつまで/どれくらい/カテゴリのチップ)と一覧。
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
+// v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
 // v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週 繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
 import { el, clear, toast, sheet, confirmSheet, svg, timeField } from './ui.js';
 import * as store from './store.js';
@@ -40,7 +41,7 @@ function whenOptions(today) {
   ];
 }
 const SIZES = [{ label: '時間なし', min: 0 }, { label: '10分', min: 10 }, { label: '30分', min: 30 }, { label: '1時間', min: 60 }, { label: '2時間', min: 120 }, { label: '4時間', min: 240 }, { label: '8時間', min: 480 }];
-const TYPES = [['task', 'タスク'], ['habit', '習慣'], ['wish', 'やりたいこと']];
+const TYPES = [['memo', 'メモ'], ['task', 'タスク'], ['habit', '習慣'], ['wish', 'やりたいこと']];
 
 function chipRow(options, value, onpick, keyOf = (o) => o.key) {
   const row = el('div.chips.small');
@@ -55,39 +56,45 @@ function segRow(options, value, onpick) {
 }
 
 /**
- * かんたん追加(v0.17): 名前の 1 行だけが見え、触ると 種類(タスク / 習慣 / やりたいこと)と、種類ごとの欄が出る。Enter か「追加」で保存。
+ * かんたん追加(v0.17・v0.22): 名前の 1 行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの欄が出る。Enter か「追加」で保存。
+ * 既定は「メモ」(v0.22・F5-11): 名前だけで書き残せる(期限・量・カテゴリは持たない)。タスク画面の先頭「メモ」に並び、タップして種類を決めるとタスクや習慣になる。
  * タスク: いつまで(今日/明日/今週/来週/日付…/なし)・繰り返す(なし/毎週)・どれくらい(時間なし〜8時間)。習慣: 毎日/毎週・1日に(1週間に)。やりたいこと: カテゴリだけ。
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
  */
 function quickAdd(today, rerender) {
-  const name = el('input.text', { type: 'text', placeholder: '何をする?(Enter で追加)', autocomplete: 'off', maxlength: 100 });
-  let type = 'task', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
+  const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く(Enter でメモ)', autocomplete: 'off', maxlength: 200 });
+  let type = 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
   const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
   const dateRow = el('div.row.field', { hidden: true }, [el('span.label', '期限'), dateIn, timeIn]);
   const sizeLabel = el('span.label', 'どれくらい');
   const sizeRow = chipRow(SIZES, 60, (o) => { sizeMin = o.min; }, (o) => o.min);
-  const sizeBox = el('div.qrow', [sizeLabel, sizeRow]);
+  const sizeBox = el('div.qrow', { hidden: true }, [sizeLabel, sizeRow]);
   const recurRow = chipRow([{ key: 'no', label: 'なし' }, { key: 'weekly', label: '毎週(同じ曜日)' }], 'no', (o) => { recur = o.key === 'weekly'; });
-  const recurBox = el('div.qrow', [el('span.label', '繰り返す'), recurRow]);
+  const recurBox = el('div.qrow', { hidden: true }, [el('span.label', '繰り返す'), recurRow]);
   const whenRow = chipRow(whenOptions(today), when, (o) => {
     when = o.key;
     dateRow.hidden = when !== 'date';
     recurBox.hidden = when === 'none';
     if (o.value) dateIn.value = o.value;
   });
-  const whenBox = el('div.qrow', [el('span.label', 'いつまで'), whenRow]);
+  const whenBox = el('div.qrow', { hidden: true }, [el('span.label', 'いつまで'), whenRow]);
   const habitRow = chipRow([{ key: 'daily', label: '毎日' }, { key: 'weekly', label: '毎週' }], habitRep, (o) => { habitRep = o.key; sizeLabel.textContent = habitRep === 'daily' ? '1日に' : '1週間に'; });
   const habitBox = el('div.qrow', { hidden: true }, [el('span.label', 'くりかえし'), habitRow]);
+  const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': catOf(c.id).color }, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
+  const catBox = el('div.qrow', { hidden: true }, [el('span.label', 'カテゴリ'), catRow]);
+  const memoHint = el('p.muted.small.qhint', 'メモは名前だけ。あとでタップして タスク / 習慣 / やりたいこと にできます。');
   const typeSeg = segRow(TYPES, type, (k) => {
     type = k;
     whenBox.hidden = type !== 'task'; dateRow.hidden = type !== 'task' || when !== 'date'; recurBox.hidden = type !== 'task' || when === 'none';
     habitBox.hidden = type !== 'habit';
-    sizeBox.hidden = type === 'wish';
+    sizeBox.hidden = type === 'wish' || type === 'memo';
+    catBox.hidden = type === 'memo';
+    memoHint.hidden = type !== 'memo';
     sizeLabel.textContent = type === 'habit' ? (habitRep === 'daily' ? '1日に' : '1週間に') : 'どれくらい';
+    name.placeholder = type === 'memo' ? '思いついたことを書く(Enter でメモ)' : '何をする?(Enter で追加)';
   });
-  const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': catOf(c.id).color }, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
-  const more = el('div.qmore', { hidden: true }, [typeSeg, whenBox, dateRow, recurBox, habitBox, sizeBox, el('div.qrow', [el('span.label', 'カテゴリ'), catRow])]);
+  const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, whenBox, dateRow, recurBox, habitBox, sizeBox, catBox]);
   const reveal = () => { more.hidden = false; };
   name.addEventListener('focus', reveal);
   name.addEventListener('input', reveal);
@@ -96,7 +103,7 @@ function quickAdd(today, rerender) {
     const nm = name.value.trim();
     if (!nm) { toast('名前を入れてください'); name.focus(); return; }
     const hours = sizeMin / 60;
-    const t = { id: store.uid(), name: nm, kind: type === 'wish' ? 'wish' : 'duty', deadline: null, remainingH: 0, remainingSetAt: store.nowISO(), minUnit: plan.minUnitFor(hours || 0.5), categoryId: cid, starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null, checks: [], noTime: type !== 'wish' && sizeMin === 0, recur: null };
+    const t = { id: store.uid(), name: nm, kind: type === 'wish' ? 'wish' : type === 'memo' ? 'memo' : 'duty', deadline: null, remainingH: 0, remainingSetAt: store.nowISO(), minUnit: plan.minUnitFor(hours || 0.5), categoryId: cid, starter: '', repeat: null, note: '', doneAt: null, updatedAt: store.nowISO(), deletedAt: null, checks: [], noTime: type === 'task' && sizeMin === 0, recur: null };
     if (type === 'habit') {
       t.repeat = habitRep === 'daily' ? { type: 'daily', min: sizeMin || 30 } : { type: 'weekly', hours: Math.max(0.5, hours || 5), weekEnd: 'sun' };
     } else if (type === 'task') {
@@ -107,8 +114,8 @@ function quickAdd(today, rerender) {
       }
     }
     saveTask(t);
-    toast(t.recur ? `追加しました(毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜が期限)` : '追加しました');
-    rerender();
+    toast(t.kind === 'memo' ? '書き残しました' : t.recur ? `追加しました(毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜が期限)` : '追加しました');
+    rerender(t.kind === 'memo'); // メモは続けて書けるように入力欄へ戻る(v0.22)
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   return el('section.card.quick', [
@@ -162,7 +169,7 @@ export function renderTasks(view, ctx) {
   clear(view);
   const eff = effectiveDay(S(), dateKey(), minuteOfDay());
   const today = eff.date, nowMin = eff.min;
-  const rerender = () => renderTasks(view, ctx);
+  const rerender = (refocus = false) => { renderTasks(view, ctx); if (refocus === true) view.querySelector('.quick input')?.focus(); };
   const tasks = Object.values(T()).filter(alive);
   const gs = plan.goals(T(), E(), today, nowMin);
   const goalOf = Object.fromEntries(gs.map((g) => [g.taskId, g]));
@@ -170,25 +177,29 @@ export function renderTasks(view, ctx) {
   const overdueIds = new Set(overdue.map((t) => t.id));
   const todayList = tasks.filter((t) => !t.doneAt && (goalOf[t.id]?.kind === 'deadline' || goalOf[t.id]?.kind === 'todo') && !overdueIds.has(t.id));
   const todayIds = new Set(todayList.map((t) => t.id));
-  const duties = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && !t.repeat && !todayIds.has(t.id) && !overdueIds.has(t.id)).sort(byDeadline);
-  const repeats = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && t.repeat).sort((a, b) => (a.repeat.type === b.repeat.type ? a.name.localeCompare(b.name) : a.repeat.type === 'daily' ? -1 : 1));
-  const wishes = tasks.filter((t) => !t.doneAt && t.kind === 'wish').sort((a, b) => a.name.localeCompare(b.name));
+  const memos = tasks.filter((t) => !t.doneAt && t.kind === 'memo').sort((a, b) => ((a.updatedAt || '') < (b.updatedAt || '') ? 1 : -1)); // v0.22: 新しい順
+  const duties = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && !todayIds.has(t.id) && !overdueIds.has(t.id)).sort(byDeadline);
+  // v0.22: 習慣は まだのもの → 済んだもの、毎日 → 毎週。やりたいことは 長くふれていない順(手つかずが先)
+  const repeats = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && t.repeat).sort((a, b) => ((goalOf[a.id]?.done ? 1 : 0) - (goalOf[b.id]?.done ? 1 : 0)) || (a.repeat.type === b.repeat.type ? a.name.localeCompare(b.name) : a.repeat.type === 'daily' ? -1 : 1));
+  const wishes = tasks.filter((t) => !t.doneAt && t.kind === 'wish').sort((a, b) => ((goalOf[a.id]?.lastDate || '') < (goalOf[b.id]?.lastDate || '') ? -1 : (goalOf[a.id]?.lastDate || '') > (goalOf[b.id]?.lastDate || '') ? 1 : a.name.localeCompare(b.name)));
   const done = tasks.filter((t) => t.doneAt).sort((a, b) => (a.doneAt < b.doneAt ? 1 : -1));
 
   const open = log.openEntry(E());
   // 行のタップ=編集。右の ▶=いまから記録(記録中なら ■ でホームへ)。用事(時間なし)には ▶ を出さない
   const begin = (t) => {
     if (open && open.taskId === t.id) { ctx.go('now'); return; }
-    startCategory(t.categoryId || 'other', null, { taskId: t.id });
+    startCategory(t.categoryId || 'other', null, { taskId: t.id, plannedMin: plan.startSpan(goalOf[t.id]) }); // v0.22: 習慣・やりたいことは区切りつき(F5-12)
     ctx.go('now');
   };
+  const streakText = (t) => { const n = plan.habitStreak(t, E(), today); return n >= 2 ? `${n} ${t.repeat.type === 'weekly' ? '週' : '日'}続いてる` : null; };
   const row = (t) => {
     const g = goalOf[t.id];
     const meta = [];
     const recurTag = t.recur === 'weekly' && t.deadline ? `毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜` : null;
-    if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日 ${fmtMinJa(t.repeat.min)}`, `きょう ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`);
-    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週 ${t.repeat.hours}h`, `今週 ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週 ${fmtH(t.lastWeek.doneMin)})` : ''}`);
-    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後 ${fmtMD(g.lastDate)}` : 'まだ手つかず', `この 7 日 ${fmtH(g?.doneMin || 0)}`);
+    if (t.kind === 'memo') meta.push(t.note ? t.note : 'メモ・タップして種類を決める');
+    else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日 ${fmtMinJa(t.repeat.min)}`, `きょう ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
+    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週 ${t.repeat.hours}h`, `今週 ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週 ${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
+    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後 ${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)} 日ぶり)` : ''}` : 'まだ手つかず', `この 7 日 ${fmtH(g?.doneMin || 0)}`, '▶ で 15 分だけ');
     else {
       meta.push(fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));
       if (recurTag) meta.push(recurTag);
@@ -210,10 +221,10 @@ export function renderTasks(view, ctx) {
     return el('div.trow', [
       el('button.check', { type: 'button', 'aria-label': habit ? `${t.name} を${checked ? `${span}の済みから外す` : `${span}は済んだことにする`}` : `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${checked ? ' on' : ''}`, onclick: onCheck }, checked ? '✓' : ''),
       el('button.tmain', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, [
-        el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null, g?.done && !t.doneAt ? el('span.gok', '✓') : null]),
-        el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, meta.join('・')),
+        el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [t.kind === 'memo' ? null : el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null, g?.done && !t.doneAt ? el('span.gok', '✓') : null]),
+        el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, meta.filter(Boolean).join('・')),
       ]),
-      t.doneAt || t.noTime ? el('span.tplay.blank') : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} をいまから記録`, title: 'いまから記録', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
+      t.doneAt || t.noTime || t.kind === 'memo' ? el('span.tplay.blank') : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} をいまから記録`, title: 'いまから記録', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
     ]);
   };
   const section = (title, list, empty) => el('section.group', [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
@@ -221,6 +232,7 @@ export function renderTasks(view, ctx) {
   view.append(...[
     el('h1', 'タスク'),
     quickAdd(today, rerender),
+    memos.length ? section(`メモ(${memos.length})`, memos, '') : null, // v0.22・F5-11
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     section('きょうやる分', todayList, '期限から逆算して、きょうやる分があるものはありません(用事は期限が明日までのものをここに出します)。'),
     section('期限までに', duties, 'なし'),
@@ -231,11 +243,11 @@ export function renderTasks(view, ctx) {
 }
 const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0);
 
-/** 編集(v0.17): 種類(期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる。期限には「毎週 繰り返す」、期限・毎日・毎週には「時間を計らない」 */
+/** 編集(v0.17・v0.22): 種類(メモ / 期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる。期限には「毎週 繰り返す」、期限・毎日・毎週には「時間を計らない」。メモは種類を選ぶとタスクや習慣になる */
 function editSheet(t, today, rerender, ctx) {
   const cats = S().categories.filter((c) => !c.archived || c.id === t.categoryId).sort((a, b) => a.order - b.order);
   const name = el('input.text', { type: 'text', value: t.name, maxlength: 100 });
-  let kind = t.kind === 'wish' ? 'wish' : t.repeat?.type === 'daily' ? 'daily' : t.repeat?.type === 'weekly' ? 'weekly' : 'deadline';
+  let kind = t.kind === 'wish' ? 'wish' : t.kind === 'memo' ? 'memo' : t.repeat?.type === 'daily' ? 'daily' : t.repeat?.type === 'weekly' ? 'weekly' : 'deadline';
   const deadline = el('input.date', { type: 'date', value: t.deadline ? t.deadline.slice(0, 10) : '' });
   const dlTime = timeField(t.deadline && t.deadline.length >= 16 ? t.deadline.slice(11, 16) : '', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
   const left0 = Math.round(plan.remainingMin(t, E()) / 15) * 15 / 60; // いまの残り(記録を引いたもの)を見せる。変えなければ触らない
@@ -246,28 +258,30 @@ function editSheet(t, today, rerender, ctx) {
   const noTimeIn = el('input', { type: 'checkbox', checked: !!t.noTime });
   const cat = el('select', cats.map((c) => el('option', { value: c.id, selected: c.id === t.categoryId }, c.name)));
   const note = el('input.text', { type: 'text', value: t.note || '', placeholder: 'メモ', maxlength: 300 });
+  const catRow = el('div.row.field', [el('span.label', 'カテゴリ'), cat]);
   const remRow = el('div.row.field', [el('span.label', '残り見積'), remaining, el('span.unit', '時間')]);
   const dailyRow = el('div.row.field', [el('span.label', '1日に'), dailyMin, el('span.unit', '分')]);
   const weeklyRow = el('div.row.field', [el('span.label', '1週間に'), weeklyH, el('span.unit', '時間')]);
   const noTimeRow = el('label.row.field', [noTimeIn, el('span.small', '時間を計らない(用事: チェックで済ませる)')]);
   const rows = {
+    memo: el('p.muted.small', 'メモのまま置いておけます。期限 / 毎日 / 毎週 / やりたい を選ぶと、タスクや習慣になります。'),
     deadline: el('div.col', [el('div.row.field', [el('span.label', '期限'), deadline, dlTime, el('button.btn.sm.ghost', { type: 'button', onclick: () => { deadline.value = ''; dlTime.set(''); } }, 'なし')]), el('label.row.field', [recurIn, el('span.small', '毎週 繰り返す(済んで期限を過ぎたら、翌週の同じ曜日が期限になって戻る)')]), remRow]),
     daily: dailyRow,
     weekly: weeklyRow,
     wish: el('p.muted.small', '目安は持ちません。ふれた記録と最後の日だけを見ます。'),
   };
-  const showKind = () => { for (const k of Object.keys(rows)) rows[k].hidden = k !== kind; noTimeRow.hidden = kind === 'wish'; const nt = noTimeIn.checked && kind !== 'wish'; remRow.hidden = nt; dailyRow.hidden = kind !== 'daily' || nt; weeklyRow.hidden = kind !== 'weekly' || nt; };
+  const showKind = () => { for (const k of Object.keys(rows)) rows[k].hidden = k !== kind; noTimeRow.hidden = kind === 'wish' || kind === 'memo'; catRow.hidden = kind === 'memo'; const nt = noTimeIn.checked && kind !== 'wish' && kind !== 'memo'; remRow.hidden = nt; dailyRow.hidden = kind !== 'daily' || nt; weeklyRow.hidden = kind !== 'weekly' || nt; };
   noTimeIn.addEventListener('change', showKind);
-  const kindSeg = el('div.seg', [['deadline', '期限'], ['daily', '毎日'], ['weekly', '毎週'], ['wish', 'やりたい']].map(([k, label]) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); showKind(); } }, label)));
+  const kindSeg = el('div.seg', [['memo', 'メモ'], ['deadline', '期限'], ['daily', '毎日'], ['weekly', '毎週'], ['wish', 'やりたい']].map(([k, label]) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); showKind(); } }, label)));
   showKind();
   sheet((close) => [
-    el('h2', 'タスクを編集'),
+    el('h2', t.kind === 'memo' ? 'メモ' : 'タスクを編集'),
     el('div.col', [
       el('label.field.col', [el('span.label', '名前'), name]),
       kindSeg,
       ...Object.values(rows),
       noTimeRow,
-      el('div.row.field', [el('span.label', 'カテゴリ'), cat]),
+      catRow,
       el('label.field.col', [el('span.label', 'メモ'), note]),
     ]),
     el('div.row', [
@@ -275,8 +289,8 @@ function editSheet(t, today, rerender, ctx) {
       el('button.btn.ghost', { type: 'button', onclick: () => { close(); entrySheet({ date: today, start: Math.max(0, effectiveDay(S(), dateKey(), minuteOfDay()).min - 60), end: effectiveDay(S(), dateKey(), minuteOfDay()).min, categoryId: t.categoryId || 'other', taskId: t.id }, rerender); } }, '後から記録'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); return; }
-        t.name = nm; t.kind = kind === 'wish' ? 'wish' : 'duty';
-        t.noTime = kind !== 'wish' && noTimeIn.checked;
+        t.name = nm; t.kind = kind === 'wish' ? 'wish' : kind === 'memo' ? 'memo' : 'duty';
+        t.noTime = kind !== 'wish' && kind !== 'memo' && noTimeIn.checked;
         t.repeat = kind === 'daily' ? { type: 'daily', min: Math.max(5, Math.round(+dailyMin.value) || 30) } : kind === 'weekly' ? { type: 'weekly', hours: Math.max(0.5, +weeklyH.value || 5), weekEnd: 'sun' } : null;
         t.deadline = kind === 'deadline' && deadline.value ? deadline.value + (dlTime.value ? 'T' + dlTime.value : '') : null;
         t.recur = kind === 'deadline' && t.deadline && recurIn.checked ? 'weekly' : null;

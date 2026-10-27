@@ -142,9 +142,9 @@ export function stopRecording(at = null) {
   return r;
 }
 /** 閉じた記録を足す(後から記録・v0.15 の主役)。date の記録のすき間を閉じて保存 */
-function addClosed({ date, startMin, endMin, categoryId, taskId = null, busyKey: bk = null }) {
+function addClosed({ date, startMin, endMin, categoryId, taskId = null, busyKey: bk = null, note = '' }) {
   if (endMin > dayEndOf(date) && startMin < 1440) endMin -= 1440; // 切れ目より後まで伸びた深夜の終了は、従来どおり 24:00 で分けて翌日へ(v0.17)
-  commitTidy(log.addEntry(E(), { date, startMin, endMin, categoryId, taskId }, LCTX, dayEndOf(date)), date, `${taskName(taskId, categoryId)} ${mm(startMin % 1440)}〜${mm(endMin % 1440)} の追加`);
+  commitTidy(log.addEntry(E(), { date, startMin, endMin, categoryId, taskId, note }, LCTX, dayEndOf(date)), date, `${taskName(taskId, categoryId)} ${mm(startMin % 1440)}〜${mm(endMin % 1440)} の追加`);
   if (bk) { S().busyMemory = { ...(S().busyMemory || {}), [bk]: categoryId }; store.touchSettings(); } // 予定の時間に何をしたかを覚える(次からその候補)
   sync.autoSync();
   toast(`${taskName(taskId, categoryId)} ${mm(startMin % 1440)}〜${mm(endMin % 1440)} を記録`);
@@ -382,7 +382,10 @@ function goalsBox(n, rerender, isToday = true) {
     else if (g.kind === 'todo') meta = `${g.deadline < n.date ? `${fmtMD(g.deadline)}が期限(過ぎています)` : g.deadline === n.date ? `${today}が期限` : `${fmtMD(g.deadline)}まで`}${t?.recur ? `・毎週` : ''}${g.doneAt ? '・済' : ''}`;
     else if (g.kind === 'daily') meta = g.noTime ? `毎日・${today} ${g.checked ? '済' : 'まだ'}` : `毎日 ${fmtMinJa(g.targetMin)}・${today} ${fmtMinJa(g.doneMin)}${g.checked ? '・済'  : ''}`;
     else if (g.kind === 'weekly') meta = g.noTime ? `毎週・${isToday ? '今週' : 'その週'} ${g.checked ? '済' : 'まだ'}` : `毎週 ${fmtMinJa(g.targetMin)}・${isToday ? '今週' : 'その週'} ${fmtMinJa(g.doneMin)}${g.checked ? '・済' : ''}`;
-    else meta = `やりたいこと・この 7 日 ${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後 ${fmtMD(g.lastDate)}` : ''}`;
+    else { const ago = g.lastDate ? plan.daysBetween(g.lastDate, n.date) : null; meta = `やりたいこと・この 7 日 ${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後 ${fmtMD(g.lastDate)}${ago >= 2 ? `(${ago} 日ぶり)` : ''}` : '・まだ手つかず'}`; }
+    const streak = (g.kind === 'daily' || g.kind === 'weekly') && t ? plan.habitStreak(t, E(), n.date) : 0; // v0.22・F5-12: 続いた日数(週数)
+    if (streak >= 2) meta += `・${streak} ${g.kind === 'weekly' ? '週' : '日'}続いてる`;
+    const span = isToday ? plan.startSpan(g) : null; // v0.22・F5-12: 習慣・やりたいことは区切りつきで始める(「あと ◯分で区切り」)
     const pct = g.targetMin ? Math.min(100, Math.round((g.doneMin / g.targetMin) * 100)) : 0;
     const o = isToday ? log.openEntry(E()) : null;
     const rec = o && o.taskId === g.taskId;
@@ -395,7 +398,7 @@ function goalsBox(n, rerender, isToday = true) {
     return el('div.srow.goal', { class: `srow goal${g.done ? ' done' : ''}` }, [
       checkable ? el('button.check', { type: 'button', class: `check${g.done ? ' on' : ''}`, 'aria-label': `${g.name} を${g.done ? '戻す' : '済ませる'}`, onclick: onCheck }, g.done ? '✓' : '') : null,
       el('button.gmain', { type: 'button', 'aria-label': checkable ? `${g.name}` : `${g.name} を後から記録`, onclick: checkable ? onCheck : () => entrySheet(sheetArg, rerender) }, [el('span.gname', [el('span.gtag', { deadline: '期限', todo: '用事', daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: c.color } }), g.name, g.done && !checkable ? el('span.gok', '✓') : null, rec ? el('span.rec-mark', '● 記録中') : null]), el('span.gmeta', meta), g.targetMin ? el('span.meter', el('i', { style: { width: `${g.checked ? 100 : pct}%`, background: c.color } })) : null]),
-      isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : `${g.name} をいまから記録`, title: 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
+      isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : span ? `${g.name} を ${span} 分だけ始める` : `${g.name} をいまから記録`, title: span ? `${span} 分だけ` : 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId, plannedMin: span }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
     ]);
   };
   return el('section.group', [el('h2', 'タスクと習慣'), el('div.list', gs.map(row))]);
@@ -512,20 +515,47 @@ export function entrySheet(o, rerender) {
   const st = timeField(mm(o.start % 1440), { label: '開始' });
   const en = timeField(o.end == null ? '' : mm(o.end % 1440), { label: '終了', emptyLabel: 'いまも続けている', allowEmpty: isToday });
   const nm = () => taskName(o.taskId, cid);
+  // v0.22・F6-6: 予定(busy)の時間なら「予定のメモ」の欄。保存すると予定のメモに残り、記録のメモにもなる
+  const bn = o.busyAt ? el('input.text', { type: 'text', value: o.busyNote || '', placeholder: '何の予定?(例: ゼミ)', maxlength: 200, autocomplete: 'off' }) : null;
+  const keepBusyNote = () => { if (!bn) return ''; const v = bn.value.trim(); if (v !== (o.busyNote || '')) saveBusyNote(o.date, o.busyAt.start, v); return v; };
   sheet((close) => [
     el('h2', o.title || (isToday && o.start === defaultStart(n.date, n.min) ? `${nm()}、いつ?` : `${md(o.date)} ${nm()}`)),
     o.taskId ? el('p.muted.small', `タスク「${T()[o.taskId]?.name || ''}」に紐づけます`) : catChipPicker(cid, (v) => { cid = v; }),
+    bn ? el('label.field.col', [el('span.label', '予定のメモ'), bn]) : null,
     el('div.row.field', [el('span.label', 'いつ'), st, el('span', '〜'), en]),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const s0 = lateFix(hm(st.value), o.start); // 深夜(切れ目の前)の区間は 24:xx のまま(v0.17・F1-18)
         if (s0 == null) { toast('開始を選んでください'); return; }
         try {
-          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); startCategory(cid, s0, { taskId: o.taskId ?? null }); rerender(); return; }
-          close(); addClosed({ date: o.date, startMin: s0, endMin: lateFix(hm(en.value), o.end ?? o.start), categoryId: cid, taskId: o.taskId ?? null, busyKey: o.busyKey || null }); rerender();
+          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); keepBusyNote(); startCategory(cid, s0, { taskId: o.taskId ?? null }); rerender(); return; }
+          close(); const note = keepBusyNote(); addClosed({ date: o.date, startMin: s0, endMin: lateFix(hm(en.value), o.end ?? o.start), categoryId: cid, taskId: o.taskId ?? null, busyKey: o.busyKey || null, note }); rerender();
         } catch (err) { toast(err.message); }
       } }, '記録')]),
   ]);
+}
+
+// ---- 予定のメモ(v0.22・F6-6): カレンダーの予定は free/busy だけなので中身が無い。何の予定かをひと言で残す(日付:開始分 がキー・同期する) ----
+export function busyNoteOf(date, start) { const r = store.state.data.busyNotes?.[store.busyNoteKey(date, start)]; return r && !r.deletedAt && r.text ? r.text : ''; }
+export function saveBusyNote(date, start, text) {
+  const key = store.busyNoteKey(date, start);
+  const [d, m] = key.split(':');
+  store.state.data.busyNotes = store.state.data.busyNotes || {};
+  store.state.data.busyNotes[key] = { id: key, date: d, start: +m, text, updatedAt: store.nowISO(), deletedAt: text ? null : store.nowISO() };
+  store.save(); sync.autoSync();
+}
+function busyNoteSheet(date, start, end, rerender) {
+  const cur = busyNoteOf(date, start);
+  const inp = el('input.text', { type: 'text', value: cur, placeholder: '例: ゼミ・歯医者', maxlength: 200, autocomplete: 'off' });
+  sheet((close) => [
+    el('h2', `${mm(start % 1440)}〜${mm(end % 1440)} の予定`),
+    el('p.muted.small', 'カレンダーの予定の中身は取得していません。何の予定かをひと言で残せます(記録するときのメモにもなります)。'),
+    el('div.row', inp),
+    el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
+      cur ? el('button.btn.danger', { type: 'button', onclick: () => { saveBusyNote(date, start, ''); close(); rerender(); toast('メモを消しました'); } }, '消す') : null,
+      el('button.btn.primary.grow', { type: 'button', onclick: () => { const v = inp.value.trim(); if (v !== cur) saveBusyNote(date, start, v); close(); rerender(); if (v) toast('メモを残しました'); } }, '保存')].filter(Boolean)),
+  ]);
+  setTimeout(() => inp.focus(), 50);
 }
 
 /// ================= タイムライン =================
@@ -606,15 +636,16 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], entries, nextEn
   const takenIv = items.map((x) => ({ start: x.start, end: x.end }));
   const ovl = (g, z) => Math.max(0, Math.min(g.end, z.end) - Math.max(g.start, z.start));
   const upto = gapUpto == null ? lo : Math.min(hi, gapUpto); // 「この時間は?」を出す範囲の終わり(未来の日は無し)
-  const busyMem = (b) => { const bk = busyKey(date, b.start); const mem = S().busyMemory?.[bk]; return { bk, mc: mem && cats().some((c) => c.id === mem) ? catOf(mem) : null }; };
+  const busyMem = (b) => { const bk = busyKey(date, b.start); const mem = S().busyMemory?.[bk]; return { bk, mc: mem && cats().some((c) => c.id === mem) ? catOf(mem) : null, note: busyNoteOf(date, b.start) }; }; // note: 予定のメモ(v0.22)
+  const busyBlock = (b, s, e) => { const { mc, note } = busyMem(b); return block(s, e, { name: note || (mc ? `予定: ${mc.name}` : '予定'), color: mc ? mc.color : null, busy: true, onclick: () => busyNoteSheet(date, b.start, b.end, rerender) }); }; // 予定の背景はタップでメモ(v0.22・F6-6)
   /** 未記録の区間のボタン。bz があれば予定の時間(覚えたカテゴリが候補・記録すると覚える) */
   const gapButton = (g, bz) => {
     const inSleep = zones.reduce((a, z) => a + ovl(g, z), 0) > (g.end - g.start) / 2;
-    const { bk, mc } = bz ? busyMem(bz) : { bk: null, mc: null };
+    const { bk, mc, note } = bz ? busyMem(bz) : { bk: null, mc: null, note: '' };
     const guess = inSleep ? 'sleep' : mc ? mc.id : null;
-    const label = inSleep ? '寝ていた?' : bz ? (mc ? `予定: ${mc.name}?` : '予定の時間は?') : 'この時間は?';
+    const label = inSleep ? '寝ていた?' : bz ? (note ? `${note}?` : mc ? `予定: ${mc.name}?` : '予定の時間は?') : 'この時間は?';
     const gb = el('button.blk.gap', { type: 'button', class: `blk gap${bz ? ' busy' : ''}`, style: { top: `${y(g.start)}px`, height: `${Math.max(4, y(g.end) - y(g.start))}px` }, title: `${mm(g.start % 1440)}〜${mm(g.end % 1440)} 未記録${bz ? '(予定)' : ''}`,
-      onclick: () => entrySheet({ date, start: g.start, end: g.end, categoryId: guess && cats().some((c) => c.id === guess) ? guess : guessByHour(g.start), title: `${mm(g.start % 1440)}〜${mm(g.end % 1440)} は${inSleep ? '寝ていた?' : '何をしていた?'}`, busyKey: bk }, rerender) });
+      onclick: () => entrySheet({ date, start: g.start, end: g.end, categoryId: guess && cats().some((c) => c.id === guess) ? guess : guessByHour(g.start), title: `${mm(g.start % 1440)}〜${mm(g.end % 1440)} は${inSleep ? '寝ていた?' : note ? `「${note}」?` : '何をしていた?'}`, busyKey: bk, busyAt: bz ? { start: bz.start, end: bz.end } : null, busyNote: note }, rerender) });
     if (y(g.end) - y(g.start) >= 26) gb.append(el('span.blk-name', label));
     logLane.append(gb);
   };
@@ -624,8 +655,8 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], entries, nextEn
     for (const p of busyParts) {
       const past = { start: p.start, end: Math.min(p.end, upto) }, fut = { start: Math.max(p.start, upto), end: p.end };
       if (past.end - past.start >= 15) gapButton(past, p.src);
-      else if (past.end > past.start) { const { mc } = busyMem(p.src); logLane.append(block(past.start, past.end, { name: mc ? `予定: ${mc.name}` : '予定', color: mc ? mc.color : null, busy: true })); }
-      if (fut.end > fut.start) { const { mc } = busyMem(p.src); logLane.append(block(fut.start, fut.end, { name: mc ? `予定: ${mc.name}` : '予定', color: mc ? mc.color : null, busy: true })); }
+      else if (past.end > past.start) logLane.append(busyBlock(p.src, past.start, past.end));
+      if (fut.end > fut.start) logLane.append(busyBlock(p.src, fut.start, fut.end));
     }
     for (const q of subtractIntervals([g], busyParts)) {
       const past = { start: q.start, end: Math.min(q.end, upto) };
@@ -815,7 +846,7 @@ function categorySheet(e, rerender) {
   ]);
 }
 function taskLinkSheet(e, rerender) {
-  const tasks = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt).sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1));
+  const tasks = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'memo').sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1)); // v0.22: メモは紐づけない
   sheet((close) => [
     el('h2', 'タスクを紐づけ'),
     tasks.length ? null : el('p.muted.small', 'タスクがありません。'),

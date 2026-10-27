@@ -660,6 +660,31 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Ai.QUICK_QUESTIONS.length === 5 && Ai.MAX_CHARS === 1800 && Ai.URL_MAX_CHARS === 1500 && Ai.DEFAULT_SHORTCUT === 'メリハリ', 'ai の定数');
     ok(S.defaultData && JSON.stringify(Object.keys(S.defaultData())).includes('wants') && true, 'defaultData に wants');
 
+    // ---- v0.22: メモ・小さく始める・続いた日数・予定のメモ ----
+    log('\n# v0.22');
+    const P22 = M.plan;
+    const memoD = S.migrate({ schema: 1, tasks: { m: { id: 'm', name: 'メモ', kind: 'memo', categoryId: 'research' }, x: { id: 'x', name: 'x', kind: 'bogus' } } });
+    ok(memoD.tasks.m.kind === 'memo' && memoD.tasks.x.kind === 'duty', 'validateTask(v0.22): kind memo を通す・知らない kind は duty');
+    ok(P22.goals(memoD.tasks, {}, '2026-10-27', 600).length === 0 && P22.overdueTasks(memoD.tasks, '2026-10-27', {}).length === 0 && P22.todayShare(memoD.tasks, '2026-10-27', {}).length === 0, 'goals/overdue/todayShare: メモは目安に入らない');
+    ok(P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 10 }) === 20 && P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 30 }) === null && P22.startSpan({ kind: 'daily', targetMin: 3, doneMin: 0 }) === 5, 'startSpan: 毎日=目安の残り(5 分以上・届いていれば null)');
+    ok(P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 0 }) === 60 && P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 290 }) === 15 && P22.startSpan({ kind: 'wish', targetMin: null, doneMin: 0 }) === 15, 'startSpan: 毎週=残りと 60 分の小さい方(15 分以上)・やりたいこと=15 分');
+    ok(P22.startSpan({ kind: 'deadline', targetMin: 60, doneMin: 0 }) === null && P22.startSpan({ kind: 'daily', targetMin: null, doneMin: 0, noTime: true }) === null && P22.startSpan(null) === null, 'startSpan: 期限つき・用事・無しは null');
+    const hab = { id: 'h', name: 'h', kind: 'duty', repeat: { type: 'daily', min: 30 }, checks: ['2026-10-25', '2026-10-26'] };
+    ok(P22.habitStreak(hab, {}, '2026-10-27') === 2, 'habitStreak: きょうがまだなら昨日から数える(2 日)');
+    ok(P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:30', taskId: 'h' } }, '2026-10-27') === 3 && P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:20', taskId: 'h' } }, '2026-10-27') === 2, 'habitStreak: 記録が目安に届いた日も数える(届かない日は数えない)');
+    ok(P22.habitStreak({ ...hab, checks: ['2026-10-23', '2026-10-26'] }, {}, '2026-10-27') === 1 && P22.habitStreak({ ...hab, checks: [] }, {}, '2026-10-27') === 0 && P22.habitStreak({ id: 'w', kind: 'wish', repeat: null }, {}, '2026-10-27') === 0, 'habitStreak: 途切れたら数え直し・無ければ 0・やりたいことは 0');
+    const wk22 = { id: 'wk', name: 'wk', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, checks: ['2026-10-18', '2026-10-25'] };
+    ok(P22.habitStreak(wk22, {}, '2026-10-27') === 2 && P22.habitStreak(wk22, {}, '2026-11-01') === 2 && P22.habitStreak(wk22, {}, '2026-11-09') === 0, 'habitStreak: 毎週は週の終わりごとに数える(今週がまだなら先週から・1 週空くと 0)');
+    ok(S.busyNoteKey('2026-10-27', 540) === '2026-10-27:540' && S.busyNoteKey('2026-10-27', 1470) === '2026-10-28:30' && S.busyNoteKey('2026-10-31', 1500) === '2026-11-01:60', 'busyNoteKey: 日付:開始分・深夜(1440 超)は翌日へ正規化');
+    const bnD = S.migrate({ schema: 1, busyNotes: { '2026-10-27:540': { text: 'ゼミ', updatedAt: '2026-10-27T08:00:00+09:00' }, bad: { text: 'x' }, '2026-10-27:1500': { text: 'y' }, '2026-10-27:600': { id: '2026-10-27:600', text: 'あ'.repeat(300) } } });
+    ok(Object.keys(bnD.busyNotes).length === 2 && bnD.busyNotes['2026-10-27:540'].date === '2026-10-27' && bnD.busyNotes['2026-10-27:540'].start === 540 && bnD.busyNotes['2026-10-27:540'].text === 'ゼミ' && bnD.busyNotes['2026-10-27:600'].text.length === 200, 'validateBusyNote/migrate: キーの形と開始分を検証・本文 200 字');
+    ok('busyNotes' in S.defaultData() && eq(S.migrate(null).busyNotes, {}), 'defaultData/migrate: busyNotes を持つ');
+    const bnA = { schema: 1, settings: S.defaultSettings(), busyNotes: { '2026-10-27:540': { id: '2026-10-27:540', text: 'ゼミ', updatedAt: '2026-10-27T08:00:00+09:00' }, '2026-10-27:600': { id: '2026-10-27:600', text: 'a', updatedAt: '2026-10-27T08:00:00+09:00' } }, meta: {} };
+    const bnB = { schema: 1, settings: S.defaultSettings(), busyNotes: { '2026-10-27:540': { id: '2026-10-27:540', text: '輪講', updatedAt: '2026-10-27T09:00:00+09:00' }, '2026-10-28:540': { id: '2026-10-28:540', text: 'b', updatedAt: '2026-10-27T08:00:00+09:00' } }, meta: {} };
+    const bnM = Sy.merge(bnA, bnB);
+    ok(bnM.busyNotes['2026-10-27:540'].text === '輪講' && bnM.busyNotes['2026-10-27:600'] && bnM.busyNotes['2026-10-28:540'] && eq(bnM, Sy.merge(bnB, bnA)), 'merge: 予定のメモは キーごとの LWW・片側だけのものは残る・対称');
+    ok(!Sy.pruneTombstones({ entries: {}, tasks: {}, busyNotes: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: { text: 'b' } } }, '2026-10-27T00:00:00+09:00').busyNotes.a, 'pruneTombstones: 予定のメモの古い削除も掃除');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

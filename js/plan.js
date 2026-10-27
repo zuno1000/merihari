@@ -186,6 +186,42 @@ export function rollRecurring(tasks, today, ctx) {
   return { tasks: out, rolled };
 }
 
+/**
+ * 小さく始める(v0.22・F5-12): 習慣・やりたいことを ▶ で始めるときの区切り(分)。記録に plannedMin として載り、ホームのカードが「あと ◯分で区切り」と数える。
+ * 毎日=目安の残り(5 分以上)、毎週=残りと 60 分の小さい方(15 分以上)、やりたいこと=15 分。もう届いている・期限つき・用事は null(区切らない)。純関数
+ */
+export function startSpan(g) {
+  if (!g || g.noTime) return null;
+  if (g.kind === 'wish') return 15;
+  if (!g.targetMin) return null;
+  const left = g.targetMin - (g.doneMin || 0);
+  if (left <= 0) return null;
+  if (g.kind === 'daily') return Math.max(5, left);
+  if (g.kind === 'weekly') return Math.max(15, Math.min(60, left));
+  return null;
+}
+
+/**
+ * 続いた日数(v0.22・F5-12): 毎日の習慣は「その日に届いた(印か記録が目安以上)」日が今日(まだなら昨日)から何日続いているか。
+ * 毎週は週の終わりの日付ごとに同じ(単位は週)。それ以外は 0。最大 400。純関数
+ */
+export function habitStreak(t, entries, date) {
+  if (!t || !t.repeat || t.kind === 'wish') return 0;
+  const target = t.noTime ? null : t.repeat.type === 'daily' ? (+t.repeat.min > 0 ? +t.repeat.min : 30) : Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
+  const step = t.repeat.type === 'weekly' ? 7 : 1;
+  const metOn = (d) => {
+    if (isChecked(t, d)) return true;
+    if (target == null) return false;
+    const to = t.repeat.type === 'weekly' ? deadlineKey(t, d) : d;
+    const from = t.repeat.type === 'weekly' ? addDays(to, -6) : d;
+    return loggedBetween(entries, t.id, from, to) >= target;
+  };
+  let d = date, n = 0;
+  if (!metOn(d)) d = addDays(d, -step); // 今日(今週)がまだでも途切れ扱いにしない
+  while (n < 400 && metOn(d)) { n++; d = addDays(d, -step); }
+  return n;
+}
+
 /** 空き区間 [{start,end}](from〜to の中で blocks が無いところ) */
 export function freeSlots(blocks, from, to) {
   if (to <= from) return [];
