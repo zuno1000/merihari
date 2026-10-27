@@ -170,3 +170,20 @@ export function confirmSheet(title, body, okLabel, onOk, danger = false) {
 }
 
 export const DAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+/**
+ * 入力中にボタンを押してもキーボードを閉じない(v0.22.1・実機 FB): iOS はボタンのタップで入力欄がフォーカスを失い、キーボードが閉じる
+ * (かんたん追加の 種類 / チップ、日記の「材料」)。container の中で selector に当たるボタンを、within(省略時は container)の入力欄に
+ * フォーカスがあるときに触ると、touchend を preventDefault して自分で click を起こす(合成の mousedown が起きないのでフォーカスが外れない)。
+ * 指が 10px 動いたらスクロールとみなして何もしない。マウスは mousedown の preventDefault。時計・日付のように別のシートを開くボタンには付けない。
+ */
+export function keepFocus(container, { selector = 'button', within = null } = {}) {
+  const editing = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && (within || container).contains(a) ? a : null; };
+  let touch = null;
+  const btnOf = (e) => { const b = e.target.closest(selector); return b && container.contains(b) && !b.disabled ? b : null; };
+  container.addEventListener('touchstart', (e) => { const b = btnOf(e); touch = b && editing() ? { b, x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+  container.addEventListener('touchmove', (e) => { if (touch && (Math.abs(e.touches[0].clientX - touch.x) > 10 || Math.abs(e.touches[0].clientY - touch.y) > 10)) touch = null; }, { passive: true });
+  container.addEventListener('touchcancel', () => { touch = null; }, { passive: true });
+  container.addEventListener('touchend', (e) => { const t = touch; touch = null; if (!t || e.touches.length || btnOf(e) !== t.b) return; e.preventDefault(); t.b.click(); }, { passive: false });
+  container.addEventListener('mousedown', (e) => { if (btnOf(e) && editing()) e.preventDefault(); });
+}

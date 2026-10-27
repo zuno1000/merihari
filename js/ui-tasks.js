@@ -2,7 +2,7 @@
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
 // v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週 繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
-import { el, clear, toast, sheet, confirmSheet, svg, timeField } from './ui.js';
+import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMinJa, fmtMD, effectiveDay, DAY_JA } from './time.js';
@@ -118,10 +118,12 @@ function quickAdd(today, rerender) {
     rerender(t.kind === 'memo'); // メモは続けて書けるように入力欄へ戻る(v0.22)
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-  return el('section.card.quick', [
+  const card = el('section.card.quick', [
     el('div.row', [name, el('button.btn.primary', { type: 'button', onclick: submit }, '追加')]),
     more,
   ]);
+  keepFocus(card, { selector: '.seg button, button.chip, button.btn.primary' }); // v0.22.1: 種類・チップ・追加 を押してもキーボードを閉じない(時計・日付は除く)
+  return card;
 }
 
 /**
@@ -246,7 +248,7 @@ const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? 
 /** 編集(v0.17・v0.22): 種類(メモ / 期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる。期限には「毎週 繰り返す」、期限・毎日・毎週には「時間を計らない」。メモは種類を選ぶとタスクや習慣になる */
 function editSheet(t, today, rerender, ctx) {
   const cats = S().categories.filter((c) => !c.archived || c.id === t.categoryId).sort((a, b) => a.order - b.order);
-  const name = el('input.text', { type: 'text', value: t.name, maxlength: 100 });
+  const name = el('input.text', { type: 'text', value: t.name, maxlength: 200 });
   let kind = t.kind === 'wish' ? 'wish' : t.kind === 'memo' ? 'memo' : t.repeat?.type === 'daily' ? 'daily' : t.repeat?.type === 'weekly' ? 'weekly' : 'deadline';
   const deadline = el('input.date', { type: 'date', value: t.deadline ? t.deadline.slice(0, 10) : '' });
   const dlTime = timeField(t.deadline && t.deadline.length >= 16 ? t.deadline.slice(11, 16) : '', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });

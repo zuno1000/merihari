@@ -1,7 +1,7 @@
 // merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1 日 1 件。気分(5 つのタップ)+ 3 行(よかったこと / ひっかかったこと / 明日は)+ メモ(折りたたみ)。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。「きょうの材料」(その日の記録・ふり返り・昨日の「明日は」)はタップで欄に入る。
 // 下に続いた日数と最近 14 日の一覧(気分の点・1 行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
-import { el, clear, toast, svg, sheet } from './ui.js';
+import { el, clear, toast, svg, sheet, keepFocus } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
@@ -115,6 +115,7 @@ export function renderDiary(view, ctx, dateArg = null) {
     field('note', 'メモ', '自由に'), // v0.20: 折りたたみをやめて最初から開いておく
     seedChips,
   ].filter(Boolean));
+  if (seedChips) keepFocus(seedChips, { selector: 'button.chip', within: card }); // v0.22.1: 書いている途中に材料を押してもキーボードを閉じない
 
   // 続いた日数と最近の一覧
   const listBox = el('div');

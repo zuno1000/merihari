@@ -707,6 +707,27 @@ document.getElementById('app').addEventListener('load', async () => {
     doc.body.append(tlProbe);
     try { ok(getComputedStyle(gapBusy).pointerEvents === 'auto' && getComputedStyle(bgBusy).pointerEvents === 'none', 'CSS: 予定の時間のボタン(.blk.gap.busy)は押せる・背景の予定(.blk.busy)は押せない'); } finally { tlProbe.remove(); }
 
+    // v0.22.1: 入力中にボタンを押してもキーボードを閉じない(keepFocus)。iframe の DOM に小さな部品を作って touch を模擬(localStorage には触らない)
+    {
+      const box = W.document.createElement('div'); const kin = W.document.createElement('input'); const kb = W.document.createElement('button'); kb.type = 'button'; kb.className = 'chip';
+      let clicks = 0; kb.addEventListener('click', () => { clicks++; });
+      box.append(kin, kb); W.document.body.append(box);
+      try {
+        M.ui.keepFocus(box, { selector: 'button.chip' });
+        const touchOn = (type, target, dx = 0) => { const t = new W.Touch({ identifier: 9, target, clientX: 10 + dx, clientY: 10 }); const ev = new W.TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t] }); target.dispatchEvent(ev); return ev; };
+        kin.focus();
+        touchOn('touchstart', kb); const e1 = touchOn('touchend', kb);
+        ok(e1.defaultPrevented && clicks === 1 && W.document.activeElement === kin, 'keepFocus: 入力中にボタンを touch すると touchend を止めて自分で click(1 回)・フォーカスは入力欄のまま');
+        touchOn('touchstart', kb); touchOn('touchmove', kb, 30); const e2 = touchOn('touchend', kb);
+        ok(!e2.defaultPrevented && clicks === 1, 'keepFocus: 指が動いたら(スクロール)何もしない');
+        kin.blur();
+        touchOn('touchstart', kb); const e3 = touchOn('touchend', kb);
+        ok(!e3.defaultPrevented && clicks === 1, 'keepFocus: 入力中でなければふつうのタップ(ブラウザの click に任せる)');
+        kin.focus(); const md = new W.MouseEvent('mousedown', { bubbles: true, cancelable: true }); kb.dispatchEvent(md);
+        ok(md.defaultPrevented, 'keepFocus: マウスは mousedown を止めてフォーカスを奪わせない');
+      } finally { box.remove(); }
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
