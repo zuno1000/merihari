@@ -145,11 +145,21 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
+/**
+ * シートを閉じた直後の click を捨てる(v0.23.1・実機 FB「時刻をセットし終えたとき他のチップを押してしまう」):
+ * 時計の文字盤は分を選んだ pointerup で閉じるが、タッチでは touchend のあとに click が合成され、閉じたシートの下にあったチップに落ちていた。
+ * 閉じてから 350ms はブラウザ由来(isTrusted)の click を止める。keepFocus などアプリが起こす click は通す。
+ */
+let lastSheetClose = -Infinity; // 起動直後に効かないように(テストで検出)
+const SHEET_CLICK_GUARD_MS = 350;
+document.addEventListener('click', (e) => { if (e.isTrusted && performance.now() - lastSheetClose < SHEET_CLICK_GUARD_MS) { e.stopPropagation(); e.preventDefault(); } }, true);
+export const sheetJustClosed = () => performance.now() - lastSheetClose < SHEET_CLICK_GUARD_MS;
+
 /** 下から出るシート。build(close) が返す要素を中に入れる。背景タップで閉じる */
 export function sheet(build, onClose = null) {
   const ov = el('div.overlay', { role: 'dialog', 'aria-modal': 'true' });
   let closed = false;
-  const close = () => { if (closed) return; closed = true; ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
+  const close = () => { if (closed) return; closed = true; lastSheetClose = performance.now(); ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);

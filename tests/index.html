@@ -710,6 +710,12 @@ document.getElementById('app').addEventListener('load', async () => {
     const rp = M.report.buildReport({ entries: pes, date: '2026-10-27', nowMin: 1800, settings: S.defaultSettings(), tasks: {}, planBlocks: pbs });
     ok(rp.byCategory.research.planned === 60 && rp.byCategory.rest.planned === 60 && rp.byCategory.rest.actual === 0, 'buildReport(v0.23): byCategory.planned に予定の分(予定だけのカテゴリも行に)');
 
+    // ---- v0.23.1: 記録のメモ・シートを閉じた直後の click ----
+    log('\n# v0.23.1');
+    const LC = { uid: (() => { let i = 0; return () => 'u' + (++i); })(), nowISO: () => '2026-10-27T10:00:00+09:00' };
+    ok(M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: ' 輪講の準備 ' }, LC).entry.note === ' 輪講の準備 ' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research' }, LC).entry.note === '' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: 'x'.repeat(600) }, LC).entry.note.length === 500, 'log.start(v0.23.1): メモを持てる(500 字まで・無ければ空)');
+    ok(typeof M.ui.sheetJustClosed === 'function' && M.ui.sheetJustClosed() === false, 'sheetJustClosed: 何も閉じていなければ false');
+
     // ---- 版規約(§9) ----
     log('\n# version');
     const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();

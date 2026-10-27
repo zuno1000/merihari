@@ -121,7 +121,7 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
     const last = log.entriesOf(E(), n.date).filter((x) => x.end != null && hm(x.end) < n.min).pop();
     if (last) startMin = hm(last.end);
   }
-  const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null }, LCTX);
+  const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null, note: extra.note || '' }, LCTX); // note: v0.23.1
   if (r.ignored) { toast(`${catOf(categoryId).name} を記録中です`); return r; }
   commit(log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX), `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める
   refreshAddButton();
@@ -444,18 +444,20 @@ function chipsSheet(n0, rerender, mode0 = null) {
   const mark = () => candChips.querySelectorAll('.chip').forEach((x, i) => x.classList.toggle('on', hm(st.value) === cands[i].min));
   st.addEventListener('click', () => setTimeout(mark, 0));
   const timeBox = el('div.timebox', [el('div.row.field', [el('span.label', 'いつ'), st, el('span', '〜'), en]), candChips]);
+  const noteIn = el('input.text.note-in', { type: 'text', placeholder: 'メモ(任意)', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ' }); // v0.23.1: どの記録にもメモ
   const pick = (cid, taskId = null) => {
+    const note = noteIn.value.trim();
     if (mode === 'now') {
       close();
       const c = catOf(cid);
-      if (store.kindRole(S(), c.kind).drift && !(o && o.categoryId === cid) && !taskId) { driftSheet(c, n, rerender); return; }
-      startCategory(cid, null, { taskId }); rerender(); return;
+      if (store.kindRole(S(), c.kind).drift && !(o && o.categoryId === cid) && !taskId) { driftSheet(c, n, rerender, note); return; }
+      startCategory(cid, null, { taskId, note }); rerender(); return;
     }
     const s0 = lateFix(hm(st.value), n.min); // 深夜(切れ目の前)は実効の日の 24:xx(v0.17)
     if (s0 == null) { toast('開始を選んでください'); return; }
     try {
-      if (!en.value) { if (s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); startCategory(cid, s0, { taskId }); rerender(); return; }
-      close(); addClosed({ date: n.date, startMin: s0, endMin: lateFix(hm(en.value), n.min), categoryId: cid, taskId }); rerender();
+      if (!en.value) { if (s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); startCategory(cid, s0, { taskId, note }); rerender(); return; }
+      close(); addClosed({ date: n.date, startMin: s0, endMin: lateFix(hm(en.value), n.min), categoryId: cid, taskId, note }); rerender();
     } catch (err) { toast(err.message); }
   };
   const chip = (c, label, onpick, on) => {
@@ -482,6 +484,7 @@ function chipsSheet(n0, rerender, mode0 = null) {
     title,
     seg,
     timeBox,
+    el('div.row.field', [el('span.label', 'メモ'), noteIn]),
     taskChips,
     chips,
     o ? el('div.row', [el('span.grow'), el('button.btn', { type: 'button', onclick: () => { close(); stopRecording(); rerender(); } }, '終わる')]) : null,
@@ -489,8 +492,8 @@ function chipsSheet(n0, rerender, mode0 = null) {
 }
 
 /** ダラダラの区切り(F4-5): 終了予定を記録に持たせ、ホームの記録中カードで「あと ◯分で区切り」を出す */
-function driftSheet(c, n0, rerender) {
-  const go = (min) => { startCategory(c.id, null, { plannedMin: min }); rerender(); };
+function driftSheet(c, n0, rerender, note = '') {
+  const go = (min) => { startCategory(c.id, null, { plannedMin: min, note }); rerender(); };
   sheet((close) => [
     el('h2', `${c.name}、あと何分?`),
     el('div.row.wrap', [10, 20, 30].map((m) => el('button.btn.grow', { type: 'button', onclick: () => { close(); go(m); } }, `${m}分`))),
@@ -570,20 +573,20 @@ export function entrySheet(o, rerender) {
   const st = timeField(mm(o.start % 1440), { label: '開始' });
   const en = timeField(o.end == null ? '' : mm(o.end % 1440), { label: '終了', emptyLabel: 'いまも続けている', allowEmpty: isToday });
   const nm = () => taskName(o.taskId, cid);
-  // v0.22・F6-6: 予定(busy)の時間なら「予定のメモ」の欄。保存すると予定のメモに残り、記録のメモにもなる
-  const bn = o.busyAt ? el('input.text', { type: 'text', value: o.busyNote || '', placeholder: '何の予定?(例: ゼミ)', maxlength: 200, autocomplete: 'off' }) : null;
-  const keepBusyNote = () => { if (!bn) return ''; const v = bn.value.trim(); if (v !== (o.busyNote || '')) saveBusyNote(o.date, o.busyAt.start, v); return v; };
+  // v0.23.1: どの記録にもメモ(任意)。予定(busy)の時間なら「予定のメモ」(v0.22・F6-6): 保存すると予定のメモにも残る
+  const bn = el('input.text.note-in', { type: 'text', value: o.busyNote || '', placeholder: o.busyAt ? '何の予定?(例: ゼミ)' : 'メモ(任意)', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ' });
+  const keepBusyNote = () => { const v = bn.value.trim(); if (o.busyAt && v !== (o.busyNote || '')) saveBusyNote(o.date, o.busyAt.start, v); return v; };
   sheet((close) => [
     el('h2', o.title || (isToday && o.start === defaultStart(n.date, n.min) ? `${nm()}、いつ?` : `${md(o.date)} ${nm()}`)),
     o.taskId ? el('p.muted.small', `タスク「${T()[o.taskId]?.name || ''}」に紐づけます`) : catChipPicker(cid, (v) => { cid = v; }),
-    bn ? el('label.field.col', [el('span.label', '予定のメモ'), bn]) : null,
     el('div.row.field', [el('span.label', 'いつ'), st, el('span', '〜'), en]),
+    el('div.row.field', [el('span.label', o.busyAt ? '予定のメモ' : 'メモ'), bn]),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const s0 = lateFix(hm(st.value), o.start); // 深夜(切れ目の前)の区間は 24:xx のまま(v0.17・F1-18)
         if (s0 == null) { toast('開始を選んでください'); return; }
         try {
-          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); keepBusyNote(); startCategory(cid, s0, { taskId: o.taskId ?? null }); rerender(); return; }
+          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); const note = keepBusyNote(); startCategory(cid, s0, { taskId: o.taskId ?? null, note }); rerender(); return; }
           close(); const note = keepBusyNote(); addClosed({ date: o.date, startMin: s0, endMin: lateFix(hm(en.value), o.end ?? o.start), categoryId: cid, taskId: o.taskId ?? null, busyKey: o.busyKey || null, note }); rerender();
         } catch (err) { toast(err.message); }
       } }, '記録')]),

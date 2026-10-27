@@ -75,7 +75,7 @@ export function closeOpen(entries, { date, at, windowEndOf }, ctx) {
 
 /**
  * チップ: カテゴリの記録を開始(F1-1/F1-2)。
- * opts = { date, startMin(省略時 nowMin), nowMin, categoryId, windowEndOf, taskId, plannedMin }
+ * opts = { date, startMin(省略時 nowMin), nowMin, categoryId, windowEndOf, taskId, plannedMin, note }
  * 同じカテゴリを記録中で同じ日なら何もしない(ignored: true)。
  */
 export function start(entries, opts, ctx) {
@@ -86,7 +86,7 @@ export function start(entries, opts, ctx) {
   let { entries: out } = closeOpen(entries, { date, at: startMin, windowEndOf: opts.windowEndOf }, ctx);
   const e = {
     id: ctx.uid(), date, start: mm(startMin), end: null, categoryId,
-    taskId: opts.taskId ?? null, note: '', plannedMin: opts.plannedMin ?? null, updatedAt: ctx.nowISO(), deletedAt: null,
+    taskId: opts.taskId ?? null, note: typeof opts.note === 'string' ? opts.note.slice(0, 500) : '', plannedMin: opts.plannedMin ?? null, updatedAt: ctx.nowISO(), deletedAt: null, // note: v0.23.1
   };
   out[e.id] = e;
   out = resolveOverlap(out, e.id, nowMin, ctx);

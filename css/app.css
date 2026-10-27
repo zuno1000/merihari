@@ -455,7 +455,7 @@ button.crow:active{background:var(--accent-bg)}
 .planfig .plan-cat:first-of-type{border-top:0}
 .planfig .plan-cat-name{display:flex;align-items:center;gap:6px;font-size:14px;margin-bottom:2px}
 .planfig .goal-line{padding:0}
-.row.wrap{flex-wrap:wrap}
+.note-in{flex:1;min-width:0}
 .tl.one button.blk.busy{pointer-events:auto;cursor:pointer} /* v0.22: 予定の背景はタップでメモ(F6-6)。div の背景(記録と重なる部分)は触れないまま */
 .tl.one button.blk.busy:active{opacity:.7}
 .quick .qhint{margin:0}
