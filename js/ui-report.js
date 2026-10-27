@@ -293,17 +293,16 @@ function workKinds(r) {
   for (const [id, v] of Object.entries(r.byCategory || {})) { const c = S().categories.find((x) => x.id === id); const k = c ? c.kind : 'work'; if (kindRole(S(), k).work && v.actual > 0) out[k] = (out[k] || 0) + v.actual; }
   return Object.entries(out).sort((a, b) => b[1] - a[1]).map(([k, min]) => ({ id: k, name: kindRole(S(), k).name, min }));
 }
-/** パッと見の1行(v0.24): 作業の種別ごと・ダラダラ・記録率 を小さなタイルで */
+/** パッと見の1行(v0.24・v0.24.1 実機 FB): 作業の種別(作業 / 決まった作業 … 設定の種別の順・0 でも出す)と ダラダラ。記録率は「くわしく」のタイルに */
 function glance(r) {
-  const ks = workKinds(r);
-  const cov = Math.round((r.coverage || 0) * 100);
+  const got = Object.fromEntries(workKinds(r).map((k) => [k.id, k.min]));
+  const kinds = (S().kinds || []).filter((k) => k.work).map((k) => ({ id: k.id, name: k.name, min: got[k.id] || 0 }));
+  for (const k of workKinds(r)) if (!kinds.some((x) => x.id === k.id)) kinds.push(k); // 設定に無い種別(旧データ)も落とさない
   const tile = (k, v, cls = '') => el('div.gl-tile', { class: `gl-tile ${cls}` }, [el('span.gl-k', k), el('b.gl-v', v)]);
   return el('div.glance', [
-    ...ks.map((k) => tile(k.name, fmtMin(k.min))),
-    ks.length ? null : tile('作業', fmtMin(r.workMin) || '0m'),
+    ...kinds.map((k) => tile(k.name, fmtMin(k.min) || '0m')),
     tile(driftLabel(), fmtMin(r.driftMin) || '0m', r.driftMin >= 120 ? 'warn' : ''),
-    tile('記録', `${cov}%`),
-  ].filter(Boolean));
+  ]);
 }
 /** 気分の推移(v0.24・muute のムードフロー / Daylio の気分グラフに倣う): 日記の気分を日ごとの棒で。書いた日数・平均・いちばん良かった日 */
 function moodFigure(from, to) {

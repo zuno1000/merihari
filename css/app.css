@@ -702,7 +702,6 @@ button.srow.goal:first-child{border-top:0}
 .mrow .myen{flex:none;font-variant-numeric:tabular-nums;font-weight:600}
 .mrow .myen.in{color:#2f8f5b}
 @media (prefers-color-scheme:dark){.mrow .myen.in{color:#7fd1a3}}
-.fab,.fab2,.tab-add{display:none}
 
 /* ---- v0.20: 入力欄の見た目を揃える(iOS の二重枠)・日記のカレンダー・ほしいもの ---- */
 input.text,input.date,input.num,select,textarea,.yenin,.tfield{-webkit-appearance:none;appearance:none}
