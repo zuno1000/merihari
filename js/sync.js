@@ -12,7 +12,8 @@ const AUTO_INTERVAL_MS = 5 * 60000;  // F7-3: 前回から 5 分以上
 const TOMBSTONE_DAYS = 60;           // F5-4
 
 // ---- 暗号化 ----
-const b64 = (u8) => btoa(String.fromCharCode(...u8));
+/** Uint8Array → base64。v0.21.2: スプレッド(fromCharCode(...u8))は引数の上限(Safari は数万)を超えると RangeError「Maximum call stack size exceeded」になる(記録・日記・お金が増えて暗号文が大きくなった端末で同期が落ちた)。32K ずつに分けて変換する */
+const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const ITERATIONS = 310000; // §8.2
 async function deriveKey(pass, salt, iterations = ITERATIONS) {

@@ -10,7 +10,7 @@ const KEY = 'merihari.passkey';
 const RP_NAME = 'メリハリ';
 const PRF_SALT = new TextEncoder().encode('merihari.sync.pass.v1');
 
-const b64 = (u8) => btoa(String.fromCharCode(...new Uint8Array(u8)));
+const b64 = (buf) => { const u8 = new Uint8Array(buf); let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }; // v0.21.2: スプレッドは引数の上限で落ちる(sync.js と同じ)
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export const supported = () => typeof PublicKeyCredential !== 'undefined' && !!navigator.credentials?.create;

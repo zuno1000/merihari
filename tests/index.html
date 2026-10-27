@@ -363,6 +363,10 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(await Sy.decrypt(enc, 'correct horse battery'), { hello: 'メリハリ', n: 1 }), 'decrypt: 往復できる');
     let bad = false; try { await Sy.decrypt(enc, 'wrong passphrase!'); } catch (e) { bad = /復号/.test(e.message); }
     ok(bad, 'decrypt: 違うパスフレーズは失敗する');
+    // v0.21.2: 大きなデータ(数百 KB)でも base64 変換が落ちない(fromCharCode のスプレッドは引数の上限で「Maximum call stack size exceeded」)
+    const bigObj = { entries: Object.fromEntries(Array.from({ length: 3000 }, (_, i) => [`e${i}`, { id: `e${i}`, date: '2026-10-11', start: '09:00', end: '10:00', categoryId: 'research', note: 'メモ'.repeat(20), updatedAt: '2026-10-11T10:00:00+09:00' }])) };
+    const encBig = await Sy.encrypt(bigObj, 'correct horse battery', '', { iterations: 1000 });
+    ok(encBig.length > 300000 && eq(await Sy.decrypt(encBig, 'correct horse battery'), bigObj), 'encrypt/decrypt(v0.21.2): 300KB 超のデータでも往復できる(base64 を分割変換)');
     const enc2 = await Sy.encrypt({ a: 1 }, 'correct horse battery', '', { iterations: 1000 });
     ok(JSON.parse(enc2).iv !== encObj.iv, 'encrypt: IV は毎回ランダム');
     let badFile = false; try { await Sy.decrypt(JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256-10', salt: 'AA==', iv: 'AA==', ct: 'AA==' }), 'x'); } catch (e) { badFile = /不正/.test(e.message); }
