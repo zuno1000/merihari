@@ -1,7 +1,7 @@
-// merihari ─ diary.js: 日記(v0.18・F9)の純関数。3 行(よかったこと / ひっかかったこと / 明日は)+ 気分(1〜5)+ メモ。
-// 続けやすさの設計(参考: 小林弘幸の「3 行日記」= 失敗・感動・明日の目標、Five Minute Journal の夜の 2 問、Daylio の気分タップ、Apple ジャーナルの「その日の材料からの提案」):
-// - 1 行でも書けば「書いた日」。空欄は責めない。 - その日の記録・ふり返りから「材料」(タップで欄に入る)を出し、白紙から書かせない。
-// - 昨日の「明日は」を今日の材料に出し、今日を振り返りつつ明日につなぐ。 - 気分は 5 段階のタップ。
+// merihari ─ diary.js: 日記(v0.18・F9)の純関数。3行(よかったこと / ひっかかったこと / 明日は)+ 気分(1〜5)+ メモ。
+// 続けやすさの設計(参考: 小林弘幸の「3行日記」= 失敗・感動・明日の目標、Five Minute Journal の夜の2問、Daylio の気分タップ、Apple ジャーナルの「その日の材料からの提案」):
+// - 1行でも書けば「書いた日」。空欄は責めない。 - その日の記録・ふり返りから「材料」(タップで欄に入る)を出し、白紙から書かせない。
+// - 昨日の「明日は」を今日の材料に出し、今日を振り返りつつ明日につなぐ。 - 気分は5段階のタップ。
 import { addDays } from './time.js';
 import { fmtMinJa } from './time.js';
 
@@ -12,7 +12,7 @@ export const moodLabel = (v) => MOODS.find((m) => m.v === v)?.label || '';
 const alive = (d) => d && !d.deletedAt;
 const txt = (s) => (typeof s === 'string' ? s.trim() : '');
 
-/** 何か 1 つでも書いてあれば「書いた日」(気分だけでも可) */
+/** 何か1つでも書いてあれば「書いた日」(気分だけでも可) */
 export function isWritten(d) {
   return !!(alive(d) && (d.mood != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
 }
@@ -44,6 +44,13 @@ export function summarize(diary, from, to) {
  * 月のカレンダー(v0.20・F9-6): 月曜始まりの週で 'YYYY-MM' の日を並べる。各セル { key, inMonth, mood|null, written, future }。
  * today より後は future(書けない)。戻り値 { weeks: [[cell×7]…], days: 書いた日数, moodDays: 気分のある日数 }
  */
+/** 「あのころのきょう」(v0.24・Day One の On This Day に倣う): 1週間前・1か月前・1年前に書いた日記。純関数。戻り値 [{ label, key, d }] */
+export function memories(diary, date) {
+  const out = [];
+  for (const [days, label] of [[7, '1週間前'], [30, '1か月前'], [365, '1年前']]) { const k = addDays(date, -days); const d = diary?.[k]; if (isWritten(d)) out.push({ label, key: k, d }); }
+  return out;
+}
+
 export function monthCells(diary, ym, today) {
   const [y, m] = ym.split('-').map(Number);
   const first = `${ym}-01`;
@@ -70,7 +77,7 @@ export function monthCells(diary, ym, today) {
   return { weeks, days, moodDays };
 }
 
-/** 一覧用の 1 行(よかったこと → 明日は → ひっかかったこと → メモ の順で最初の文字列を 60 字まで) */
+/** 一覧用の1行(よかったこと → 明日は → ひっかかったこと → メモ の順で最初の文字列を60字まで) */
 export function excerpt(d, max = 60) {
   if (!alive(d)) return '';
   const s = txt(d.good) || txt(d.tomorrow) || txt(d.hard) || txt(d.note);
@@ -80,7 +87,7 @@ export function excerpt(d, max = 60) {
 /**
  * きょうの材料(Apple ジャーナル風・ルールベース): タップすると欄に入る短い文。
  * agg = report.aggregate の結果、fb = report.dayFeedback の結果、gs = plan.goals の行、prev = 前日の日記。
- * 戻り値 [{ field:'good'|'hard'|'tomorrow', text, src }](最大 8 件・同じ文は 1 回)
+ * 戻り値 [{ field:'good'|'hard'|'tomorrow', text, src }](最大8件・同じ文は1回)
  */
 export function seeds({ agg = null, fb = null, gs = [], prev = null, categories = [] } = {}) {
   const out = [];
@@ -89,7 +96,7 @@ export function seeds({ agg = null, fb = null, gs = [], prev = null, categories 
   if (prev && txt(prev.tomorrow)) push('good', `昨日の「明日は」: ${txt(prev.tomorrow)}`, 'prev');
   if (agg && agg.workMin > 0) {
     const top = Object.entries(agg.byCategory || {}).filter(([, r]) => r.work && r.actual > 0).sort((a, b) => b[1].actual - a[1].actual)[0];
-    push('good', top ? `${nameOf(top[0])}を ${fmtMinJa(top[1].actual)}(作業は合計 ${fmtMinJa(agg.workMin)})` : `作業は合計 ${fmtMinJa(agg.workMin)}`, 'work');
+    push('good', top ? `${nameOf(top[0])}を${fmtMinJa(top[1].actual)}(作業は合計${fmtMinJa(agg.workMin)})` : `作業は合計${fmtMinJa(agg.workMin)}`, 'work');
   }
   for (const g of gs) {
     if (g.done && (g.kind === 'daily' || g.kind === 'weekly' || g.kind === 'todo' || g.kind === 'deadline')) push('good', `${g.name}を済ませた`, 'task');
@@ -100,7 +107,7 @@ export function seeds({ agg = null, fb = null, gs = [], prev = null, categories 
     if (fb.better) push('hard', fb.better, 'fb');
     if (fb.next && !fb.next.startsWith('きょうはあと')) push('tomorrow', fb.next.replace(/^明日は\s*/, ''), 'fb');
   }
-  for (const g of gs) if (!g.done && g.kind === 'deadline' && g.targetMin) push('tomorrow', `${g.name}を ${fmtMinJa(g.targetMin)}`, 'task');
+  for (const g of gs) if (!g.done && g.kind === 'deadline' && g.targetMin) push('tomorrow', `${g.name}を${fmtMinJa(g.targetMin)}`, 'task');
   for (const g of gs) if (!g.done && g.kind === 'todo') push('tomorrow', `${g.name}を済ませる`, 'task');
   return out;
 }

@@ -1,7 +1,7 @@
-// merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1)。かんたん追加(名前 1 行+種類/いつまで/どれくらい/カテゴリのチップ)と一覧。
+// merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1)。かんたん追加(名前1行+種類/いつまで/どれくらい/カテゴリのチップ)と一覧。
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
-// v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週 繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
+// v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
 import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
@@ -21,7 +21,7 @@ export function fmtH(min) {
   const h = min / 60;
   return `${h >= 10 ? Math.round(h) : Math.round(h * 10) / 10}h`;
 }
-const fmtDeadline = (key, today) => (!key ? '期限なし' : key === today ? '期限 今日' : key === addDays(today, 1) ? '期限 明日' : `期限 ${fmtMD(key)}`);
+const fmtDeadline = (key, today) => (!key ? '期限なし' : key === today ? '期限 今日' : key === addDays(today, 1) ? '期限 明日' : `期限${fmtMD(key)}`);
 
 function saveTask(t) { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); autoSync(); }
 const effToday = () => effectiveDay(S(), dateKey(), minuteOfDay()).date;
@@ -56,7 +56,7 @@ function segRow(options, value, onpick) {
 }
 
 /**
- * かんたん追加(v0.17・v0.22): 名前の 1 行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの欄が出る。Enter か「追加」で保存。
+ * かんたん追加(v0.17・v0.22): 名前の1行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの欄が出る。Enter か「追加」で保存。
  * 既定は「メモ」(v0.22・F5-11): 名前だけで書き残せる(期限・量・カテゴリは持たない)。タスク画面の先頭「メモ」に並び、タップして種類を決めるとタスクや習慣になる。
  * タスク: いつまで(今日/明日/今週/来週/日付…/なし)・繰り返す(なし/毎週)・どれくらい(時間なし〜8時間)。習慣: 毎日/毎週・1日に(1週間に)。やりたいこと: カテゴリだけ。
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
@@ -145,7 +145,7 @@ export function overdueCheck(ctx, { force = false } = {}) {
     const plus = (half) => { if (!t.noTime) { t.remainingH = Math.max(0.25, Math.round((half ? left / 2 : left) / 15) * 15 / 60); t.remainingSetAt = store.nowISO(); } t.deadline = addDays(today, 7) + (t.deadline.length >= 16 ? t.deadline.slice(10) : ''); saveTask(t); };
     sheet((close) => [
       el('h2', `${t.name} は期限(${fmtMD(k)})を過ぎました`),
-      t.noTime ? el('p.muted.small', '用事(時間なし)') : el('p.muted.small', `残り ${fmtH(left)}`),
+      t.noTime ? el('p.muted.small', '用事(時間なし)') : el('p.muted.small', `残り${fmtH(left)}`),
       el('div.col', [
         el('button.btn.block.primary', { type: 'button', onclick: () => { close(); plus(false); next(i + 1); } }, '+1週'),
         t.noTime ? null : el('button.btn.block', { type: 'button', onclick: () => { close(); plus(true); next(i + 1); } }, '残りを半分にして +1週'),
@@ -199,16 +199,16 @@ export function renderTasks(view, ctx) {
     const meta = [];
     const recurTag = t.recur === 'weekly' && t.deadline ? `毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜` : null;
     if (t.kind === 'memo') meta.push(t.note ? t.note : 'メモ・タップして種類を決める');
-    else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日 ${fmtMinJa(t.repeat.min)}`, `きょう ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
-    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週 ${t.repeat.hours}h`, `今週 ${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週 ${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
-    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後 ${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)} 日ぶり)` : ''}` : 'まだ手つかず', `この 7 日 ${fmtH(g?.doneMin || 0)}`, '▶ で 15 分だけ');
+    else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日${fmtMinJa(t.repeat.min)}`, `きょう${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
+    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週${t.repeat.hours}h`, `今週${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
+    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)}日ぶり)` : ''}` : 'まだ手つかず', `この7日${fmtH(g?.doneMin || 0)}`, '▶ で15分だけ');
     else {
       meta.push(fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));
       if (recurTag) meta.push(recurTag);
       if (t.noTime) meta.push('用事');
       else {
-        meta.push(`残り ${fmtH(plan.remainingMin(t, E()))}`); // 記録した分を自動で引いた残り(v0.12)
-        if (g && g.kind === 'deadline') meta.push(`きょう ${fmtH(g.targetMin)}${g.doneMin ? `(済 ${fmtH(g.doneMin)})` : ''}`);
+        meta.push(`残り${fmtH(plan.remainingMin(t, E()))}`); // 記録した分を自動で引いた残り(v0.12)
+        if (g && g.kind === 'deadline') meta.push(`きょう${fmtH(g.targetMin)}${g.doneMin ? `(済${fmtH(g.doneMin)})` : ''}`);
       }
     }
     const over = !t.doneAt && !t.repeat && t.deadline && t.deadline.slice(0, 10) < today;
@@ -245,7 +245,7 @@ export function renderTasks(view, ctx) {
 }
 const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0);
 
-/** 編集(v0.17・v0.22): 種類(メモ / 期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる。期限には「毎週 繰り返す」、期限・毎日・毎週には「時間を計らない」。メモは種類を選ぶとタスクや習慣になる */
+/** 編集(v0.17・v0.22): 種類(メモ / 期限 / 毎日 / 毎週 / やりたい)で出す欄が変わる。期限には「毎週繰り返す」、期限・毎日・毎週には「時間を計らない」。メモは種類を選ぶとタスクや習慣になる */
 function editSheet(t, today, rerender, ctx) {
   const cats = S().categories.filter((c) => !c.archived || c.id === t.categoryId).sort((a, b) => a.order - b.order);
   const name = el('input.text', { type: 'text', value: t.name, maxlength: 200 });
@@ -267,7 +267,7 @@ function editSheet(t, today, rerender, ctx) {
   const noTimeRow = el('label.row.field', [noTimeIn, el('span.small', '時間を計らない(用事: チェックで済ませる)')]);
   const rows = {
     memo: el('p.muted.small', 'メモのまま置いておけます。期限 / 毎日 / 毎週 / やりたい を選ぶと、タスクや習慣になります。'),
-    deadline: el('div.col', [el('div.row.field', [el('span.label', '期限'), deadline, dlTime, el('button.btn.sm.ghost', { type: 'button', onclick: () => { deadline.value = ''; dlTime.set(''); } }, 'なし')]), el('label.row.field', [recurIn, el('span.small', '毎週 繰り返す(済んで期限を過ぎたら、翌週の同じ曜日が期限になって戻る)')]), remRow]),
+    deadline: el('div.col', [el('div.row.field', [el('span.label', '期限'), deadline, dlTime, el('button.btn.sm.ghost', { type: 'button', onclick: () => { deadline.value = ''; dlTime.set(''); } }, 'なし')]), el('label.row.field', [recurIn, el('span.small', '毎週繰り返す(済んで期限を過ぎたら、翌週の同じ曜日が期限になって戻る)')]), remRow]),
     daily: dailyRow,
     weekly: weeklyRow,
     wish: el('p.muted.small', '目安は持ちません。ふれた記録と最後の日だけを見ます。'),

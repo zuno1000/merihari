@@ -38,15 +38,15 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- time.js ----
     log('\n# time');
     ok(T.hm('07:30') === 450 && T.hm('7:05') === 425, 'hm: HH:MM → 分');
-    ok(T.hm('x') === null && T.hm('31:00') === null && T.hm(null) === null && T.hm('25:00') === 1500 && T.hm('24:10') === 1450, 'hm: 壊れた値は null・翌日の深夜(30:00 まで)は 24 時間超の分');
+    ok(T.hm('x') === null && T.hm('31:00') === null && T.hm(null) === null && T.hm('25:00') === 1500 && T.hm('24:10') === 1450, 'hm: 壊れた値は null・翌日の深夜(30:00まで)は24時間超の分');
     ok(T.mm(450) === '07:30' && T.mm(0) === '00:00', 'mm: 分 → HH:MM');
     ok(T.dateKey(new Date(2026, 9, 11)) === '2026-10-11', 'dateKey: ローカル YYYY-MM-DD');
     ok(T.dateKey(T.parseDateKey('2026-02-03')) === '2026-02-03', 'parseDateKey ↔ dateKey が往復する');
     ok(T.addDays('2026-10-31', 1) === '2026-11-01' && T.addDays('2026-01-01', -1) === '2025-12-31', 'addDays: 月またぎ・年またぎ');
     ok(T.weekday('2026-10-11') === 0 && T.dayKeyOf('2026-10-12') === 'mon', 'weekday / dayKeyOf');
     const d = S.defaultSettings();
-    ok(eq(T.windowFor(d, '2026-10-11'), { start: 480, end: 1380 }), 'windowFor: 日曜は 08:00〜23:00');
-    ok(eq(T.windowFor(d, '2026-10-12'), { start: 420, end: 1410 }), 'windowFor: 月曜は 07:00〜23:30');
+    ok(eq(T.windowFor(d, '2026-10-11'), { start: 480, end: 1380 }), 'windowFor: 日曜は08:00〜23:00');
+    ok(eq(T.windowFor(d, '2026-10-12'), { start: 420, end: 1410 }), 'windowFor: 月曜は07:00〜23:30');
     ok(T.windowFor({ window: { mon: ['23:00', '07:00'] } }, '2026-10-12') === null, 'windowFor: 終了≦開始は null');
     ok(eq(T.mergeIntervals([{ start: 10, end: 20 }, { start: 15, end: 30 }, { start: 40, end: 50 }, { start: 5, end: 5 }]),
       [{ start: 10, end: 30 }, { start: 40, end: 50 }]), 'mergeIntervals: 重なりをまとめ空区間を捨てる');
@@ -60,7 +60,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- store.js ----
     log('\n# store');
     const base = S.migrate(null);
-    ok(base.schema === S.SCHEMA && base.settings.categories.length === 11 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ11件・v0.12 で睡眠を追加)');
+    ok(base.schema === S.SCHEMA && base.settings.categories.length === 11 && eq(base.entries, {}), 'migrate(null): 既定データ(カテゴリ11件・v0.12で睡眠を追加)');
     ok(S.defaultSettings().categories !== S.defaultSettings().categories, 'defaultSettings: 呼ぶたびに新しいオブジェクト');
     ok(base.settings.habitsMigrated === true && !('habits' in base.settings) && !('routines' in base.settings) && !('ratio' in base.settings), 'defaultSettings(v0.15): 理想スケジュール用の設定を持たない');
     const broken = S.migrate({ schema: 1, bar: 2, settings: { transitMin: 'abc', ratio: 5, window: { mon: ['bad'] }, routines: [{ id: 'x', start: '9:00' }], restEvery: { workMin: 90 }, longRest: { min: 60 }, outingMemory: { '1:600': 'out' }, foo: 1 }, entries: 'nope' });
@@ -71,11 +71,11 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(S.migrate({ schema: 1, settings: { busyMemory: { '1:540': 'class', '2:600': '', 'x': 'a', '3:615': 5 } } }).settings.busyMemory, { '1:540': 'class', '2:600': '' }), 'migrate: 予定のラベルの記憶はキーと文字列を検証');
     const legacy = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2b6cb0', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#123456', order: 2 }, { id: 'new', name: 'x', kind: 'work', color: 'bad', order: 3 }] } });
     ok(legacy.settings.categories[0].color === '#9ccbee' && legacy.settings.categories[1].color === '#123456' && legacy.settings.categories[2].color === '#cfd7e1', 'migrate: 旧既定色(v0.4.0)は新既定色(パステル)へ・自分で変えた色は保持・壊れた色は灰');
-    ok(S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#e34948', order: 2 }] } }).settings.categories.slice(0, 2).map((c) => c.color).join() === '#9ccbee,#f7bdbd' && S.migrate({ schema: 1, settings: { categories: [{ id: 'rest', name: '休憩', kind: 'rest', color: '#9fd8a0', order: 1 }] } }).settings.categories[0].color === '#cfe9c3', 'migrate(v0.15.1/0.15.2): v0.4.1〜v0.15.1 の既定色も新しいパステルへ');
+    ok(S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }, { id: 'sns', name: 'SNS', kind: 'drift', color: '#e34948', order: 2 }] } }).settings.categories.slice(0, 2).map((c) => c.color).join() === '#9ccbee,#f7bdbd' && S.migrate({ schema: 1, settings: { categories: [{ id: 'rest', name: '休憩', kind: 'rest', color: '#9fd8a0', order: 1 }] } }).settings.categories[0].color === '#cfe9c3', 'migrate(v0.15.1/0.15.2): v0.4.1〜v0.15.1の既定色も新しいパステルへ');
     // ---- v0.15.2: 種別(増減できる)・非表示のカテゴリ ----
-    ok(base.settings.kinds.length === 6 && base.settings.kinds[0].id === 'work' && base.settings.categories.find((c) => c.id === 'class').kind === 'fixed' && base.settings.categories.find((c) => c.id === 'research').kind === 'work', 'defaultSettings(v0.15.2): 種別 6 件・授業は「決まった作業」');
+    ok(base.settings.kinds.length === 6 && base.settings.kinds[0].id === 'work' && base.settings.categories.find((c) => c.id === 'class').kind === 'fixed' && base.settings.categories.find((c) => c.id === 'research').kind === 'work', 'defaultSettings(v0.15.2): 種別6件・授業は「決まった作業」');
     const oldK = S.migrate({ schema: 1, settings: { categories: [{ id: 'class', name: '授業', kind: 'work', color: '#2a78d6', order: 1 }, { id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 2 }, { id: 'x', name: 'x', kind: 'nope', color: '#2a78d6', order: 3 }] } }).settings;
-    ok(oldK.kinds.length === 6 && oldK.categories[0].kind === 'fixed' && oldK.categories[1].kind === 'work' && oldK.categories[2].kind === 'work' && oldK.kindSchema === 1, 'migrate(v0.15.2): 旧データの授業は 1 回だけ「決まった作業」へ・知らない種別は work');
+    ok(oldK.kinds.length === 6 && oldK.categories[0].kind === 'fixed' && oldK.categories[1].kind === 'work' && oldK.categories[2].kind === 'work' && oldK.kindSchema === 1, 'migrate(v0.15.2): 旧データの授業は1回だけ「決まった作業」へ・知らない種別は work');
     const myK = S.migrate({ schema: 1, settings: { kinds: [{ id: 'hobby', name: '趣味', work: 'yes', drift: false }, { id: 'w', name: '仕事', work: true }], categories: [{ id: 'class', name: '授業', kind: 'work', color: '#2a78d6', order: 1 }, { id: 'g', name: 'ギター', kind: 'hobby', color: '#2a78d6', order: 2 }] } }).settings;
     ok(myK.kinds.length === 2 && myK.kinds[0].work === false && myK.categories[0].kind === 'hobby' && myK.categories[1].kind === 'hobby', 'migrate(v0.15.2): 自分で定義した種別はそのまま(真偽値は検証・無い種別は先頭へ・授業の移行はしない)');
     ok(S.kindRole(myK, 'w').work === true && S.kindRole(myK, 'hobby').work === false && S.kindRole({}, 'fixed').work === true && S.kindRole({}, 'drift').drift === true && S.catRole(myK, 'g').name === '趣味' && S.catRole({}, 'sns').drift === true, 'kindRole / catRole: 種別の役割(settings に kinds が無ければ既定)');
@@ -85,12 +85,12 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(once.settings.gapAbsorbMin === 15, 'migrate: 正しい値は保持');
     // v0.15: 旧「毎日の習慣」→ タスク(毎日 ◯分)
     const hb = S.migrate({ schema: 1, settings: { habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30, prefer: 'morning' }, { name: '' }] }, tasks: {} });
-    ok(hb.tasks.habit_h1 && hb.tasks.habit_h1.repeat.type === 'daily' && hb.tasks.habit_h1.repeat.min === 30 && hb.tasks.habit_h1.categoryId === 'english' && hb.tasks.habit_h1.kind === 'duty' && Object.keys(hb.tasks).length === 1, 'migrate(v0.15): 習慣は「毎日 30分」のタスクになる(名前の無いものは捨てる)');
+    ok(hb.tasks.habit_h1 && hb.tasks.habit_h1.repeat.type === 'daily' && hb.tasks.habit_h1.repeat.min === 30 && hb.tasks.habit_h1.categoryId === 'english' && hb.tasks.habit_h1.kind === 'duty' && Object.keys(hb.tasks).length === 1, 'migrate(v0.15): 習慣は「毎日30分」のタスクになる(名前の無いものは捨てる)');
     ok(hb.settings.habitsMigrated === true && !('habits' in hb.settings) && eq(S.migrate(hb), hb), 'migrate(v0.15): 移したら印を立てて habits を消す・冪等');
     const hb2 = S.migrate({ schema: 1, settings: { habits: [{ id: 'h1', name: '英語', categoryId: 'english', min: 30 }] }, tasks: { habit_h1: { id: 'habit_h1', name: '英語(自分で直した)', repeat: { type: 'daily', min: 45 }, updatedAt: 'x' } } });
     ok(hb2.tasks.habit_h1.repeat.min === 45 && hb2.tasks.habit_h1.name === '英語(自分で直した)', 'migrate(v0.15): 同じ id のタスクがあれば上書きしない');
     ok(!('habit_h1' in S.migrate({ schema: 1, settings: { habitsMigrated: true, habits: [{ id: 'h1', name: '英語', min: 30 }] }, tasks: {} }).tasks), 'migrate(v0.15): 移行済みの印があれば habits を無視して捨てる');
-    ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', repeat: { type: 'daily', min: 'x' } }, u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } }, v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.t.repeat.min === 30 && S.migrate({ schema: 1, tasks: { u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } } } }).tasks.u.repeat.min === 30 && S.migrate({ schema: 1, tasks: { v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.v.repeat === null, 'validateTask: 毎日型は 5〜600 分・知らない繰り返しは無し');
+    ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', repeat: { type: 'daily', min: 'x' } }, u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } }, v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.t.repeat.min === 30 && S.migrate({ schema: 1, tasks: { u: { id: 'u', name: 'u', repeat: { type: 'daily', min: 999 } } } }).tasks.u.repeat.min === 30 && S.migrate({ schema: 1, tasks: { v: { id: 'v', name: 'v', repeat: { type: 'monthly' } } } }).tasks.v.repeat === null, 'validateTask: 毎日型は5〜600分・知らない繰り返しは無し');
     ok(throws(() => S.validateImport({})) && throws(() => S.validateImport([1])) && throws(() => S.validateImport('x')), 'validateImport: merihari 以外は拒否');
     ok(throws(() => S.validateImport({ schema: 99, settings: {} })), 'validateImport: 新しい schema は拒否');
     ok(S.validateImport({ schema: 1, settings: {} }).schema === 1, 'validateImport: 通れば migrate 済みを返す');
@@ -130,8 +130,8 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(throws(() => L.setTimes(es, engId, { start: '16:00', end: '15:00' }, 1000, C)), 'setTimes: 終了≦開始は拒否');
     let big = L.start({}, { date: D, nowMin: 600, startMin: 540, categoryId: 'life', windowEndOf: wEnd }, C).entries;
     big = L.stop(big, { date: D, nowMin: 1080, windowEndOf: wEnd }, C).entries; // life 09:00-18:00
-    let mid = L.start(big, { date: D, nowMin: 870, categoryId: 'research', windowEndOf: wEnd }, C); // 14:30 に生活の途中で研究を開始
-    mid = L.stop(mid.entries, { date: D, nowMin: 960, windowEndOf: wEnd }, C).entries; // 16:00 に終了 → 生活の後半が残る
+    let mid = L.start(big, { date: D, nowMin: 870, categoryId: 'research', windowEndOf: wEnd }, C); // 14:30に生活の途中で研究を開始
+    mid = L.stop(mid.entries, { date: D, nowMin: 960, windowEndOf: wEnd }, C).entries; // 16:00に終了 → 生活の後半が残る
     ok(eq(alive(mid), ['life 09:00-14:30', 'research 14:30-16:00', 'life 16:00-18:00']), 'resolveOverlap: 真ん中に入れると前後に分割される');
     const covered = L.setTimes(mid, Object.values(mid).find((e) => e.categoryId === 'research').id, { start: '08:00', end: '19:00' }, 1200, C);
     ok(eq(alive(covered), ['research 08:00-19:00']) && Object.values(covered).filter((e) => e.deletedAt).length === 2, 'resolveOverlap: 丸ごと覆われた記録は tombstone(deletedAt)で残る');
@@ -139,15 +139,15 @@ document.getElementById('app').addEventListener('load', async () => {
     r = L.closeOpen(ys, { date: D, at: 600, windowEndOf: () => 1410 }, C);
     ok(r.closed.end === '23:30', 'closeOpen: 前日の記録中はその日の作業時間帯の終わりで閉じる(F1-3)');
     r = L.closeOpen(ys, { date: D, at: 600, windowEndOf: () => 1300 }, C);
-    ok(r.closed.end === '24:00', 'closeOpen: 作業時間帯の終わりが開始より前なら 24:00');
+    ok(r.closed.end === '24:00', 'closeOpen: 作業時間帯の終わりが開始より前なら24:00');
     r = L.start(ys, { date: D, nowMin: 600, categoryId: 'research', windowEndOf: () => 1410 }, C);
     ok(eq(alive(r.entries), ['research 10:00-open', 'research 22:00-23:30']), 'start: 前日の同カテゴリ記録中は無視せず閉じて今日の分を作る');
-    ok(L.elapsedMin({ start: '14:30', end: null, date: D }, D, 900) === 30 && L.elapsedMin(ys.a, D, 600) === 120, 'elapsedMin: 同日は now まで・別日は 24:00 まで');
+    ok(L.elapsedMin({ start: '14:30', end: null, date: D }, D, 900) === 30 && L.elapsedMin(ys.a, D, 600) === 120, 'elapsedMin: 同日は now まで・別日は24:00まで');
     ok(L.isStale({ start: '10:00', end: null, date: D }, D, 780) && !L.isStale({ start: '10:00', end: null, date: D }, D, 700), 'isStale: 3時間以上で止め忘れ(F1-4)');
     ok(eq(L.totalsByCategory(mid, D, 1200), { life: 450, research: 90 }), 'totalsByCategory');
     const cands = L.backfillCandidates(es, D, 1000);
     ok(cands[0].min === 915 && eq(cands.map((c) => c.min), [915, 985, 970, 940]), 'backfillCandidates: 直前の終わり/15分前/30分前/1時間前(重複なし)');
-    ok(eq(L.backfillCandidates({}, D, 20).map((c) => c.min), [5]), 'backfillCandidates: 0:00 より前の候補は出さない');
+    ok(eq(L.backfillCandidates({}, D, 20).map((c) => c.min), [5]), 'backfillCandidates: 0:00より前の候補は出さない');
     const sp = L.split(mid, Object.values(mid).find((e) => e.categoryId === 'research').id, 900, 1200, C);
     ok(eq(alive(sp), ['life 09:00-14:30', 'research 14:30-15:00', 'research 15:00-16:00', 'life 16:00-18:00']), 'split: ここで分ける');
     ok(throws(() => L.split(mid, Object.values(mid)[0].id, 1300, 1200, C)), 'split: 範囲外は拒否');
@@ -169,7 +169,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(nm1.a.end === '10:00' && nm1.b.start === '10:00' && nm1.b.end === '12:00' && nm1.c.end === '10:00' && mgE.a.end === '11:00', 'normalizeAfterMerge: 別端末の記録と重なれば、新しく変えた方を優先して古い方を詰める(入力は変えない)');
     const mgO = { a: { id: 'a', date: D, start: '09:00', end: null, categoryId: 'research', updatedAt: 'x', deletedAt: null }, b: { id: 'b', date: D, start: '10:00', end: null, categoryId: 'class', updatedAt: 'y', deletedAt: null } };
     const nm2 = L.normalizeAfterMerge(mgO, C);
-    ok(nm2.a.end === '10:00' && nm2.b.end === null && L.openEntry(nm2).id === 'b', 'normalizeAfterMerge: 記録中が 2 つなら、あとから始めた方だけを記録中のまま残す');
+    ok(nm2.a.end === '10:00' && nm2.b.end === null && L.openEntry(nm2).id === 'b', 'normalizeAfterMerge: 記録中が2つなら、あとから始めた方だけを記録中のまま残す');
     ok(eq(L.normalizeAfterMerge(snap0, C), snap0), 'normalizeAfterMerge: 重なりが無ければ何も変えない');
 
     // ---- plan.js(v0.15: 目安) ----
@@ -189,18 +189,18 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Pn.deadlineKey({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON) === '2026-10-18', 'deadlineKey: 毎週型は今週の日曜');
     ok(Pn.daysBetween('2026-10-12', '2026-10-20') === 8 && Pn.daysBetween('2026-10-12', '2026-10-12') === 0 && Pn.daysBetween('2026-10-12', '2026-10-11') === -1, 'daysBetween: 日付の差');
     ok(Pn.deadlineMin({ deadline: '2026-10-13T15:00' }) === 900 && Pn.deadlineMin({ deadline: '2026-10-13' }) === null && Pn.deadlineKey({ deadline: '2026-10-13T15:00' }, '2026-10-12') === '2026-10-13', 'deadlineMin / deadlineKey: 時刻つきの期限');
-    ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10 分のタスクは 10・15 分未満は 5 以上・3 時間以上は 30');
+    ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10分のタスクは10・15分未満は5以上・3時間以上は30');
     const sh = Pn.todayShare(tasksA, MON);
     ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 期限つきの義務だけを期限順(やりたい・完了は除く)');
-    ok(sh[0].todayMin === 30 && sh[0].daysLeft === 2 && sh[1].todayMin === 80 && sh[1].daysLeft === 9, 'todayShare: 残り ÷ 期限までの日数(今日を含む): 面談 60/2=30・修論 720/9=80');
+    ok(sh[0].todayMin === 30 && sh[0].daysLeft === 2 && sh[1].todayMin === 80 && sh[1].daysLeft === 9, 'todayShare: 残り ÷ 期限までの日数(今日を含む): 面談60/2=30・修論720/9=80');
     ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10 } }, MON).length === 0, 'todayShare: 期限を過ぎたタスクは入れない(期限超過の出口で期限を変えるか完了にする)');
-    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1 日あたりが 15 分未満なら今日は 0');
+    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1日あたりが15分未満なら今日は0');
     ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: null, remainingH: 20 } }, MON).length === 0 && Pn.todayShare({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5 }, remainingH: 5 } }, MON).length === 0, 'todayShare: 期限なし・繰り返しは含めない(目安は goals で)');
-    ok(Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ 0.5 時間=30 分)');
+    ok(Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ0.5時間=30分)');
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
     const lbE = { a: { date: '2026-10-12', start: '09:00', end: '10:00', taskId: 'w' }, b: { date: '2026-10-15', start: '09:00', end: '09:30', taskId: 'w' }, c: { date: '2026-10-19', start: '09:00', end: '10:00', taskId: 'w' }, d: { date: '2026-10-13', start: '09:00', end: null, taskId: 'w' }, e: { date: '2026-10-14', start: '12:00', end: '13:00', taskId: 'x' } };
     ok(Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18') === 90 && Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18', '2026-10-13', 600) === 90 + 60, 'loggedBetween: 期間内の紐づく記録。記録中は今日なら now まで');
-    ok(eq(Pn.weekRange({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON), { from: '2026-10-12', to: '2026-10-18' }), 'weekRange: 週の終わりを含む 7 日');
+    ok(eq(Pn.weekRange({ repeat: { type: 'weekly', weekEnd: 'sun' } }, MON), { from: '2026-10-12', to: '2026-10-18' }), 'weekRange: 週の終わりを含む7日');
     ok(Pn.lastLoggedDate(lbE, 'w') === '2026-10-19' && Pn.lastLoggedDate(lbE, 'zzz') === null, 'lastLoggedDate: 最後にふれた日');
     const gTasks = {
       t2: tasksA.t2,
@@ -213,9 +213,9 @@ document.getElementById('app').addEventListener('load', async () => {
     const gs = Pn.goals(gTasks, gE, MON, 720);
     ok(gs.map((g) => `${g.kind}:${g.taskId}`).join() === 'deadline:t2,daily:d,weekly:w,wish:x', 'goals: 期限 → 毎日 → 毎週 → やりたい の順・消したものは出さない');
     ok(gs[0].targetMin === 30 && gs[0].doneMin === 0 && gs[0].deadline === '2026-10-13' && !gs[0].done, 'goals(期限): きょうの目安と今日の記録');
-    ok(gs[1].targetMin === 30 && gs[1].doneMin === 20 && !gs[1].done, 'goals(毎日): 毎日 30分 のうち 20分');
-    ok(gs[2].targetMin === 300 && gs[2].doneMin === 120 && gs[2].from === '2026-10-12' && gs[2].to === '2026-10-18', 'goals(毎週): 今週の記録(今日 90 + 15 日 30)');
-    ok(gs[3].targetMin === null && gs[3].doneMin === 0 && gs[3].lastDate === '2026-10-01' && !gs[3].done, 'goals(やりたい): 目安なし・直近 7 日 0・最後にふれた日');
+    ok(gs[1].targetMin === 30 && gs[1].doneMin === 20 && !gs[1].done, 'goals(毎日): 毎日30分のうち20分');
+    ok(gs[2].targetMin === 300 && gs[2].doneMin === 120 && gs[2].from === '2026-10-12' && gs[2].to === '2026-10-18', 'goals(毎週): 今週の記録(今日90 + 15日30)');
+    ok(gs[3].targetMin === null && gs[3].doneMin === 0 && gs[3].lastDate === '2026-10-01' && !gs[3].done, 'goals(やりたい): 目安なし・直近7日0・最後にふれた日');
     ok(Pn.goals(gTasks, { ...gE, e: { date: MON, start: '12:00', end: '12:15', taskId: 'd' } }, MON, 800)[1].done === true, 'goals: 目安に届けば done');
     ok(Pn.goals({}, {}, MON, 600).length === 0, 'goals: タスクが無ければ空');
     // v0.16: 習慣の「済んだ」の印(F5-8)
@@ -252,19 +252,19 @@ document.getElementById('app').addEventListener('load', async () => {
     const agg = Rp.aggregate({ entries: entR, date: RD, nowMin: 1440, settings: ds });
     ok(agg.byCategory.research.actual === 205 && agg.byCategory.sns.baseline === 60 && agg.workMin === 205 && agg.driftMin === 30 && agg.baselineWorkMin === 90 && agg.dayDone, 'aggregate: 実績/ベースライン・作業合計・drift 合計・先週の作業平均');
     const lines = Rp.reportLines(agg, { tasks: {}, entries: entR, date: RD });
-    ok(lines.positive[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && lines.positive[1] === '研究は先週の平均より 1時間55分 多くなりました。' && lines.positive[2] === '作業は合計 3時間25分 でした。先週の平均は 1時間30分 です。', 'reportLines: 肯定文は ダラダラの減少 → 作業の増加 → 作業の合計(最大 3 文・§6.5)');
-    ok(lines.improve.length === 1 && lines.improve[0].startsWith('記録のない時間が '), 'reportLines: 改善点は事実だけ(未記録)');
+    ok(lines.positive[0] === 'SNS・動画は先週の平均より30分少なくなりました。' && lines.positive[1] === '研究は先週の平均より1時間55分多くなりました。' && lines.positive[2] === '作業は合計3時間25分でした。先週の平均は1時間30分です。', 'reportLines: 肯定文は ダラダラの減少 → 作業の増加 → 作業の合計(最大3文・§6.5)');
+    ok(lines.improve.length === 1 && lines.improve[0].startsWith('記録のない時間が'), 'reportLines: 改善点は事実だけ(未記録)');
     ok(lines.tomorrow === null, 'reportLines: 近い期限の未着手も、ふれていないやりたいことも無ければ明日への一言は無し');
     const tasksR = { a: { id: 'a', name: '面談資料', kind: 'duty', deadline: '2026-10-14', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: '遠い', kind: 'duty', deadline: '2026-11-01', remainingH: 1 }, c: { id: 'c', name: '済', kind: 'duty', deadline: '2026-10-13', remainingH: 1, doneAt: 'x' } };
     ok(Rp.untouchedNear(tasksR, entR, RD).map((t) => t.id).join() === 'a', 'untouchedNear: 期限3日以内・未着手・未完了の義務だけ');
-    ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料はまだ手つかずです(期限 10月14日)。明日、まず 5 分だけ。', 'reportLines: 明日への一言は 1 件');
+    ok(Rp.reportLines(agg, { tasks: tasksR, entries: entR, date: RD }).tomorrow === '面談資料はまだ手つかずです(期限10月14日)。明日、まず5分だけ。', 'reportLines: 明日への一言は1件');
     const wishT = { x: { id: 'x', name: 'Blender', kind: 'wish', deletedAt: null, doneAt: null }, y: { id: 'y', name: '最近', kind: 'wish', deletedAt: null, doneAt: null }, z: { id: 'z', name: '未着手', kind: 'wish', deletedAt: null, doneAt: null } };
     const wishE = toMap([mkE('2026-10-01', '10:00', '11:00', 'other', 'x'), mkE('2026-10-10', '10:00', '11:00', 'other', 'y')]);
-    ok(Rp.idleWishes(wishT, wishE, RD).map((t) => t.id).join() === 'z,x', 'idleWishes: 7 日以上ふれていないやりたいこと(未着手が先)');
-    ok(Rp.reportLines(agg, { tasks: wishT, entries: { ...entR, ...wishE }, date: RD }).tomorrow === '未着手(やりたいこと)はまだ手つかずです。明日、まず 5 分だけ。' && Rp.reportLines(agg, { tasks: { x: wishT.x }, entries: { ...entR, ...wishE }, date: RD }).tomorrow === 'Blender(やりたいこと)は 11 日ふれていません。明日、まず 5 分だけ。', 'reportLines: やりたいことを思い出させる一言(期限の未着手が無いとき)');
+    ok(Rp.idleWishes(wishT, wishE, RD).map((t) => t.id).join() === 'z,x', 'idleWishes: 7日以上ふれていないやりたいこと(未着手が先)');
+    ok(Rp.reportLines(agg, { tasks: wishT, entries: { ...entR, ...wishE }, date: RD }).tomorrow === '未着手(やりたいこと)はまだ手つかずです。明日、まず5分だけ。' && Rp.reportLines(agg, { tasks: { x: wishT.x }, entries: { ...entR, ...wishE }, date: RD }).tomorrow === 'Blender(やりたいこと)は11日ふれていません。明日、まず5分だけ。', 'reportLines: やりたいことを思い出させる一言(期限の未着手が無いとき)');
     const dailyT = { d: { id: 'd', name: '英語', kind: 'duty', categoryId: 'english', repeat: { type: 'daily', min: 30 }, deletedAt: null, doneAt: null } };
     const dailyE = toMap([mkE(RD, '09:00', '09:35', 'english', 'd')]);
-    ok(Rp.reportLines(Rp.aggregate({ entries: dailyE, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: dailyE, date: RD }).positive[0] === '英語は 35分 で、毎日の目安 30分 に届きました。', 'reportLines: 毎日の目安に届いた日はそれを先に言う');
+    ok(Rp.reportLines(Rp.aggregate({ entries: dailyE, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: dailyE, date: RD }).positive[0] === '英語は35分で、毎日の目安30分に届きました。', 'reportLines: 毎日の目安に届いた日はそれを先に言う');
     const hobbyS = { ...ds, kinds: [{ id: 'hobby', name: '趣味', work: false, drift: false }, { id: 'w', name: '仕事', work: true, drift: false }, { id: 'd', name: 'だらだら', work: false, drift: true }], categories: [{ id: 'g', name: 'ギター', kind: 'hobby', color: '#000000', order: 1 }, { id: 'j', name: '仕事', kind: 'w', color: '#000000', order: 2 }, { id: 'tv', name: 'TV', kind: 'd', color: '#000000', order: 3 }] };
     const aggH = Rp.aggregate({ entries: toMap([mkE(RD, '09:00', '10:00', 'g'), mkE(RD, '10:00', '10:30', 'j'), mkE(RD, '11:00', '11:10', 'tv')]), date: RD, nowMin: 1440, settings: hobbyS });
     ok(aggH.workMin === 30 && aggH.driftMin === 10 && aggH.byCategory.g.work === false && Rp.periodSummary(toMap([mkE(RD, '09:00', '10:00', 'g'), mkE(RD, '10:00', '10:30', 'j')]), hobbyS, RD, RD).workMin === 30, 'aggregate / periodSummary(v0.15.2): 作業・ダラダラは種別の役割で数える(趣味は作業に入れない)');
@@ -272,30 +272,30 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- v0.16: 種別ごとの合計(F3-10)・きょうのふり返り(F3-9) ----
     log('\n# report v0.16');
     const tk = Rp.totalsByKind({ research: 100, english: 20, sns: 30, rest: 20, zzz: 0 }, ds);
-    ok(tk.map((k) => `${k.id}:${k.name}:${k.min}:${k.topCategoryId}`).join() === 'work:作業:120:research,drift:ダラダラ:30:sns,rest:休憩:20:rest', 'totalsByKind: カテゴリ別を種別にまとめ多い順・色はいちばん大きいカテゴリ・0 は出さない');
+    ok(tk.map((k) => `${k.id}:${k.name}:${k.min}:${k.topCategoryId}`).join() === 'work:作業:120:research,drift:ダラダラ:30:sns,rest:休憩:20:rest', 'totalsByKind: カテゴリ別を種別にまとめ多い順・色はいちばん大きいカテゴリ・0は出さない');
     ok(Rp.totalsByKind({ c_gone: 40 }, ds)[0].id === 'work' && Rp.totalsByKind({}, ds).length === 0, 'totalsByKind: 消したカテゴリは作業として数える・空なら空');
     const fbBase = [mkE('2026-10-09', '09:00', '11:00', 'research'), mkE('2026-10-09', '12:00', '13:00', 'sns'), mkE('2026-10-10', '09:00', '11:00', 'research'), mkE('2026-10-10', '12:00', '13:00', 'sns'), mkE('2026-10-11', '09:00', '11:00', 'research'), mkE('2026-10-11', '12:00', '13:00', 'sns')];
     const fbGood = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research'), mkE(RD, '12:00', '12:30', 'sns'), mkE(RD, '12:30', '23:30', 'life')]);
     const fbAggGood = Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: ds });
     const fb1 = Rp.dayFeedback(fbAggGood, { tasks: {}, entries: fbGood, date: RD, settings: ds });
-    ok(fbAggGood.baselineDays === 3 && fb1.judged && fb1.score === 2 && fb1.verdict === 'よい一日でした。(作業は先週の平均より 1時間 多め・ダラダラは 30分 少なめ)', 'dayFeedback: 自分の先週平均(3 日以上)と比べて 作業が多め・ダラダラが少なめ → よい一日(理由つき)');
-    ok(fb1.good[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && fb1.better === null && fb1.next === null, 'dayFeedback: よかったことは肯定文・裏づけの無い「良くするには」「明日は」は出さない');
+    ok(fbAggGood.baselineDays === 3 && fb1.judged && fb1.score === 2 && fb1.verdict === 'よい一日でした。(作業は先週の平均より1時間多め・ダラダラは30分少なめ)', 'dayFeedback: 自分の先週平均(3日以上)と比べて 作業が多め・ダラダラが少なめ → よい一日(理由つき)');
+    ok(fb1.good[0] === 'SNS・動画は先週の平均より30分少なくなりました。' && fb1.better === null && fb1.next === null, 'dayFeedback: よかったことは肯定文・裏づけの無い「良くするには」「明日は」は出さない');
     const fbGap = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research'), mkE(RD, '12:00', '12:30', 'sns'), mkE(RD, '12:30', '20:30', 'life')]);
-    ok(Rp.dayFeedback(Rp.aggregate({ entries: fbGap, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbGap, date: RD, settings: ds }).better === '未記録が 5時間 あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。', 'dayFeedback: 未記録が 1 時間以上でカバー率 80% 未満なら「埋めると正確になる」と言う(責めない)');
+    ok(Rp.dayFeedback(Rp.aggregate({ entries: fbGap, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbGap, date: RD, settings: ds }).better === '未記録が5時間あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。', 'dayFeedback: 未記録が1時間以上でカバー率80%未満なら「埋めると正確になる」と言う(責めない)');
     const fbMid = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 600, settings: ds }), { tasks: dailyT, entries: fbGood, date: RD, settings: ds, nowMin: 600 });
-    ok(!fbMid.judged && fbMid.verdict === null && fbMid.better === null && fbMid.next === 'きょうはあと 英語 を 30分。', 'dayFeedback: 1 日の途中は判定せず「きょうはあと ◯◯ を ◯分」だけ');
+    ok(!fbMid.judged && fbMid.verdict === null && fbMid.better === null && fbMid.next === 'きょうはあと 英語 を30分。', 'dayFeedback: 1日の途中は判定せず「きょうはあと ◯◯ を ◯分」だけ');
     const fbThin = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research')]);
     const fb2 = Rp.dayFeedback(Rp.aggregate({ entries: fbThin, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbThin, date: RD, settings: ds });
-    ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の 18% なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
+    ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の18%なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
     const fbFew = toMap([mkE('2026-10-11', '09:00', '11:00', 'research'), mkE(RD, '07:00', '20:00', 'research')]);
     const fb3 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew, date: RD, settings: ds });
-    ok(!fb3.judged && fb3.verdict.startsWith('比べる材料がまだ少ない日です(先週の記録 1 日)。'), 'dayFeedback: 先週の記録が 3 日未満で目安も無ければ比べない');
+    ok(!fb3.judged && fb3.verdict.startsWith('比べる材料がまだ少ない日です(先週の記録1日)。'), 'dayFeedback: 先週の記録が3日未満で目安も無ければ比べない');
     const fbSlow = toMap([...fbBase, mkE(RD, '09:00', '10:00', 'research'), mkE(RD, '10:00', '12:00', 'sns'), mkE(RD, '12:00', '20:00', 'life')]);
     const fb4 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: fbSlow, date: RD, settings: ds });
-    ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より 1時間 少なめ・ダラダラは 1時間 多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
-    ok(fb4.better === 'ダラダラ 2時間 のうち 30分 を 英語 に回せば、目安に届いていました。' && fb4.next === '明日は 英語(毎日 30分)を。きょうは 0分 でした。', 'dayFeedback: 良くするには=数字で裏づけられる 1 件(ダラダラの一部を届かなかった目安へ)・明日は=届かなかった毎日');
+    ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より1時間少なめ・ダラダラは1時間多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
+    ok(fb4.better === 'ダラダラ2時間のうち30分を 英語 に回せば、目安に届いていました。' && fb4.next === '明日は 英語(毎日30分)を。きょうは0分でした。', 'dayFeedback: 良くするには=数字で裏づけられる1件(ダラダラの一部を届かなかった目安へ)・明日は=届かなかった毎日');
     const fb5 = Rp.dayFeedback(fbAggGood, { tasks: tasksR, entries: fbGood, date: RD, settings: ds });
-    ok(fb5.next === '明日は 面談資料 を 30分(残り 1時間 を 2 日で)。', 'dayFeedback: 明日は=期限つきの明日の分(残り ÷ 期限までの日数)が最優先');
+    ok(fb5.next === '明日は 面談資料 を30分(残り1時間を2日で)。', 'dayFeedback: 明日は=期限つきの明日の分(残り ÷ 期限までの日数)が最優先');
     const fbChk = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: ds }), { tasks: { d: { ...dailyT.d, checks: [RD] } }, entries: fbGood, date: RD, settings: ds });
     ok(fbChk.reasons.includes('毎日の目安に届いた') && fbChk.good.includes('英語は済みました(印)。') && fbChk.next === null, 'dayFeedback: 「済んだ」の印は目安に届いた扱い');
     const bre = Rp.buildReport({ entries: fbGood, date: RD, nowMin: 1440, settings: ds, tasks: {} });
@@ -303,14 +303,14 @@ document.getElementById('app').addEventListener('load', async () => {
     const gsSumChk = Rp.goalsSummary({ d: { ...dailyT.d, checks: ['2026-10-10'] } }, dailyE, '2026-10-09', RD);
     ok(gsSumChk[0].metDays === 2 && gsSumChk[0].dayList.find((x) => x.key === '2026-10-10').checked === true, 'goalsSummary: 印の日も「届いた日」に数える');
     const aggZero = Rp.aggregate({ entries: {}, date: RD, nowMin: 1440, settings: ds });
-    ok(Rp.reportLines(aggZero, {}).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロでも必ず 1 文');
+    ok(Rp.reportLines(aggZero, {}).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロでも必ず1文');
     const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), date: RD, nowMin: 1440, settings: ds });
-    ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業は合計 40分 でした。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
+    ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業は合計40分でした。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
     const snap = Rp.buildReport({ entries: entR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
     ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット');
     ok(S.migrate({ schema: 1, reports: { [RD]: snap } }).reports[RD].workMin === 205, 'migrate: 新しいレポート(planned 0)も通る');
 
-    // ---- sync.js(F7-4 マージ・暗号化)/ google.js(busy の切り出し) ----
+    // ---- sync.js(F7-4マージ・暗号化)/ google.js(busy の切り出し) ----
     log('\n# sync');
     const Sy = M.sync, G = M.google;
     const dA = { schema: 1, settings: { gapAbsorbMin: 10, settingsUpdatedAt: '2026-10-11T10:00:00+09:00' },
@@ -355,18 +355,18 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(!mR.entries.e1 && mR.entries.e2 && mR.entries.e3 && !mR.tasks.t1 && mR.meta.resetAt === '2026-10-11T11:00:00+09:00', 'merge: resetAt より古いレコードは全端末から消える(世代)');
     ok(eq(Sy.merge(resetB, dA), mR), 'merge: resetAt を含めても対称');
     const pr = Sy.pruneTombstones({ entries: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: { deletedAt: '2026-10-01T00:00:00+09:00' }, c: {} }, tasks: {} }, '2026-10-11T00:00:00+09:00');
-    ok(!pr.entries.a && pr.entries.b && pr.entries.c, 'pruneTombstones: 60 日より前の削除だけ掃除');
-    const enc = await Sy.encrypt({ hello: 'メリハリ', n: 1 }, 'correct horse battery', 'ヒント文', { iterations: 1000 }); // テストは軽い反復回数(本番は 310,000)
+    ok(!pr.entries.a && pr.entries.b && pr.entries.c, 'pruneTombstones: 60日より前の削除だけ掃除');
+    const enc = await Sy.encrypt({ hello: 'メリハリ', n: 1 }, 'correct horse battery', 'ヒント文', { iterations: 1000 }); // テストは軽い反復回数(本番は310,000)
     const encObj = JSON.parse(enc);
     ok(encObj.v === 1 && encObj.kdf === 'PBKDF2-SHA256-1000' && encObj.iv && encObj.salt && !enc.includes('メリハリ'), 'encrypt: 平文を含まない・IV/salt 付き・kdf に反復回数');
     ok(Sy.readHint(enc) === 'ヒント文', 'readHint: 平文ヒントだけ読める');
     ok(eq(await Sy.decrypt(enc, 'correct horse battery'), { hello: 'メリハリ', n: 1 }), 'decrypt: 往復できる');
     let bad = false; try { await Sy.decrypt(enc, 'wrong passphrase!'); } catch (e) { bad = /復号/.test(e.message); }
     ok(bad, 'decrypt: 違うパスフレーズは失敗する');
-    // v0.21.2: 大きなデータ(数百 KB)でも base64 変換が落ちない(fromCharCode のスプレッドは引数の上限で「Maximum call stack size exceeded」)
+    // v0.21.2: 大きなデータ(数百 KB)でも base64変換が落ちない(fromCharCode のスプレッドは引数の上限で「Maximum call stack size exceeded」)
     const bigObj = { entries: Object.fromEntries(Array.from({ length: 3000 }, (_, i) => [`e${i}`, { id: `e${i}`, date: '2026-10-11', start: '09:00', end: '10:00', categoryId: 'research', note: 'メモ'.repeat(20), updatedAt: '2026-10-11T10:00:00+09:00' }])) };
     const encBig = await Sy.encrypt(bigObj, 'correct horse battery', '', { iterations: 1000 });
-    ok(encBig.length > 300000 && eq(await Sy.decrypt(encBig, 'correct horse battery'), bigObj), 'encrypt/decrypt(v0.21.2): 300KB 超のデータでも往復できる(base64 を分割変換)');
+    ok(encBig.length > 300000 && eq(await Sy.decrypt(encBig, 'correct horse battery'), bigObj), 'encrypt/decrypt(v0.21.2): 300KB 超のデータでも往復できる(base64を分割変換)');
     const enc2 = await Sy.encrypt({ a: 1 }, 'correct horse battery', '', { iterations: 1000 });
     ok(JSON.parse(enc2).iv !== encObj.iv, 'encrypt: IV は毎回ランダム');
     let badFile = false; try { await Sy.decrypt(JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256-10', salt: 'AA==', iv: 'AA==', ct: 'AA==' }), 'x'); } catch (e) { badFile = /不正/.test(e.message); }
@@ -382,7 +382,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const nowT = 1_000_000_000;
     const dec = (o) => Sy.autoSyncDecision({ connected: true, hasToken: true, hasPass: true, online: true, now: nowT, lastSyncAt: 0, pending: false, ...o });
     ok(dec({}) === 'silent' && dec({ hasToken: false }) === 'gesture' && dec({ hasPass: false }) === 'gesture', 'autoSyncDecision: 鍵が揃えば静かに・無ければ次のタップで');
-    ok(dec({ connected: false }) === 'none' && dec({ online: false }) === 'none' && dec({ lastSyncAt: nowT - 60000 }) === 'none' && dec({ lastSyncAt: nowT - 6 * 60000 }) === 'silent', 'autoSyncDecision: 未接続・オフライン・5 分以内は何もしない');
+    ok(dec({ connected: false }) === 'none' && dec({ online: false }) === 'none' && dec({ lastSyncAt: nowT - 60000 }) === 'none' && dec({ lastSyncAt: nowT - 6 * 60000 }) === 'silent', 'autoSyncDecision: 未接続・オフライン・5分以内は何もしない');
     const secret = new Uint8Array(32).map((_, i) => i * 7 + 1);
     const wrapped = await M.passkey.wrap(secret, 'ひみつのpassphrase');
     ok((await M.passkey.unwrap(secret, wrapped)) === 'ひみつのpassphrase' && wrapped.ct !== (await M.passkey.wrap(secret, 'ひみつのpassphrase')).ct, 'passkey: PRF の秘密でパスフレーズを包んで戻せる(iv は毎回違う)');
@@ -400,18 +400,18 @@ document.getElementById('app').addEventListener('load', async () => {
     const rw = Pn.rollWeekly({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 1, periodEnd: '2026-10-11', deletedAt: null, doneAt: null } }, {}, '2026-10-12', PC);
     ok(rw.tasks.w.remainingSetAt === '2026-10-12T00:00:00' && rw.tasks.w.remainingH === 5, 'rollWeekly: 新しい週の始まりを remainingSetAt にする');
     const od = Pn.overdueTasks({ a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-10', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: 'b', kind: 'duty', deadline: '2026-10-10', remainingH: 0, deletedAt: null, doneAt: null }, c: { id: 'c', name: 'c', kind: 'wish', deadline: '2026-10-01', remainingH: 1, deletedAt: null, doneAt: null }, d: { id: 'd', name: 'd', kind: 'duty', deadline: '2026-10-12', remainingH: 1, deletedAt: null, doneAt: null } }, '2026-10-12');
-    ok(od.length === 1 && od[0].id === 'a', 'overdueTasks: 期限超過かつ残りがある義務だけ(やりたい・残り 0・今日が期限は除く)');
+    ok(od.length === 1 && od[0].id === 'a', 'overdueTasks: 期限超過かつ残りがある義務だけ(やりたい・残り0・今日が期限は除く)');
     const wsum = Rp.weekSummary({ a: { date: '2026-10-12', start: '09:00', end: '11:00', categoryId: 'research', deletedAt: null }, b: { date: '2026-10-03', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, c: { date: '2026-10-12', start: '12:00', end: '12:30', categoryId: 'sns', deletedAt: null } }, ds, '2026-10-12');
     ok(wsum.week.workMin === 120 && wsum.week.driftMin === 30 && wsum.week.days === 1 && wsum.prev.workMin === 60, 'weekSummary: 直近7日と前の7日の作業・ダラダラ・記録日数');
 
     // ---- v0.11: 時刻の書式・1日の始まり・圧縮座標・途中から切り出し・1日の円 ----
     log('\n# v0.11');
     ok(T.fmtMD('2026-10-12') === '10月12日' && T.fmtMD('2026-10-12', true) === '10月12日(月)' && T.fmtMD(null) === '', 'fmtMD: 10月12日(月)');
-    ok(T.dayStartMin({ dayStart: '02:00' }) === 120 && T.dayStartMin({}) === 0 && T.dayStartMin({ dayStart: '09:00' }) === 0, 'dayStartMin: 0〜6 時だけ有効');
-    ok(S.migrate({ schema: 1, settings: { dayStart: '03:00' } }).settings.dayStart === '03:00' && S.migrate({ schema: 1, settings: { dayStart: '12:00' } }).settings.dayStart === '00:00', 'settings.dayStart は 0〜6 時だけ通す');
+    ok(T.dayStartMin({ dayStart: '02:00' }) === 120 && T.dayStartMin({}) === 0 && T.dayStartMin({ dayStart: '09:00' }) === 0, 'dayStartMin: 0〜6時だけ有効');
+    ok(S.migrate({ schema: 1, settings: { dayStart: '03:00' } }).settings.dayStart === '03:00' && S.migrate({ schema: 1, settings: { dayStart: '12:00' } }).settings.dayStart === '00:00', 'settings.dayStart は0〜6時だけ通す');
     const cyf = T.compressY([{ start: 0, end: 420 }, { start: 1380, end: 1440 }], [{ start: 60, end: 120 }], 0.25);
-    ok(cyf(0) === 0 && cyf(60) === 15 && cyf(120) === 75 && cyf(420) === 150 && cyf(1440) === 1125, 'compressY: 睡眠帯は 1/4、予定と重なる部分は等倍');
-    ok(Math.abs(cyf(1440) - (1440 - 0.75 * (60 + 300 + 60))) < 1e-9 && cyf(900) - cyf(899) === 1 && cyf(1400) - cyf(1399) === 0.25, 'compressY: 作業時間帯は 1px/分・圧縮帯は 0.25');
+    ok(cyf(0) === 0 && cyf(60) === 15 && cyf(120) === 75 && cyf(420) === 150 && cyf(1440) === 1125, 'compressY: 睡眠帯は1/4、予定と重なる部分は等倍');
+    ok(Math.abs(cyf(1440) - (1440 - 0.75 * (60 + 300 + 60))) < 1e-9 && cyf(900) - cyf(899) === 1 && cyf(1400) - cyf(1399) === 0.25, 'compressY: 作業時間帯は1px/分・圧縮帯は0.25');
     const sw0 = { a: { id: 'a', date: '2026-10-12', start: '10:00', end: '11:20', categoryId: 'research', taskId: 't1', note: 'x', plannedMin: 60, deletedAt: null } };
     const sw1 = L.switchFrom(sw0, 'a', 650, 'class', 1440, PC);
     const swTail = sw1.entries[sw1.tailId];
@@ -423,7 +423,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(throws(() => L.switchFrom(sw0, 'a', 700, 'class', 1440, PC)), 'switchFrom: 終わり以降は拒否');
     const pie = Rp.dayPie({ a: { id: 'a', date: '2026-10-12', start: '09:00', end: '11:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '06:00', end: '06:30', categoryId: 'life', deletedAt: null } }, '2026-10-12', { start: 420, end: 1410 }, 720);
     const pm = Object.fromEntries(pie.map((x) => [x.id, x.min]));
-    ok(pm.research === 120 && pm.life === 30 && pm.unlogged === 180 && pm.sleep === 390 && pm.future === 720 && pie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: カテゴリ・未記録(帯の中)・睡眠(帯の外で記録なし)・これから の合計が 1440');
+    ok(pm.research === 120 && pm.life === 30 && pm.unlogged === 180 && pm.sleep === 390 && pm.future === 720 && pie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: カテゴリ・未記録(帯の中)・睡眠(帯の外で記録なし)・これから の合計が1440');
     ok(pie[0].id === 'research' && pie[pie.length - 1].id === 'future', 'dayPie: 多い順 → 未記録 → 睡眠 → これから');
     ok(!Rp.dayPie({}, '2026-10-12', null, 1440).some((x) => x.id === 'unlogged') && Rp.dayPie({}, '2026-10-12', null, 1440)[0].min === 1440, 'dayPie: 作業時間帯なしなら全部睡眠扱い');
     const tfEl = M.ui.timeField('09:30', {});
@@ -434,33 +434,33 @@ document.getElementById('app').addEventListener('load', async () => {
     const rt = { id: 'r', name: 'r', kind: 'duty', deadline: '2026-10-20', remainingH: 5, remainingSetAt: '2026-10-10T12:00:00+09:00', minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
     const rE = { a: { id: 'a', date: '2026-10-10', start: '09:00', end: '10:00', taskId: 'r', deletedAt: null }, b: { id: 'b', date: '2026-10-11', start: '09:00', end: '10:30', taskId: 'r', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '09:00', end: '09:30', taskId: 'r', deletedAt: null }, d: { id: 'd', date: '2026-10-12', start: '10:00', end: null, taskId: 'r', deletedAt: null }, e: { id: 'e', date: '2026-10-11', start: '12:00', end: '13:00', taskId: 'x', deletedAt: null } };
     ok(Pn.remainingMin(rt, rE) === 300 - 90 - 30 && Pn.remainingMin(rt, rE, '2026-10-12') === 300 - 90 && Pn.remainingMin(rt, {}) === 300, 'remainingMin: remainingSetAt より後の閉じた記録を引く(beforeDate で今日の分は引かない・記録中は引かない)');
-    ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0 で止まる');
+    ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0で止まる');
     const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', rE)[0];
-    ok(ts0 && ts0.remainingMin === 210 && ts0.todayMin === 25, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9 日 → 25 分)');
-    ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが 0 なら出さない');
+    ok(ts0 && ts0.remainingMin === 210 && ts0.todayMin === 25, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9日 → 25分)');
+    ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが0なら出さない');
     const gE2 = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
     const gR = L.closeSmallGaps(gE2, '2026-10-12', 10, PC);
-    ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE2.b.start === '10:07', 'closeSmallGaps: 10 分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
-    ok(L.closeSmallGaps(gE2, '2026-10-12', 0, PC).b.start === '10:07', 'closeSmallGaps: 0 なら何もしない');
+    ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE2.b.start === '10:07', 'closeSmallGaps: 10分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
+    ok(L.closeSmallGaps(gE2, '2026-10-12', 0, PC).b.start === '10:07', 'closeSmallGaps: 0なら何もしない');
     const pie2 = Rp.dayPie({ a: { id: 'a', date: '2026-10-12', start: '00:00', end: '06:00', categoryId: 'sleep', deletedAt: null } }, '2026-10-12', { start: 420, end: 1410 }, 720);
     ok(pie2.filter((x) => x.id === 'sleep').length === 1 && pie2.find((x) => x.id === 'sleep').min === 420, 'dayPie: 記録した睡眠と推定の睡眠は1つにまとめる');
     const mig = S.migrate({ schema: 1, settings: { categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
     ok(mig.categories.some((c) => c.id === 'sleep') && mig.catSchema === 2 && !S.migrate({ schema: 1, settings: { catSchema: 2, categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings.categories.some((c) => c.id === 'sleep'), 'migrate: 古いデータに睡眠カテゴリを1回だけ足す(消したら戻さない)');
-    ok(S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } }).settings.gapAbsorbMin === 15 && S.migrate({ schema: 1, settings: { gapAbsorbMin: 99 } }).settings.gapAbsorbMin === 10, 'migrate: すき間は 0〜60 分');
+    ok(S.migrate({ schema: 1, settings: { gapAbsorbMin: 15 } }).settings.gapAbsorbMin === 15 && S.migrate({ schema: 1, settings: { gapAbsorbMin: 99 } }).settings.gapAbsorbMin === 10, 'migrate: すき間は0〜60分');
     ok(S.migrate({ schema: 1, tasks: { t: { id: 't', name: 't', updatedAt: '2026-10-01T00:00:00+09:00' } } }).tasks.t.remainingSetAt === '2026-10-01T00:00:00+09:00', 'validateTask: remainingSetAt が無ければ updatedAt を使う(過去の記録を急に引かない)');
     ok(S.migrate({ schema: 1, settings: { startFromLast: true } }).settings.startFromLast === true && S.migrate({ schema: 1, settings: { startFromLast: 'yes' } }).settings.startFromLast === false && S.defaultSettings().startFromLast === false, 'settings.startFromLast: 真偽値だけ・既定オフ');
 
     // ---- v0.12.2: 深夜にまたぐ作業時間帯・実効の日・記録ありの日の文 ----
     log('\n# v0.12.2');
     const wx = { window: { mon: ['07:00', '01:00'], tue: ['07:00', '23:00'], wed: ['07:00', '07:00'], thu: ['23:00', '01:00'], fri: ['07:00', '23:30'], sat: ['08:00', '23:00'], sun: ['08:00', '23:00'] } };
-    ok(eq(T.windowFor(wx, '2026-10-12'), { start: 420, end: 1500, crosses: true }) && T.windowFor(wx, '2026-10-14') === null && eq(T.windowFor(wx, '2026-10-15'), { start: 1380, end: 1500, crosses: true }), 'windowFor: 終わりが 6:00 以前なら翌日の深夜(+1440)・同じ時刻は null');
-    ok(T.dayCut(wx, '2026-10-12') === 60 && T.dayCut(wx, '2026-10-13') === 0 && T.dayCut({ ...wx, dayStart: '02:00' }, '2026-10-12') === 120, 'dayCut: またぐ分と 1日の始まり の大きいほう');
+    ok(eq(T.windowFor(wx, '2026-10-12'), { start: 420, end: 1500, crosses: true }) && T.windowFor(wx, '2026-10-14') === null && eq(T.windowFor(wx, '2026-10-15'), { start: 1380, end: 1500, crosses: true }), 'windowFor: 終わりが6:00以前なら翌日の深夜(+1440)・同じ時刻は null');
+    ok(T.dayCut(wx, '2026-10-12') === 60 && T.dayCut(wx, '2026-10-13') === 0 && T.dayCut({ ...wx, dayStart: '02:00' }, '2026-10-12') === 120, 'dayCut: またぐ分と1日の始まり の大きいほう');
     ok(eq(T.effectiveDay(wx, '2026-10-13', 30), { date: '2026-10-12', min: 1470, shifted: true }) && eq(T.effectiveDay(wx, '2026-10-13', 90), { date: '2026-10-13', min: 90, shifted: false }) && eq(T.effectiveDay(wx, '2026-10-14', 30), { date: '2026-10-14', min: 30, shifted: false }), 'effectiveDay: 前の日の作業時間帯が続く間は前の日(min は +1440)');
     const ul = Rp.unlogged({ a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, '2026-10-14', null, 1440);
     ok(ul.loggedMin === 90 && ul.unloggedMin === 0, 'unlogged: 作業時間帯が無い日でも記録した時間は数える');
     const agx = Rp.aggregate({ entries: { a: { id: 'a', date: '2026-10-14', start: '09:00', end: '10:30', categoryId: 'research', deletedAt: null } }, date: '2026-10-14', nowMin: 1440, settings: ds });
     const lx = Rp.reportLines(agx, { date: '2026-10-14' });
-    ok(lx.positive[0] === '作業は合計 1時間30分 でした。' && !lx.positive.some((t) => /記録がありません/.test(t)), 'reportLines: 記録があれば作業の合計を言う(「記録なし」とは言わない)');
+    ok(lx.positive[0] === '作業は合計1時間30分でした。' && !lx.positive.some((t) => /記録がありません/.test(t)), 'reportLines: 記録があれば作業の合計を言う(「記録なし」とは言わない)');
     ok(Rp.reportLines(Rp.aggregate({ entries: {}, date: '2026-10-14', nowMin: 1440, settings: ds }), { date: '2026-10-14' }).positive[0] === '今日は記録がありませんでした。', 'reportLines: 記録ゼロの日の文');
 
     // ---- v0.13.2: 日付をまたぐ終了時刻 ----
@@ -468,33 +468,33 @@ document.getElementById('app').addEventListener('load', async () => {
     const xE = { a: { id: 'a', date: '2026-10-12', start: '23:30', end: '23:50', categoryId: 'research', taskId: 't', note: 'n', plannedMin: null, deletedAt: null } };
     const xR = L.setTimes(xE, 'a', { start: '23:30', end: '00:10' }, 1440, PC);
     const xT = Object.values(xR).find((e) => e.id !== 'a');
-    ok(xR.a.end === '24:00' && xT && xT.date === '2026-10-13' && xT.start === '00:00' && xT.end === '00:10' && xT.categoryId === 'research' && xT.taskId === 't', 'setTimes: 終了が翌日の深夜なら 24:00 で分けて翌日の記録を作る');
-    ok(throws(() => L.setTimes(xE, 'a', { start: '23:30', end: '12:00' }, 1440, PC)), 'setTimes: 6:00 より後の「前の時刻」は従来どおり拒否');
+    ok(xR.a.end === '24:00' && xT && xT.date === '2026-10-13' && xT.start === '00:00' && xT.end === '00:10' && xT.categoryId === 'research' && xT.taskId === 't', 'setTimes: 終了が翌日の深夜なら24:00で分けて翌日の記録を作る');
+    ok(throws(() => L.setTimes(xE, 'a', { start: '23:30', end: '12:00' }, 1440, PC)), 'setTimes: 6:00より後の「前の時刻」は従来どおり拒否');
     const xA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC);
-    ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も 2 つに分ける');
-    ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00 終了の記録は 30 分・翌日分は 10 分と数える');
+    ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も2つに分ける');
+    ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00終了の記録は30分・翌日分は10分と数える');
 
     // ---- v0.13.3: 期限切れの扱い ----
     log('\n# v0.13.3');
     const ovr = { id: 'o', name: 'o', kind: 'duty', deadline: '2026-10-11', remainingH: 3, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
     ok(!Pn.isEligible(ovr, '2026-10-12') && Pn.isEligible(ovr, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null }, '2026-10-12') && !Pn.isEligible({ ...ovr, doneAt: 'x' }, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null, repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' } }, '2026-10-12'), 'isEligible: 期限がその日以降(期限なし・毎週型は可)・完了/削除/やりたいは不可');
     ok(Pn.todayShare({ o: ovr }, '2026-10-12').length === 0 && Pn.todayShare({ o: ovr }, '2026-10-11')[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
-    ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5 で扱う)');
+    ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5で扱う)');
 
-    // ---- v0.13.4: 記録は実効の日に属する(切れ目があれば 24:xx の 1 つの記録) ----
+    // ---- v0.13.4: 記録は実効の日に属する(切れ目があれば24:xx の1つの記録) ----
     log('\n# v0.13.4');
     const yE = { a: { id: 'a', date: '2026-10-12', start: '23:40', end: '23:50', categoryId: 'research', taskId: null, note: '', plannedMin: null, deletedAt: null } };
     const yR = L.setTimes(yE, 'a', { start: '23:40', end: '00:10' }, 1440, PC, 1560);
-    ok(Object.keys(yR).length === 1 && yR.a.end === '24:10' && L.totalsByCategory(yR, '2026-10-12', 1560).research === 30, 'setTimes(dayEnd=26:00): 23:40〜翌 0:10 は同じ日の 1 つの記録(24:10)になる');
-    ok(Object.keys(L.setTimes(yE, 'a', { start: '23:40', end: '00:10' }, 1440, PC)).length === 2, 'setTimes(切れ目なし): 24:00 で分ける(従来)');
+    ok(Object.keys(yR).length === 1 && yR.a.end === '24:10' && L.totalsByCategory(yR, '2026-10-12', 1560).research === 30, 'setTimes(dayEnd=26:00): 23:40〜翌0:10は同じ日の1つの記録(24:10)になる');
+    ok(Object.keys(L.setTimes(yE, 'a', { start: '23:40', end: '00:10' }, 1440, PC)).length === 2, 'setTimes(切れ目なし): 24:00で分ける(従来)');
     const yA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC, 1560);
-    ok(Object.keys(yA).length === 1 && Object.values(yA)[0].end === '24:20', 'addEntry(dayEnd): 1 つの記録として追加');
+    ok(Object.keys(yA).length === 1 && Object.values(yA)[0].end === '24:20', 'addEntry(dayEnd): 1つの記録として追加');
     const yS = L.start({}, { date: '2026-10-12', nowMin: 1470, categoryId: 'research' }, PC);
-    ok(yS.entry.start === '24:30' && yS.entry.date === '2026-10-12' && L.elapsedMin(yS.entry, '2026-10-12', 1500) === 30, 'start: 深夜(実効の日の 24:30)から記録でき、経過も数える');
+    ok(yS.entry.start === '24:30' && yS.entry.date === '2026-10-12' && L.elapsedMin(yS.entry, '2026-10-12', 1500) === 30, 'start: 深夜(実効の日の24:30)から記録でき、経過も数える');
     const yC = L.closeOpen(yS.entries, { date: '2026-10-13', at: 600, windowEndOf: () => 1500 }, PC);
-    ok(yC.closed.end === '25:00', 'closeOpen: 日が変わっていたら作業時間帯の終わり(翌 1:00=25:00)で閉じる');
+    ok(yC.closed.end === '25:00', 'closeOpen: 日が変わっていたら作業時間帯の終わり(翌1:00=25:00)で閉じる');
     const yPie = Rp.dayPie(yR, '2026-10-12', { start: 420, end: 1500 }, 1560);
-    ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24 時間超の nowMin でも合計は 1440');
+    ok(yPie.reduce((a, x) => a + x.min, 0) === 1440, 'dayPie: 24時間超の nowMin でも合計は1440');
 
     // ---- v0.15.1: 期間のまとめ ----
     log('\n# period');
@@ -521,11 +521,11 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(lostC.length === 1 && lostC[0].id === 'c_014df50c' && lostC[0].archived && lostC[0].name === '消したカテゴリ' && eq(S.migrate(lost), lost), 'migrate(v0.15.6): 記録にだけ残るカテゴリを「消したカテゴリ」の非表示カテゴリとして復元(消した記録は見ない・冪等)');
 
 
-    // ---- v0.17: タスクの種類(用事・繰り返す期限)・深夜の記録・設定の項目ごとの同期・1 日の目標 ----
+    // ---- v0.17: タスクの種類(用事・繰り返す期限)・深夜の記録・設定の項目ごとの同期・1日の目標 ----
     log('\n# v0.17');
     const v17 = S.migrate({ schema: 1, tasks: { a: { id: 'a', name: 'a', noTime: true, recur: 'weekly' }, b: { id: 'b', name: 'b', noTime: 'yes', recur: 'monthly' } }, settings: { goals: { workMin: 360, driftMax: 60 }, fieldStamps: { dayStart: '2026-10-16T10:00:00+09:00', nope: 'x', window: 5 } } });
     ok(v17.tasks.a.noTime === true && v17.tasks.a.recur === 'weekly' && v17.tasks.b.noTime === false && v17.tasks.b.recur === null, 'validateTask(v0.17): noTime は真偽値・recur は weekly だけ');
-    ok(v17.settings.goals.workMin === 360 && v17.settings.goals.driftMax === 60 && eq(S.migrate({ schema: 1, settings: { goals: { workMin: 5, driftMax: 'x' } } }).settings.goals, { workMin: null, driftMax: null }) && eq(S.defaultSettings().goals, { workMin: null, driftMax: null }) && S.migrate({ schema: 1, settings: { goals: { driftMax: 0 } } }).settings.goals.driftMax === 0, 'settings.goals(v0.17): 作業は 15 分以上・上限は 0 以上・他は null(0 は「ダラダラなし」の上限として通す)');
+    ok(v17.settings.goals.workMin === 360 && v17.settings.goals.driftMax === 60 && eq(S.migrate({ schema: 1, settings: { goals: { workMin: 5, driftMax: 'x' } } }).settings.goals, { workMin: null, driftMax: null }) && eq(S.defaultSettings().goals, { workMin: null, driftMax: null }) && S.migrate({ schema: 1, settings: { goals: { driftMax: 0 } } }).settings.goals.driftMax === 0, 'settings.goals(v0.17): 作業は15分以上・上限は0以上・他は null(0は「ダラダラなし」の上限として通す)');
     ok(eq(v17.settings.fieldStamps, { dayStart: '2026-10-16T10:00:00+09:00' }) && eq(S.migrate(null).settings.fieldStamps, {}), 'settings.fieldStamps(v0.17): 知っている項目の文字列だけ');
     const todoT = { u: { id: 'u', name: '銀行', kind: 'duty', deadline: MON, remainingH: 0, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, v: { id: 'v', name: '明日の用事', kind: 'duty', deadline: '2026-10-13', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, w: { id: 'w', name: '先の用事', kind: 'duty', deadline: '2026-10-14', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, x: { id: 'x', name: '過ぎた用事', kind: 'duty', deadline: '2026-10-10', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, y: { id: 'y', name: '済んだ用事', kind: 'duty', deadline: MON, noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-12T09:00:00+09:00' }, z: { id: 'z', name: '昨日済んだ', kind: 'duty', deadline: '2026-10-11', noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-11T09:00:00+09:00' } };
     ok(Pn.todayShare({ ...todoT, t: { id: 't', name: 't', kind: 'duty', deadline: MON, remainingH: 2, noTime: true } }, MON).length === 0, 'todayShare: 用事(noTime)は量を持たない');
@@ -541,17 +541,17 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(rr.tasks.s.doneAt === null && rr.tasks.s.deadline === '2026-10-09' && rr.tasks.t.doneAt === 'x' && rr.tasks.u.doneAt === 'x', 'rollRecurring: 済んでいないもの(期限切れの出口へ)・期限が先のもの・繰り返さないものは触らない');
     ok(Pn.rollRecurring({ r: { ...recT.r, deadline: '2026-09-18' } }, MON, PC).tasks.r.deadline === '2026-10-16', 'rollRecurring: 何週も過ぎていれば today 以降になるまで送る');
     ok(eq(Pn.rollRecurring(recT, '2026-10-09', PC).rolled, []), 'rollRecurring: 期限の当日はまだ送らない');
-    // 1 日の目標(F3-11)
+    // 1日の目標(F3-11)
     const gS = { ...ds, goals: { workMin: 240, driftMax: 60 } };
     const fbG1 = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: gS }), { tasks: {}, entries: fbGood, date: RD, settings: gS });
-    ok(fbG1.judged && fbG1.score === 0 && fbG1.verdict === 'いつもどおりの一日でした。(作業は目標 4時間 のうち 3時間・ダラダラは上限 1時間 の中)', 'dayFeedback(目標): 作業は目標と比べ(8 割未満は −1)、ダラダラは上限と比べる(先週平均は使わない)');
-    ok(fbG1.good.includes('ダラダラは 30分 で、上限の 1時間 におさまりました。') && fbG1.next === '明日は作業 4時間 を(きょうは 3時間)。', 'dayFeedback(目標): 上限におさまった文・明日は目標の量');
+    ok(fbG1.judged && fbG1.score === 0 && fbG1.verdict === 'いつもどおりの一日でした。(作業は目標4時間のうち3時間・ダラダラは上限1時間の中)', 'dayFeedback(目標): 作業は目標と比べ(8割未満は −1)、ダラダラは上限と比べる(先週平均は使わない)');
+    ok(fbG1.good.includes('ダラダラは30分で、上限の1時間におさまりました。') && fbG1.next === '明日は作業4時間を(きょうは3時間)。', 'dayFeedback(目標): 上限におさまった文・明日は目標の量');
     const gS2 = { ...ds, goals: { workMin: 150, driftMax: 30 } };
     const fbG2 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: gS2 }), { tasks: {}, entries: fbSlow, date: RD, settings: gS2 });
-    ok(fbG2.score === -2 && fbG2.reasons.join() === '作業は目標 2時間30分 のうち 1時間,ダラダラは上限より 1時間30分 多め' && fbG2.better === 'ダラダラ 2時間 のうち 1時間30分 を作業に回せば、目標の 2時間30分 に届いていました。', 'dayFeedback(目標): 届かず上限超え → 「良くするには」は上限を超えた分を作業へ');
+    ok(fbG2.score === -2 && fbG2.reasons.join() === '作業は目標2時間30分のうち1時間,ダラダラは上限より1時間30分多め' && fbG2.better === 'ダラダラ2時間のうち1時間30分を作業に回せば、目標の2時間30分に届いていました。', 'dayFeedback(目標): 届かず上限超え → 「良くするには」は上限を超えた分を作業へ');
     const gS3 = { ...ds, goals: { workMin: 120, driftMax: null } };
     const fbG3 = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: gS3 }), { tasks: {}, entries: fbGood, date: RD, settings: gS3 });
-    ok(fbG3.score === 2 && fbG3.reasons[0] === '作業は目標の 2時間 に届いた' && fbG3.reasons[1] === 'ダラダラは 30分 少なめ' && fbG3.good[0] === 'SNS・動画は先週の平均より 30分 少なくなりました。' && fbG3.good.includes('作業は 3時間 で、目標の 2時間 に届きました。'), 'dayFeedback(目標): 作業だけ目標があればダラダラは先週平均と比べる・届いた文は肯定に');
+    ok(fbG3.score === 2 && fbG3.reasons[0] === '作業は目標の2時間に届いた' && fbG3.reasons[1] === 'ダラダラは30分少なめ' && fbG3.good[0] === 'SNS・動画は先週の平均より30分少なくなりました。' && fbG3.good.includes('作業は3時間で、目標の2時間に届きました。'), 'dayFeedback(目標): 作業だけ目標があればダラダラは先週平均と比べる・届いた文は肯定に');
     const fewG = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: gS }), { tasks: {}, entries: fbFew, date: RD, settings: gS });
     ok(fewG.judged && fewG.verdict.startsWith('よい一日でした。'), 'dayFeedback(目標): 先週の記録が少なくても目標があれば判定する');
     // 設定の項目ごとの同期(F7-8)
@@ -570,20 +570,20 @@ document.getElementById('app').addEventListener('load', async () => {
     log('\n# diary');
     const Dg = M.diary;
     const dOk = S.validateDiary({ date: '2026-10-12', mood: 4, good: 'よかった', hard: '', tomorrow: '早く寝る', note: 'x'.repeat(5000), updatedAt: 'u' }, '2026-10-12');
-    ok(dOk.mood === 4 && dOk.good === 'よかった' && dOk.note.length === 4000 && dOk.deletedAt === null, 'validateDiary: 気分 1〜5・文字列は長さを切る');
+    ok(dOk.mood === 4 && dOk.good === 'よかった' && dOk.note.length === 4000 && dOk.deletedAt === null, 'validateDiary: 気分1〜5・文字列は長さを切る');
     ok(S.validateDiary({ mood: 9, good: 1 }, '2026-10-12').mood === null && S.validateDiary({ mood: 9 }, '2026-10-12').good === '' && S.validateDiary({ mood: 3 }, 'x') === null && S.validateDiary({ date: '2026-10-12', mood: '3' }, '2026-10-12').mood === 3, 'validateDiary: 範囲外の気分は null・壊れた日付は捨てる・文字列の数字は通す');
     const dM = S.migrate({ schema: 1, diary: { '2026-10-12': { mood: 2 }, wrong: { date: '2026-10-11', good: 'a' }, bad: { good: 'b' } } });
     ok(Object.keys(dM.diary).sort().join() === '2026-10-11,2026-10-12' && dM.diary['2026-10-11'].good === 'a' && eq(S.migrate(null).diary, {}), 'migrate: diary はキー=日付に正規化・壊れたものは捨てる・既定は空');
-    const dy = { '2026-10-10': { date: '2026-10-10', mood: 3, good: 'a', deletedAt: null }, '2026-10-11': { date: '2026-10-11', mood: null, good: '', hard: '', tomorrow: '論文を 1 本', note: '', deletedAt: null }, '2026-10-09': { date: '2026-10-09', mood: 5, deletedAt: 'x' }, '2026-10-08': { date: '2026-10-08', mood: null, good: '  ', deletedAt: null } };
-    ok(Dg.isWritten(dy['2026-10-10']) && Dg.isWritten(dy['2026-10-11']) && !Dg.isWritten(dy['2026-10-09']) && !Dg.isWritten(dy['2026-10-08']) && !Dg.isWritten(undefined), 'isWritten: 気分か 1 行でもあれば書いた日・空白だけ・削除は書いていない');
+    const dy = { '2026-10-10': { date: '2026-10-10', mood: 3, good: 'a', deletedAt: null }, '2026-10-11': { date: '2026-10-11', mood: null, good: '', hard: '', tomorrow: '論文を1本', note: '', deletedAt: null }, '2026-10-09': { date: '2026-10-09', mood: 5, deletedAt: 'x' }, '2026-10-08': { date: '2026-10-08', mood: null, good: '  ', deletedAt: null } };
+    ok(Dg.isWritten(dy['2026-10-10']) && Dg.isWritten(dy['2026-10-11']) && !Dg.isWritten(dy['2026-10-09']) && !Dg.isWritten(dy['2026-10-08']) && !Dg.isWritten(undefined), 'isWritten: 気分か1行でもあれば書いた日・空白だけ・削除は書いていない');
     ok(Dg.streak(dy, '2026-10-12') === 2 && Dg.streak(dy, '2026-10-11') === 2 && Dg.streak(dy, '2026-10-13') === 0 && Dg.streak({}, '2026-10-12') === 0, 'streak: 続いた日数(きょう書いていなくても昨日から数える)');
     const dsum = Dg.summarize({ ...dy, '2026-10-12': { date: '2026-10-12', mood: 5, deletedAt: null } }, '2026-10-08', '2026-10-12');
     ok(dsum.days === 3 && dsum.moodAvg === 4 && dsum.list.length === 5 && dsum.list[4].mood === 5 && dsum.list[0].written === false, 'summarize: 書いた日数・気分の平均・日ごと');
-    ok(Dg.excerpt(dy['2026-10-11']) === '論文を 1 本' && Dg.excerpt({ good: 'あ'.repeat(80), deletedAt: null }).length === 60 && Dg.excerpt(dy['2026-10-09']) === '', 'excerpt: 最初の文字列を 60 字まで');
+    ok(Dg.excerpt(dy['2026-10-11']) === '論文を1本' && Dg.excerpt({ good: 'あ'.repeat(80), deletedAt: null }).length === 60 && Dg.excerpt(dy['2026-10-09']) === '', 'excerpt: 最初の文字列を60字まで');
     ok(Dg.moodLabel(5) === '最高' && Dg.moodLabel(null) === '' && Dg.MOODS.length === 5, 'MOODS / moodLabel');
     const sd = Dg.seeds({ agg: fbAggGood, fb: fb1, gs: [{ kind: 'daily', name: '英語', done: true }, { kind: 'deadline', name: '修論', done: false, targetMin: 60 }, { kind: 'todo', name: '銀行', done: false }], prev: dy['2026-10-11'], categories: ds.categories });
-    ok(sd[0].field === 'good' && sd[0].text === '昨日の「明日は」: 論文を 1 本' && sd[1].text === '研究を 3時間(作業は合計 3時間)' && sd.some((x) => x.text === '英語を済ませた') && sd.some((x) => x.field === 'tomorrow' && x.text === '修論を 1時間') && sd.some((x) => x.field === 'tomorrow' && x.text === '銀行を済ませる') && sd.length <= 8, 'seeds: 昨日の「明日は」→ 作業 → 済ませたもの → ふり返り → 明日の分(欄つき・重複なし・8 件まで)');
-    ok(eq(Dg.seeds({}), []) && Dg.seeds({ fb: { next: 'きょうはあと 英語 を 30分。', good: [] } }).length === 0 && Dg.seeds({ fb: { next: '明日は 面談資料 を 30分。', good: [] } })[0].text === '面談資料 を 30分。', 'seeds: 材料が無ければ空・途中の「きょうはあと」は出さない・「明日は」の頭を落とす');
+    ok(sd[0].field === 'good' && sd[0].text === '昨日の「明日は」: 論文を1本' && sd[1].text === '研究を3時間(作業は合計3時間)' && sd.some((x) => x.text === '英語を済ませた') && sd.some((x) => x.field === 'tomorrow' && x.text === '修論を1時間') && sd.some((x) => x.field === 'tomorrow' && x.text === '銀行を済ませる') && sd.length <= 8, 'seeds: 昨日の「明日は」→ 作業 → 済ませたもの → ふり返り → 明日の分(欄つき・重複なし・8件まで)');
+    ok(eq(Dg.seeds({}), []) && Dg.seeds({ fb: { next: 'きょうはあと 英語 を30分。', good: [] } }).length === 0 && Dg.seeds({ fb: { next: '明日は 面談資料 を30分。', good: [] } })[0].text === '面談資料 を30分。', 'seeds: 材料が無ければ空・途中の「きょうはあと」は出さない・「明日は」の頭を落とす');
     const dA2 = { ...dA, diary: { '2026-10-11': { date: '2026-10-11', mood: 3, good: 'a', updatedAt: '2026-10-11T22:00:00+09:00', deletedAt: null } } };
     const dB2 = { ...dB, diary: { '2026-10-11': { date: '2026-10-11', mood: 4, good: 'b', updatedAt: '2026-10-11T23:00:00+09:00', deletedAt: null }, '2026-10-10': { date: '2026-10-10', mood: 2, updatedAt: 'x', deletedAt: null } } };
     const mD = Sy.merge(dA2, dB2);
@@ -594,26 +594,26 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- v0.19: お金(F10) ----
     log('\n# money');
     const Mn = M.money;
-    ok(Mn.fmtYen(1234567) === '¥1,234,567' && Mn.fmtYen(0) === '¥0' && Mn.fmtYen(-500) === '−¥500' && Mn.fmtYen(999) === '¥999', 'fmtYen: 3 桁区切り・負は −');
-    ok(Mn.parseYen('1,200') === 1200 && Mn.parseYen('¥１２００円') === 1200 && Mn.parseYen('0') === null && Mn.parseYen('abc') === null && Mn.parseYen('') === null && Mn.parseYen('200000000') === null, 'parseYen: 区切り・¥・円・全角を受け、0 以下・壊れた値・1 億超は null');
+    ok(Mn.fmtYen(1234567) === '¥1,234,567' && Mn.fmtYen(0) === '¥0' && Mn.fmtYen(-500) === '−¥500' && Mn.fmtYen(999) === '¥999', 'fmtYen: 3桁区切り・負は −');
+    ok(Mn.parseYen('1,200') === 1200 && Mn.parseYen('¥１２００円') === 1200 && Mn.parseYen('0') === null && Mn.parseYen('abc') === null && Mn.parseYen('') === null && Mn.parseYen('200000000') === null, 'parseYen: 区切り・¥・円・全角を受け、0以下・壊れた値・1億超は null');
     ok(eq(Mn.monthRange('2026-02'), { from: '2026-02-01', to: '2026-02-28', days: 28 }) && Mn.monthRange('2024-02').days === 29 && Mn.addMonths('2026-01', -1) === '2025-12' && Mn.addMonths('2026-12', 1) === '2027-01' && Mn.fmtYM('2026-10') === '2026年10月' && Mn.monthOf('2026-10-16') === '2026-10', 'monthRange / addMonths / fmtYM / monthOf');
     const mny = { a: { id: 'a', date: '2026-10-03', time: '12:10', amount: 800, type: 'out', categoryId: 'food', entryId: 'e1', deletedAt: null, updatedAt: '1' }, b: { id: 'b', date: '2026-10-03', time: '19:00', amount: 1200, type: 'out', categoryId: 'food', entryId: null, deletedAt: null, updatedAt: '2' }, c: { id: 'c', date: '2026-10-10', time: null, amount: 3000, type: 'out', categoryId: 'hobby', entryId: 'e1', deletedAt: null, updatedAt: '3' }, d: { id: 'd', date: '2026-10-25', time: '10:00', amount: 50000, type: 'in', categoryId: 'income', deletedAt: null, updatedAt: '4' }, e: { id: 'e', date: '2026-09-30', amount: 999, type: 'out', categoryId: 'food', deletedAt: null }, f: { id: 'f', date: '2026-10-05', amount: 5000, type: 'out', categoryId: 'food', deletedAt: 'x' } };
     const ms = Mn.summarize(mny, '2026-10');
     ok(ms.out === 5000 && ms.in === 50000 && ms.net === 45000 && ms.count === 4 && ms.byCategory.food === 2000 && ms.byCategory.hobby === 3000 && ms.byDay['2026-10-03'] === 2000 && !ms.byDay['2026-10-25'], 'summarize: 月の支出・収入・カテゴリ別・日別(削除・他の月・収入はカテゴリ別に入れない)');
     ok(Mn.summarize(mny, '2026-10', '2026-10-05').out === 2000, 'summarize: upto でその日まで');
     const bs = Mn.budgetStatus(ms, 30000, '2026-10-16');
-    ok(bs.remaining === 25000 && bs.daysLeft === 16 && bs.perDay === 1562 && !bs.over && Math.abs(bs.pct - 5000 / 30000) < 1e-9, 'budgetStatus: 残り・残り日数(今日を含む)・1 日あたり');
-    ok(Mn.budgetStatus(ms, 4000, '2026-10-16').over && Mn.budgetStatus(ms, 4000, '2026-10-16').perDay === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').daysLeft === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').perDay === null && Mn.budgetStatus(ms, null, '2026-10-16') === null, 'budgetStatus: 超過は over・月が過ぎれば残り日数 0・予算なしは null');
+    ok(bs.remaining === 25000 && bs.daysLeft === 16 && bs.perDay === 1562 && !bs.over && Math.abs(bs.pct - 5000 / 30000) < 1e-9, 'budgetStatus: 残り・残り日数(今日を含む)・1日あたり');
+    ok(Mn.budgetStatus(ms, 4000, '2026-10-16').over && Mn.budgetStatus(ms, 4000, '2026-10-16').perDay === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').daysLeft === 0 && Mn.budgetStatus(ms, 30000, '2026-11-02').perDay === null && Mn.budgetStatus(ms, null, '2026-10-16') === null, 'budgetStatus: 超過は over・月が過ぎれば残り日数0・予算なしは null');
     ok(Mn.perDayAverage(ms, '2026-10-10') === 500 && Mn.perDayAverage(ms, '2026-11-05') === Math.round(5000 / 31) && Mn.perDayAverage(ms, '2026-09-01') === 0, 'perDayAverage: 月初からの日数で割る');
     const lE = { e1: { id: 'e1', date: '2026-10-03', start: '12:00', end: '13:00', deletedAt: null }, e2: { id: 'e2', date: '2026-10-03', start: '18:00', end: null, deletedAt: null }, e3: { id: 'e3', date: '2026-10-02', start: '23:00', end: '25:00', deletedAt: null } };
-    ok(Mn.linkEntry(lE, '2026-10-03', '12:10') === 'e1' && Mn.linkEntry(lE, '2026-10-03', '13:00') === null && Mn.linkEntry(lE, '2026-10-03', '18:30', 1200) === 'e2' && Mn.linkEntry(lE, '2026-10-03', '21:00', 1200) === null && Mn.linkEntry(lE, '2026-10-03', '00:30') === 'e3' && Mn.linkEntry(lE, '2026-10-03', null) === null, 'linkEntry: その時刻の記録(記録中は now まで・前の日の深夜 24:xx にも当たる)');
+    ok(Mn.linkEntry(lE, '2026-10-03', '12:10') === 'e1' && Mn.linkEntry(lE, '2026-10-03', '13:00') === null && Mn.linkEntry(lE, '2026-10-03', '18:30', 1200) === 'e2' && Mn.linkEntry(lE, '2026-10-03', '21:00', 1200) === null && Mn.linkEntry(lE, '2026-10-03', '00:30') === 'e3' && Mn.linkEntry(lE, '2026-10-03', null) === null, 'linkEntry: その時刻の記録(記録中は now まで・前の日の深夜24:xx にも当たる)');
     ok(eq(Mn.totalsByEntry(mny), { e1: 3800 }), 'totalsByEntry: 記録ごとの支出(収入・削除は除く)');
     const gb = Mn.groupByDay(mny, '2026-10-01', '2026-10-31');
     ok(gb.map((g) => `${g.date}:${g.total}:${g.items.length}`).join() === '2026-10-25:0:1,2026-10-10:3000:1,2026-10-03:2000:2' && gb[2].items[0].id === 'b', 'groupByDay: 新しい日が先・日の合計は支出だけ・日の中は時刻の遅い順');
     ok(Mn.monthlyTrend(mny, '2026-10', 3).map((t) => `${t.ym}:${t.out}`).join() === '2026-08:0,2026-09:999,2026-10:5000', 'monthlyTrend: 直近 n か月の支出(古い順)');
     const vm = S.migrate({ schema: 1, money: { a: { id: 'a', date: '2026-10-03', time: '12:10', amount: '800', type: 'in', categoryId: 'food', note: 'x'.repeat(300) }, b: { date: 'x', amount: 1 }, c: { date: '2026-10-03', amount: 0 }, d: { date: '2026-10-03', amount: 500, time: 'zz' } } });
-    ok(Object.keys(vm.money).sort().join() === 'a,d' && vm.money.a.amount === 800 && vm.money.a.type === 'in' && vm.money.a.note.length === 200 && vm.money.d.time === null && vm.money.d.type === 'out' && vm.money.d.categoryId === 'misc' && vm.money.d.id === 'd', 'validateMoney: 金額は正の整数・type は out/in・時刻は HH:MM だけ・壊れた日付や 0 円は捨てる');
-    ok(S.defaultSettings().moneyCategories.length === 10 && S.defaultMoneyCategories().find((c) => c.id === 'income').income === true && eq(S.defaultSettings().budget, { monthMax: null, startBalance: null }) && eq(S.migrate(null).money, {}), 'お金の既定: カテゴリ 10 件(収入 1 つ)・予算なし・money は空');
+    ok(Object.keys(vm.money).sort().join() === 'a,d' && vm.money.a.amount === 800 && vm.money.a.type === 'in' && vm.money.a.note.length === 200 && vm.money.d.time === null && vm.money.d.type === 'out' && vm.money.d.categoryId === 'misc' && vm.money.d.id === 'd', 'validateMoney: 金額は正の整数・type は out/in・時刻は HH:MM だけ・壊れた日付や0円は捨てる');
+    ok(S.defaultSettings().moneyCategories.length === 10 && S.defaultMoneyCategories().find((c) => c.id === 'income').income === true && eq(S.defaultSettings().budget, { monthMax: null, startBalance: null }) && eq(S.migrate(null).money, {}), 'お金の既定: カテゴリ10件(収入1つ)・予算なし・money は空');
     const bud = S.migrate({ schema: 1, settings: { budget: { monthMax: '30000' }, moneyCategories: [{ id: 'food', name: '食', color: 'bad', order: 1 }, { noId: 1 }] } }).settings;
     ok(bud.budget.monthMax === 30000 && bud.moneyCategories.length === 1 && bud.moneyCategories[0].color === '#cfd7e1' && S.migrate({ schema: 1, settings: { budget: { monthMax: -5 } } }).settings.budget.monthMax === null && S.migrate({ schema: 1, settings: { moneyCategories: [] } }).settings.moneyCategories.length === 10, 'settings(v0.19): 予算は正の整数だけ・カテゴリは id のあるものだけ(空なら既定)・壊れた色は灰');
     const mcA = { ...S.defaultSettings(), settingsUpdatedAt: '2026-10-14T10:00:00+09:00', moneyCategories: S.defaultMoneyCategories().map((c) => (c.id === 'food' ? { ...c, name: 'ごはん', updatedAt: '2026-10-14T10:00:00+09:00' } : c)).concat([{ id: 'm_x', name: 'ペット', color: '#9ccbee', order: 11 }]), budget: { monthMax: 40000 }, fieldStamps: { budget: '2026-10-14T10:00:00+09:00' } };
@@ -633,10 +633,10 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(cells.find((c) => c.key === '2026-10-03').mood === 4 && cells.find((c) => c.key === '2026-10-16').written && cells.find((c) => c.key === '2026-10-16').mood === null && cells.find((c) => c.key === '2026-10-17').future && !cells.find((c) => c.key === '2026-10-16').future && mc.days === 2 && mc.moodDays === 1, 'monthCells: 気分・書いた日・未来・日数');
     ok(eq(Mn.netAll(mny), { out: 5999, in: 50000, net: 44001 }) && Mn.netAll(mny, '2026-10-05').net === -2999, 'netAll: 全期間の収入 − 支出(upto でその日まで)');
     const wp = Mn.wantPlan({ price: 30000, targetDate: '2026-12-16' }, '2026-10-16', 20000);
-    ok(wp.daysLeft === 61 && wp.monthsLeft === 2 && wp.perMonth === 15000 && wp.monthsAtPace === 1.5, 'wantPlan: 目標日までの日数・月数(0.5 刻み)・月いくら(100 円単位切り上げ)・今のペースで何か月');
-    ok(Mn.wantPlan({ price: 1000, targetDate: '2026-10-17' }, '2026-10-16', 0).monthsLeft === 0.5 && Mn.wantPlan({ price: 1000 }, '2026-10-16', 0).perMonth === null && Mn.wantPlan({ price: 1000 }, '2026-10-16', -500).monthsAtPace === null && Mn.wantPlan({ price: 0, targetDate: '2026-11-01' }, '2026-10-16', 100).monthsAtPace === null, 'wantPlan: 近い目標は 0.5 か月・目標なしは月いくら無し・赤字や値段 0 ならペース無し');
+    ok(wp.daysLeft === 61 && wp.monthsLeft === 2 && wp.perMonth === 15000 && wp.monthsAtPace === 1.5, 'wantPlan: 目標日までの日数・月数(0.5刻み)・月いくら(100円単位切り上げ)・今のペースで何か月');
+    ok(Mn.wantPlan({ price: 1000, targetDate: '2026-10-17' }, '2026-10-16', 0).monthsLeft === 0.5 && Mn.wantPlan({ price: 1000 }, '2026-10-16', 0).perMonth === null && Mn.wantPlan({ price: 1000 }, '2026-10-16', -500).monthsAtPace === null && Mn.wantPlan({ price: 0, targetDate: '2026-11-01' }, '2026-10-16', 100).monthsAtPace === null, 'wantPlan: 近い目標は0.5か月・目標なしは月いくら無し・赤字や値段0ならペース無し');
     const vw = S.migrate({ schema: 1, wants: { a: { id: 'a', name: 'イヤホン', price: '29800', targetDate: '2026-12-01', note: 'x' }, b: { name: '  ' }, c: { id: 'c', name: 'x', price: -5, targetDate: 'bad' } }, settings: { budget: { monthMax: 50000, startBalance: '120000' } } });
-    ok(Object.keys(vw.wants).sort().join() === 'a,c' && vw.wants.a.price === 29800 && vw.wants.a.categoryId === 'hobby' && vw.wants.c.price === 0 && vw.wants.c.targetDate === null && vw.settings.budget.startBalance === 120000 && S.migrate(null).settings.budget.startBalance === null && S.migrate({ schema: 1, settings: { budget: { startBalance: -3000 } } }).settings.budget.startBalance === -3000, 'validateWant / budget.startBalance: 名前が必須・値段は 0 以上・目標日は日付だけ・開始残高は負も可');
+    ok(Object.keys(vw.wants).sort().join() === 'a,c' && vw.wants.a.price === 29800 && vw.wants.a.categoryId === 'hobby' && vw.wants.c.price === 0 && vw.wants.c.targetDate === null && vw.settings.budget.startBalance === 120000 && S.migrate(null).settings.budget.startBalance === null && S.migrate({ schema: 1, settings: { budget: { startBalance: -3000 } } }).settings.budget.startBalance === -3000, 'validateWant / budget.startBalance: 名前が必須・値段は0以上・目標日は日付だけ・開始残高は負も可');
     const wA = { ...dA, wants: { a: { id: 'a', name: 'A', price: 100, updatedAt: '2026-10-11T10:00:00+09:00', deletedAt: null } } }, wB = { ...dB, wants: { a: { id: 'a', name: 'A2', price: 200, updatedAt: '2026-10-11T11:00:00+09:00', deletedAt: null } } };
     ok(Sy.merge(wA, wB).wants.a.price === 200 && eq(Sy.merge(wA, wB), Sy.merge(wB, wA)), 'merge: ほしいものも id ごとの LWW・対称');
 
@@ -650,12 +650,12 @@ document.getElementById('app').addEventListener('load', async () => {
     const suL = Ai.shortcutURL('x', 'あ'.repeat(1600));
     ok(suL.url === 'shortcuts://run-shortcut?name=x&input=clipboard' && suL.viaClipboard === true && Ai.shortcutURL('', 'a').url.includes(encodeURIComponent('メリハリ')), 'shortcutURL: 長い文はクリップボード経由・名前が空なら既定');
     const st = Ai.summaryText({ date: RD, agg: fbAggGood, fb: fb1, gs: [{ kind: 'daily', name: '英語', done: true, targetMin: 30, doneMin: 30 }, { kind: 'deadline', name: '修論', done: false, targetMin: 60, doneMin: 20 }, { kind: 'todo', name: '銀行', done: false }], diary: { mood: 4, good: '進んだ', hard: '', tomorrow: '早く寝る' }, categories: ds.categories, goals: { workMin: 240, driftMax: null }, nowMin: 1440, dayDone: true });
-    ok(st.length <= 1800 && st.includes('【10月12日(月)の記録】') && st.includes('内訳: 生活 11時間・研究 3時間') && st.includes('作業の合計 3時間(目標 4時間)') && st.includes('済ませたもの: 英語') && st.includes('目安に届いていないもの: 修論(あと 40分)') && st.includes('残っている用事: 銀行') && st.includes('【アプリのふり返り(規則で作った文)】') && st.includes('よかったこと: 進んだ') && st.includes('調子: 良い') && st.endsWith('きょうを 3 文でふり返り、よかった点を 1 つと明日の一歩を 1 つ。'), 'summaryText: 役割 → 記録(内訳・合計と目標・済/未達/用事)→ アプリのふり返り → 日記 → お願い');
+    ok(st.length <= 1800 && st.includes('【10月12日(月)の記録】') && st.includes('内訳: 生活11時間・研究3時間') && st.includes('作業の合計3時間(目標4時間)') && st.includes('済ませたもの: 英語') && st.includes('目安に届いていないもの: 修論(あと40分)') && st.includes('残っている用事: 銀行') && st.includes('【アプリのふり返り(規則で作った文)】') && st.includes('よかったこと: 進んだ') && st.includes('調子: 良い') && st.endsWith('きょうを3文でふり返り、よかった点を1つと明日の一歩を1つ。'), 'summaryText: 役割 → 記録(内訳・合計と目標・済/未達/用事)→ アプリのふり返り → 日記 → お願い');
     const stMid = Ai.summaryText({ date: RD, agg: Rp.aggregate({ entries: fbGood, date: RD, nowMin: 600, settings: ds }), fb: null, gs: [], diary: null, categories: ds.categories, goals: {}, nowMin: 600, dayDone: false });
-    ok(stMid.includes('いまは 10:00(1 日の途中)') && !stMid.includes('【日記】') && stMid.endsWith('ここまでを 3 文でふり返り、きょうの残りの一歩を 1 つ。') && stMid.includes('(先週の平均 2時間)'), 'summaryText: 途中の日は「いま」と残りの一歩・日記が無ければ省く・目標が無ければ先週平均');
+    ok(stMid.includes('いまは10:00(1日の途中)') && !stMid.includes('【日記】') && stMid.endsWith('ここまでを3文でふり返り、きょうの残りの一歩を1つ。') && stMid.includes('(先週の平均2時間)'), 'summaryText: 途中の日は「いま」と残りの一歩・日記が無ければ省く・目標が無ければ先週平均');
     ok(Ai.summaryText({ date: RD, agg: null, fb: null, gs: [], diary: null, categories: [], goals: {}, nowMin: 1440, dayDone: true }).length < 400, 'summaryText: 材料が無くても短い文になる');
     const ct = Ai.consultText({ question: 'やる気が出ない', nowMin: 1300, open: { name: '研究', elapsedMin: 32 }, workMin: 200, goals: { workMin: 360 }, gs: [{ kind: 'daily', name: '英語', done: false, targetMin: 30, doneMin: 0 }, { kind: 'todo', name: 'メール', done: false }], near: [{ name: '面談資料', deadline: '2026-10-14' }], mood: 2 });
-    ok(ct.includes('時刻 21:40') && ct.includes('記録中: 研究(32分)') && ct.includes('きょうの作業 3時間20分(目標 6時間)') && ct.includes('きょうの目安の残り: 英語(あと 30分)') && ct.includes('残っている用事: メール') && ct.includes('期限が近いもの: 面談資料(10月14日まで)') && ct.includes('きょうの調子: やや低め') && ct.includes('【作業の進め方の相談】\n手がつかない') && ct.includes('いま 10 分でできる作業の一歩を 1 つ'), 'consultText: いまの状況(時刻・記録中・作業・目安・用事・期限・気分)+ 質問 + お願い');
+    ok(ct.includes('時刻21:40') && ct.includes('記録中: 研究(32分)') && ct.includes('きょうの作業3時間20分(目標6時間)') && ct.includes('きょうの目安の残り: 英語(あと30分)') && ct.includes('残っている用事: メール') && ct.includes('期限が近いもの: 面談資料(10月14日まで)') && ct.includes('きょうの調子: やや低め') && ct.includes('【作業の進め方の相談】\n手がつかない') && ct.includes('いま10分でできる作業の一歩を1つ'), 'consultText: いまの状況(時刻・記録中・作業・目安・用事・期限・気分)+ 質問 + お願い');
     ok(Ai.consultText({ question: '  ', nowMin: 600, open: null }).includes('いまは何も記録していない') && Ai.consultText({ question: '', nowMin: 600, open: null }).includes('【作業の進め方の相談】\n次に何をやるといい?') && Ai.reframe('つらいし、やる気がでない') === '調子が上がらないし、手がつかない' && Ai.reframe('  ') === '次に何をやるといい?', 'consultText: 記録中でない・質問が空なら既定の問い');
     ok(Ai.QUICK_QUESTIONS.length === 5 && Ai.MAX_CHARS === 1800 && Ai.URL_MAX_CHARS === 1500 && Ai.DEFAULT_SHORTCUT === 'メリハリ', 'ai の定数');
     ok(S.defaultData && JSON.stringify(Object.keys(S.defaultData())).includes('wants') && true, 'defaultData に wants');
@@ -666,18 +666,18 @@ document.getElementById('app').addEventListener('load', async () => {
     const memoD = S.migrate({ schema: 1, tasks: { m: { id: 'm', name: 'メモ', kind: 'memo', categoryId: 'research' }, x: { id: 'x', name: 'x', kind: 'bogus' } } });
     ok(memoD.tasks.m.kind === 'memo' && memoD.tasks.x.kind === 'duty', 'validateTask(v0.22): kind memo を通す・知らない kind は duty');
     ok(P22.goals(memoD.tasks, {}, '2026-10-27', 600).length === 0 && P22.overdueTasks(memoD.tasks, '2026-10-27', {}).length === 0 && P22.todayShare(memoD.tasks, '2026-10-27', {}).length === 0, 'goals/overdue/todayShare: メモは目安に入らない');
-    ok(P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 10 }) === 20 && P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 30 }) === null && P22.startSpan({ kind: 'daily', targetMin: 3, doneMin: 0 }) === 5, 'startSpan: 毎日=目安の残り(5 分以上・届いていれば null)');
-    ok(P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 0 }) === 60 && P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 290 }) === 15 && P22.startSpan({ kind: 'wish', targetMin: null, doneMin: 0 }) === 15, 'startSpan: 毎週=残りと 60 分の小さい方(15 分以上)・やりたいこと=15 分');
+    ok(P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 10 }) === 20 && P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 30 }) === null && P22.startSpan({ kind: 'daily', targetMin: 3, doneMin: 0 }) === 5, 'startSpan: 毎日=目安の残り(5分以上・届いていれば null)');
+    ok(P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 0 }) === 60 && P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 290 }) === 15 && P22.startSpan({ kind: 'wish', targetMin: null, doneMin: 0 }) === 15, 'startSpan: 毎週=残りと60分の小さい方(15分以上)・やりたいこと=15分');
     ok(P22.startSpan({ kind: 'deadline', targetMin: 60, doneMin: 0 }) === null && P22.startSpan({ kind: 'daily', targetMin: null, doneMin: 0, noTime: true }) === null && P22.startSpan(null) === null, 'startSpan: 期限つき・用事・無しは null');
     const hab = { id: 'h', name: 'h', kind: 'duty', repeat: { type: 'daily', min: 30 }, checks: ['2026-10-25', '2026-10-26'] };
-    ok(P22.habitStreak(hab, {}, '2026-10-27') === 2, 'habitStreak: きょうがまだなら昨日から数える(2 日)');
+    ok(P22.habitStreak(hab, {}, '2026-10-27') === 2, 'habitStreak: きょうがまだなら昨日から数える(2日)');
     ok(P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:30', taskId: 'h' } }, '2026-10-27') === 3 && P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:20', taskId: 'h' } }, '2026-10-27') === 2, 'habitStreak: 記録が目安に届いた日も数える(届かない日は数えない)');
-    ok(P22.habitStreak({ ...hab, checks: ['2026-10-23', '2026-10-26'] }, {}, '2026-10-27') === 1 && P22.habitStreak({ ...hab, checks: [] }, {}, '2026-10-27') === 0 && P22.habitStreak({ id: 'w', kind: 'wish', repeat: null }, {}, '2026-10-27') === 0, 'habitStreak: 途切れたら数え直し・無ければ 0・やりたいことは 0');
+    ok(P22.habitStreak({ ...hab, checks: ['2026-10-23', '2026-10-26'] }, {}, '2026-10-27') === 1 && P22.habitStreak({ ...hab, checks: [] }, {}, '2026-10-27') === 0 && P22.habitStreak({ id: 'w', kind: 'wish', repeat: null }, {}, '2026-10-27') === 0, 'habitStreak: 途切れたら数え直し・無ければ0・やりたいことは0');
     const wk22 = { id: 'wk', name: 'wk', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, checks: ['2026-10-18', '2026-10-25'] };
-    ok(P22.habitStreak(wk22, {}, '2026-10-27') === 2 && P22.habitStreak(wk22, {}, '2026-11-01') === 2 && P22.habitStreak(wk22, {}, '2026-11-09') === 0, 'habitStreak: 毎週は週の終わりごとに数える(今週がまだなら先週から・1 週空くと 0)');
-    ok(S.busyNoteKey('2026-10-27', 540) === '2026-10-27:540' && S.busyNoteKey('2026-10-27', 1470) === '2026-10-28:30' && S.busyNoteKey('2026-10-31', 1500) === '2026-11-01:60', 'busyNoteKey: 日付:開始分・深夜(1440 超)は翌日へ正規化');
+    ok(P22.habitStreak(wk22, {}, '2026-10-27') === 2 && P22.habitStreak(wk22, {}, '2026-11-01') === 2 && P22.habitStreak(wk22, {}, '2026-11-09') === 0, 'habitStreak: 毎週は週の終わりごとに数える(今週がまだなら先週から・1週空くと0)');
+    ok(S.busyNoteKey('2026-10-27', 540) === '2026-10-27:540' && S.busyNoteKey('2026-10-27', 1470) === '2026-10-28:30' && S.busyNoteKey('2026-10-31', 1500) === '2026-11-01:60', 'busyNoteKey: 日付:開始分・深夜(1440超)は翌日へ正規化');
     const bnD = S.migrate({ schema: 1, busyNotes: { '2026-10-27:540': { text: 'ゼミ', updatedAt: '2026-10-27T08:00:00+09:00' }, bad: { text: 'x' }, '2026-10-27:1500': { text: 'y' }, '2026-10-27:600': { id: '2026-10-27:600', text: 'あ'.repeat(300) } } });
-    ok(Object.keys(bnD.busyNotes).length === 2 && bnD.busyNotes['2026-10-27:540'].date === '2026-10-27' && bnD.busyNotes['2026-10-27:540'].start === 540 && bnD.busyNotes['2026-10-27:540'].text === 'ゼミ' && bnD.busyNotes['2026-10-27:600'].text.length === 200, 'validateBusyNote/migrate: キーの形と開始分を検証・本文 200 字');
+    ok(Object.keys(bnD.busyNotes).length === 2 && bnD.busyNotes['2026-10-27:540'].date === '2026-10-27' && bnD.busyNotes['2026-10-27:540'].start === 540 && bnD.busyNotes['2026-10-27:540'].text === 'ゼミ' && bnD.busyNotes['2026-10-27:600'].text.length === 200, 'validateBusyNote/migrate: キーの形と開始分を検証・本文200字');
     ok('busyNotes' in S.defaultData() && eq(S.migrate(null).busyNotes, {}), 'defaultData/migrate: busyNotes を持つ');
     const bnA = { schema: 1, settings: S.defaultSettings(), busyNotes: { '2026-10-27:540': { id: '2026-10-27:540', text: 'ゼミ', updatedAt: '2026-10-27T08:00:00+09:00' }, '2026-10-27:600': { id: '2026-10-27:600', text: 'a', updatedAt: '2026-10-27T08:00:00+09:00' } }, meta: {} };
     const bnB = { schema: 1, settings: S.defaultSettings(), busyNotes: { '2026-10-27:540': { id: '2026-10-27:540', text: '輪講', updatedAt: '2026-10-27T09:00:00+09:00' }, '2026-10-28:540': { id: '2026-10-28:540', text: 'b', updatedAt: '2026-10-27T08:00:00+09:00' } }, meta: {} };
@@ -688,7 +688,7 @@ document.getElementById('app').addEventListener('load', async () => {
     // ---- v0.23: 予定(手で置く) ----
     log('\n# v0.23');
     const pbD = S.migrate({ schema: 1, planBlocks: { a: { id: 'a', date: '2026-10-27', start: '09:00', end: '10:00', categoryId: 'research' }, b: { id: 'b', date: '2026-10-27', start: '10:00', end: '09:00', categoryId: 'x' }, c: { id: 'c', date: '2026-10-27', start: '25:00', end: '31:00' }, d: { id: 'd', date: 'nope', start: '09:00', end: '10:00' }, e: { id: 'e', date: '2026-10-27', start: '24:30', end: '26:00', categoryId: 'rest', taskId: 't1', note: 'x' } } });
-    ok(Object.keys(pbD.planBlocks).length === 2 && pbD.planBlocks.a.categoryId === 'research' && pbD.planBlocks.e.taskId === 't1' && pbD.planBlocks.e.end === '26:00', 'validatePlanBlock: 終了>開始・30:00 まで・日付を検証(深夜 24:30〜26:00 は可)');
+    ok(Object.keys(pbD.planBlocks).length === 2 && pbD.planBlocks.a.categoryId === 'research' && pbD.planBlocks.e.taskId === 't1' && pbD.planBlocks.e.end === '26:00', 'validatePlanBlock: 終了>開始・30:00まで・日付を検証(深夜24:30〜26:00は可)');
     ok('planBlocks' in S.defaultData() && eq(S.migrate(null).planBlocks, {}), 'defaultData/migrate: planBlocks を持つ');
     const pbs = { a: { id: 'a', date: '2026-10-27', start: '09:00', end: '10:00', categoryId: 'research' }, b: { id: 'b', date: '2026-10-27', start: '13:00', end: '14:00', categoryId: 'english', taskId: 'x' }, c: { id: 'c', date: '2026-10-27', start: '20:00', end: '21:00', categoryId: 'rest' }, z: { id: 'z', date: '2026-10-27', start: '08:00', end: '08:30', categoryId: 'life', deletedAt: '2026-10-27T00:00:00+09:00' }, o: { id: 'o', date: '2026-10-28', start: '09:00', end: '10:00', categoryId: 'research' } };
     ok(P22.planBlocksOf(pbs, '2026-10-27').map((b) => b.id).join() === 'a,b,c' && P22.planBlocksOf(pbs, '2026-10-27')[0].s === 540, 'planBlocksOf: その日の生きている予定を開始順に(s/e は分)');
@@ -706,15 +706,26 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(pM.planBlocks.a.start === '09:30' && pM.planBlocks.b && pM.planBlocks.c && eq(pM, Sy.merge(pB, pA)), 'merge: 予定は id ごとの LWW・片側だけのものは残る・対称');
     ok(!Sy.pruneTombstones({ entries: {}, tasks: {}, planBlocks: { a: { deletedAt: '2026-01-01T00:00:00+09:00' }, b: {} } }, '2026-10-27T00:00:00+09:00').planBlocks.a, 'pruneTombstones: 予定の古い削除も掃除');
     const fbp = M.report.dayFeedback(M.report.aggregate({ entries: pes, date: '2026-10-27', nowMin: 1800, settings: S.defaultSettings() }), { tasks: {}, entries: pes, date: '2026-10-27', settings: S.defaultSettings(), nowMin: 1800, planBlocks: pbs });
-    ok(fbp.good.some((t) => t.includes('予定 3 件のうち 1 件は')) && fbp.reasons.some((t) => t.includes('予定 3 件のうちその時間にできたのは 1 件')), 'dayFeedback(v0.23): 予定を置いた日は「予定 n 件のうち m 件はその時間に」を事実として足す');
+    ok(fbp.good.some((t) => t.includes('予定3件のうち1件は')) && fbp.reasons.some((t) => t.includes('予定3件のうちその時間にできたのは1件')), 'dayFeedback(v0.23): 予定を置いた日は「予定 n 件のうち m 件はその時間に」を事実として足す');
     const rp = M.report.buildReport({ entries: pes, date: '2026-10-27', nowMin: 1800, settings: S.defaultSettings(), tasks: {}, planBlocks: pbs });
     ok(rp.byCategory.research.planned === 60 && rp.byCategory.rest.planned === 60 && rp.byCategory.rest.actual === 0, 'buildReport(v0.23): byCategory.planned に予定の分(予定だけのカテゴリも行に)');
 
     // ---- v0.23.1: 記録のメモ・シートを閉じた直後の click ----
     log('\n# v0.23.1');
     const LC = { uid: (() => { let i = 0; return () => 'u' + (++i); })(), nowISO: () => '2026-10-27T10:00:00+09:00' };
-    ok(M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: ' 輪講の準備 ' }, LC).entry.note === ' 輪講の準備 ' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research' }, LC).entry.note === '' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: 'x'.repeat(600) }, LC).entry.note.length === 500, 'log.start(v0.23.1): メモを持てる(500 字まで・無ければ空)');
+    ok(M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: ' 輪講の準備 ' }, LC).entry.note === ' 輪講の準備 ' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research' }, LC).entry.note === '' && M.log.start({}, { date: '2026-10-27', nowMin: 600, categoryId: 'research', note: 'x'.repeat(600) }, LC).entry.note.length === 500, 'log.start(v0.23.1): メモを持てる(500字まで・無ければ空)');
     ok(typeof M.ui.sheetJustClosed === 'function' && M.ui.sheetJustClosed() === false, 'sheetJustClosed: 何も閉じていなければ false');
+
+    // ---- v0.24 ----
+    log('\n# v0.24');
+    const Dm = M.diary;
+    const memD = { '2026-10-20': { date: '2026-10-20', mood: 4, good: '散歩', hard: '', tomorrow: '', note: '' }, '2026-09-27': { date: '2026-09-27', mood: null, good: '', hard: '', tomorrow: '', note: 'めも' }, '2025-10-27': { date: '2025-10-27', mood: 2, good: '', hard: 'x', tomorrow: '', note: '' }, '2026-10-26': { date: '2026-10-26', mood: 3, good: 'y', hard: '', tomorrow: '', note: '' } };
+    const mems = Dm.memories(memD, '2026-10-27');
+    ok(mems.length === 3 && mems[0].key === '2026-10-20' && mems[1].key === '2026-09-27' && mems[2].key === '2025-10-27' && mems[0].label.includes('週間前'), 'diary.memories: 1週間前・1か月前・1年前に書いた日だけ(昨日は含めない)');
+    ok(Dm.memories({}, '2026-10-27').length === 0 && Dm.memories(null, '2026-10-27').length === 0, 'diary.memories: 無ければ空');
+    const fbh = M.report.dayFeedback(M.report.aggregate({ entries: pes, date: '2026-10-27', nowMin: 1800, settings: { ...S.defaultSettings(), window: { ...S.defaultSettings().window, tue: ['09:00', '10:00'] }, goals: { workMin: 60, driftMax: null } } }), { tasks: {}, entries: pes, date: '2026-10-27', settings: { ...S.defaultSettings(), window: { ...S.defaultSettings().window, tue: ['09:00', '10:00'] }, goals: { workMin: 60, driftMax: null } }, nowMin: 1800 });
+    ok(fbh.judged && typeof fbh.head === 'string' && fbh.head.endsWith('。') && !fbh.head.includes('(') && fbh.verdict.startsWith(fbh.head), 'dayFeedback(v0.24): head は判定の見出しだけ・verdict は head + 理由');
+    ok(!/[぀-ヿ一-鿿]\s\d|\d\s[぀-ヿ一-鿿]/.test([fbh.verdict, ...fbh.good, fbh.better || '', fbh.next || ''].join('')), 'ふり返りの文(v0.24): 数字の前後にスペースが無い');
 
     // ---- 版規約(§9) ----
     log('\n# version');
@@ -748,7 +759,7 @@ document.getElementById('app').addEventListener('load', async () => {
         const touchOn = (type, target, dx = 0) => { const t = new W.Touch({ identifier: 9, target, clientX: 10 + dx, clientY: 10 }); const ev = new W.TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t] }); target.dispatchEvent(ev); return ev; };
         kin.focus();
         touchOn('touchstart', kb); const e1 = touchOn('touchend', kb);
-        ok(e1.defaultPrevented && clicks === 1 && W.document.activeElement === kin, 'keepFocus: 入力中にボタンを touch すると touchend を止めて自分で click(1 回)・フォーカスは入力欄のまま');
+        ok(e1.defaultPrevented && clicks === 1 && W.document.activeElement === kin, 'keepFocus: 入力中にボタンを touch すると touchend を止めて自分で click(1回)・フォーカスは入力欄のまま');
         touchOn('touchstart', kb); touchOn('touchmove', kb, 30); const e2 = touchOn('touchend', kb);
         ok(!e2.defaultPrevented && clicks === 1, 'keepFocus: 指が動いたら(スクロール)何もしない');
         kin.blur();
@@ -763,7 +774,7 @@ document.getElementById('app').addEventListener('load', async () => {
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
   } finally {
-    const line = `\n${total} tests, ${fails} failed(ネガティブコントロール1件を含む。期待値は 1 failed)`;
+    const line = `\n${total} tests, ${fails} failed(ネガティブコントロール1件を含む。期待値は1 failed)`;
     log(line);
     const s = document.createElement('div'); s.className = 'sum'; s.id = 'summary'; s.textContent = line.trim(); document.body.prepend(s);
     document.title = `${fails === 1 ? 'PASS' : 'FAIL'} merihari tests`;

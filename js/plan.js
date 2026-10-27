@@ -1,4 +1,4 @@
-// merihari ─ plan.js: 「目安」(v0.15)。理想スケジュール(時間割)の生成は v0.15 で廃止し、タスクの量だけを扱う。すべて純関数。
+// merihari ─ plan.js: 「目安」(v0.15)。理想スケジュール(時間割)の生成は v0.15で廃止し、タスクの量だけを扱う。すべて純関数。
 // - 期限つき: 残り ÷ 期限までの日数 = 今日の目安(todayShare)
 // - 毎日 ◯分 / 毎週 ◯時間(repeat.daily / repeat.weekly): 今日 / 今週の記録と目安(goals)
 // - やりたいこと(kind:'wish'): 目安は持たず、今週の記録と最後にふれた日だけ
@@ -19,7 +19,7 @@ export function deadlineKey(t, date) {
   if (typeof t.deadline !== 'string' || t.deadline.length < 10) return null;
   return t.deadline.slice(0, 10);
 }
-/** 大きさ(時間)から最小単位(分)(v0.14): 10 分のタスクは 10 分。3 時間以上は 30、それ以外は 15 */
+/** 大きさ(時間)から最小単位(分)(v0.14): 10分のタスクは10分。3時間以上は30、それ以外は15 */
 export function minUnitFor(hours) {
   const min = Math.round((+hours || 0) * 60);
   if (min > 0 && min < 15) return Math.max(5, min);
@@ -30,13 +30,13 @@ export function deadlineMin(t) {
   if (typeof t?.deadline !== 'string' || t.deadline.length < 16 || t.deadline[10] !== 'T') return null;
   return hm(t.deadline.slice(11, 16));
 }
-/** 2 つの日付キーの差(日)。b − a */
+/** 2つの日付キーの差(日)。b − a */
 export function daysBetween(a, b) {
   return Math.round((parseDateKey(b) - parseDateKey(a)) / 86400000);
 }
 
 /**
- * 残り見積(分)(v0.12・F5-3 改: 自動減算)。task.remainingH は「remainingSetAt 時点の残り」。
+ * 残り見積(分)(v0.12・F5-3改: 自動減算)。task.remainingH は「remainingSetAt 時点の残り」。
  * そのあとに紐づけて記録した分(閉じた記録・beforeDate より前の日)を自動で引く。beforeDate を省けば全部引く。
  */
 export function remainingMin(t, entries = {}, beforeDate = null) {
@@ -52,7 +52,7 @@ export function remainingMin(t, entries = {}, beforeDate = null) {
   return Math.max(0, base - done);
 }
 
-/** 目安に数えてよいタスクか: 生きていて・未完了・義務で・期限がその日以降(期限なし・繰り返しは可)。期限を過ぎたものは F5-5 の出口で扱う */
+/** 目安に数えてよいタスクか: 生きていて・未完了・義務で・期限がその日以降(期限なし・繰り返しは可)。期限を過ぎたものは F5-5の出口で扱う */
 export function isEligible(t, date) {
   if (!alive(t) || t.doneAt || t.kind === 'wish') return false;
   const dl = deadlineKey(t, date);
@@ -60,7 +60,7 @@ export function isEligible(t, date) {
 }
 
 /**
- * 今日の目安(v0.15・§6.4 改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)。5 分丸め・15 分未満は 0(期限当日は残り全部)。
+ * 今日の目安(v0.15・§6.4改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)。5分丸め・15分未満は0(期限当日は残り全部)。
  * 残りは前日までの記録を引いたもの(今日の記録は doneMin 側で見る)。期限のない・繰り返しのタスクは含めない。期限順。
  * 戻り値 [{ taskId, todayMin, remainingMin, deadline, daysLeft }]
  */
@@ -103,7 +103,7 @@ export function loggedBetween(entries, taskId, from, to, nowDate = null, nowMin 
   return sum;
 }
 
-/** 毎週型の今週の期間 { from, to }(weekEnd を含む 7 日) */
+/** 毎週型の今週の期間 { from, to }(weekEnd を含む7日) */
 export function weekRange(t, date) {
   const to = deadlineKey(t, date);
   return { from: addDays(to, -6), to };
@@ -111,7 +111,7 @@ export function weekRange(t, date) {
 
 /**
  * 習慣の「済んだ」の印(v0.16・F5-8): 毎日/毎週のタスクは完了(doneAt)にせず、その日(毎週は週の終わりの日付)を task.checks に積む。
- * 記録(時間)が無くても目安に届いた扱いにでき、明日にはまた出る。checks は日付キーの配列(新しい順でなくてよい・最大 400 件)。
+ * 記録(時間)が無くても目安に届いた扱いにでき、明日にはまた出る。checks は日付キーの配列(新しい順でなくてよい・最大400件)。
  */
 export function checkKey(t, date) { return t?.repeat?.type === 'weekly' ? deadlineKey(t, date) : date; }
 export function isChecked(t, date) { return Array.isArray(t?.checks) && t.checks.includes(checkKey(t, date)); }
@@ -132,10 +132,10 @@ export function lastLoggedDate(entries, taskId) {
 
 /**
  * 「きょうの目安」(v0.15): ホームとタスク画面に出す行。種類ごとに 目安(targetMin)と済み(doneMin)。
- * - deadline: 今日の目安(todayShare)と今日の記録。目安 0 の期限つきは出さない
- * - daily: 毎日 ◯分 と今日の記録
- * - weekly: 毎週 ◯時間 と今週(weekRange)の記録
- * - wish: 目安なし。直近 7 日の記録と最後にふれた日
+ * - deadline: 今日の目安(todayShare)と今日の記録。目安0の期限つきは出さない
+ * - daily: 毎日 ◯分と今日の記録
+ * - weekly: 毎週 ◯時間と今週(weekRange)の記録
+ * - wish: 目安なし。直近7日の記録と最後にふれた日
  * 戻り値 [{ taskId, name, categoryId, kind, targetMin|null, doneMin, done, lastDate?, deadline?, daysLeft? }]。並び: 期限順 → 毎日 → 毎週 → やりたい
  */
 export function goals(tasks, entries, date, nowMin = 1440) {
@@ -165,9 +165,9 @@ export function goals(tasks, entries, date, nowMin = 1440) {
 }
 
 /**
- * 繰り返す期限つきタスク(v0.17・F5-9): recur:'weekly' のタスクは、済んで(doneAt)期限を過ぎたら、期限を 7 日ずつ送って(today 以降になるまで)未完了に戻す。
+ * 繰り返す期限つきタスク(v0.17・F5-9): recur:'weekly' のタスクは、済んで(doneAt)期限を過ぎたら、期限を7日ずつ送って(today 以降になるまで)未完了に戻す。
  * 残り見積は remainingH のまま、remainingSetAt を送った時刻にして前の週の記録を引かない。済んだ期限は checks に残す(ふり返り用)。
- * 済んでいないまま期限を過ぎたものは触らない(期限切れの出口 F5-5 で +1週 などを選ぶ)。純関数。戻り値 { tasks, rolled:[taskId] }
+ * 済んでいないまま期限を過ぎたものは触らない(期限切れの出口 F5-5で +1週などを選ぶ)。純関数。戻り値 { tasks, rolled:[taskId] }
  */
 export function rollRecurring(tasks, today, ctx) {
   const out = { ...tasks };
@@ -188,7 +188,7 @@ export function rollRecurring(tasks, today, ctx) {
 
 /**
  * 小さく始める(v0.22・F5-12): 習慣・やりたいことを ▶ で始めるときの区切り(分)。記録に plannedMin として載り、ホームのカードが「あと ◯分で区切り」と数える。
- * 毎日=目安の残り(5 分以上)、毎週=残りと 60 分の小さい方(15 分以上)、やりたいこと=15 分。もう届いている・期限つき・用事は null(区切らない)。純関数
+ * 毎日=目安の残り(5分以上)、毎週=残りと60分の小さい方(15分以上)、やりたいこと=15分。もう届いている・期限つき・用事は null(区切らない)。純関数
  */
 export function startSpan(g) {
   if (!g || g.noTime) return null;
@@ -203,7 +203,7 @@ export function startSpan(g) {
 
 /**
  * 続いた日数(v0.22・F5-12): 毎日の習慣は「その日に届いた(印か記録が目安以上)」日が今日(まだなら昨日)から何日続いているか。
- * 毎週は週の終わりの日付ごとに同じ(単位は週)。それ以外は 0。最大 400。純関数
+ * 毎週は週の終わりの日付ごとに同じ(単位は週)。それ以外は0。最大400。純関数
  */
 export function habitStreak(t, entries, date) {
   if (!t || !t.repeat || t.kind === 'wish') return 0;
@@ -223,7 +223,7 @@ export function habitStreak(t, entries, date) {
 }
 
 // ---- 予定(v0.23・F12): 朝に自分で置く予定ブロック。自動生成はしない。planBlocks[id] = { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt } ----
-/** その日の予定(生きているもの・開始順)。s/e は分(深夜は 1440 超) */
+/** その日の予定(生きているもの・開始順)。s/e は分(深夜は1440超) */
 export function planBlocksOf(blocks, date) {
   return Object.values(blocks || {}).filter((b) => alive(b) && b.date === date && hm(b.end) > hm(b.start)).map((b) => ({ ...b, s: hm(b.start), e: hm(b.end) })).sort((a, b) => (a.s - b.s) || (a.id < b.id ? -1 : 1));
 }
@@ -278,7 +278,7 @@ export function freeSlots(blocks, from, to) {
 }
 
 /**
- * 毎週 X 時間型の自動送り(F5-1 繰り返し・v0.9)。週の終わり(periodEnd)を過ぎていたら、その週の実績を lastWeek に残し、
+ * 毎週 X 時間型の自動送り(F5-1繰り返し・v0.9)。週の終わり(periodEnd)を過ぎていたら、その週の実績を lastWeek に残し、
  * 残り見積を X に戻して periodEnd を次の週末へ。未消化分は繰り越さない。periodEnd が無ければ今週の終わりを設定するだけ。
  * 戻り値 { tasks(新しいマップ), rolled:[{taskId, doneMin, hours}] }。純関数(ctx.nowISO)
  */

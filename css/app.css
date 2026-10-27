@@ -456,6 +456,25 @@ button.crow:active{background:var(--accent-bg)}
 .planfig .plan-cat-name{display:flex;align-items:center;gap:6px;font-size:14px;margin-bottom:2px}
 .planfig .goal-line{padding:0}
 .note-in{flex:1;min-width:0}
+/* v0.24: 記録の ＋ はタイムライン右下の丸ボタン(上部のはみ出し対策) */
+.add-btn.fab-add{position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));width:52px;height:52px;z-index:4;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.add-btn.fab-add svg{width:26px;height:26px}
+/* v0.24: レポートのパッと見 */
+.rep-sub{margin:-6px 0 10px;font-size:13px;color:var(--muted);line-height:1.5}
+.glance{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px;margin:0 0 14px}
+.gl-tile{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:12px;background:var(--bg);min-width:0}
+.gl-tile .gl-k{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gl-tile .gl-v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.gl-tile.warn .gl-v{color:var(--danger)}
+/* v0.24: 気分の推移 */
+.moodflow{padding:10px 12px}
+.mf-row{display:flex;gap:3px;height:64px;align-items:flex-end}
+.mf-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.mf-bar{display:block;width:70%;max-width:16px;border-radius:4px 4px 0 0;background:var(--track);flex:none}
+.mf-bar.w{background:var(--line)}
+.mf-lab{font-size:10px;color:var(--muted);margin-top:3px;line-height:1}
+.mf-note{margin:8px 0 0}
+.drow .ddate.wide{min-width:70px}
 .tl.one button.blk.busy{pointer-events:auto;cursor:pointer} /* v0.22: 予定の背景はタップでメモ(F6-6)。div の背景(記録と重なる部分)は触れないまま */
 .tl.one button.blk.busy:active{opacity:.7}
 .quick .qhint{margin:0}

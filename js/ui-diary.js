@@ -1,6 +1,6 @@
-// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1 日 1 件。気分(5 つのタップ)+ 3 行(よかったこと / ひっかかったこと / 明日は)+ メモ(折りたたみ)。
+// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1日1件。気分(5つのタップ)+ 3行(よかったこと / ひっかかったこと / 明日は)+ メモ(折りたたみ)。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。「きょうの材料」(その日の記録・ふり返り・昨日の「明日は」)はタップで欄に入る。
-// 下に続いた日数と最近 14 日の一覧(気分の点・1 行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
+// 下に続いた日数と最近14日の一覧(気分の点・1行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
 import { el, clear, toast, svg, sheet, keepFocus } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
@@ -32,7 +32,7 @@ function saveEntry(d) {
   store.save(); sync.autoSync();
 }
 
-/** 気分の 5 つ(丸の大きさと色の濃さで段階を見せる・ラベルは選んだものだけ強く) */
+/** 気分の5つ(丸の大きさと色の濃さで段階を見せる・ラベルは選んだものだけ強く) */
 export function moodPicker(value, onpick) {
   const node = el('div.moods', { role: 'radiogroup', 'aria-label': '気分' });
   const draw = () => {
@@ -48,7 +48,7 @@ export function moodPicker(value, onpick) {
   return node;
 }
 
-/** 自動で伸びる textarea(入力のたびに高さを合わせる)。rows=1 から(v0.20: 2 行ぶんの空白が「謎の改行」に見えた) */
+/** 自動で伸びる textarea(入力のたびに高さを合わせる)。rows=1から(v0.20: 2行ぶんの空白が「謎の改行」に見えた) */
 function growArea(value, placeholder, oninput) {
   const ta = el('textarea.dtext', { rows: 1, placeholder, maxlength: 2000, autocomplete: 'off' });
   ta.value = value || '';
@@ -135,13 +135,16 @@ export function renderDiary(view, ctx, dateArg = null) {
         el('span.chev', '›'),
       ]));
     }
-    listBox.append(el('section.group', [el('h2', n >= 2 ? `${n} 日続いています` : '最近'), el('div.list', rows)]));
+    listBox.append(el('section.group', [el('h2', n >= 2 ? `${n}日続いています` : '最近'), el('div.list', rows)]));
   }
   refreshList();
 
   // AI(v0.21・F11): 設定 › AI で有効にした人だけ。文をショートカットへ渡し、返事はクリップボードから貼り付ける(アプリ内に AI は無い)
   const aiBox = store.state.local.ai?.enabled ? aiCard({ date, isToday, nowMin, agg, fb, gs, draft, fields, queue, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) }) : null;
-  view.append(...[el('h1', '日記'), head, card, aiBox, listBox].filter(Boolean));
+  // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
+  const mems = diary.memories(Dy(), date);
+  const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
+  view.append(...[el('h1', '日記'), head, card, aiBox, memBox, listBox].filter(Boolean));
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
 }
 
@@ -216,7 +219,7 @@ export function calendarSheet(date, today, onpick) {
       const cell = el(c.inMonth && !c.future ? 'button.hc-cell' : 'div.hc-cell', { type: c.inMonth && !c.future ? 'button' : null, class: cls, 'aria-label': c.inMonth ? `${fmtMD(c.key)}${c.written ? `・${diary.moodLabel(c.mood) || '書いた日'}` : ''}` : null, onclick: c.inMonth && !c.future ? () => { close(); onpick(c.key); } : null }, [el('span.hc-d', String(+c.key.slice(8, 10)))]);
       return cell;
     })));
-    body.append(head, ...rows, el('p.muted.small.center', g.days ? `この月は ${g.days} 日書きました${g.moodDays ? `・色は気分(${diary.MOODS.map((m) => m.label).join(' → ')})` : ''}` : 'この月はまだ書いていません。'));
+    body.append(head, ...rows, el('p.muted.small.center', g.days ? `この月は${g.days}日書きました${g.moodDays ? `・色は気分(${diary.MOODS.map((m) => m.label).join(' → ')})` : ''}` : 'この月はまだ書いていません。'));
   };
   draw();
   close = sheet((c) => { close = c; return [
@@ -227,7 +230,7 @@ export function calendarSheet(date, today, onpick) {
 }
 function addMonthsYM(ym, n) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
-/** レポート「今日」の抜粋(ui-report から): 書いてあれば 気分と 3 行、無ければ「日記を書く ›」(1 日の終わり近くだけ) */
+/** レポート「今日」の抜粋(ui-report から): 書いてあれば 気分と3行、無ければ「日記を書く ›」(1日の終わり近くだけ) */
 export function diaryExcerptBox(date, ctx, { dayDone = false } = {}) {
   const d = Dy()[date];
   if (!diary.isWritten(d)) return dayDone ? el('button.srow.plain.dlink', { type: 'button', onclick: () => { ctx.go('diary', date); } }, [el('span.lbl', '日記'), el('span.val', 'この日の日記を書く ›')]) : null;
@@ -238,10 +241,10 @@ export function diaryExcerptBox(date, ctx, { dayDone = false } = {}) {
   ].filter(Boolean));
 }
 
-/** ホームの夕方以降の 1 行(v0.18): 作業時間帯の終わり 2 時間前から、まだ書いていなければ「きょうの日記を 1 行 ›」。責めない(1 行だけ・書かなくても消えない以外は何もしない) */
+/** ホームの夕方以降の1行(v0.18): 作業時間帯の終わり2時間前から、まだ書いていなければ「きょうの日記を1行 ›」。責めない(1行だけ・書かなくても消えない以外は何もしない) */
 export function diaryCue(n, ctx) {
   const W = windowFor(S(), n.date);
   const evening = !W || n.min >= W.end - 120;
   if (!evening || diary.isWritten(Dy()[n.date])) return null;
-  return el('button.srow.fresh.dcue', { type: 'button', onclick: () => ctx.go('diary') }, [el('span.lbl', 'きょうの日記'), el('span.grow'), el('span.val', '1 行だけ書く'), el('span.chev', '›')]);
+  return el('button.srow.fresh.dcue', { type: 'button', onclick: () => ctx.go('diary') }, [el('span.lbl', 'きょうの日記'), el('span.grow'), el('span.val', '1行だけ書く'), el('span.chev', '›')]);
 }

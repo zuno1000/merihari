@@ -1,7 +1,7 @@
-// merihari ─ money.js: お金(v0.19・F10)の純関数。支出/収入 1 件 = { id, date, time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }。
-// 設計(参考: おカネレコの「金額 → カテゴリをタップで完了」、Zaim の月予算と「あといくら / 1 日あたり」、家計簿が続かない理由の 1 位「カテゴリ分類」→ カテゴリは少なく・自由に増減):
-// - 入力は 2 タップ(金額 → カテゴリ)。日付と時刻は「きょう・いま」が既定で、タイムラインの記録に自動で紐づく(その時間に何をしていたか)。
-// - 月の予算は任意。あれば「残り ◯円 / 1 日 ◯円」。無ければ 1 日平均だけ。責めない。
+// merihari ─ money.js: お金(v0.19・F10)の純関数。支出/収入1件 = { id, date, time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }。
+// 設計(参考: おカネレコの「金額 → カテゴリをタップで完了」、Zaim の月予算と「あといくら / 1日あたり」、家計簿が続かない理由の1位「カテゴリ分類」→ カテゴリは少なく・自由に増減):
+// - 入力は2タップ(金額 → カテゴリ)。日付と時刻は「きょう・いま」が既定で、タイムラインの記録に自動で紐づく(その時間に何をしていたか)。
+// - 月の予算は任意。あれば「残り ◯円 / 1日 ◯円」。無ければ1日平均だけ。責めない。
 import { addDays, hm } from './time.js';
 
 const alive = (x) => x && !x.deletedAt;
@@ -47,8 +47,8 @@ export function summarize(money, ym, upto = null) {
 }
 
 /**
- * 予算の見え方(月の支出の上限 budget・円)。today が月の中なら 残り日数(今日を含む)で割った 1 日あたり。月が過ぎていれば残り日数 0。
- * 戻り値 { budget, spent, remaining, daysLeft, perDay(残り ÷ 残り日数・null=残り日数 0), pct(0〜1 超も), over }
+ * 予算の見え方(月の支出の上限 budget・円)。today が月の中なら 残り日数(今日を含む)で割った1日あたり。月が過ぎていれば残り日数0。
+ * 戻り値 { budget, spent, remaining, daysLeft, perDay(残り ÷ 残り日数・null=残り日数0), pct(0〜1超も), over }
  */
 export function budgetStatus(summary, budget, today) {
   if (!(budget > 0)) return null;
@@ -74,7 +74,7 @@ export function linkEntry(entries, date, time, nowMin = 1440) {
     const s = hm(e.start), en = e.end == null ? nowMin + 1 : hm(e.end); // 記録中は「いま」の分も含む
     if (t >= s && t < en) return e.id;
   }
-  // 前の日の深夜(24:xx)の記録に当たる場合(1日の切れ目が 2:00 など)
+  // 前の日の深夜(24:xx)の記録に当たる場合(1日の切れ目が2:00など)
   const prev = addDays(date, -1);
   for (const e of Object.values(entries || {})) {
     if (!alive(e) || e.date !== prev) continue;
@@ -120,7 +120,7 @@ export function netAll(money, upto = null) {
 
 /**
  * ほしいもの(v0.20・F10-8)の計画: want = { price, targetDate|null }。today と「今月の差し引き(monthlyNet・円/月)」から
- * { daysLeft|null, monthsLeft|null(目標までの月数・0.5 刻み・最低 0.5), perMonth|null(目標までに月いくら), monthsAtPace|null(今のペースで何か月・差し引きが 0 以下なら null) }
+ * { daysLeft|null, monthsLeft|null(目標までの月数・0.5刻み・最低0.5), perMonth|null(目標までに月いくら), monthsAtPace|null(今のペースで何か月・差し引きが0以下なら null) }
  */
 export function wantPlan(want, today, monthlyNet = 0) {
   const price = Math.max(0, Math.round(+want?.price || 0));
@@ -134,7 +134,7 @@ export function wantPlan(want, today, monthlyNet = 0) {
   return { price, daysLeft, monthsLeft, perMonth, monthsAtPace };
 }
 
-/** 金額の文字列 → 整数(円)。'1,200' '1200円' '¥1200' を受け、0 以下や壊れていれば null。上限 1 億 */
+/** 金額の文字列 → 整数(円)。'1,200' '1200円' '¥1200' を受け、0以下や壊れていれば null。上限1億 */
 export function parseYen(s) {
   const v = String(s ?? '').replace(/[¥,円\s]/g, '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
   if (!/^\d+$/.test(v)) return null;
