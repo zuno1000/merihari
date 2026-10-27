@@ -489,7 +489,9 @@ function chipsSheet(n0, rerender, mode0 = null) {
     seg,
     timeBox,
     el('div.row.field', [el('span.label', 'メモ'), noteIn]),
+    taskChips ? el('span.chips-cap', 'タスク') : null, // v0.24.2: 群の見出し
     taskChips,
+    el('span.chips-cap', 'カテゴリ'),
     chips,
     o ? el('div.row', [el('span.grow'), el('button.btn', { type: 'button', onclick: () => { close(); stopRecording(); rerender(); } }, '終わる')]) : null,
   ]; });

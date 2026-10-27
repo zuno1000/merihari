@@ -237,9 +237,10 @@ export function renderTasks(view, ctx) {
     memos.length ? section(`メモ(${memos.length})`, memos, '') : null, // v0.22・F5-11
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     section('きょうやる分', todayList, '期限から逆算して、きょうやる分があるものはありません(用事は期限が明日までのものをここに出します)。'),
-    section('期限までに', duties, 'なし'),
-    section('習慣', repeats, 'なし'),
-    section('やりたいこと', wishes, 'なし'),
+    duties.length ? section('期限までに', duties, '') : null, // v0.24.2: 空の区分は出さない
+    repeats.length ? section('習慣', repeats, '') : null,
+    wishes.length ? section('やりたいこと', wishes, '') : null,
+    !tasks.some((t) => !t.doneAt) ? el('p.muted.small.pad', '上の欄に書くと、ここに並びます。種類(メモ / タスク / 習慣 / やりたいこと)はあとからでも変えられます。') : null,
     el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
   ].filter(Boolean));
 }

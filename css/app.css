@@ -76,6 +76,10 @@ ul.news{margin:6px 0 0;padding-left:1.2em;font-size:13px;color:var(--muted)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .sheet{background:var(--card);color:var(--fg);width:100%;max-width:640px;border-radius:24px 24px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -4px 24px rgba(0,0,0,.2);max-height:88vh;max-height:88dvh;overflow-y:auto}
 .sheet h2{font-size:17px;margin-bottom:8px}
+/* v0.24.2: シートのつまみ(下から出るシートの定石。背景タップで閉じることの手がかり) */
+.sheet::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--line);margin:-6px auto 12px}
+/* v0.24.2: チップの見出し(タスク / カテゴリ の群を目で分ける) */
+.chips-cap{display:block;font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em;margin:10px 2px -4px}
 .sheet .row{margin-top:14px}
 #toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translate(-50%,8px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30;max-width:90vw}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -151,7 +155,7 @@ button.srow:active{background:var(--accent-bg)}
 .hero-btns .btn.sm.primary{flex:1}
 .tl-foot{justify-content:flex-end;margin-top:6px}
 .chips.small{margin-top:0;gap:6px}
-.chip.sm2{min-height:34px;padding:4px 12px;font-size:13px}
+.chip.sm2{min-height:36px;padding:4px 12px;font-size:13px} /* v0.24.2: タップ領域を広く */
 .quick{padding:12px}
 .quick .row.field{margin:8px 0 0}
 .trow{display:flex;align-items:stretch;border-top:1px solid var(--line)}
@@ -425,6 +429,7 @@ button.crow:active{background:var(--accent-bg)}
 .gok{font-size:12px;color:var(--accent);font-weight:600}
 .now-card.big .now-main{flex-direction:column;align-items:flex-start;gap:2px}
 .now-card.big .now-main b{font-size:17px}
+.now-card.big .now-timer{margin-left:0} /* v0.24.2: 数字の頭を名前とそろえる */
 .now-card.big .hero-btns{margin:0;flex:none;flex-direction:column;gap:6px}
 .now-card.big .hero-btns .btn.sm{min-height:40px;padding:6px 14px;font-size:14px}
 .timebox .row.field{margin:6px 0 0}
@@ -481,7 +486,7 @@ button.crow:active{background:var(--accent-bg)}
 
 /* ---- v0.16: ホームの日送り・レポートのふり返り・円の切替(カテゴリ/種別) ---- */
 .today-head{gap:6px}
-.today-head>.btn.sm.ghost{padding:4px 8px;min-width:32px;flex:none;font-size:18px;line-height:1}
+.today-head>.btn.sm.ghost{padding:4px 8px;min-width:40px;min-height:40px;flex:none;font-size:18px;line-height:1} /* v0.24.2: 44pt に近づける */
 .today-head>.btn.sm:not(.ghost){flex:none;margin-left:4px}
 .home{display:flex;flex-direction:column;touch-action:pan-y}
 .pie-box{display:flex;flex-direction:column;align-items:center}
@@ -526,7 +531,7 @@ button.crow:active{background:var(--accent-bg)}
 .fig .crow{padding:5px 2px;cursor:default}
 
 /* ---- v0.15.2: 種別/色の設定・非表示・予定は未記録の所だけ・未記録の行から「何をしていた?」・タグ ---- */
-.gtag{font-size:10px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);flex:none;letter-spacing:.02em}
+.gtag{font-size:11px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);flex:none;letter-spacing:.02em}
 .srow.goal .gnote{margin:0}
 .group .gnote{margin:-2px 4px 8px;font-size:12px}
 .crow.unlogged{color:var(--fg)}
@@ -596,7 +601,7 @@ button.srow.goal:first-child{border-top:0}
 .tl-nav{gap:2px;flex-wrap:nowrap}
 .tl-nav .tl-date{flex:none;padding:4px 4px}
 .tl-nav .tl-date b{white-space:nowrap;font-size:16px}
-.tl-nav>.btn.sm.ghost:not(.undo){padding:4px 6px;min-width:32px;flex:none}
+.tl-nav>.btn.sm.ghost:not(.undo){padding:4px 6px;min-width:40px;min-height:40px;flex:none}
 .tl-nav .tl-total{font-size:12px;white-space:nowrap}
 .tl-nav .undo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tl-nav .undo:disabled{opacity:.3}
