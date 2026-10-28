@@ -139,10 +139,16 @@ function catList(items, { tagOf = null, onEdit, onMove }) {
   const list = el('div.list.catlist');
   items.forEach((c) => list.append(el('div.srow.catrow', [
     el('span.handle', { role: 'button', tabindex: '0', 'aria-label': `${c.name} を並べ替え(引っ張るか ↑ ↓)`, title: '引っ張って並べ替え' }, '≡'),
-    el('button.cmain', { type: 'button', 'aria-label': `${c.name} を編集`, onclick: () => onEdit(c) }, [el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('span.cname', c.name), tagOf && tagOf(c) ? el('span.ckind', tagOf(c)) : null, el('span.chev', { 'aria-hidden': 'true' }, '›')]),
+    el('button.cmain', { type: 'button', 'aria-label': `${c.name} を編集`, onclick: () => onEdit(c) }, [c.color ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, el('span.cname', c.name), tagOf && tagOf(c) ? el('span.ckind', tagOf(c)) : null, el('span.chev', { 'aria-hidden': 'true' }, '›')]),
   ])));
   sortable(list, { rowSelector: '.catrow', handleSelector: '.handle', onMove });
   return list;
+}
+/** パレットに出す色(v0.29.3): 適用中の配色セットのカテゴリの色+予備の色(extra)→ 既定の色。重複は除く */
+function paletteSwatches() {
+  const s = S();
+  const p = (s.palettes || []).find((x) => x.id === s.palette) || PALETTES[s.palette] || null;
+  return [...new Set([...(p ? [...Object.values(p.colors || {}), ...(p.extra || [])] : []), ...EXTRA_COLORS])];
 }
 /** 1 つのカテゴリの編集(v0.28.1): 名前・種別(時間のカテゴリだけ)・色(ピッカー / カラーコード / パレット)・非表示。変えた時点で保存。閉じると一覧を描き直す */
 function catEditSheet(c, { kinds = null, canHide, onHide, rerender }) {
@@ -152,7 +158,7 @@ function catEditSheet(c, { kinds = null, canHide, onHide, rerender }) {
   const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, placeholder: '#9ccbee', autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード',
     onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
   const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
-  const swatches = el('div.swatches', EXTRA_COLORS.map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) })));
+  const swatches = el('div.swatches', paletteSwatches().map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) }))); // v0.29.3: 適用中の配色セット(予備の色を含む)が先
   sheet((close) => [
     el('h2', [dot, 'カテゴリ']),
     el('label.field.col', [el('span.label', '名前'), textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名', maxlength: 40 })]),
@@ -220,7 +226,7 @@ function sectionPalettes(rerender) {
     live.forEach((c, i) => { c.color = cols[i]; });
     s.palette = p.id; store.touchSettings(); rerender(); toast(`配色「${p.name}」を適用しました`);
   };
-  const snapshot = (name, base = null) => ({ id: 'p_' + store.uid().slice(0, 8), name, colors: Object.fromEntries(live.map((c, i) => [c.id, base ? colorsOf(base)[i] : c.color])) });
+  const snapshot = (name, base = null) => ({ id: 'p_' + store.uid().slice(0, 8), name, colors: Object.fromEntries(live.map((c, i) => [c.id, base ? colorsOf(base)[i] : c.color])), extra: base && Array.isArray(base.extra) ? base.extra.slice() : [] }); // v0.29.3: 予備の色も写す
   const row = (p) => el('div.item.palrow', [
     el('div.row', [
       el('span.pal-dots.big', colorsOf(p).slice(0, 8).map((x) => el('i', { style: { background: x } }))),
@@ -240,49 +246,73 @@ function sectionPalettes(rerender) {
     el('h3.help-h', '組み込み'),
     ...builtin.map(row));
 }
-/** 自分の配色セットの編集: 名前と、カテゴリごとの色(ピッカー / カラーコード)。変えた時点で保存。「適用」でカテゴリの色に反映 */
+/** 自分の配色セットの編集: 名前と、カテゴリごとの色(ピッカー / カラーコード)。変えた時点で保存。「適用」でカテゴリの色に反映。v0.29.3: 予備の色(新しいカテゴリに順に使う・カテゴリの色のパレットにも出る)を 追加 / 直す / 消す */
 function editPaletteSheet(p, live, rerender) {
   const s = S();
   const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
+  p.extra = Array.isArray(p.extra) ? p.extra : [];
   const name = el('input.text', { type: 'text', value: p.name, maxlength: 40, 'aria-label': 'セット名', onchange: (e) => { p.name = e.target.value.trim() || p.name; store.touchSettings(); } });
-  const rows = live.map((c) => {
-    const cur = () => p.colors[c.id] || c.color;
+  const colorRow = (label, cur, set) => {
     const dot = el('span.dot.big', { style: { background: cur() }, 'aria-hidden': 'true' });
-    const set = (v, persist = true) => { p.colors[c.id] = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
-    const hex = el('input.text.hex', { type: 'text', value: cur(), maxlength: 7, autocomplete: 'off', spellcheck: false, 'aria-label': `${c.name} のカラーコード`, onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) set(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = cur(); } } });
-    const pick = el('input.color', { type: 'color', value: cur(), 'aria-label': `${c.name} の色`, oninput: (e) => set(e.target.value, false), onchange: (e) => set(e.target.value) });
-    return el('div.row.field', [dot, el('span', { style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.name), pick, hex]);
-  });
+    const apply = (v, persist = true) => { set(v); dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
+    const hex = el('input.text.hex', { type: 'text', value: cur(), maxlength: 7, autocomplete: 'off', spellcheck: false, 'aria-label': `${label} のカラーコード`, onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) apply(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = cur(); } } });
+    const pick = el('input.color', { type: 'color', value: cur(), 'aria-label': `${label} の色`, oninput: (e) => apply(e.target.value, false), onchange: (e) => apply(e.target.value) });
+    return { dot, hex, pick };
+  };
+  const rows = live.map((c) => { const r = colorRow(c.name, () => p.colors[c.id] || c.color, (v) => { p.colors[c.id] = v; }); return el('div.row.field', [r.dot, el('span.ptxt', c.name), r.pick, r.hex]); });
+  const extraBox = el('div.col');
+  const drawExtra = () => {
+    clear(extraBox);
+    p.extra.forEach((x, i) => {
+      const r = colorRow(`予備 ${i + 1}`, () => p.extra[i], (v) => { p.extra[i] = v; });
+      extraBox.append(el('div.row.field', [r.dot, el('span.ptxt.muted', `予備 ${i + 1}`), r.pick, r.hex, el('button.btn.sm.ghost', { type: 'button', 'aria-label': `予備 ${i + 1} を消す`, onclick: () => { p.extra.splice(i, 1); store.touchSettings(); drawExtra(); } }, '消す')]));
+    });
+    if (!p.extra.length) extraBox.append(el('p.muted.small', 'まだありません。'));
+  };
+  drawExtra();
+  const addExtra = () => {
+    if (p.extra.length >= 24) { toast('予備の色は 24 色までです'); return; }
+    const used = new Set([...Object.values(p.colors), ...p.extra]);
+    p.extra.push(EXTRA_COLORS.find((x) => !used.has(x)) || EXTRA_COLORS[p.extra.length % EXTRA_COLORS.length]);
+    store.touchSettings(); drawExtra();
+  };
   sheet((close) => [
     el('h2', '配色セットを編集'),
     el('label.field.col', [el('span.label', '名前'), name]),
+    el('h3.help-h', 'カテゴリの色'),
     el('div.col', rows),
-    el('div.row', [
+    el('h3.help-h', '予備の色'),
+    el('p.muted.small', '新しいカテゴリを作ったとき順に使う色。カテゴリの色を選ぶパレットにも出ます。'),
+    extraBox,
+    addBtn('色を追加', addExtra),
+    el('div.row', { style: { marginTop: '12px' } }, [
       el('button.btn', { type: 'button', onclick: () => { close(); rerender(); } }, '閉じる'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => { live.forEach((c) => { if (p.colors[c.id]) c.color = p.colors[c.id]; }); s.palette = p.id; store.touchSettings(); close(); rerender(); toast(`配色「${p.name}」を適用しました`); } }, '適用して閉じる'),
     ]),
-  ]);
+  ], () => rerender());
 }
 
-/** 種別(v0.15.2): カテゴリを束ねる区分。レポートの「作業」に数えるか・「ダラダラ」として数えるかを持つ。使っている種別は消せない */
+/** 種別(v0.15.2): カテゴリを束ねる区分。レポートの「作業」に数えるか・「ダラダラ」として数えるかを持つ。使っている種別は消せない。
+ * v0.29.3(実機 FB): 一覧は 1 行ずつ(≡ 名前 作業 / ダラダラ の札 ›)。≡ を引っ張って並べ替え(カテゴリと同じ catList)。行のタップで編集のシート(名前・数え方・削除) */
 function sectionKinds(rerender) {
   const s = S();
   const used = (k) => s.categories.filter((c) => c.kind === k.id).length;
-  const rows = s.kinds.map((k) => el('div.item', [
-    el('div.row', [
-      textInput(k.name, (v) => { k.name = v || k.id; store.touchSettings(); }, { 'aria-label': '種別名' }),
-      el('span.muted.small', { style: { flex: 'none' } }, `${used(k)} 件`),
-      el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${k.name} を削除`, disabled: used(k) > 0 || s.kinds.length <= 1, title: used(k) > 0 ? 'この種別のカテゴリがあるので消せません' : '',
-        onclick: () => { s.kinds = s.kinds.filter((x) => x !== k); store.touchSettings(); rerender(); } }, '削除'),
+  const tagOf = (k) => [k.work ? '作業' : null, k.drift ? 'ダラダラ' : null].filter(Boolean).join('・') || null;
+  const edit = (k) => sheet((close) => [
+    el('h2', '種別'),
+    el('label.field.col', [el('span.label', '名前'), textInput(k.name, (v) => { k.name = v || k.id; store.touchSettings(); }, { 'aria-label': '種別名', maxlength: 40 })]),
+    el('p.muted.small', `この種別のカテゴリ: ${used(k)} 件`),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.work, onchange: (e) => { k.work = e.target.checked; store.touchSettings(); } }), el('span', '「作業」として数える(レポートの作業の合計に入る)')]),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.drift, onchange: (e) => { k.drift = e.target.checked; store.touchSettings(); } }), el('span', '「ダラダラ」として数える(減ると良い)')]),
+    el('div.row', { style: { marginTop: '12px' } }, [
+      el('button.btn.ghost', { type: 'button', disabled: used(k) > 0 || s.kinds.length <= 1, title: used(k) > 0 ? 'この種別のカテゴリがあるので消せません' : '', onclick: () => confirmSheet(`種別「${k.name}」を削除しますか?`, null, '削除', () => { s.kinds = s.kinds.filter((x) => x !== k); store.touchSettings(); close(); rerender(); }, true) }, '削除'),
+      el('span.grow'),
+      el('button.btn.primary', { type: 'button', onclick: () => { close(); rerender(); } }, '閉じる'),
     ]),
-    el('div.row.wrap', [
-      el('label.row', [el('input', { type: 'checkbox', checked: !!k.work, onchange: (e) => { k.work = e.target.checked; store.touchSettings(); } }), el('span.small', '「作業」として数える')]),
-      el('label.row', [el('input', { type: 'checkbox', checked: !!k.drift, onchange: (e) => { k.drift = e.target.checked; store.touchSettings(); } }), el('span.small', '「ダラダラ」として数える(減ると良い)')]),
-    ]),
-  ]));
-  return card('種別', 'カテゴリを束ねる区分(例: 決まった作業=授業・バイト、作業=研究、趣味)。レポートの「作業」の合計に入れる種別と、「ダラダラ」として先週と比べる種別をここで決めます。種別はいくつでも増やせます。',
-    ...rows,
-    addBtn('種別を追加', () => { s.kinds.push({ id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false }); store.touchSettings(); rerender(); }));
+  ], () => rerender());
+  return card('種別', 'カテゴリを束ねる区分(例: 決まった作業=授業・バイト、作業=研究、趣味)。≡ を引っ張って並べ替え。行をタップで 名前・「作業」「ダラダラ」として数えるか・削除。レポートの「作業」の合計に入る種別と、「ダラダラ」として先週と比べる種別をここで決めます。',
+    catList(s.kinds, { tagOf, onEdit: edit, onMove: (from, to) => { const arr = s.kinds.slice(); const [x] = arr.splice(from, 1); arr.splice(to, 0, x); s.kinds = arr; store.touchSettings(); rerender(); } }),
+    addBtn('種別を追加', () => { const k = { id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false }; s.kinds.push(k); store.touchSettings(); rerender(); edit(k); }));
 }
 
 const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }; // v0.25: 日付と時刻の間の空き(スペース除去で消えて「10/2723:41」になっていた)
@@ -391,11 +421,14 @@ function sectionWeather(rerender) {
     } catch (e) { clear(results); results.append(el('div.srow.plain', el('span.val.left', '検索できませんでした(しばらくして もう一度)'))); }
   };
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-  const rows = w.regions.map((r) => el('div.srow.plain.wx-reg', [el('span.lbl', r.name), el('span.val', `${r.lat}, ${r.lon}`), el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${r.name} を消す`, onclick: () => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); } }, '消す')]));
+  const remove = (r) => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); };
+  // v0.29.3: 地域も ≡ で並べ替え(先頭の地域がホームの印の絵になる)。行のタップで 消す
+  const rows = w.regions.length ? catList(w.regions, { tagOf: (r) => `${r.lat}, ${r.lon}`, onEdit: (r) => confirmSheet(`「${r.name}」を消しますか?`, null, '消す', () => remove(r), true), onMove: (from, to) => { const arr = w.regions.slice(); const [x] = arr.splice(from, 1); arr.splice(to, 0, x); w.regions = arr; save(); rerender(); } }) : null;
   return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに天気の印を出す')]),
     el('h3.help-h', `地域(${w.regions.length} / ${weather.MAX_REGIONS})`),
-    rows.length ? el('div.list', rows) : el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
+    rows || el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
+    rows ? el('p.muted.small', '先頭の地域の天気がホームの印の絵になります。≡ で並べ替え、行をタップで消す。') : null,
     el('div.row.field', { style: { marginTop: '10px' } }, [q, el('button.btn', { type: 'button', onclick: search }, '検索')]),
     results,
     el('p.muted.small', '安全について: 接続先は api.open-meteo.com(予報)と geocoding-api.open-meteo.com(地名検索)の 2 つだけで、端末の位置情報(GPS)は使いません。送るのは登録した地域の緯度経度だけ、受け取るのは数値と天気コードだけです。地域の名前と座標は設定として同期し、取得した天気はこの端末に 1 時間だけ置きます。'));
@@ -442,7 +475,7 @@ function sectionHelp() {
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分の順にタップ。分はなぞると1分刻み、下の −5/−1/+1/+5でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
     h('配色'),
-    li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます(行をタップ)。', '設定 › カテゴリ の一覧は 1 行ずつ(色・名前・種別)。≡ を引っ張って並べ替え(≡ にフォーカスして ↑ ↓ でも)。行をタップで 名前・種別・色・非表示(v0.28.1)。']),
+    li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます(行をタップ)。', '設定 › カテゴリ の一覧は 1 行ずつ(色・名前・種別)。≡ を引っ張って並べ替え(≡ にフォーカスして ↑ ↓ でも)。行をタップで 名前・種別・色・非表示(v0.28.1)。', '設定 › 種別 も同じ(≡ で並べ替え・行をタップで 名前・「作業」「ダラダラ」として数えるか・削除・v0.29.3)。', '自分の配色セットの「編集」に「予備の色」(v0.29.3): 新しいカテゴリを作ったとき順に使う色で、カテゴリの色を選ぶパレットにも出ます。「＋ 色を追加」で足し、ピッカーかカラーコードで直せます。']),
     h('タスクと目安'),
     li(['タスク画面は 期限切れ と きょう の分だけを見せます(v0.26)。メモ / 期限までに / 習慣 / やりたいこと / 完了 は下の「リスト」のタイルから開き、‹ で戻ります。開いた区分の先頭の追加欄は、その種類(習慣など)が選ばれています。先頭に「メモ」: 名前を入れて Enter で書き残せます(期限も量も持ちません)。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、いつまで / 繰り返す / どれくらい / カテゴリ の札が出ます(札をタップでその選択肢・v0.28.1)。メモは一覧の先頭に新しい順。タップして 期限 / 毎日 / 毎週 / やりたい を選ぶと、そのままタスクや習慣になります。', '期限のあるタスク: 残り ÷ 期限までの日数 が「きょうの目安」。期限が近づくほど増えます。「期限までに」には、1日あたりが15分に満たないもの・期限の無いもの・記録で残りが0になったものが入ります。期限を過ぎたら朝に1回「+1週 / 半分にして +1週 / 完了 / 消す」を聞きます。', '毎週繰り返す(課題など): 済ませると「完了」に入り、期限を過ぎた朝に翌週の同じ曜日が期限になって戻ってきます。済ませないまま期限を過ぎれば「期限切れ」です。', '時間なし(用事): 銀行・メールのように時間を計らないもの。残りや目安は持たず、チェックで済ませます。期限が明日までの用事はホームの「タスクと習慣」にも出ます。', '毎日 ◯分: 毎日の目安(英語など)。きょうの記録と比べます。「時間なし」の習慣(薬を飲む など)はチェックだけ。', '毎週 ◯時間: 週の目安。週(日曜まで)の記録と比べ、週が変わると「先週 x/yh」を残して戻します。', 'やりたいこと: 目安は持ちません。この7日の記録と最後にふれた日を出し、1週間ふれていなければレポートの「明日への一言」で思い出させます。', '目安は「予定」ではありません。入れなくても責めませんし、いつやるかはあなたが決めます。']),
     h('習慣・やりたいことを始めやすく'),

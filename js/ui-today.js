@@ -390,6 +390,7 @@ export function renderNow(view, ctx, dateArg = null) {
   if (!isToday) return;
   const key = homeKey(e);
   ctx.setTick(() => {
+    if (!home.isConnected) return; // v0.29.3: 別の画面に移っていたら何もしない(二重の守り)
     const m = nowInfo();
     const em = effectiveDay(S(), m.date, m.min);
     if (em.date !== e.date || homeKey(em) !== key) { rerender(); return; }

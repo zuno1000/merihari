@@ -966,3 +966,5 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .wx-tmr .wx-tmr-k{font-weight:600;flex:none}
 .wx-tmr .wx-sm{width:18px;height:18px;fill:none;stroke:var(--wx);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .wx-tmr .wx-tmr-t{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* v0.29.3: 配色セットの編集(カテゴリの色・予備の色)の行 */
+.sheet .row.field .ptxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

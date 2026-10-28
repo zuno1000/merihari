@@ -24,7 +24,7 @@ import * as ai from './ai.js';
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
-export const APP_VERSION = '0.29.2';
+export const APP_VERSION = '0.29.3';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -53,6 +53,7 @@ for (const k of Object.keys(screens)) { const f = screens[k]; screens[k] = (arg)
 function go(tab, arg) {
   if (tab === 'today') tab = 'now';
   if (!screens[tab]) tab = 'now';
+  tickFn = null; // v0.29.3(実機 FB「設定やタスクを見ていると勝手にホームに戻る」): 前の画面(ホームなど)の毎秒の更新を止める。ホーム/カレンダー/ふり返りは自分で setTick(null) するが、設定・タスク・お金はしないので、ホームの tick が 5 分ごとにホームを描き直していた
   view.dataset.from = current; // v0.28(実機 FB ⑦): どの画面から来たか(カレンダーは他のタブから来たときだけ現在時刻へ動かす)
   current = tab; currentArg = arg; redrawPending = false;
   view.dataset.screen = tab; view.dataset.date = ''; // 画面を開き直した印(v0.16: タイムラインは同じ日の描き直しだけスクロール位置を保つ)
