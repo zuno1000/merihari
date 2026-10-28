@@ -927,3 +927,5 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .tl-nav.hgrid .btn.sm:not(.ghost){padding:4px 9px;min-height:36px;font-size:13px}
 .tl-nav.hgrid .undo{min-width:36px;padding:4px 6px}
 .hgrid .hs{flex-wrap:nowrap}
+/* v0.28.3: ふり返りの保存の印は右端(hgrid の右の列は row-reverse なので、文字は右端に寄る) */
+.hgrid .hs.r .dsave{text-align:right;padding-right:4px}

@@ -90,9 +90,10 @@ export function renderDiary(view, ctx, dateArg = null) {
 
   // v0.20: 右上のカレンダー(月のカレンダーでさかのぼる)。v0.28: ホーム・カレンダータブと同じ升目(ui-today.calendarSheet)・日付は中央(headBar)
   const head = headBar({
-    left: [status, isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => { commit(); goDate(e.date); } }, '今日')],
+    // v0.28.3(実機 FB): ホーム・カレンダータブと同じく カレンダーの印は左上(今日 はその右)。保存の印(保存ずみ / … / 保存しました)は右端へ
+    left: [calButton(() => { commit(); calendarSheet(date, e.date, (k) => goDate(k)); }), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => { commit(); goDate(e.date); } }, '今日')],
     center: dateNav(date, { prev: () => { commit(); goDate(addDays(date, -1)); }, next: isToday ? null : () => { commit(); goDate(addDays(date, 1)); } }),
-    right: [calButton(() => { commit(); calendarSheet(date, e.date, (k) => goDate(k)); })],
+    right: [status],
   });
 
   // きょうの材料(ルールベース): その日の集計・ふり返り・目安・昨日の「明日は」
