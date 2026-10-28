@@ -100,6 +100,31 @@ export function defaultTiles(settings) {
 }
 const TILE_KEY = /^(kind|cat):[A-Za-z0-9_-]{1,40}$/;
 
+/**
+ * カテゴリを種別で束ねる(v0.28.1・実機 FB ⑤「カテゴリが増えるほど煩雑」): 設定の種別の順に { id, name, cats }。カテゴリが 1 つも無い種別は出さない。
+ * 種別が無い(消えた)カテゴリは末尾の 'other'「その他」に。純関数
+ */
+export function kindGroups(settings, cats) {
+  const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
+  const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id) })).filter((g) => g.cats.length);
+  const rest = cats.filter((c) => !kinds.some((k) => k.id === c.kind));
+  if (rest.length) groups.push({ id: 'other', name: 'その他', cats: rest });
+  return groups;
+}
+/** 種別で絞る価値があるか: 種別が 2 つ以上あり、カテゴリが min(既定 8)以上。純関数 */
+export const KIND_FILTER_MIN = 8;
+export function needsKindFilter(groups, min = KIND_FILTER_MIN) {
+  return groups.length >= 2 && groups.reduce((a, g) => a + g.cats.length, 0) >= min;
+}
+/** 並べ替え(v0.28.1・設定のドラッグ): list の from 番目を to 番目へ動かした新しい配列(order は 1 から振り直す)。範囲外や同じ位置ならそのまま(同じ参照を返す)。純関数 */
+export function moveItem(list, from, to) {
+  if (!Array.isArray(list) || from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
+  const out = list.slice();
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out.map((c, i) => ({ ...c, order: i + 1 }));
+}
+
 export function defaultData() {
   return {
     schema: SCHEMA,

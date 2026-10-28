@@ -10,18 +10,16 @@ import { reportSheet, pieFigure } from './ui-report.js';
 import { displayColor } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
-import { diaryCue } from './ui-diary.js';
 import * as money from './money.js';
 import * as kiai from './kiai.js';
 import * as calendar from './calendar.js';
-import { exportJSONFile, shouldRemindExport } from './ui-settings.js';
+import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
 
 import { FEATURES } from './features.js';
 const LCTX = { uid: store.uid, nowISO: store.nowISO };
 const PX_PER_MIN = 1;
-const HOME_GOALS_MAX = 4; // v0.26: ホームのタスクは 4 行まで(残りは「ほか n 件」でタスク画面へ)
 const STALE_MIN = 180;
 
 const S = () => store.state.data.settings;
@@ -235,10 +233,33 @@ function setupGate(view, ctx) {
   ]));
 }
 
+// ================= 画面の上の 1 行(v0.28・実機 FB ④「日付を水平方向の中心に」) =================
+/**
+ * 3 列のグリッド(左 | 中央 | 右)。中央は ‹ 日付 › で、左右の中身の幅に関係なく画面の中心に来る(.hgrid: 1fr auto 1fr)。
+ * ホーム(左: カレンダー・今日 / 右: 歯車)・カレンダー(左: 今日 / 右: 月・↶ ↷)・ふり返り(左: 保存の印・今日 / 右: カレンダー)で共通。
+ */
+export function headBar({ left = [], center = [], right = [], cls = 'today-head' } = {}) {
+  return el(`div.${cls}.hgrid`, [el('span.hs.l', left), el('span.hmid', center), el('span.hs.r', right)]);
+}
+/** ‹ 日付 ›。next を渡さなければ › は見えないまま場所だけ取る(日付が中心からずれない) */
+export function dateNav(date, { prev, next = null, label = null } = {}) {
+  return [
+    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: prev }, '‹'),
+    label || el('b', md(date)),
+    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', disabled: !next, class: `btn sm ghost${next ? '' : ' hold'}`, onclick: next || null }, '›'),
+  ];
+}
+const CAL_ICON = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('rect', { x: 3, y: 5, width: 18, height: 16, rx: 3 }), svg('path', { d: 'M3 10h18M8 3v4M16 3v4' }), svg('circle', { cx: 12, cy: 15.5, r: 1.6, fill: 'currentColor', stroke: 'none' })]);
+/** 月のカレンダー(シート)を開くボタン(v0.28・実機 FB ②③: ホームとふり返りで同じ印・同じカレンダー) */
+export function calButton(onclick) {
+  return el('button.btn.sm.ghost.gear.cal', { type: 'button', 'aria-label': 'カレンダーで日を選ぶ', title: 'カレンダー', onclick }, CAL_ICON());
+}
+
 // ================= ホーム =================
 /**
- * ホーム(v0.15.2): 記録だけを出す。主役は「きょうの内訳」(1日の円+カテゴリ別の一覧・未記録の行から「何をしていた?」)。記録中ならその上にカード。
- * 下に「タスクと習慣」(きょうの分の目安と済んだ分)。秒の更新は textContent だけ、状態が変わったら描き直す。
+ * ホーム(v0.28・実機 FB ①): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
+ * v0.28 で外したもの: 気合のカード(FEATURES.KIAI)・きょうのタスク・きょうの予定・「きょうをふり返る」・同期と書き出しの 1 行(→ 歯車の赤い点と 設定 の先頭)。
+ * 秒の更新は textContent だけ、状態が変わったら描き直す。
  */
 export function renderNow(view, ctx, dateArg = null) {
   clear(view);
@@ -255,16 +276,12 @@ export function renderNow(view, ctx, dateArg = null) {
   const hero = o ? recordingCard(o, e, rerender) : null;
   // v0.18: 設定はタブから外し、ホーム右上の歯車に(タブは 日記 に)
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
-  const head = el('div.today-head', [
-    el('span.head-side'), // v0.24: ホーム左上の ＋ は廃止(使われなかった)。記録の ＋ はタイムライン右下
-    el('span.grow'),
-    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
-    el('b', md(date)),
-    isToday ? null : el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
-    isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
-    el('span.grow'),
-    el('span.head-side', gear),
-  ]);
+  if (attentionItems().length) { gear.append(el('i.badge', { 'aria-hidden': 'true' })); gear.setAttribute('aria-label', '設定(お知らせあり)'); } // v0.28: 未同期・予定が古い・控えの書き出し → 赤い点(中身は設定の先頭)
+  const head = headBar({
+    left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)
+    center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
+    right: [gear],
+  });
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {
     if (!swipe) return;
@@ -273,10 +290,8 @@ export function renderNow(view, ctx, dateArg = null) {
     if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) goDate(addDays(date, -1)); else if (!isToday) goDate(addDays(date, 1)); } // 左へスワイプ=前の日・右へ=次の日
   } }, [
     head,
-    kiaiBox(v, rerender, isToday), // v0.25・F13: 気合(ワンタップ・主役のカードより上。押すだけ)
-    hero?.node, breakdown(v, rerender, { isToday, ctx }), goalsBox(v, rerender, isToday, ctx), planBox(v, rerender, isToday, ctx), isToday ? freshLine(e, rerender) : null, // v0.23: きょうの予定
-    isToday ? exportLine(e, rerender) : null, // v0.25: 控えの書き出し(30 日)
-    isToday ? (() => { const c = diaryCue(e, ctx); return c ? el('div.list.freshline', c) : null; })() : null, // v0.18: 夕方以降「きょうの日記 › 1行だけ書く」
+    FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
+    hero?.node, breakdown(v, rerender, { isToday, ctx }),
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す
@@ -428,7 +443,7 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   const work = Object.entries(totals).filter(([id]) => store.catRole(S(), id).work).reduce((a, [, v]) => a + v, 0);
   const un = report.unlogged(E(), n.date, W, n.min);
-  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? (isToday ? 'きょうの記録' : 'この日の記録') : (isToday ? 'まだ記録なし' : '記録なし')), el('span.pie-hint', 'レポート ›')]);
+  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? (isToday ? 'きょうの記録' : 'この日の記録') : (isToday ? 'まだ記録なし' : '記録なし'))]); // v0.28: 「レポート ›」の文字は出さない(円のタップで開くのはそのまま)
   const pie = pieFigure(E(), n.date, W, n.min, { workMin: work }, { size: 220, stroke: 34, center });
   const rows = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min, c: catOf(id) }));
   const max = Math.max(1, ...rows.map((r) => r.min)); // 棒はカテゴリの最大を100%に(未記録が大きい日でもカテゴリの差が見える)
@@ -449,13 +464,11 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
       el('span.cbar', el('i', { style: { width: `${Math.min(100, Math.round((un.unloggedMin / max) * 100))}%`, background: 'var(--line)' } })),
     ]));
   }
-  // 円のタップでレポート(v0.15.3: 小ボタンは廃止)。昨日のレポートが未読なら赤い点を付け、最初のタップは昨日を開く。過去の日はその日のレポート
-  const unseen = isToday ? unseenYesterday(n) : null;
+  // 円のタップでその日のレポート(v0.15.3: 小ボタンは廃止)。v0.28(実機 FB ①): 「昨日のふり返り」の札と「レポート ›」の文字は廃止(導線は ふり返りタブ の「レポートをすべて見る ›」)
   const wrap = pie ? pie.querySelector('.pie-wrap') : el('div.pie-wrap.empty', { style: { width: '220px', height: '220px' } }, center);
   wrap.classList.add('tap');
-  wrap.setAttribute('role', 'button'); wrap.setAttribute('tabindex', '0'); wrap.setAttribute('aria-label', unseen ? '昨日のレポート(未読)を開く' : 'レポートを開く');
-  if (unseen) wrap.append(el('span.pie-badge', { 'aria-hidden': 'true' }, [el('i'), '昨日のふり返り'])); // v0.17: 赤い点ではなく小さな札(タップで昨日を開く)
-  const openReport = () => { if (!isToday) { reportSheet(n.date, 'day'); return; } if (unseen) { store.state.local.reportSeen = unseen; store.saveLocal(); rerender(); reportSheet(unseen, 'day'); return; } reportSheet(n.date, 'day'); }; // 既読にしたら赤い点を消す(描き直してからシート)。v0.17: 最初は「今日」(7日は上の切替で)
+  wrap.setAttribute('role', 'button'); wrap.setAttribute('tabindex', '0'); wrap.setAttribute('aria-label', 'レポートを開く');
+  const openReport = () => reportSheet(n.date, 'day');
   wrap.addEventListener('click', openReport);
   wrap.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openReport(); } });
   // 1日の目標(v0.17・F3-11): 決めてあれば円の下に「作業 ◯ / 目標 ◯」の細いメーター(ダラダラの上限も)。数字は副文、主役は円のまま
@@ -470,80 +483,6 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
     goalLines.length ? el('div.goal-lines', goalLines) : null,
     list.length ? el('div.crows', list) : el('p.muted.small.center', '記録は下の ＋ から。タイムラインの未記録をタップしても足せます。'),
   ]);
-}
-
-/** タスクと習慣(v0.15.2・旧「きょうの目安」): 期限/毎日/毎週/やりたい の行に種類のタグ。きょうの分(目安)と済んだ分。行のタップで後から記録・▶ でいまから */
-function goalsBox(n, rerender, isToday = true, ctx = null) {
-  const gs = plan.goals(T(), E(), n.date, n.min);
-  if (!gs.length) return null;
-  const today = isToday ? 'きょう' : 'この日';
-  const saveTask = (t) => { t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); sync.autoSync(); };
-  const row = (g) => {
-    const c = catOf(g.categoryId);
-    const t = T()[g.taskId];
-    let meta;
-    if (g.kind === 'deadline') meta = `${fmtMD(g.deadline)}まで・${today}${fmtMinJa(g.targetMin)}のうち${fmtMinJa(g.doneMin)}`;
-    else if (g.kind === 'todo') meta = `${g.deadline < n.date ? `${fmtMD(g.deadline)}が期限(過ぎています)` : g.deadline === n.date ? `${today}が期限` : `${fmtMD(g.deadline)}まで`}${t?.recur ? `・毎週` : ''}${g.doneAt ? '・済' : ''}`;
-    else if (g.kind === 'daily') meta = g.noTime ? `毎日・${today} ${g.checked ? '済' : 'まだ'}` : `毎日${fmtMinJa(g.targetMin)}・${today}${fmtMinJa(g.doneMin)}${g.checked ? '・済'  : ''}`;
-    else if (g.kind === 'weekly') meta = g.noTime ? `毎週・${isToday ? '今週' : 'その週'} ${g.checked ? '済' : 'まだ'}` : `毎週${fmtMinJa(g.targetMin)}・${isToday ? '今週' : 'その週'}${fmtMinJa(g.doneMin)}${g.checked ? '・済' : ''}`;
-    else { const ago = g.lastDate ? plan.daysBetween(g.lastDate, n.date) : null; meta = `やりたいこと・この7日${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後${fmtMD(g.lastDate)}${ago >= 2 ? `(${ago}日ぶり)` : ''}` : '・まだ手つかず'}`; }
-    const streak = (g.kind === 'daily' || g.kind === 'weekly') && t ? plan.habitStreak(t, E(), n.date) : 0; // v0.22・F5-12: 続いた日数(週数)
-    if (streak >= 2) meta += `・${streak} ${g.kind === 'weekly' ? '週' : '日'}続いてる`;
-    const span = FEATURES.TASK_START && isToday ? plan.startSpan(g) : null; // v0.22・F5-12(v0.26: FEATURES で非表示): 習慣・やりたいことは区切りつきで始める(「あと ◯分で区切り」)
-    const pct = g.targetMin ? Math.min(100, Math.round((g.doneMin / g.targetMin) * 100)) : 0;
-    const o = isToday ? log.openEntry(E()) : null;
-    const rec = o && o.taskId === g.taskId;
-    const sheetArg = isToday ? { date: n.date, start: defaultStart(n.date, n.min), end: n.min, categoryId: g.categoryId, taskId: g.taskId } : { date: n.date, start: pastDefault(n.date), end: Math.min(1440, pastDefault(n.date) + 60), categoryId: g.categoryId, taskId: g.taskId };
-    // 時間を計らないもの(用事・時間なしの習慣)はチェックで済ませる(v0.17): 用事は完了、習慣は「済んだ」の印
-    const checkable = isToday && t && (g.kind === 'todo' || g.noTime);
-    const onCheck = !checkable ? null : g.kind === 'todo'
-      ? () => { t.doneAt = t.doneAt ? null : store.nowISO(); saveTask(t); toast(t.doneAt ? (t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了') : '戻しました'); rerender(); }
-      : () => { t.checks = plan.toggleCheck(t, n.date); saveTask(t); toast(plan.isChecked(t, n.date) ? '済み(明日もまた出ます)' : '印を外しました'); rerender(); };
-    return el('div.srow.goal', { class: `srow goal${g.done ? ' done' : ''}` }, [
-      checkable ? el('button.check', { type: 'button', class: `check${g.done ? ' on' : ''}`, 'aria-label': `${g.name} を${g.done ? '戻す' : '済ませる'}`, onclick: onCheck }, g.done ? '✓' : '') : null,
-      el('button.gmain', { type: 'button', 'aria-label': checkable ? `${g.name}` : `${g.name} を後から記録`, onclick: checkable ? onCheck : () => entrySheet(sheetArg, rerender) }, [el('span.gname', [el('span.gtag', { deadline: '期限', todo: '用事', daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: c.color } }), g.name, g.done && !checkable ? el('span.gok', '✓') : null, rec ? el('span.rec-mark', '● 記録中') : null]), el('span.gmeta', meta)]), // v0.26.1: 行ごとの細いメーターは出さない(進みは文で言う・ホームの線を減らす)
-      FEATURES.TASK_START && isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : span ? `${g.name} を${span}分だけ始める` : `${g.name} をいまから記録`, title: span ? `${span}分だけ` : 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId, plannedMin: span }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
-    ]);
-  };
-  // v0.26: まだのもの → 済んだもの、期限/用事 → 習慣 → やりたい の順に 4 行まで。残りは「ほか n 件」でタスク画面へ(▶ は無し・行のタップで後から記録)
-  const order = { deadline: 0, todo: 0, daily: 1, weekly: 1, wish: 2 };
-  const sorted = [...gs].sort((a, b) => ((a.done ? 1 : 0) - (b.done ? 1 : 0)) || ((order[a.kind] ?? 3) - (order[b.kind] ?? 3)));
-  const shown = sorted.slice(0, HOME_GOALS_MAX);
-  const rest = sorted.length - shown.length;
-  const more = rest > 0 ? el('button.srow.plain.more', { type: 'button', onclick: () => ctx?.go('tasks') }, [el('span.lbl', `ほか${rest}件`), el('span.grow'), el('span.val', 'タスクへ'), el('span.chev', '›')]) : null;
-  return el('section.group', [
-    el('div.row.between.gh', [el('h2', `${today}のタスク`), ctx ? el('button.btn.sm.ghost', { type: 'button', onclick: () => ctx.go('tasks') }, 'すべて ›') : null]),
-    el('div.list', [...shown.map(row), more].filter(Boolean)),
-  ]);
-}
-
-/** 鮮度と同期の1行(§4.1) */
-function freshLine(n, rerender) {
-  if (!google.isConnected()) return null;
-  const rows = [];
-  const f = google.freshness();
-  const w = windowFor(S(), n.date);
-  const busyText = !f.fetchedAt ? '予定は未取得' : f.ageMin >= 60 ? `予定は${Math.floor(f.ageMin / 60)}時間前のもの` : null;
-  if (busyText && (!w || n.min < w.end)) rows.push(el('button.srow.fresh', { type: 'button', onclick: async () => {
-    try { toast('予定を取得中…'); await google.fetchBusy({ force: true, interactive: true }); toast('予定を更新しました'); rerender(); } catch (e) { toast(e.message); }
-  } }, [el('span.lbl', busyText + (f.error ? '(前回失敗)' : '')), el('span.grow'), el('span.val', '更新'), el('span.chev', '›')]));
-  const local = store.state.local;
-  if (local.pendingSync && (!local.lastSyncAt || Date.now() - local.lastSyncAt > 5 * 60000)) rows.push(el('button.srow.fresh', { type: 'button', onclick: async () => {
-    try { toast('同期中…'); const r = await sync.syncDrive({ interactive: true }); toast(r === 'skip' ? '同期を見送りました' : '同期しました'); rerender(); } catch (e) { toast(e.message); }
-  } }, [el('span.lbl', '未同期の変更あり'), el('span.grow'), el('span.val', '同期'), el('span.chev', '›')]));
-  return rows.length ? el('div.list.freshline', rows) : null;
-}
-/** 書き出しの 1 行(v0.25・レビュー D): 記録が 14 日以上あり、最後の書き出しから 30 日以上たったら。タップで JSON を書き出す(Google に接続していなくても出す) */
-function exportLine(n, rerender) {
-  if (!shouldRemindExport({ firstDate: report.firstLoggedDate(E()), today: n.date, lastExportAt: store.state.local.lastExportAt || 0, now: Date.now() })) return null;
-  return el('div.list.freshline', el('button.srow.fresh', { type: 'button', onclick: () => { exportJSONFile(); rerender(); } },
-    [el('span.lbl', store.state.local.lastExportAt ? '控え(JSON)の書き出しから30日' : '控え(JSON)をまだ書き出していません'), el('span.grow'), el('span.val', '書き出す'), el('span.chev', '›')]));
-}
-
-/** 昨日のレポートがまだ見られていなければその日付(v0.14: バッジ。v0.15.3: ホームの円に赤い点) */
-function unseenYesterday(n) {
-  const y = addDays(n.date, -1);
-  return store.state.data.reports[y] && store.state.local.reportSeen !== y ? y : null;
 }
 
 /**
@@ -672,20 +611,6 @@ export function planSheet(o, rerender) {
       } }, cur ? '保存' : '置く')]),
   ].filter(Boolean));
 }
-/** きょうの予定(F12-2): 置いた予定の一覧(状態つき)と「予定を置く」「明日の予定」。過去の日は予定があるときだけ(予定どおりの件数つき) */
-function planBox(n, rerender, isToday, ctx) {
-  const pc = plan.planCompare(PB(), E(), n.date, n.min);
-  if (!isToday && !pc.blocks.length) return null;
-  const rows = pc.blocks.map((b) => { const c = catOf(b.categoryId); const t = b.taskId ? T()[b.taskId] : null; return el('button.srow.planrow', { type: 'button', class: `srow planrow ${b.status}`, 'aria-label': `${mm(b.s % 1440)}〜${mm(b.e % 1440)} ${t ? t.name : c.name} の予定を直す`, onclick: () => planSheet({ date: n.date, id: b.id }, rerender) }, [el('span.ptime', `${mm(b.s % 1440)}〜${mm(b.e % 1440)}`), el('i.dot', { style: { background: c.color } }), el('span.pname', t ? t.name : c.name), el('span.pst', b.status === 'done' ? '✓' : b.status === 'now' ? 'いま' : '')]); });
-  const w = windowFor(S(), n.date);
-  const nextStart = Math.min(1439, Math.max(w ? w.start : 0, Math.ceil(n.min / 30) * 30));
-  const add = isToday ? el('button.srow', { type: 'button', onclick: () => planSheet({ date: n.date, start: nextStart, end: Math.min(nextStart + 60, 1800) }, rerender) }, [el('span.lbl', pc.blocks.length ? '予定を足す' : 'きょうの予定を置く'), el('span.grow'), el('span.chev', '›')]) : null;
-  const tomorrowN = isToday ? plan.planBlocksOf(PB(), addDays(n.date, 1)).length : 0; // v0.26.1: 「明日の予定」は行ではなく見出しの右(線を減らす)
-  const summary = pc.endedCount ? el('div.srow.plain', [el('span.lbl', '予定どおり'), el('span.val', `${pc.doneCount} / ${pc.endedCount}件(予定の時間の${Math.round((pc.rate || 0) * 100)}%)`)]) : null;
-  const head = el('div.row.between.gh', [el('h2', isToday ? 'きょうの予定' : 'この日の予定'), isToday ? el('button.btn.sm.ghost', { type: 'button', onclick: () => ctx.go('timeline', addDays(n.date, 1)) }, `明日${tomorrowN ? `(${tomorrowN})` : ''} ›`) : null]);
-  return el('section.group', [head, el('div.list', [...rows, summary, add].filter(Boolean))]);
-}
-
 /**
  * 1件の記録を書くシート(v0.15・F1-2/F1-5を統合): 開始〜終了(時計)とカテゴリ(タスクが決まっていればカテゴリは固定)。
  * o = { date, start, end(分), categoryId?, taskId?, title?, busyKey?(予定の時間なら記憶する) }。今日なら終了を「なし」にして その時刻から記録中にもできる。
@@ -764,16 +689,16 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const next = addDays(date, 1);
   const totals = log.totalsByCategory(E(), date, isToday ? n.min : 1440);
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
-  const nav = el('div.tl-nav', [
-    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の日', onclick: () => goDate(addDays(date, -1)) }, '‹'),
-    el('button.tl-date', { type: 'button', 'aria-label': `${md(date)} のレポートを開く`, title: 'この日のレポート', onclick: () => reportSheet(date, 'day') }, [el('b', md(date)), svg('svg', { class: 'tl-rep', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 20V10M10 20V4M16 20v-8M22 20H2' })])]),
-    el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
-    showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
-    el('span.grow'),
-    el('button.btn.sm.ghost.calmode', { type: 'button', 'aria-label': store.state.local.calMode === 'month' ? '週の帯にする' : '月の升目にする', title: '週 / 月', onclick: () => { store.state.local.calMode = store.state.local.calMode === 'month' ? 'week' : 'month'; store.saveLocal(); rerender(); } }, store.state.local.calMode === 'month' ? '週' : '月'), // v0.27・F14
-    el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
-    el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), redoCount() ? el('span.undo-n', String(redoCount())) : null]),
-  ]);
+  // v0.28(実機 FB ④⑧): 日付は中央(hgrid)・日付の横のレポートの印(グラフのアイコン)は廃止(レポートは ふり返りタブ から)
+  const nav = headBar({ cls: 'tl-nav',
+    left: [showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')],
+    center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: () => goDate(addDays(date, 1)), label: el('b.tl-date', md(date)) }),
+    right: [
+      el('button.btn.sm.ghost.calmode', { type: 'button', 'aria-label': store.state.local.calMode === 'month' ? '週の帯にする' : '月の升目にする', title: '週 / 月', onclick: () => { store.state.local.calMode = store.state.local.calMode === 'month' ? 'week' : 'month'; store.saveLocal(); rerender(); } }, store.state.local.calMode === 'month' ? '週' : '月'), // v0.27・F14
+      el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
+      el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), redoCount() ? el('span.undo-n', String(redoCount())) : null]),
+    ],
+  });
   const fab = addButton(ctx); fab.classList.add('fab-add'); // v0.24: 上部からはみ出していた ＋ を右下の丸ボタンに(過去の日ならその日に足す)
   const busy = [...google.busyForDate(date), ...(ds > 0 ? google.busyForDate(next).filter((b) => b.start < ds).map((b) => ({ ...b, start: b.start + 1440, end: Math.min(ds, b.end) + 1440 })) : [])];
   const plans = plan.planCompare(PB(), E(), date, showNow ? e.min : (date > e.date ? 0 : 1800)).blocks; // v0.23: 予定(状態つき)
@@ -782,46 +707,71 @@ export function renderTimeline(view, ctx, dateArg = null) {
   view.dataset.date = date;
   timelineDate = showNow ? null : date;
   if (showNow) ctx.setTick(() => { const m = nowInfo(); const em = effectiveDay(S(), m.date, m.min); if (em.date !== date) { ctx.go('timeline'); return; } tl.tick(em.min); });
+  // v0.28(実機 FB ⑦): 現在時刻へ動かすのは 他のタブから来たとき だけ(main.js の go() が view.dataset.from に前の画面を入れる)。升目や ‹ › で「今日」に戻ったときは先頭(升目が見える)のまま
+  const fromOther = view.dataset.from && view.dataset.from !== 'timeline';
   if (keepY != null) requestAnimationFrame(() => window.scrollTo({ top: keepY }));
-  else if (showNow) {
+  else if (showNow && fromOther) {
     // 開いたら現在時刻が見えるところへ(v0.11)。main.js の go() が先頭に戻したあとに動かす
-    requestAnimationFrame(() => { const top = tl.nowTop(); if (top != null) window.scrollTo({ top: Math.max(0, top - Math.round(window.innerHeight * 0.4)) }); });
+    requestAnimationFrame(() => { if (!tl.node.isConnected) return; const top = tl.nowTop(); if (top != null) window.scrollTo({ top: Math.max(0, top - Math.round(window.innerHeight * 0.4)) }); }); // 描き直されていたら動かさない
   }
+  view.dataset.from = 'timeline'; // 同じ画面の描き直し(同期など)で動かさない
 }
 
 /**
  * カレンダーの升目(v0.27・F14・案 A): 週の帯(既定)か月の升目(local.calMode)。手帳のマンスリーに倣い、1 升は 日付・棒(作業の合計)・色(日記の気分)・点(予定)・三角(期限)だけ。
  * 升目のタップでその日のタイムラインへ(未来の日は予定と期限だけ・「ここに予定」で置ける)。月は ‹ › で前後。材料は calendar.js(純関数)。
  */
-function calendarStrip(date, today, goDate) {
-  const d = store.state.data;
-  const base = { today, entries: d.entries, settings: S(), diary: d.diary || {}, planBlocks: PB(), tasks: T() };
-  const cell = (c, maxWork, withDow = false) => el('button.cal-cell', {
-    type: 'button',
-    class: `cal-cell${c.inMonth ? '' : ' out'}${c.future ? ' future' : ''}${c.today ? ' today' : ''}${c.key === date ? ' cur' : ''}${c.mood ? ` m${c.mood}` : ''}`,
+const calBase = (today) => { const d = store.state.data; return { today, entries: d.entries, settings: S(), diary: d.diary || {}, planBlocks: PB(), tasks: T() }; };
+/** 升目 1 つ(v0.28: カレンダータブ・ホームとふり返りの月のカレンダーで共通)。off=押せない(ホーム・ふり返りの未来の日) */
+function calCell(c, maxWork, { withDow = false, cur = null, off = false, onpick }) {
+  return el('button.cal-cell', {
+    type: 'button', disabled: off,
+    class: `cal-cell${c.inMonth ? '' : ' out'}${c.future ? ' future' : ''}${c.today ? ' today' : ''}${c.key === cur ? ' cur' : ''}${c.mood ? ` m${c.mood}` : ''}${off ? ' off' : ''}`,
     'aria-label': `${fmtMD(c.key, true)}${c.work ? `・作業${fmtMinJa(c.work)}` : ''}${c.plans ? `・予定${c.plans}件` : ''}${c.deadlines.length ? `・期限 ${c.deadlines.join('・')}` : ''}`,
-    'aria-current': c.key === date ? 'date' : null,
-    onclick: () => { if (c.key !== date) goDate(c.key); },
+    'aria-current': c.key === cur ? 'date' : null,
+    onclick: () => { if (!off && c.key !== cur) onpick(c.key); },
   }, [
     withDow ? el('span.cal-w', DAY_JA[weekday(c.key)]) : null,
     el('span.cal-d', String(+c.key.slice(8, 10))),
     el('span.cal-marks', [c.plans ? el('i.cal-plan', { title: `予定${c.plans}件` }) : null, c.deadlines.length ? el('i.cal-dl', { title: `期限: ${c.deadlines.join('・')}` }) : null]),
     c.work ? el('i.cal-bar', { style: { height: `${calendar.barHeight(c.work, maxWork)}px` } }) : null,
   ]);
+}
+/**
+ * 月の升目(v0.27・v0.28 で共通化・実機 FB ③「ホーム・カレンダー・ふり返りで参照するカレンダーが違うのは違和感」): ‹ 年月 › と 7 列の升目と凡例。
+ * ym の月を描き、onMonth(±1) で前後の月、onpick(key) でその日へ。allowFuture=false なら未来の日は押せない(ホーム・ふり返りは過去だけ)
+ */
+function monthGrid(ym, { today, cur = null, allowFuture = true, onpick, onMonth }) {
+  const g = calendar.monthCells({ ym, ...calBase(today) });
+  const title = `${+ym.slice(0, 4)}年${+ym.slice(5, 7)}月`;
+  return el('div.mcal', [
+    el('div.mcal-head', [el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の月', onclick: () => onMonth(-1) }, '‹'), el('b', title), el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の月', disabled: !allowFuture && ym >= today.slice(0, 7), onclick: () => onMonth(1) }, '›')]),
+    el('div.cal-row.cal-h', ['月', '火', '水', '木', '金', '土', '日'].map((x) => el('span', x))),
+    ...g.weeks.map((w) => el('div.cal-row', w.map((c) => calCell(c, g.maxWork, { cur, off: !allowFuture && c.future, onpick })))),
+    el('p.cal-legend.muted.small', '棒=作業の合計・色=気分・点=予定・▲=期限。タップでその日へ'),
+  ]);
+}
+/** カレンダータブの升目(v0.27・F14): 週の帯(既定)か月の升目(local.calMode)。タップでその日のタイムラインへ(未来も可) */
+function calendarStrip(date, today, goDate) {
   if (store.state.local.calMode === 'month') {
-    const g = calendar.monthCells({ ym: date.slice(0, 7), ...base });
     const ym = date.slice(0, 7);
-    const title = `${+ym.slice(0, 4)}年${+ym.slice(5, 7)}月`;
     const jump = (n) => { const t = calendar.addMonthsYM(ym, n); const day = Math.min(+date.slice(8, 10), new Date(+t.slice(0, 4), +t.slice(5, 7), 0).getDate()); goDate(`${t}-${String(day).padStart(2, '0')}`); };
-    return el('div.mcal', [
-      el('div.mcal-head', [el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の月', onclick: () => jump(-1) }, '‹'), el('b', title), el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の月', onclick: () => jump(1) }, '›')]),
-      el('div.cal-row.cal-h', ['月', '火', '水', '木', '金', '土', '日'].map((x) => el('span', x))),
-      ...g.weeks.map((w) => el('div.cal-row', w.map((c) => cell(c, g.maxWork)))),
-      el('p.cal-legend.muted.small', '棒=作業の合計・色=気分・点=予定・▲=期限。タップでその日へ'),
-    ]);
+    return monthGrid(ym, { today, cur: date, allowFuture: true, onpick: goDate, onMonth: jump });
   }
-  const g = calendar.weekCells({ date, ...base });
-  return el('div.wcal', el('div.cal-row', g.cells.map((c) => cell(c, g.maxWork, true))));
+  const g = calendar.weekCells({ date, ...calBase(today) });
+  return el('div.wcal', el('div.cal-row', g.cells.map((c) => calCell(c, g.maxWork, { withDow: true, cur: date, onpick: goDate }))));
+}
+/**
+ * 月のカレンダーのシート(v0.28・実機 FB ②③): ホームの左上とふり返りの右上から。カレンダータブと同じ升目(棒・色・点・▲)で、過去の日だけ選べる。
+ * onpick(key) でその日へ。‹ › で前後の月(未来の月へは進めない)
+ */
+export function calendarSheet(date, today, onpick) {
+  let ym = date.slice(0, 7);
+  const body = el('div');
+  let close;
+  const draw = () => { clear(body); body.append(monthGrid(ym, { today, cur: date, allowFuture: false, onpick: (k) => { close(); onpick(k); }, onMonth: (n) => { ym = calendar.addMonthsYM(ym, n); draw(); } })); };
+  draw();
+  close = sheet((c) => { close = c; return [body, el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる'))]; });
 }
 
 /**

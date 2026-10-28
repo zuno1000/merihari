@@ -323,6 +323,18 @@ export async function syncDrive({ interactive = false } = {}) {
  * s = { connected, hasToken, hasPass, online, now, lastSyncAt, pending }
  * 戻り値: 'silent'(いま静かに) | 'gesture'(次のタップで: 鍵が無くポップアップが要る) | 'none'
  */
+/**
+ * 気づいてほしいこと(v0.28・実機 FB ①「同期はホームの行ではなく、設定から・通知の印で」): ホームの歯車の赤い点と、設定の先頭の行の材料。純関数。
+ * s = { connected, pending, lastSyncAt, now, busyFetchedAt, busyAgeMin, inDay, exportDue } → ['sync', 'busy', 'export'] の部分列(この順)
+ * sync: 接続済みで未同期の変更があり、前回の同期から 5 分以上。busy: 接続済みで(作業時間帯の中に)予定を取れていない・1 時間以上前のもの。export: 控えの書き出しの期限(ui-settings.shouldRemindExport)
+ */
+export function attentionReasons(s) {
+  const out = [];
+  if (s.connected && s.pending && (!s.lastSyncAt || s.now - s.lastSyncAt > AUTO_INTERVAL_MS)) out.push('sync');
+  if (s.connected && s.inDay !== false && (!s.busyFetchedAt || !(s.busyAgeMin < 60))) out.push('busy');
+  if (s.exportDue) out.push('export');
+  return out;
+}
 export function autoSyncDecision(s) {
   if (!s.connected || s.online === false) return 'none';
   if (s.lastSyncAt && s.now - s.lastSyncAt < AUTO_INTERVAL_MS) return 'none';

@@ -715,16 +715,6 @@ input.date{min-height:44px}
 .today-head .cal svg,.today-head .piggy svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .today-head .piggy{display:inline-flex;align-items:center;gap:2px}
 .today-head .piggy .undo-n{font-size:11px;font-variant-numeric:tabular-nums}
-.dcal-grid{margin:4px 0 8px}
-.hc-cell.dcal{background:var(--bg);color:var(--fg)}
-button.hc-cell.dcal{border:0;font-family:inherit;cursor:pointer;padding:0}
-.hc-cell.dcal.future{opacity:.35}
-.hc-cell.dcal.written{background:color-mix(in srgb,var(--accent) 18%,var(--card))}
-.hc-cell.dcal.m1{background:#c9d2e3}.hc-cell.dcal.m2{background:#b8c9ea}.hc-cell.dcal.m3{background:#a9d4ea}.hc-cell.dcal.m4{background:#a4dec4}.hc-cell.dcal.m5{background:#ffd98a}
-@media (prefers-color-scheme:dark){.hc-cell.dcal.m1{background:#4b5566}.hc-cell.dcal.m2{background:#415a86}.hc-cell.dcal.m3{background:#3b6f86}.hc-cell.dcal.m4{background:#3b7d62}.hc-cell.dcal.m5{background:#9a7a2e}}
-.hc-cell.dcal.today .hc-d{font-weight:700;color:var(--accent)}
-.hc-cell.dcal.cur{outline:2px solid var(--accent);outline-offset:-2px}
-.hc-cell.dcal.m1 .hc-d,.hc-cell.dcal.m2 .hc-d,.hc-cell.dcal.m3 .hc-d,.hc-cell.dcal.m4 .hc-d,.hc-cell.dcal.m5 .hc-d{color:var(--fg)}
 .sheet .today-head{margin:0 0 4px}
 .mnet{margin-top:4px}
 .wrow{gap:10px;padding:10px 12px 10px 14px}
@@ -875,3 +865,25 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .rtop .srow.rlink{margin:0 -14px;width:calc(100% + 28px);border-top:1px solid var(--line);min-height:44px}
 .dtomorrow{padding-top:6px}
 .dtomorrow .dfield{margin-top:4px}
+
+/* ---- v0.28(実機 FB ①②③④⑦⑧): ホームは 円と棒だけ・上の 1 行は 3 列(日付が中心)・歯車の赤い点・設定の先頭「同期」・月のカレンダーのシートを共通に ---- */
+.hgrid{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;min-height:40px;margin:0 0 6px}
+.hgrid .hs{display:flex;align-items:center;gap:4px;min-width:0}
+.hgrid .hs.l{justify-self:start}
+.hgrid .hs.r{justify-self:end;justify-content:flex-end}
+.hgrid .hmid{display:flex;flex-direction:row;align-items:center;gap:4px;justify-content:center}
+.hgrid .hmid b{font-size:17px;white-space:nowrap}
+.hgrid .btn.sm.ghost{padding:4px 8px;min-width:40px;min-height:40px;flex:none;font-size:18px;line-height:1}
+.hgrid .btn.sm:not(.ghost){flex:none;white-space:nowrap}
+.hgrid .btn.hold{visibility:hidden}
+.hgrid .dsave{white-space:nowrap;font-size:11px}
+.tl-nav.hgrid{margin:0 0 8px}
+.tl-nav.hgrid .tl-date{display:inline;padding:0;cursor:default;font-size:17px;font-weight:700;border-radius:0}
+.tl-nav.hgrid .calmode{font-size:13px}
+.today-head .gear{position:relative}
+.gear .badge{position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:2px solid var(--bg)}
+.srow .ndot{width:8px;height:8px;border-radius:50%;background:var(--danger);flex:none}
+.srow.accent .lbl{color:var(--accent);font-weight:600}
+.sheet .mcal{margin:4px 0 10px}
+.cal-cell.off{cursor:default;opacity:.35}
+.cal-cell.off:active{background:var(--card)}

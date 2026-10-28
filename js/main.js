@@ -23,7 +23,7 @@ import * as ai from './ai.js';
 
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
-export const APP_VERSION = '0.27.1';
+export const APP_VERSION = '0.28.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -52,6 +52,7 @@ for (const k of Object.keys(screens)) { const f = screens[k]; screens[k] = (arg)
 function go(tab, arg) {
   if (tab === 'today') tab = 'now';
   if (!screens[tab]) tab = 'now';
+  view.dataset.from = current; // v0.28(実機 FB ⑦): どの画面から来たか(カレンダーは他のタブから来たときだけ現在時刻へ動かす)
   current = tab; currentArg = arg; redrawPending = false;
   view.dataset.screen = tab; view.dataset.date = ''; // 画面を開き直した印(v0.16: タイムラインは同じ日の描き直しだけスクロール位置を保つ)
   tabs.querySelectorAll('button').forEach((b) => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }); // aria-current: v0.25(レビュー C-4)
@@ -103,7 +104,7 @@ function handleParams() {
   let ref = null; try { ref = document.referrer ? new URL(document.referrer).origin : null; } catch { ref = null; }
   if (ref && ref !== location.origin) { toast('外部のリンクからの記録は受け付けません'); return false; }
   if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return false; }
-  if (k) { pressKiai({ openSheet: true, rerender: () => redraw() }); return true; } // 起動と同時に「気合」(F13)。シートは body に付くので、このあとの go() で消えない
+  if (k) { if (!FEATURES.KIAI) { toast('気合(?kiai=1)は v0.28 で廃止しました'); return false; } pressKiai({ openSheet: true, rerender: () => redraw() }); return true; } // 起動と同時に「気合」(F13)。シートは body に付くので、このあとの go() で消えない。v0.28: FEATURES.KIAI で廃止
   if (l === 'stop') { stopRecording(); return true; }
   const c = store.state.data.settings.categories.find((x) => x.id === l || x.name === l);
   if (!c) { toast(`カテゴリ「${l}」がありません`); return false; }
@@ -170,8 +171,8 @@ if (ui.DEV) window.M = {
   money,
   ai,
   ui: { timeField: ui.timeField, keepFocus: ui.keepFocus, sheetJustClosed: ui.sheetJustClosed },
-  sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue },
+  sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

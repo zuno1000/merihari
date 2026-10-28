@@ -868,6 +868,24 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(C.barHeight(0, 300) === 0 && C.barHeight(300, 300) === 16 && C.barHeight(5, 300) === 3 && C.barHeight(30, 10) === 8, 'calendar.barHeight: 0 は 0・最大 16px・最低 3px・分母は 60 分以上');
     }
 
+    // ---- v0.28: ホームは円と棒だけ・同期の入口(F7-10)・カテゴリを種別で束ねる・並べ替え(純関数) ----
+    log('\n# v0.28 attention / kindGroups / moveItem');
+    ok(M.features.FEATURES.KIAI === false, 'features: KIAI は既定で false(気合のカードと ?kiai=1 は非表示・true で復活)');
+    {
+      const AR = M.sync.attentionReasons;
+      ok(eq(AR({ connected: true, pending: true, lastSyncAt: 0, now: 1e12, busyFetchedAt: 1e12, busyAgeMin: 0, inDay: true, exportDue: false }), ['sync']), 'attentionReasons: 接続済みで未同期の変更(まだ一度も同期していない)→ sync');
+      ok(eq(AR({ connected: true, pending: true, lastSyncAt: 1e12 - 60000, now: 1e12, busyFetchedAt: 1e12, busyAgeMin: 0, inDay: true, exportDue: false }), []), 'attentionReasons: 5 分以内に同期していれば出さない');
+      ok(eq(AR({ connected: false, pending: true, lastSyncAt: 0, now: 1e12, busyFetchedAt: 0, busyAgeMin: Infinity, inDay: true, exportDue: true }), ['export']), 'attentionReasons: 未接続なら sync / busy は出さない・export は出す');
+      ok(eq(AR({ connected: true, pending: false, lastSyncAt: 1e12, now: 1e12, busyFetchedAt: 1e12 - 7200000, busyAgeMin: 120, inDay: true, exportDue: false }), ['busy']) && eq(AR({ connected: true, pending: false, lastSyncAt: 1e12, now: 1e12, busyFetchedAt: 0, busyAgeMin: Infinity, inDay: false, exportDue: false }), []), 'attentionReasons: 予定が 1 時間以上前なら busy・作業時間帯の外なら出さない');
+      ok(eq(AR({ connected: true, pending: true, lastSyncAt: 0, now: 1e12, busyFetchedAt: 0, busyAgeMin: Infinity, inDay: true, exportDue: true }), ['sync', 'busy', 'export']), 'attentionReasons: 順は sync → busy → export');
+      const st28 = S.defaultSettings();
+      const kg = S.kindGroups(st28, st28.categories);
+      ok(kg.map((g) => g.id).join() === 'work,fixed,life,rest,drift' && kg[0].cats.map((c) => c.id).join() === 'research,english,hunt,other' && !kg.some((g) => g.id === 'hobby'), 'kindGroups: 種別の順に束ねる・カテゴリの無い種別(趣味)は出さない');
+      ok(S.kindGroups(st28, [{ id: 'x', kind: 'gone' }, ...st28.categories]).slice(-1)[0].id === 'other' && S.needsKindFilter(kg) && !S.needsKindFilter(kg.slice(0, 1)) && !S.needsKindFilter(S.kindGroups(st28, st28.categories.slice(0, 5))) && S.KIND_FILTER_MIN === 8, 'kindGroups: 種別の無いカテゴリは末尾「その他」。needsKindFilter: 種別 2 つ以上かつ 8 件以上');
+      const mv = S.moveItem([{ id: 'a', order: 1 }, { id: 'b', order: 2 }, { id: 'c', order: 3 }], 0, 2);
+      ok(mv.map((c) => c.id + c.order).join() === 'b1,c2,a3' && S.moveItem(mv, 1, 1) === mv && S.moveItem(mv, 5, 0) === mv && S.moveItem(mv, 2, 0).map((c) => c.id).join() === 'a,b,c', 'moveItem: from → to に動かして order を振り直す・範囲外や同じ位置はそのまま');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
