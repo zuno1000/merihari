@@ -7,7 +7,7 @@ import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from
 import * as store from './store.js';
 import * as plan from './plan.js';
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMinJa, fmtMD, effectiveDay, DAY_JA } from './time.js';
-import { startCategory, catOf, entrySheet } from './ui-today.js';
+import { startCategory, catOf, entrySheet, groupedChips } from './ui-today.js';
 import * as log from './log.js';
 import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
@@ -58,46 +58,59 @@ function segRow(options, value, onpick) {
 }
 
 /**
- * かんたん追加(v0.17・v0.22): 名前の1行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの欄が出る。Enter か「追加」で保存。
+ * かんたん追加(v0.17・v0.22・v0.28.1): 名前の1行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの「札」が出る。Enter か「追加」で保存。
  * 既定は「メモ」(v0.22・F5-11): 名前だけで書き残せる(期限・量・カテゴリは持たない)。タスク画面の先頭「メモ」に並び、タップして種類を決めるとタスクや習慣になる。
+ * v0.28.1(実機 FB ⑥「どれくらい以下がキーボードと被る」): いつまで / 繰り返す / どれくらい / カテゴリ は 1 行の札(いまの値)にし、札をタップしたときだけその選択肢の 1 行が下に出る(他は畳む)。
+ * 名前 → 種類 → 札 → 選択肢 の 4 段で、キーボードが出ていても画面の上半分に収まる。札と選択肢を押してもキーボードは閉じない(keepFocus)。
  * タスク: いつまで(今日/明日/今週/来週/日付…/なし)・繰り返す(なし/毎週)・どれくらい(時間なし〜8時間)。習慣: 毎日/毎週・1日に(1週間に)。やりたいこと: カテゴリだけ。
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
  */
 function quickAdd(today, rerender, preset = null) {
   const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く(Enter でメモ)', autocomplete: 'off', maxlength: 200 });
   let type = preset || 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
-  const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today });
-  const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
+  const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today, onchange: () => refresh() });
+  const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true, onchange: () => refresh() });
   const dateRow = el('div.row.field', { hidden: true }, [el('span.label', '期限'), dateIn, timeIn]);
-  const sizeLabel = el('span.label', 'どれくらい');
-  const sizeRow = chipRow(SIZES, 60, (o) => { sizeMin = o.min; }, (o) => o.min);
-  const sizeBox = el('div.qrow', { hidden: true }, [sizeLabel, sizeRow]);
-  const recurRow = chipRow([{ key: 'no', label: 'なし' }, { key: 'weekly', label: '毎週(同じ曜日)' }], 'no', (o) => { recur = o.key === 'weekly'; });
-  const recurBox = el('div.qrow', { hidden: true }, [el('span.label', '繰り返す'), recurRow]);
-  const whenRow = chipRow(whenOptions(today), when, (o) => {
-    when = o.key;
-    dateRow.hidden = when !== 'date';
-    recurBox.hidden = when === 'none';
-    if (o.value) dateIn.value = o.value;
-  });
-  const whenBox = el('div.qrow', { hidden: true }, [el('span.label', 'いつまで'), whenRow]);
-  const habitRow = chipRow([{ key: 'daily', label: '毎日' }, { key: 'weekly', label: '毎週' }], habitRep, (o) => { habitRep = o.key; sizeLabel.textContent = habitRep === 'daily' ? '1日に' : '1週間に'; });
-  const habitBox = el('div.qrow', { hidden: true }, [el('span.label', 'くりかえし'), habitRow]);
-  const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': catOf(c.id).color }, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
-  const catBox = el('div.qrow', { hidden: true }, [el('span.label', 'カテゴリ'), catRow]);
   const memoHint = el('p.muted.small.qhint', 'メモは名前だけ。あとでタップして タスク / 習慣 / やりたいこと にできます。');
+  // 札(v0.28.1): key → { pill, valueOf(), build(), show() }。開いている札の選択肢だけを detail に出す
+  let open = null;
+  const detail = el('div.qdetail', { hidden: true });
+  const P = {};
+  const pill = (key, label, valueOf, build, show) => {
+    const b = el('button.qpill', { type: 'button', 'aria-expanded': 'false', onclick: () => toggle(key) }, [el('span.qk', label), el('b.qv', '')]);
+    P[key] = { pill: b, valueOf, build, show };
+    return b;
+  };
+  const refresh = () => {
+    for (const k of Object.keys(P)) {
+      const x = P[k];
+      const vis = x.show();
+      x.pill.hidden = !vis;
+      x.pill.querySelector('.qk').textContent = k === 'size' ? (type === 'habit' ? (habitRep === 'daily' ? '1日に' : '1週間に') : 'どれくらい') : x.pill.querySelector('.qk').textContent;
+      x.pill.querySelector('.qv').textContent = x.valueOf();
+      x.pill.setAttribute('aria-expanded', open === k ? 'true' : 'false');
+      x.pill.classList.toggle('open', open === k);
+      if (open === k && !vis) { open = null; detail.hidden = true; clear(detail); }
+    }
+    memoHint.hidden = type !== 'memo';
+  };
+  const toggle = (key) => { open = open === key ? null : key; clear(detail); if (open) detail.append(P[open].build()); detail.hidden = !open; refresh(); };
+  const whenText = () => (when === 'date' ? `${fmtMD(dateIn.value || today)}${timeIn.value ? ' ' + timeIn.value : ''}` : whenOptions(today).find((o) => o.key === when).label);
+  const sizeText = () => SIZES.find((o) => o.min === sizeMin)?.label || `${sizeMin}分`;
+  const catText = () => catOf(cid).name;
+  pill('when', 'いつまで', whenText, () => { dateRow.hidden = when !== 'date'; return el('div.col', [chipRow(whenOptions(today), when, (o) => { when = o.key; if (o.value) dateIn.value = o.value; dateRow.hidden = when !== 'date'; if (when === 'none') recur = false; refresh(); }), dateRow]); }, () => type === 'task');
+  pill('recur', '繰り返す', () => (recur ? '毎週' : 'なし'), () => chipRow([{ key: 'no', label: 'なし' }, { key: 'weekly', label: '毎週(同じ曜日)' }], recur ? 'weekly' : 'no', (o) => { recur = o.key === 'weekly'; refresh(); }), () => type === 'task' && when !== 'none');
+  pill('habit', 'くりかえし', () => (habitRep === 'daily' ? '毎日' : '毎週'), () => chipRow([{ key: 'daily', label: '毎日' }, { key: 'weekly', label: '毎週' }], habitRep, (o) => { habitRep = o.key; refresh(); }), () => type === 'habit');
+  pill('size', 'どれくらい', sizeText, () => chipRow(SIZES, sizeMin, (o) => { sizeMin = o.min; refresh(); }, (o) => o.min), () => type === 'task' || type === 'habit');
+  pill('cat', 'カテゴリ', catText, () => groupedChips(workCats(), (c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, 'data-id': c.id, style: { '--c': catOf(c.id).color }, onclick: () => { cid = c.id; detail.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); refresh(); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name]), { current: cid, small: true }), () => type !== 'memo'); // v0.28.1・FB ⑤: カテゴリが多ければ種別で絞る
+  const pills = el('div.qpills', Object.values(P).map((x) => x.pill));
   const applyType = (k) => {
     type = k;
-    whenBox.hidden = type !== 'task'; dateRow.hidden = type !== 'task' || when !== 'date'; recurBox.hidden = type !== 'task' || when === 'none';
-    habitBox.hidden = type !== 'habit';
-    sizeBox.hidden = type === 'wish' || type === 'memo';
-    catBox.hidden = type === 'memo';
-    memoHint.hidden = type !== 'memo';
-    sizeLabel.textContent = type === 'habit' ? (habitRep === 'daily' ? '1日に' : '1週間に') : 'どれくらい';
     name.placeholder = type === 'memo' ? '思いついたことを書く(Enter でメモ)' : '何をする?(Enter で追加)';
+    refresh();
   };
   const typeSeg = segRow(TYPES, type, applyType);
-  const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, whenBox, dateRow, recurBox, habitBox, sizeBox, catBox]);
+  const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, pills, detail]);
   applyType(type); // v0.26: 区分の画面ではその種類(習慣など)が選ばれた状態で始まる
   const reveal = () => { more.hidden = false; };
   name.addEventListener('focus', reveal);
@@ -126,7 +139,7 @@ function quickAdd(today, rerender, preset = null) {
     el('div.row', [name, el('button.btn.primary', { type: 'button', onclick: submit }, '追加')]),
     more,
   ]);
-  keepFocus(card, { selector: '.seg button, button.chip, button.btn.primary' }); // v0.22.1: 種類・チップ・追加 を押してもキーボードを閉じない(時計・日付は除く)
+  keepFocus(card, { selector: '.seg button, button.chip, button.qpill, button.ktab, button.btn.primary' }); // v0.22.1: 種類・札・チップ・追加 を押してもキーボードを閉じない(時計・日付は除く)
   return card;
 }
 

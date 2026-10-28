@@ -185,6 +185,48 @@ export function confirmSheet(title, body, okLabel, onOk, danger = false) {
 export const DAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
 /**
+ * 引っ張って並べ替え(v0.28.1・実機 FB ⑨・設定 › カテゴリ): list の中の rowSelector の行を、handleSelector(≡)を押さえて上下に動かす。
+ * pointer events(タッチ・マウス共通。≡ は touch-action:none)。押さえた行は指について動き(transform)、他の行は通り過ぎた分だけずれる。DOM は動かさない。
+ * 離したら位置が変わったときだけ onMove(from, to)(呼ぶ側が保存して描き直す)。≡ にフォーカスして ↑ ↓ でも 1 つずつ動く。
+ */
+export function sortable(list, { rowSelector, handleSelector, onMove }) {
+  const rows = () => [...list.querySelectorAll(rowSelector)];
+  let st = null; // { id, row, from, to, y0, mids: 各行の中点(押さえた時点), h: 押さえた行の高さ }
+  const finish = () => { if (!st) return; const { from, to } = st; rows().forEach((r) => { r.style.transform = ''; r.classList.remove('lifting'); }); list.classList.remove('sorting'); st = null; if (from !== to) onMove(from, to); };
+  list.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest(handleSelector); if (!h || !list.contains(h) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const row = h.closest(rowSelector); const rs = rows();
+    st = { id: e.pointerId, row, from: rs.indexOf(row), to: rs.indexOf(row), y0: e.clientY, mids: rs.map((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }), h: row.getBoundingClientRect().height };
+    row.classList.add('lifting'); list.classList.add('sorting');
+    try { h.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    e.preventDefault();
+  });
+  list.addEventListener('pointermove', (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    e.preventDefault();
+    const dy = e.clientY - st.y0;
+    st.row.style.transform = `translateY(${dy}px)`;
+    const cy = st.mids[st.from] + dy;
+    const to = st.mids.filter((m, i) => i !== st.from && m < cy).length; // 自分より上にある他の行の数=新しい位置
+    if (to === st.to) return;
+    st.to = to;
+    rows().forEach((r, i) => {
+      if (i === st.from) return;
+      const s = st.from < to && i > st.from && i <= to ? -st.h : st.from > to && i >= to && i < st.from ? st.h : 0;
+      r.style.transform = s ? `translateY(${s}px)` : '';
+    });
+  });
+  list.addEventListener('pointerup', (e) => { if (st && e.pointerId === st.id) finish(); });
+  list.addEventListener('pointercancel', (e) => { if (st && e.pointerId === st.id) { st.to = st.from; finish(); } });
+  list.addEventListener('keydown', (e) => {
+    const h = e.target.closest(handleSelector); if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    const rs = rows(); const i = rs.indexOf(h.closest(rowSelector)); const j = e.key === 'ArrowUp' ? i - 1 : i + 1;
+    if (j < 0 || j >= rs.length) return;
+    e.preventDefault(); onMove(i, j);
+  });
+}
+
+/**
  * 入力中にボタンを押してもキーボードを閉じない(v0.22.1・実機 FB): iOS はボタンのタップで入力欄がフォーカスを失い、キーボードが閉じる
  * (かんたん追加の 種類 / チップ、日記の「材料」)。container の中で selector に当たるボタンを、within(省略時は container)の入力欄に
  * フォーカスがあるときに触ると、touchend を preventDefault して自分で click を起こす(合成の mousedown が起きないのでフォーカスが外れない)。

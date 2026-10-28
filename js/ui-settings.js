@@ -1,6 +1,6 @@
 // merihari ─ ui-settings.js: 初回ウィザード(3ステップ・既定値で「次へ」3回)と設定画面(仕様書 §4.3)
 // 設定画面は「一覧(ラベル+いまの値)→ 行をタップで項目ごとの編集画面」。編集部品はウィザードと共有する。
-import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField, DEV } from './ui.js';
+import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField, DEV, sortable } from './ui.js';
 import * as store from './store.js';
 import { hm, dayStartMin, mm, dateKey, minuteOfDay, effectiveDay, windowFor } from './time.js';
 import { EXTRA_COLORS, PALETTES } from './palette.js';
@@ -129,7 +129,42 @@ function sectionTiles(rerender) {
     el('p.muted.small', order.length ? `いまの並び: ${order.join(' / ')}${s.tiles ? '' : '(既定: 作業の種別+ダラダラ)'}` : 'なにも選んでいません(タイルは出ません)'),
     el('div.row', [el('span.grow'), el('button.btn.sm.ghost', { type: 'button', disabled: !s.tiles, onclick: () => { s.tiles = null; store.touchSettings(); rerender(); } }, '既定に戻す')]));
 }
-/** お金(v0.19・F10): 月の予算と、お金のカテゴリ(名前・色・並び・非表示・追加)。時間のカテゴリとは別 */
+/**
+ * カテゴリの一覧(v0.28.1・実機 FB ⑨「種別や色がすべて表示されていて一覧性が悪い・並べ替えはドラッグで」): 1 行= ≡(引っ張って並べ替え・ui.sortable)・色の点・名前・種別(か「収入」)・›。
+ * 行をタップすると編集のシート(catEditSheet: 名前・種別・色・非表示)。時間のカテゴリとお金のカテゴリで共通。onMove(from, to) は呼ぶ側が保存して描き直す
+ */
+function catList(items, { tagOf = null, onEdit, onMove }) {
+  const list = el('div.list.catlist');
+  items.forEach((c) => list.append(el('div.srow.catrow', [
+    el('span.handle', { role: 'button', tabindex: '0', 'aria-label': `${c.name} を並べ替え(引っ張るか ↑ ↓)`, title: '引っ張って並べ替え' }, '≡'),
+    el('button.cmain', { type: 'button', 'aria-label': `${c.name} を編集`, onclick: () => onEdit(c) }, [el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), el('span.cname', c.name), tagOf && tagOf(c) ? el('span.ckind', tagOf(c)) : null, el('span.chev', { 'aria-hidden': 'true' }, '›')]),
+  ])));
+  sortable(list, { rowSelector: '.catrow', handleSelector: '.handle', onMove });
+  return list;
+}
+/** 1 つのカテゴリの編集(v0.28.1): 名前・種別(時間のカテゴリだけ)・色(ピッカー / カラーコード / パレット)・非表示。変えた時点で保存。閉じると一覧を描き直す */
+function catEditSheet(c, { kinds = null, canHide, onHide, rerender }) {
+  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
+  const dot = el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' });
+  const setColor = (v, persist = true) => { c.color = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
+  const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, placeholder: '#9ccbee', autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード',
+    onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
+  const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
+  const swatches = el('div.swatches', EXTRA_COLORS.map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) })));
+  sheet((close) => [
+    el('h2', [dot, 'カテゴリ']),
+    el('label.field.col', [el('span.label', '名前'), textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名', maxlength: 40 })]),
+    kinds ? el('div.row.field', [el('span.label', '種別'), select(kinds, c.kind, (v) => { c.kind = v; store.touchSettings(); })]) : null,
+    el('div.row.colorrow', [el('span.label', '色'), pick, hex]),
+    swatches,
+    el('div.row', { style: { marginTop: '12px' } }, [
+      el('button.btn.ghost', { type: 'button', disabled: !canHide, onclick: () => confirmSheet(`「${c.name}」を非表示にしますか?`, '記録は消えません。これまでの記録はこの名前と色のまま残り、集計にも入ります。チップに出なくなるだけで、あとから「表示に戻す」こともできます。', '非表示にする', () => { close(); onHide(c); }) }, '非表示'),
+      el('span.grow'),
+      el('button.btn.primary', { type: 'button', onclick: () => { close(); rerender(); } }, '閉じる'),
+    ]),
+  ], () => rerender());
+}
+/** お金(v0.19・F10): 月の予算と、お金のカテゴリ(名前・色・並び・非表示・追加)。時間のカテゴリとは別。v0.28.1: 一覧は catList(ドラッグで並べ替え・行のタップで編集) */
 function sectionMoney(rerender) {
   const s = S();
   s.budget = s.budget || { monthMax: null };
@@ -137,22 +172,8 @@ function sectionMoney(rerender) {
   const live = s.moneyCategories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
   const archived = s.moneyCategories.filter((c) => c.archived);
   const renumber = () => { live.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
-  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
   const budgetIn = el('input.text', { type: 'text', inputmode: 'numeric', value: s.budget.monthMax == null ? '' : String(s.budget.monthMax), placeholder: '決めない', 'aria-label': '月の予算(円)', style: { maxWidth: '10em' },
     onchange: (e) => { const v = e.target.value.replace(/[¥,円\s]/g, ''); if (v === '') { s.budget.monthMax = null; store.touchSettings(); return; } if (/^\d+$/.test(v) && +v > 0 && +v <= 100000000) { s.budget.monthMax = +v; store.touchSettings(); } else { toast('円の数字で入れてください'); e.target.value = s.budget.monthMax == null ? '' : String(s.budget.monthMax); } } });
-  const rows = live.map((c, i) => {
-    const dot = el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' });
-    const setColor = (v, persist = true) => { c.color = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
-    const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード', onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
-    const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
-    return el('div.item', [
-      el('div.row', [dot, textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), c.income ? el('span.gtag', '収入') : null,
-        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${c.name} を非表示にする`, disabled: live.length <= 1, onclick: () => confirmSheet(`「${c.name}」を非表示にしますか?`, '記録は消えません。チップに出なくなるだけで、あとから「表示に戻す」こともできます。', '非表示にする', () => { c.archived = true; renumber(); }) }, '非表示')]),
-      el('div.row.colorrow', [el('span.label', '色'), pick, hex, el('span.grow'),
-        el('button.btn.sm', { type: 'button', 'aria-label': '上へ', disabled: i === 0, onclick: () => { [live[i - 1], live[i]] = [live[i], live[i - 1]]; renumber(); } }, '↑'),
-        el('button.btn.sm', { type: 'button', 'aria-label': '下へ', disabled: i === live.length - 1, onclick: () => { [live[i + 1], live[i]] = [live[i], live[i + 1]]; renumber(); } }, '↓')]),
-    ]);
-  });
   return card('お金', 'お金タブの月の予算とカテゴリ。カテゴリは少ないほど続きます(家計簿が続かない要因の1位は「カテゴリ分類」)。時間のカテゴリとは別です。',
     el('div.row.field', [el('span.label', '月の予算(支出)'), el('span.yen-mark.sm', '¥'), budgetIn]),
     el('p.muted.small', '決めると、お金タブに「残り ◯円・1日 ◯円まで」のメーターが出ます。決めなければ1日平均だけを出します。'),
@@ -160,44 +181,24 @@ function sectionMoney(rerender) {
       onchange: (e) => { const v = e.target.value.replace(/[¥,円\s]/g, ''); if (v === '') { s.budget.startBalance = null; store.touchSettings(); return; } if (/^-?\d+$/.test(v) && Math.abs(+v) <= 1000000000) { s.budget.startBalance = +v; store.touchSettings(); } else { toast('円の数字で入れてください'); e.target.value = s.budget.startBalance == null ? '' : String(s.budget.startBalance); } } })]),
     el('p.muted.small', '記録を始めた時点の手持ち(口座+財布)。入れると、お金タブに「資産 = 開始残高 + これまでの収入 − 支出」が出ます(v0.20)。'),
     el('h3.help-h', 'カテゴリ'),
-    ...rows,
+    el('p.muted.small', '≡ を引っ張って並べ替え。行をタップで 名前・色・非表示。'),
+    catList(live, { tagOf: (c) => (c.income ? '収入' : null), onEdit: (c) => catEditSheet(c, { canHide: live.length > 1, onHide: (x) => { x.archived = true; renumber(); }, rerender }), onMove: (from, to) => { const moved = store.moveItem(live, from, to); moved.forEach((m) => { const c = s.moneyCategories.find((x) => x.id === m.id); if (c) c.order = m.order; }); store.touchSettings(); rerender(); } }),
     addBtn('カテゴリを追加', () => { s.moneyCategories.push({ id: 'm_' + store.uid().slice(0, 8), name: '新しいカテゴリ', color: EXTRA_COLORS[(live.length + 3) % EXTRA_COLORS.length], order: live.length + 1, archived: false }); store.touchSettings(); rerender(); }),
     archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), textInput(c.name, (v) => { c.name = v || c.name; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
 }
+/** カテゴリ(時間)。v0.28.1: 一覧は catList(≡ で並べ替え・行のタップで catEditSheet)。種別や色を一覧に広げない */
 function sectionCategories(rerender) {
   const s = S();
   const kinds = Object.fromEntries((s.kinds || []).map((k) => [k.id, k.name]));
   const live = s.categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
   const archived = s.categories.filter((c) => c.archived);
   const renumber = () => { live.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
-  const isHex = (v) => /^#[0-9a-f]{6}$/.test(v);
-  const rows = live.map((c, i) => {
-    const dot = el('span.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' });
-    const setColor = (v, persist = true) => { c.color = v; dot.style.background = v; hex.value = v; pick.value = v; if (persist) store.touchSettings(); };
-    const hex = el('input.text.hex', { type: 'text', value: c.color, maxlength: 7, placeholder: '#9ccbee', autocomplete: 'off', spellcheck: false, 'aria-label': 'カラーコード',
-      onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
-    const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
-    const swatches = el('div.swatches', EXTRA_COLORS.map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) })));
-    return el('div.item', [
-      el('div.row', [
-        dot,
-        textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }),
-        el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${c.name} を非表示にする`, disabled: live.length <= 1,
-          onclick: () => confirmSheet(`「${c.name}」を非表示にしますか?`, '記録は消えません。これまでの記録はこの名前と色のまま残り、集計にも入ります。チップに出なくなるだけで、あとから「表示に戻す」こともできます。', '非表示にする', () => { c.archived = true; renumber(); toast('非表示にしました(記録は残っています)'); }) }, '非表示'),
-      ]),
-      el('div.row', [
-        el('span.label', '種別'), select(kinds, c.kind, (v) => { c.kind = v; store.touchSettings(); }), el('span.grow'),
-        el('button.btn.sm', { type: 'button', 'aria-label': '上へ', disabled: i === 0, onclick: () => { [live[i - 1], live[i]] = [live[i], live[i - 1]]; renumber(); } }, '↑'),
-        el('button.btn.sm', { type: 'button', 'aria-label': '下へ', disabled: i === live.length - 1, onclick: () => { [live[i + 1], live[i]] = [live[i], live[i + 1]]; renumber(); } }, '↓'),
-      ]),
-      el('div.row.colorrow', [el('span.label', '色'), pick, hex, swatches]),
-    ]);
-  });
-  return card('カテゴリ', '記録と集計の単位。色はパレットから選ぶか、カラーコード(#RRGGBB)で指定できます(まとめて変えるには 設定 › 配色)。消す代わりに「非表示」にするので、これまでの記録は消えません。',
-    ...rows,
+  return card('カテゴリ', '記録と集計の単位。≡ を引っ張って並べ替え(記録のチップもこの順)。行をタップで 名前・種別・色・非表示。消す代わりに「非表示」にするので、これまでの記録は消えません。色をまとめて変えるには 設定 › 配色。',
+    catList(live, { tagOf: (c) => kinds[c.kind] || null, onEdit: (c) => catEditSheet(c, { kinds, canHide: live.length > 1, onHide: (x) => { x.archived = true; renumber(); toast('非表示にしました(記録は残っています)'); }, rerender }), onMove: (from, to) => { const moved = store.moveItem(live, from, to); moved.forEach((m) => { const c = s.categories.find((x) => x.id === m.id); if (c) c.order = m.order; }); store.touchSettings(); rerender(); } }),
     addBtn('カテゴリを追加', () => {
-      s.categories.push({ id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false });
-      store.touchSettings(); rerender();
+      const c = { id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false };
+      s.categories.push(c); store.touchSettings(); rerender();
+      catEditSheet(c, { kinds, canHide: true, onHide: (x) => { x.archived = true; renumber(); }, rerender }); // 追加したらそのまま名前と種別を決める
     }),
     archived.length ? el('details', [el('summary.muted.small', `非表示のカテゴリ(${archived.length})`), el('p.muted.small', '記録は残っています。名前は変えられます(以前の版で消したカテゴリは「消したカテゴリ」の名前で復元されています)。'), ...archived.map((c) => el('div.row.item', [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), textInput(c.name, (v) => { c.name = v || c.name; store.touchSettings(); }, { 'aria-label': 'カテゴリ名' }), el('button.btn.sm', { type: 'button', onclick: () => { c.archived = false; c.order = live.length + 1; store.touchSettings(); rerender(); } }, '表示に戻す')]))]) : null);
 }
@@ -396,15 +397,15 @@ function sectionHelp() {
   const li = (items) => el('ul.help-ul', items.map((t) => el('li', t)));
   return el('div.help', [
     h('5つのタブと設定'),
-    li(['ホーム(v0.28): きょうの内訳(円とカテゴリ別の棒)だけ。円をタップするとその日のレポート。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。左上のカレンダー(‹ › でも)で過去の日のホームへ。右上の歯車が設定で、未同期の変更・予定が古い・控えの書き出し があると赤い点が付きます。v0.27 まであった きょうのタスク・きょうの予定・「きょうをふり返る」・気合のカード はホームから外しました(タスクはタスクタブ、予定はカレンダータブ、ふり返りはふり返りタブ。気合は廃止)。', 'カレンダー(旧 タイムライン): 上に手帳の升目(週の帯・右上の「月」で月の升目)、下にその日の実績を縦に。升目のタップ・左右にスワイプ(または ‹ ›)で前後の日。他のタブから開いたときだけ現在時刻の位置に移ります(升目や「今日」で戻ったときは先頭のまま・v0.28)。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。右下の ＋ でその日に記録を足せます(記録中は ●)。自分で置いた予定は枠線だけで描きます。支出が紐づく記録には ¥ の印。', 'お金: 今月の支出と予算の残り。金額を入れてカテゴリをタップで記録(きょう・いま。「きょう・いま」をタップで日時を変更)。内訳の円・日ごとの一覧(タップで修正)・月ごとの推移。', 'タスク: 名前を入れて Enter。触ると 種類(タスク / 習慣 / やりたいこと)と いつまで / 繰り返す / どれくらい / カテゴリ のチップが出ます。行のタップは編集、右の ▶ はいまから記録。', 'ふり返り(旧 日記): きょうはどうだった → 気持ちを残す(気分 / 元気と 3 行)→ 明日を決める。書くたびに自動保存。右上のカレンダー(ホームと同じ升目)で過去の日へ。', '設定(ホーム右上の歯車): 先頭に「いますぐ同期」(v0.28)。作業時間帯・カテゴリ・種別・配色・すき間・1日の目標・レポートのタイル・お金(予算・カテゴリ)・Google・データ。']),
+    li(['ホーム(v0.28): きょうの内訳(円とカテゴリ別の棒)だけ。円をタップするとその日のレポート。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。左上のカレンダー(‹ › でも)で過去の日のホームへ。右上の歯車が設定で、未同期の変更・予定が古い・控えの書き出し があると赤い点が付きます。v0.27 まであった きょうのタスク・きょうの予定・「きょうをふり返る」・気合のカード はホームから外しました(タスクはタスクタブ、予定はカレンダータブ、ふり返りはふり返りタブ。気合は廃止)。', 'カレンダー(旧 タイムライン): 上に手帳の升目(週の帯・右上の「月」で月の升目)、下にその日の実績を縦に。升目のタップ・左右にスワイプ(または ‹ ›)で前後の日。他のタブから開いたときだけ現在時刻の位置に移ります(升目や「今日」で戻ったときは先頭のまま・v0.28)。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。右下の ＋ でその日に記録を足せます(記録中は ●)。自分で置いた予定は枠線だけで描きます。支出が紐づく記録には ¥ の印。', 'お金: 今月の支出と予算の残り。金額を入れてカテゴリをタップで記録(きょう・いま。「きょう・いま」をタップで日時を変更)。内訳の円・日ごとの一覧(タップで修正)・月ごとの推移。', 'タスク: 名前を入れて Enter。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と いつまで / 繰り返す / どれくらい / カテゴリ の札が出て、札をタップするとその選択肢だけが下に出ます(キーボードが出ていても画面の上半分に収まる・v0.28.1)。行のタップは編集。', 'ふり返り(旧 日記): きょうはどうだった → 気持ちを残す(気分 / 元気と 3 行)→ 明日を決める。書くたびに自動保存。右上のカレンダー(ホームと同じ升目)で過去の日へ。', '設定(ホーム右上の歯車): 先頭に「いますぐ同期」(v0.28)。作業時間帯・カテゴリ・種別・配色・すき間・1日の目標・レポートのタイル・お金(予算・カテゴリ)・Google・データ。']),
     h('記録する(タイムライン右下の ＋)'),
-    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを1回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、カレンダーの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが10分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00など)なら、0:00を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
+    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを1回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'カテゴリが 8 つ以上あり種別が 2 つ以上なら、チップの上に種別のタブが出て、選んだ種別のカテゴリだけが並びます(v0.28.1・記録のシート・記録の直し・予定・タスクの追加で同じ)。最初は記録中(か直前)のカテゴリの種別。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、カレンダーの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが10分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00など)なら、0:00を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分の順にタップ。分はなぞると1分刻み、下の −5/−1/+1/+5でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
     h('配色'),
-    li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます。']),
+    li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます(行をタップ)。', '設定 › カテゴリ の一覧は 1 行ずつ(色・名前・種別)。≡ を引っ張って並べ替え(≡ にフォーカスして ↑ ↓ でも)。行をタップで 名前・種別・色・非表示(v0.28.1)。']),
     h('タスクと目安'),
-    li(['タスク画面は 期限切れ と きょう の分だけを見せます(v0.26)。メモ / 期限までに / 習慣 / やりたいこと / 完了 は下の「リスト」のタイルから開き、‹ で戻ります。開いた区分の先頭の追加欄は、その種類(習慣など)が選ばれています。先頭に「メモ」: 名前を入れて Enter で書き残せます(期限も量も持ちません)。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、いつまで / 繰り返す / どれくらい / カテゴリ のチップが出ます。メモは一覧の先頭に新しい順。タップして 期限 / 毎日 / 毎週 / やりたい を選ぶと、そのままタスクや習慣になります。', '期限のあるタスク: 残り ÷ 期限までの日数 が「きょうの目安」。期限が近づくほど増えます。「期限までに」には、1日あたりが15分に満たないもの・期限の無いもの・記録で残りが0になったものが入ります。期限を過ぎたら朝に1回「+1週 / 半分にして +1週 / 完了 / 消す」を聞きます。', '毎週繰り返す(課題など): 済ませると「完了」に入り、期限を過ぎた朝に翌週の同じ曜日が期限になって戻ってきます。済ませないまま期限を過ぎれば「期限切れ」です。', '時間なし(用事): 銀行・メールのように時間を計らないもの。残りや目安は持たず、チェックで済ませます。期限が明日までの用事はホームの「タスクと習慣」にも出ます。', '毎日 ◯分: 毎日の目安(英語など)。きょうの記録と比べます。「時間なし」の習慣(薬を飲む など)はチェックだけ。', '毎週 ◯時間: 週の目安。週(日曜まで)の記録と比べ、週が変わると「先週 x/yh」を残して戻します。', 'やりたいこと: 目安は持ちません。この7日の記録と最後にふれた日を出し、1週間ふれていなければレポートの「明日への一言」で思い出させます。', '目安は「予定」ではありません。入れなくても責めませんし、いつやるかはあなたが決めます。']),
+    li(['タスク画面は 期限切れ と きょう の分だけを見せます(v0.26)。メモ / 期限までに / 習慣 / やりたいこと / 完了 は下の「リスト」のタイルから開き、‹ で戻ります。開いた区分の先頭の追加欄は、その種類(習慣など)が選ばれています。先頭に「メモ」: 名前を入れて Enter で書き残せます(期限も量も持ちません)。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、いつまで / 繰り返す / どれくらい / カテゴリ の札が出ます(札をタップでその選択肢・v0.28.1)。メモは一覧の先頭に新しい順。タップして 期限 / 毎日 / 毎週 / やりたい を選ぶと、そのままタスクや習慣になります。', '期限のあるタスク: 残り ÷ 期限までの日数 が「きょうの目安」。期限が近づくほど増えます。「期限までに」には、1日あたりが15分に満たないもの・期限の無いもの・記録で残りが0になったものが入ります。期限を過ぎたら朝に1回「+1週 / 半分にして +1週 / 完了 / 消す」を聞きます。', '毎週繰り返す(課題など): 済ませると「完了」に入り、期限を過ぎた朝に翌週の同じ曜日が期限になって戻ってきます。済ませないまま期限を過ぎれば「期限切れ」です。', '時間なし(用事): 銀行・メールのように時間を計らないもの。残りや目安は持たず、チェックで済ませます。期限が明日までの用事はホームの「タスクと習慣」にも出ます。', '毎日 ◯分: 毎日の目安(英語など)。きょうの記録と比べます。「時間なし」の習慣(薬を飲む など)はチェックだけ。', '毎週 ◯時間: 週の目安。週(日曜まで)の記録と比べ、週が変わると「先週 x/yh」を残して戻します。', 'やりたいこと: 目安は持ちません。この7日の記録と最後にふれた日を出し、1週間ふれていなければレポートの「明日への一言」で思い出させます。', '目安は「予定」ではありません。入れなくても責めませんし、いつやるかはあなたが決めます。']),
     h('習慣・やりたいことを始めやすく'),
     li(['v0.26: ホームとタスク画面の ▶(いまから記録)と「区切り」は出しません(戻すときは js/features.js の TASK_START を true に)。記録とタスクの紐づけは、＋ のシートの「タスク」のチップと、タスクの編集の「後から記録」から。残りの見積は、紐づいた記録の分だけ自動で減ります。v0.28: ホームにはタスクを出しません(タスクタブへ)。', '習慣は「◯日続いてる」(毎週は週)を出します。印か、記録が目安に届いた日を数え、きょうがまだでも途切れにはしません。', 'タスク画面の習慣は まだのもの が先、やりたいことは 長くふれていない順。やりたいことには「◯日ぶり」。']),
     h('予定のメモ'),

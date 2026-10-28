@@ -23,7 +23,7 @@ import * as ai from './ai.js';
 
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
-export const APP_VERSION = '0.28.0';
+export const APP_VERSION = '0.28.1';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -170,7 +170,7 @@ if (ui.DEV) window.M = {
   diary,
   money,
   ai,
-  ui: { timeField: ui.timeField, keepFocus: ui.keepFocus, sheetJustClosed: ui.sheetJustClosed },
+  ui: { timeField: ui.timeField, keepFocus: ui.keepFocus, sheetJustClosed: ui.sheetJustClosed, sortable: ui.sortable },
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
