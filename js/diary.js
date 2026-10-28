@@ -9,12 +9,25 @@ export const MOODS = [
   { v: 1, label: 'つらい' }, { v: 2, label: 'いまいち' }, { v: 3, label: 'ふつう' }, { v: 4, label: 'よい' }, { v: 5, label: '最高' },
 ];
 export const moodLabel = (v) => MOODS.find((m) => m.v === v)?.label || '';
+/**
+ * 3 つの 5 段階(v0.26・F9-1 改・ユーザー FB「満足度だけでなく気分や疲れも」): sat=満足(作業の進み)・mood=気分(v0.18 からの欄)・tired=疲れ。
+ * どれか 1 つでも「書いた日」。期間のまとめ(summarize)はそれぞれの平均を返す。
+ */
+export const SCALES = Object.freeze({
+  sat: { label: '満足', hint: '作業の進み', levels: [{ v: 1, label: '物足りない' }, { v: 2, label: 'すこし' }, { v: 3, label: 'ふつう' }, { v: 4, label: 'よい' }, { v: 5, label: 'はかどった' }] },
+  mood: { label: '気分', hint: 'きょう一日', levels: MOODS },
+  tired: { label: '疲れ', hint: 'からだ', levels: [{ v: 1, label: '元気' }, { v: 2, label: 'すこし' }, { v: 3, label: 'ふつう' }, { v: 4, label: '疲れた' }, { v: 5, label: 'くたくた' }] },
+});
+export const SCALE_KEYS = Object.freeze(['sat', 'mood', 'tired']);
+export const scaleLabel = (key, v) => SCALES[key]?.levels.find((m) => m.v === v)?.label || '';
+/** 一覧やレポートの 1 行に添える状態(「満足 よい・気分 ふつう・疲れ すこし」)。無ければ '' */
+export const scalesText = (d) => SCALE_KEYS.filter((k) => d && d[k] != null).map((k) => `${SCALES[k].label} ${scaleLabel(k, d[k])}`).join('・');
 const alive = (d) => d && !d.deletedAt;
 const txt = (s) => (typeof s === 'string' ? s.trim() : '');
 
 /** 何か1つでも書いてあれば「書いた日」(気分だけでも可) */
 export function isWritten(d) {
-  return !!(alive(d) && (d.mood != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
+  return !!(alive(d) && (d.mood != null || d.sat != null || d.tired != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
 }
 
 /** 続けて書いた日数。date に書いていなくても途切れ扱いにしない(昨日から数える) */
@@ -26,18 +39,19 @@ export function streak(diary, date) {
   return n;
 }
 
-/** 書いた日の数と気分の平均(期間) */
+/** 書いた日の数と 満足・気分・疲れ の平均(期間)。list は日ごと { key, written, mood, sat, tired } */
 export function summarize(diary, from, to) {
-  let days = 0, moodSum = 0, moodN = 0;
+  let days = 0;
+  const sums = { mood: [0, 0], sat: [0, 0], tired: [0, 0] };
   const list = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const x = diary?.[d];
     const w = isWritten(x);
-    if (w) days++;
-    if (w && x.mood != null) { moodSum += x.mood; moodN++; }
-    list.push({ key: d, written: w, mood: w ? x.mood : null });
+    if (w) { days++; for (const k of SCALE_KEYS) if (x[k] != null) { sums[k][0] += x[k]; sums[k][1]++; } }
+    list.push({ key: d, written: w, mood: w ? x.mood ?? null : null, sat: w ? x.sat ?? null : null, tired: w ? x.tired ?? null : null });
   }
-  return { days, moodAvg: moodN ? Math.round((moodSum / moodN) * 10) / 10 : null, list };
+  const avg = (k) => (sums[k][1] ? Math.round((sums[k][0] / sums[k][1]) * 10) / 10 : null);
+  return { days, moodAvg: avg('mood'), satAvg: avg('sat'), tiredAvg: avg('tired'), list };
 }
 
 /**

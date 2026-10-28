@@ -281,11 +281,12 @@ export function validateKiai(r, id) {
   if (!isObj(r) || !isDate(r.date) || !isHM(r.time)) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: r.time, categoryId: optStr(r.categoryId, 40), note: str(r.note, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
-/** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null、3 つの欄とメモは文字列(2000 字まで) */
+/** 日記(v0.18・F9): 1 日 1 件(キー=日付)。気分 1〜5 か null(v0.26: 満足 sat・疲れ tired も同じ)、3 つの欄とメモは文字列(2000 字まで) */
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
-  const mood = Number.isInteger(+r.mood) && +r.mood >= 1 && +r.mood <= 5 && r.mood != null ? +r.mood : null;
-  return { ...stripUnsafe(r), date: r.date || id, mood, good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  const lv = (v) => (v != null && Number.isInteger(+v) && +v >= 1 && +v <= 5 ? +v : null); // 1〜5 の整数か null
+  const mood = lv(r.mood);
+  return { ...stripUnsafe(r), date: r.date || id, mood, sat: lv(r.sat), tired: lv(r.tired), good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 
 /** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数)。レコードは型を検証する */

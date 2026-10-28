@@ -99,6 +99,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
       weekBox(date),
       bullets(r),
       tiles(r, baseDrift),
+      el('p.muted.small.tile-hint', ['上のタイル(作業 / 決まった作業 / ダラダラ)の名前と中身は ', el('button.btn.inline', { type: 'button', onclick: () => { close(); hooks.go?.('settings', 'kinds'); } }, '設定 › 種別'), ' で変えられます。']), // v0.26・ユーザー FB
       dayStrip(entries, W, nowMin, isToday),
       trendFigure(days, '7日間の推移'),
       tables(r, days),
@@ -175,16 +176,17 @@ function shareDonut(rows, total) {
     segs.push(seg); face.append(seg); acc += len;
   }
   const center = el('div.pie-center', [el('b', fmtMin(total)), el('span.muted.small', '記録')]);
-  return el('figure.fig.pie-fig', [el('div.pie-wrap', [face, center]), el('div.pie-legend', rows.slice(0, 6).map((x) => el('span.lg', [el('i', { style: { background: cl(x) } }), `${nm(x)}${fmtMin(x.min)}`]))), caption]);
+  return el('figure.fig.pie-fig', [el('div.pie-wrap', [face, center]), el('div.pie-legend', rows.slice(0, 6).map((x) => el('span.lg', [el('i', { style: { background: cl(x) } }), `${nm(x)}${fmtMin(x.min)}(${report.sharePct(x.min, total)}%)`]))), caption]); // v0.26: 記録した時間に対する割合
 }
 
 /** カテゴリ別の棒(期間用)。右に合計と1日平均 */
 function catBars(rows, loggedDays) {
   const max = Math.max(1, ...rows.map((r) => r.min));
+  const total = rows.reduce((a, r) => a + r.min, 0); // v0.26: 割合(記録した時間に対して)
   return el('figure.fig', [
-    el('figcaption', 'カテゴリ別(合計・記録した日の平均)'),
+    el('figcaption', 'カテゴリ別(合計・割合・記録した日の平均)'),
     el('div.crows', rows.map((r) => el('div.crow', [
-      el('i.dot', { style: { background: colorOf(r.id) } }), el('span.cname', catOf(r.id).name), el('span.cval', `${fmtMin(r.min)}・${fmtMin(loggedDays ? Math.round(r.min / loggedDays) : 0)}/日`),
+      el('i.dot', { style: { background: colorOf(r.id) } }), el('span.cname', catOf(r.id).name), el('span.cval', `${fmtMin(r.min)}(${report.sharePct(r.min, total)}%)・${fmtMin(loggedDays ? Math.round(r.min / loggedDays) : 0)}/日`),
       el('span.cbar', el('i', { style: { width: `${Math.round((r.min / max) * 100)}%`, background: colorOf(r.id) } })),
     ]))),
   ]);
@@ -275,7 +277,7 @@ export function pieFigure(entries, date, W, nowMin, r, { size = 200, stroke = 30
     if (x.id !== 'future') seg.addEventListener('click', () => { caption.textContent = `${nameOf(x.id)}${fmtMinJa(x.min)}(${Math.round((x.min / 1440) * 100)}%)`; segs.forEach((s) => s.classList.toggle('lit', s === seg)); });
     segs.push(seg); face.append(seg); acc += len;
   }
-  const legend = el('div.pie-legend', rows.filter((x) => x.id !== 'future').map((x) => el('span.lg', [el('i', { class: clsOf(x.id) ? `sw-${x.id}` : '', style: clsOf(x.id) ? null : { background: colorOf(x.id) } }), `${nameOf(x.id)}${fmtMin(x.min)}`])));
+  const legend = el('div.pie-legend', rows.filter((x) => x.id !== 'future').map((x) => el('span.lg', [el('i', { class: clsOf(x.id) ? `sw-${x.id}` : '', style: clsOf(x.id) ? null : { background: colorOf(x.id) } }), `${nameOf(x.id)}${fmtMin(x.min)}(${report.sharePct(x.min, 1440)}%)`]))); // v0.26: 24 時間に対する割合
   return el('figure.fig.pie-fig', [el('div.pie-wrap', { style: { width: `${SZ}px`, height: `${SZ}px` } }, [face, centerNode]), legend, caption]);
 }
 
@@ -337,7 +339,7 @@ function moodFigure(from, to) {
     n <= 8 ? el('span.mf-lab', DAY_JA[weekday(x.key)]) : (i === 0 || i === n - 1 || i % 7 === 0 ? el('span.mf-lab', `${+x.key.slice(8, 10)}`) : null),
   ].filter(Boolean)));
   return el('section.group', [el('h2', '気分の推移(日記)'), el('div.card.moodflow', [el('div.mf-row', cells),
-    el('p.small.muted.mf-note', `書いた日${sm.days}/${n}${sm.moodAvg ? `・気分の平均 ${sm.moodAvg}`: ''}${best ? `・いちばん良かった日${fmtMD(best.key, true)}` : ''}`)])]);
+    el('p.small.muted.mf-note', `書いた日${sm.days}/${n}${sm.moodAvg ? `・気分の平均 ${sm.moodAvg}`: ''}${sm.satAvg ? `・満足 ${sm.satAvg}` : ''}${sm.tiredAvg ? `・疲れ ${sm.tiredAvg}` : ''}${best ? `・いちばん良かった日${fmtMD(best.key, true)}` : ''}`)])]); // v0.26: 満足・疲れの平均も
 }
 function heroFigure(r, baseWork) {
   // 1日の目標(v0.17・F3-11)があれば先週平均ではなく目標と比べる(メーターつき)

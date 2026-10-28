@@ -21,7 +21,8 @@ import { renderMoney } from './ui-money.js';
 import * as money from './money.js';
 import * as ai from './ai.js';
 
-export const APP_VERSION = '0.25.1';
+import { FEATURES } from './features.js';
+export const APP_VERSION = '0.26.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -33,7 +34,7 @@ store.init();
 
 let tickFn = null;
 const ctx = { version: APP_VERSION, news: loadNews, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw() };
-const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: () => renderTasks(view, ctx), settings: (arg) => renderSettings(view, ctx, arg), diary: (arg) => renderDiary(view, ctx, arg), money: (arg) => renderMoney(view, ctx, arg) };
+const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: (arg) => renderTasks(view, ctx, arg), settings: (arg) => renderSettings(view, ctx, arg), diary: (arg) => renderDiary(view, ctx, arg), money: (arg) => renderMoney(view, ctx, arg) };
 uiReport.hooks.go = (tab, arg) => go(tab, arg); // レポートの中から日記へ(v0.18)
 let current = 'now';
 let currentArg = undefined; // いまの画面の引数(タイムライン/ホームの日付・設定の項目)。同期や復帰で描き直すときに失わない(v0.16)
@@ -157,6 +158,7 @@ async function checkUpdate() {
 if (ui.DEV) window.M = {
   APP_VERSION,
   loadNews,
+  features: { FEATURES },
   kiai,
   time,
   log,

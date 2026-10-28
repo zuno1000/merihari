@@ -1,4 +1,5 @@
-// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1日1件。気分(5つのタップ)+ 3行(よかったこと / ひっかかったこと / 明日は)+ メモ(折りたたみ)。
+// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1日1件。満足 / 気分 / 疲れ(v0.26: 5 段階を 1 行ずつ)+ 3行(よかったこと / ひっかかったこと / 明日は)+ メモ(空なら「＋ メモ」に畳む)。
+// v0.26: 「AI に頼む」はカードではなく 1 行(タップでシート)。材料は横 1 列。見た目は Apple ジャーナル / Google Keep に倣い、線と部品を減らす。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。「きょうの材料」(その日の記録・ふり返り・昨日の「明日は」)はタップで欄に入る。
 // 下に続いた日数と最近14日の一覧(気分の点・1行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
 import { el, clear, toast, svg, sheet, keepFocus } from './ui.js';
@@ -33,21 +34,29 @@ function saveEntry(d) {
   store.save(); sync.autoSync();
 }
 
-/** 気分の5つ(丸の大きさと色の濃さで段階を見せる・ラベルは選んだものだけ強く) */
-export function moodPicker(value, onpick) {
-  const node = el('div.moods', { role: 'radiogroup', 'aria-label': '気分' });
+/**
+ * 5 段階の 1 行(v0.26・F9-1 改): 左に名前(満足 / 気分 / 疲れ)、まん中に 5 つの丸、右に選んだ言葉。もう一度タップで外す。
+ * 丸の色は 気分・満足 が m1〜m5(日記のカレンダーと同じ)、疲れ が t1〜t5(元気=緑 → くたくた=赤)。
+ */
+export function scalePicker(key, value, onpick) {
+  const sc = diary.SCALES[key];
+  const node = el('div.scale', { role: 'radiogroup', 'aria-label': sc.label });
+  const word = el('span.sc-word', '');
+  const dots = el('div.sc-dots');
   const draw = () => {
-    clear(node);
-    for (const m of diary.MOODS) {
+    clear(dots);
+    for (const m of sc.levels) {
       const on = value === m.v;
-      node.append(el('button.mood', { type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', class: `mood m${m.v}${on ? ' on' : ''}`, 'aria-label': m.label, onclick: () => { value = on ? null : m.v; onpick(value); draw(); } }, [
-        el('i'), el('span', m.label),
-      ]));
+      dots.append(el('button.sc-dot', { type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', class: `sc-dot ${key === 'tired' ? 't' : 'm'}${m.v}${on ? ' on' : ''}`, 'aria-label': `${sc.label}: ${m.label}`, title: m.label, onclick: () => { value = on ? null : m.v; onpick(value); draw(); } }, el('i')));
     }
+    word.textContent = value ? diary.scaleLabel(key, value) : '';
   };
   draw();
+  node.append(el('span.sc-name', sc.label), dots, word);
   return node;
 }
+/** v0.18〜v0.25 の気分の列(互換のために残す。scalePicker('mood') と同じ) */
+export function moodPicker(value, onpick) { return scalePicker('mood', value, onpick); }
 
 /** 自動で伸びる textarea(入力のたびに高さを合わせる)。rows=1から(v0.20: 2行ぶんの空白が「謎の改行」に見えた) */
 function growArea(value, placeholder, oninput) {
@@ -102,19 +111,23 @@ export function renderDiary(view, ctx, dateArg = null) {
     fields[key] = ta;
     return el('label.dfield', [el('span.dlabel', label), ta]);
   };
-  const seedChips = seeds.length ? el('div.seeds', [el('span.dlabel', isToday ? 'きょうの材料(タップで欄に入る)' : 'この日の材料'), el('div.chips.small', seeds.map((s) => el('button.chip.sm2.seed', { type: 'button', class: `chip sm2 seed f-${s.field}`, onclick: (ev) => {
+  const seedChips = seeds.length ? el('div.seeds', [el('span.dlabel', isToday ? '材料(タップで欄に入る)' : 'この日の材料'), el('div.seeds-scroll', seeds.map((s) => el('button.chip.sm2.seed', { type: 'button', class: `chip sm2 seed f-${s.field}`, onclick: (ev) => {
     const ta = fields[s.field]; if (!ta) return;
     const cur = ta.value.trim();
     ta.value = cur ? `${cur}\n${s.text}` : s.text; draft[s.field] = ta.value; ta.fit(); queue(); ev.currentTarget.disabled = true; ta.focus();
   } }, [el('i.seed-dot'), s.text])))]) : null;
 
+  // v0.26: 状態(満足 / 気分 / 疲れ)を 1 行ずつ → 3 行 → メモ(空なら「＋ メモ」に畳む) → 材料(横 1 列)
+  const noteField = field('note', 'メモ', '自由に');
+  const noteBtn = el('button.btn.sm.ghost.dmore', { type: 'button', onclick: () => revealNote(true) }, '＋ メモ');
+  const revealNote = (focus = false) => { noteField.hidden = false; noteBtn.hidden = true; if (focus) fields.note.focus(); };
+  if (draft.note && draft.note.trim()) revealNote(); else noteField.hidden = true;
   const card = el('section.card.dcard', [
-    el('div.row.between', [el('span.dlabel', isToday ? 'きょうの気分' : 'この日の気分'), null]),
-    moodPicker(draft.mood, (v) => { draft.mood = v; queue(); }),
+    el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))),
     field('good', 'よかったこと', isToday ? 'きょう、よかったこと' : 'よかったこと'),
     field('hard', 'ひっかかったこと', '気づき。なければ空でいい'),
     field('tomorrow', '明日は', 'ひとつだけ'),
-    field('note', 'メモ', '自由に'), // v0.20: 折りたたみをやめて最初から開いておく
+    noteField, noteBtn,
     seedChips,
   ].filter(Boolean));
   if (seedChips) keepFocus(seedChips, { selector: 'button.chip', within: card }); // v0.22.1: 書いている途中に材料を押してもキーボードを閉じない
@@ -133,7 +146,7 @@ export function renderDiary(view, ctx, dateArg = null) {
       rows.push(el('button.srow.drow', { type: 'button', class: `srow drow${k === date ? ' cur' : ''}`, onclick: () => { commit(); goDate(k); } }, [
         el('span.ddate', [el('b', `${+k.slice(8, 10)}`), el('span.muted.small', `${DAY_JA[weekday(k)]}`)]),
         el('i.mdot', { class: `mdot${w && d.mood ? ` m${d.mood}` : ''}`, 'aria-hidden': 'true' }),
-        el('span.dx', w ? (diary.excerpt(d) || diary.moodLabel(d.mood)) : (k === e.date ? 'きょうはまだ' : '')),
+        el('span.dx', w ? (diary.excerpt(d) || diary.scalesText(d)) : (k === e.date ? 'きょうはまだ' : '')),
         el('span.chev', '›'),
       ]));
     }
@@ -142,7 +155,10 @@ export function renderDiary(view, ctx, dateArg = null) {
   refreshList();
 
   // AI(v0.21・F11): 設定 › AI で有効にした人だけ。文をショートカットへ渡し、返事はクリップボードから貼り付ける(アプリ内に AI は無い)
-  const aiBox = store.state.local.ai?.enabled ? aiCard({ date, isToday, nowMin, agg, fb, gs, draft, fields, queue, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) }) : null;
+  // v0.26: カードではなく 1 行。タップでシート(中身は aiCard のまま)
+  const aiOpts = { date, isToday, nowMin, agg, fb, gs, draft, fields, queue, revealNote, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) };
+  const aiBox = store.state.local.ai?.enabled ? el('div.list.freshline', el('button.srow.fresh', { type: 'button', onclick: () => sheet(() => [aiCard(aiOpts)]) },
+    [el('span.lbl', 'AI に頼む'), el('span.grow'), el('span.val', `ショートカット「${store.state.local.ai.shortcutName || ai.DEFAULT_SHORTCUT}」`), el('span.chev', '›')])) : null;
   // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
   const mems = diary.memories(Dy(), date);
   const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
@@ -185,7 +201,7 @@ function aiCard(o) {
       el('p.aireply', text.slice(0, 2000)),
       el('div.row', [el('button.btn', { type: 'button', onclick: close }, '閉じる'), el('button.btn.primary.grow', { type: 'button', onclick: () => {
         const ta = o.fields.note; const cur = (ta.value || '').trim();
-        ta.value = cur ? `${cur}\n${text}` : text; o.draft.note = ta.value; ta.fit(); o.queue(); close(); toast('メモに追記しました');
+        o.revealNote?.(); ta.value = cur ? `${cur}\n${text}` : text; o.draft.note = ta.value; ta.fit(); o.queue(); close(); toast('メモに追記しました');
       } }, 'メモに追記')]),
     ]);
   };
@@ -232,13 +248,13 @@ export function calendarSheet(date, today, onpick) {
 }
 function addMonthsYM(ym, n) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
-/** レポート「今日」の抜粋(ui-report から): 書いてあれば 気分と3行、無ければ「日記を書く ›」(1日の終わり近くだけ) */
+/** レポート「今日」の抜粋(ui-report から): 書いてあれば 満足/気分/疲れ と3行、無ければ「日記を書く ›」(1日の終わり近くだけ) */
 export function diaryExcerptBox(date, ctx, { dayDone = false } = {}) {
   const d = Dy()[date];
   if (!diary.isWritten(d)) return dayDone ? el('button.srow.plain.dlink', { type: 'button', onclick: () => { ctx.go('diary', date); } }, [el('span.lbl', '日記'), el('span.val', 'この日の日記を書く ›')]) : null;
   const line = (label, v) => (v && v.trim() ? el('p', [el('span.fb-title', label), ' ', v.trim()]) : null);
   return el('section.report-lines.fb.dexcerpt', [
-    el('div.row.between', [el('span.fb-title', `日記${d.mood ? `・${diary.moodLabel(d.mood)}` : ''}`), el('button.btn.sm.ghost', { type: 'button', onclick: () => { ctx.go('diary', date); } }, '開く ›')]),
+    el('div.row.between', [el('span.fb-title', `日記${diary.scalesText(d) ? `・${diary.scalesText(d)}` : ''}`), el('button.btn.sm.ghost', { type: 'button', onclick: () => { ctx.go('diary', date); } }, '開く ›')]),
     line('よかったこと', d.good), line('ひっかかったこと', d.hard), line('明日は', d.tomorrow),
   ].filter(Boolean));
 }

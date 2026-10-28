@@ -792,3 +792,41 @@ button.krow{cursor:pointer}
 @media (prefers-reduced-motion:reduce){.kiai-card.lit .kiai-ico{transform:none}}
 button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-visible,input[type=checkbox]:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* ---- v0.26: 整理(Google / Apple のアプリに倣い、線を減らして面で分ける) ---- */
+.card,.hero,.list,.now-card{border-color:transparent}
+.group h2{margin:0 14px 6px}
+.gh{margin:0 0 6px}.gh h2{margin:0 14px}.gh .btn.sm.ghost{min-height:32px;padding:4px 10px;font-size:13px}
+.srow.more .lbl{color:var(--muted)}
+.trow .tmain{padding-right:12px}
+/* タスク画面の「リスト」のタイル(F5-13) */
+.ltiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ltile{display:flex;align-items:center;gap:6px;min-height:60px;padding:12px 10px 12px 14px;border:0;border-radius:var(--radius);background:var(--card);color:var(--fg);font-family:inherit;text-align:left;cursor:pointer;min-width:0}
+.ltile:active{background:var(--accent-bg)}
+.ltile .lt-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ltile .lt-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ltile .lt-sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ltile .lt-n{font-size:20px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.ltile .chev{color:var(--muted);font-size:20px;line-height:1;flex:none}
+/* 日記: 満足 / 気分 / 疲れ の 1 行(F9-1 改) */
+.scales{display:flex;flex-direction:column;margin:-4px 0 2px}
+.scale{display:grid;grid-template-columns:2.6em 1fr auto;align-items:center;gap:6px;min-height:42px}
+.sc-name{font-size:13px;color:var(--muted);font-weight:600}
+.sc-dots{display:flex;justify-content:space-between;gap:2px;max-width:220px}
+.sc-dot{flex:1;display:flex;align-items:center;justify-content:center;border:0;background:none;padding:0;cursor:pointer;min-width:34px;min-height:40px;border-radius:12px}
+.sc-dot i{display:block;width:22px;height:22px;border-radius:50%;background:var(--track);transition:transform .15s;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.sc-dot.m1 i{background:#c9d2e3}.sc-dot.m2 i{background:#b8c9ea}.sc-dot.m3 i{background:#a9d4ea}.sc-dot.m4 i{background:#a4dec4}.sc-dot.m5 i{background:#ffd98a}
+.sc-dot.t1 i{background:#a4dec4}.sc-dot.t2 i{background:#cfe3b0}.sc-dot.t3 i{background:#ece0a6}.sc-dot.t4 i{background:#f3c79b}.sc-dot.t5 i{background:#f0a9a0}
+.sc-dot.on i{transform:scale(1.3);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent)}
+.sc-dot:active i{transform:scale(1.15)}
+.sc-word{font-size:12px;color:var(--fg);min-width:4.5em;text-align:right;white-space:nowrap}
+@media (prefers-color-scheme:dark){.sc-dot.m1 i{background:#4b5566}.sc-dot.m2 i{background:#415a86}.sc-dot.m3 i{background:#3b6f86}.sc-dot.m4 i{background:#3b7d62}.sc-dot.m5 i{background:#9a7a2e}.sc-dot.t1 i{background:#3b7d62}.sc-dot.t2 i{background:#5a7a3e}.sc-dot.t3 i{background:#7a6f30}.sc-dot.t4 i{background:#8a5a2e}.sc-dot.t5 i{background:#8a3f3a}}
+.dfield{margin:10px 0 0}
+.dmore{align-self:flex-start;margin-top:8px;padding-left:0;font-size:13px}
+.seeds-scroll{display:flex;gap:8px;overflow-x:auto;padding:6px 0 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.seeds-scroll::-webkit-scrollbar{display:none}
+.seeds-scroll .chip{flex:none;white-space:nowrap;max-width:280px}
+.sheet .aicard{border:0;padding:0;margin:0;background:none;box-shadow:none}
+/* レポート: タイルの案内 */
+.tile-hint{margin:8px 0 0}
+.btn.inline{display:inline;min-height:0;padding:0 2px;border:0;background:none;color:var(--accent);font-size:inherit;font-weight:600;cursor:pointer}

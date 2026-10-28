@@ -17,8 +17,10 @@ import { exportJSONFile, shouldRemindExport } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
 
+import { FEATURES } from './features.js';
 const LCTX = { uid: store.uid, nowISO: store.nowISO };
 const PX_PER_MIN = 1;
+const HOME_GOALS_MAX = 4; // v0.26: ホームのタスクは 4 行まで(残りは「ほか n 件」でタスク画面へ)
 const STALE_MIN = 180;
 
 const S = () => store.state.data.settings;
@@ -271,7 +273,7 @@ export function renderNow(view, ctx, dateArg = null) {
   } }, [
     head,
     kiaiBox(v, rerender, isToday), // v0.25・F13: 気合(ワンタップ・主役のカードより上。押すだけ)
-    hero?.node, breakdown(v, rerender, { isToday, ctx }), goalsBox(v, rerender, isToday), planBox(v, rerender, isToday, ctx), isToday ? freshLine(e, rerender) : null, // v0.23: きょうの予定
+    hero?.node, breakdown(v, rerender, { isToday, ctx }), goalsBox(v, rerender, isToday, ctx), planBox(v, rerender, isToday, ctx), isToday ? freshLine(e, rerender) : null, // v0.23: きょうの予定
     isToday ? exportLine(e, rerender) : null, // v0.25: 控えの書き出し(30 日)
     isToday ? (() => { const c = diaryCue(e, ctx); return c ? el('div.list.freshline', c) : null; })() : null, // v0.18: 夕方以降「きょうの日記 › 1行だけ書く」
   ].filter(Boolean));
@@ -470,7 +472,7 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
 }
 
 /** タスクと習慣(v0.15.2・旧「きょうの目安」): 期限/毎日/毎週/やりたい の行に種類のタグ。きょうの分(目安)と済んだ分。行のタップで後から記録・▶ でいまから */
-function goalsBox(n, rerender, isToday = true) {
+function goalsBox(n, rerender, isToday = true, ctx = null) {
   const gs = plan.goals(T(), E(), n.date, n.min);
   if (!gs.length) return null;
   const today = isToday ? 'きょう' : 'この日';
@@ -486,7 +488,7 @@ function goalsBox(n, rerender, isToday = true) {
     else { const ago = g.lastDate ? plan.daysBetween(g.lastDate, n.date) : null; meta = `やりたいこと・この7日${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後${fmtMD(g.lastDate)}${ago >= 2 ? `(${ago}日ぶり)` : ''}` : '・まだ手つかず'}`; }
     const streak = (g.kind === 'daily' || g.kind === 'weekly') && t ? plan.habitStreak(t, E(), n.date) : 0; // v0.22・F5-12: 続いた日数(週数)
     if (streak >= 2) meta += `・${streak} ${g.kind === 'weekly' ? '週' : '日'}続いてる`;
-    const span = isToday ? plan.startSpan(g) : null; // v0.22・F5-12: 習慣・やりたいことは区切りつきで始める(「あと ◯分で区切り」)
+    const span = FEATURES.TASK_START && isToday ? plan.startSpan(g) : null; // v0.22・F5-12(v0.26: FEATURES で非表示): 習慣・やりたいことは区切りつきで始める(「あと ◯分で区切り」)
     const pct = g.targetMin ? Math.min(100, Math.round((g.doneMin / g.targetMin) * 100)) : 0;
     const o = isToday ? log.openEntry(E()) : null;
     const rec = o && o.taskId === g.taskId;
@@ -499,10 +501,19 @@ function goalsBox(n, rerender, isToday = true) {
     return el('div.srow.goal', { class: `srow goal${g.done ? ' done' : ''}` }, [
       checkable ? el('button.check', { type: 'button', class: `check${g.done ? ' on' : ''}`, 'aria-label': `${g.name} を${g.done ? '戻す' : '済ませる'}`, onclick: onCheck }, g.done ? '✓' : '') : null,
       el('button.gmain', { type: 'button', 'aria-label': checkable ? `${g.name}` : `${g.name} を後から記録`, onclick: checkable ? onCheck : () => entrySheet(sheetArg, rerender) }, [el('span.gname', [el('span.gtag', { deadline: '期限', todo: '用事', daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: c.color } }), g.name, g.done && !checkable ? el('span.gok', '✓') : null, rec ? el('span.rec-mark', '● 記録中') : null]), el('span.gmeta', meta), g.targetMin ? el('span.meter', el('i', { style: { width: `${g.checked ? 100 : pct}%`, background: c.color } })) : null]),
-      isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : span ? `${g.name} を${span}分だけ始める` : `${g.name} をいまから記録`, title: span ? `${span}分だけ` : 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId, plannedMin: span }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
+      FEATURES.TASK_START && isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : span ? `${g.name} を${span}分だけ始める` : `${g.name} をいまから記録`, title: span ? `${span}分だけ` : 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId, plannedMin: span }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
     ]);
   };
-  return el('section.group', [el('h2', 'タスクと習慣'), el('div.list', gs.map(row))]);
+  // v0.26: まだのもの → 済んだもの、期限/用事 → 習慣 → やりたい の順に 4 行まで。残りは「ほか n 件」でタスク画面へ(▶ は無し・行のタップで後から記録)
+  const order = { deadline: 0, todo: 0, daily: 1, weekly: 1, wish: 2 };
+  const sorted = [...gs].sort((a, b) => ((a.done ? 1 : 0) - (b.done ? 1 : 0)) || ((order[a.kind] ?? 3) - (order[b.kind] ?? 3)));
+  const shown = sorted.slice(0, HOME_GOALS_MAX);
+  const rest = sorted.length - shown.length;
+  const more = rest > 0 ? el('button.srow.plain.more', { type: 'button', onclick: () => ctx?.go('tasks') }, [el('span.lbl', `ほか${rest}件`), el('span.grow'), el('span.val', 'タスクへ'), el('span.chev', '›')]) : null;
+  return el('section.group', [
+    el('div.row.between.gh', [el('h2', `${today}のタスク`), ctx ? el('button.btn.sm.ghost', { type: 'button', onclick: () => ctx.go('tasks') }, 'すべて ›') : null]),
+    el('div.list', [...shown.map(row), more].filter(Boolean)),
+  ]);
 }
 
 /** 鮮度と同期の1行(§4.1) */

@@ -1,6 +1,7 @@
 // merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1)。かんたん追加(名前1行+種類/いつまで/どれくらい/カテゴリのチップ)と一覧。
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
+// v0.26: 画面は 期限切れ / きょう だけ。メモ / 期限までに / 習慣 / やりたいこと / 完了 は「リスト」のタイルから 1 画面はさんで開く(F5-13)。▶ は FEATURES.TASK_START(features.js)で非表示。
 // v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
 import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
@@ -9,6 +10,7 @@ import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMinJa, fmtMD, effect
 import { startCategory, catOf, entrySheet } from './ui-today.js';
 import * as log from './log.js';
 import { autoSync } from './sync.js';
+import { FEATURES } from './features.js';
 
 const T = () => store.state.data.tasks;
 const S = () => store.state.data.settings;
@@ -61,9 +63,9 @@ function segRow(options, value, onpick) {
  * タスク: いつまで(今日/明日/今週/来週/日付…/なし)・繰り返す(なし/毎週)・どれくらい(時間なし〜8時間)。習慣: 毎日/毎週・1日に(1週間に)。やりたいこと: カテゴリだけ。
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
  */
-function quickAdd(today, rerender) {
+function quickAdd(today, rerender, preset = null) {
   const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く(Enter でメモ)', autocomplete: 'off', maxlength: 200 });
-  let type = 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
+  let type = preset || 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
   const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true });
   const dateRow = el('div.row.field', { hidden: true }, [el('span.label', '期限'), dateIn, timeIn]);
@@ -84,7 +86,7 @@ function quickAdd(today, rerender) {
   const catRow = el('div.chips.small', workCats().map((c) => el('button', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': catOf(c.id).color }, onclick: (e) => { cid = c.id; catRow.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } }, [el('span.dot', { style: { background: catOf(c.id).color }, 'aria-hidden': 'true' }), c.name])));
   const catBox = el('div.qrow', { hidden: true }, [el('span.label', 'カテゴリ'), catRow]);
   const memoHint = el('p.muted.small.qhint', 'メモは名前だけ。あとでタップして タスク / 習慣 / やりたいこと にできます。');
-  const typeSeg = segRow(TYPES, type, (k) => {
+  const applyType = (k) => {
     type = k;
     whenBox.hidden = type !== 'task'; dateRow.hidden = type !== 'task' || when !== 'date'; recurBox.hidden = type !== 'task' || when === 'none';
     habitBox.hidden = type !== 'habit';
@@ -93,8 +95,10 @@ function quickAdd(today, rerender) {
     memoHint.hidden = type !== 'memo';
     sizeLabel.textContent = type === 'habit' ? (habitRep === 'daily' ? '1日に' : '1週間に') : 'どれくらい';
     name.placeholder = type === 'memo' ? '思いついたことを書く(Enter でメモ)' : '何をする?(Enter で追加)';
-  });
+  };
+  const typeSeg = segRow(TYPES, type, applyType);
   const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, whenBox, dateRow, recurBox, habitBox, sizeBox, catBox]);
+  applyType(type); // v0.26: 区分の画面ではその種類(習慣など)が選ばれた状態で始まる
   const reveal = () => { more.hidden = false; };
   name.addEventListener('focus', reveal);
   name.addEventListener('input', reveal);
@@ -167,11 +171,20 @@ export function toggleDone(t, rerender) {
   if (rerender) rerender();
 }
 
-export function renderTasks(view, ctx) {
+/** 区分(v0.26・F5-13): タスク画面の「リスト」のタイル。タップで 1 画面はさんで開く(‹ で戻る)。preset は先頭の追加欄の種類 */
+export const LISTS = Object.freeze([
+  { key: 'memo', title: 'メモ', preset: 'memo', empty: '上の欄に書くと、ここに新しい順で並びます。' },
+  { key: 'duties', title: '期限までに', preset: 'task', empty: '期限のあるタスクで、きょうやる分がまだ無いものがここに並びます。' },
+  { key: 'habits', title: '習慣', preset: 'habit', empty: '毎日・毎週の習慣がここに並びます。' },
+  { key: 'wishes', title: 'やりたいこと', preset: 'wish', empty: '時間ができたらやりたいことがここに並びます。' },
+  { key: 'done', title: '完了', preset: null, empty: '完了したタスクはまだありません。' },
+]);
+
+export function renderTasks(view, ctx, listKey = null) {
   clear(view);
   const eff = effectiveDay(S(), dateKey(), minuteOfDay());
   const today = eff.date, nowMin = eff.min;
-  const rerender = (refocus = false) => { renderTasks(view, ctx); if (refocus === true) view.querySelector('.quick input')?.focus(); };
+  const rerender = (refocus = false) => { renderTasks(view, ctx, listKey); if (refocus === true) view.querySelector('.quick input')?.focus(); };
   const tasks = Object.values(T()).filter(alive);
   const gs = plan.goals(T(), E(), today, nowMin);
   const goalOf = Object.fromEntries(gs.map((g) => [g.taskId, g]));
@@ -201,7 +214,7 @@ export function renderTasks(view, ctx) {
     if (t.kind === 'memo') meta.push(t.note ? t.note : 'メモ・タップして種類を決める');
     else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日${fmtMinJa(t.repeat.min)}`, `きょう${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
     else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週${t.repeat.hours}h`, `今週${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
-    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)}日ぶり)` : ''}` : 'まだ手つかず', `この7日${fmtH(g?.doneMin || 0)}`, '▶ で15分だけ');
+    else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)}日ぶり)` : ''}` : 'まだ手つかず', `この7日${fmtH(g?.doneMin || 0)}`, FEATURES.TASK_START ? '▶ で15分だけ' : null);
     else {
       meta.push(fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));
       if (recurTag) meta.push(recurTag);
@@ -226,22 +239,40 @@ export function renderTasks(view, ctx) {
         el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [t.kind === 'memo' ? null : el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null, g?.done && !t.doneAt ? el('span.gok', '✓') : null]),
         el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, meta.filter(Boolean).join('・')),
       ]),
-      t.doneAt || t.noTime || t.kind === 'memo' ? el('span.tplay.blank') : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} をいまから記録`, title: 'いまから記録', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
+      !FEATURES.TASK_START ? null : t.doneAt || t.noTime || t.kind === 'memo' ? el('span.tplay.blank') : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} をいまから記録`, title: 'いまから記録', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
     ]);
   };
   const section = (title, list, empty) => el('section.group', [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
+  const groups = { memo: memos, duties, habits: repeats, wishes, done };
 
+  // v0.26・F5-13: 区分の画面(1 画面はさむ)。‹ でタスクへ。先頭の追加欄はその区分の種類が選ばれている(完了には無い)
+  const list = LISTS.find((l) => l.key === listKey);
+  if (list) {
+    const items = groups[list.key];
+    view.append(...[
+      el('div.today-head', [el('span.head-side', el('button.btn.sm.ghost.back', { type: 'button', onclick: () => ctx.go('tasks') }, '‹ タスク')), el('span.grow'), el('b', list.title), el('span.grow'), el('span.head-side')]),
+      list.preset ? quickAdd(today, rerender, list.preset) : null,
+      el('section.group', el('div.list', items.length ? items.slice(0, list.key === 'done' ? 50 : items.length).map(row) : el('p.muted.small.pad', list.empty))),
+    ].filter(Boolean));
+    return;
+  }
+
+  // 画面は きょうの分(期限切れ・きょうやる分)だけ。ほかは「リスト」のタイル(件数つき)
+  const habitsDone = repeats.filter((t) => goalOf[t.id]?.done).length;
+  const nextDuty = duties.find((t) => t.deadline);
+  const tile = (l) => {
+    const n = groups[l.key].length;
+    const sub = l.key === 'habits' && n ? `きょう${habitsDone}/${n}済` : l.key === 'duties' && nextDuty ? `次の期限${fmtMD(nextDuty.deadline.slice(0, 10))}` : null;
+    return el('button.ltile', { type: 'button', 'aria-label': `${l.title}(${n}件)を開く`, onclick: () => ctx.go('tasks', l.key) }, [
+      el('span.lt-main', [el('span.lt-name', l.title), sub ? el('span.lt-sub', sub) : null]), el('b.lt-n', String(n)), el('span.chev', '›'),
+    ]);
+  };
   view.append(...[
     el('h1', 'タスク'),
     quickAdd(today, rerender),
-    memos.length ? section(`メモ(${memos.length})`, memos, '') : null, // v0.22・F5-11
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
-    section('きょうやる分', todayList, '期限から逆算して、きょうやる分があるものはありません(用事は期限が明日までのものをここに出します)。'),
-    duties.length ? section('期限までに', duties, '') : null, // v0.24.2: 空の区分は出さない
-    repeats.length ? section('習慣', repeats, '') : null,
-    wishes.length ? section('やりたいこと', wishes, '') : null,
-    !tasks.some((t) => !t.doneAt) ? el('p.muted.small.pad', '上の欄に書くと、ここに並びます。種類(メモ / タスク / 習慣 / やりたいこと)はあとからでも変えられます。') : null,
-    el('details.group', [el('summary.muted.small', `完了(${done.length}件)`), el('div.list', done.slice(0, 30).map(row))]),
+    section('きょう', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、きょうやる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(メモ / タスク / 習慣 / やりたいこと)はあとからでも変えられます。'),
+    el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),
   ].filter(Boolean));
 }
 const byDeadline = (a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0);
