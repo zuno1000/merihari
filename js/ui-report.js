@@ -108,6 +108,26 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
   ];
 }
 
+/**
+ * ふり返りタブの「きょうはどうだった」(v0.27.1・案 A・F9-7): レポート「今日」の見出し・理由・タイルだけを 1 枚のカードに。
+ * 「レポートをすべて見る ›」で従来のシート(円・予定と実際・ふり返り・くわしく)。記録が無く見出しも無い日は出さない。
+ */
+export function dayTop(date, nowMin) {
+  const d = store.state.data;
+  const r = d.reports[date]?.finalizedAt ? d.reports[date]
+    : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks });
+  const fb = r.feedback || report.dayFeedback(report.aggregate({ entries: d.entries, date, nowMin, settings: d.settings }), { tasks: d.tasks, entries: d.entries, date, settings: d.settings, nowMin, planBlocks: d.planBlocks });
+  const head = fb.head || (fb.verdict ? fb.verdict.split('(')[0] : null) || r.positive?.[0] || null;
+  const sub = fb.head ? (fb.reasons || []).join('・') : (fb.verdict && fb.verdict.includes('(') ? fb.verdict.slice(fb.verdict.indexOf('(') + 1).replace(/\)$/, '') : '');
+  if (!(r.loggedMin > 0) && !head) return null;
+  return el('section.card.rtop', [
+    head ? el('p.rep-lead', head) : null,
+    sub ? el('p.rep-sub', sub) : null,
+    glance(r),
+    el('button.srow.plain.rlink', { type: 'button', onclick: () => reportSheet(date, 'day') }, [el('span.lbl', 'レポートをすべて見る'), el('span.grow'), el('span.val', `記録${fmtMin(r.loggedMin || 0)}`), el('span.chev', '›')]),
+  ].filter(Boolean));
+}
+
 // ================= 期間(7日・30日・すべて) =================
 function periodView(range, date, nowMin) {
   const d = store.state.data;

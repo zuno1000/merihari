@@ -866,3 +866,12 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 @media (prefers-color-scheme:dark){.cal-cell.m1{background:#4b5566}.cal-cell.m2{background:#415a86}.cal-cell.m3{background:#3b6f86}.cal-cell.m4{background:#3b7d62}.cal-cell.m5{background:#9a7a2e}}
 .cal-legend{margin:2px 0 0;text-align:center;font-size:11px}
 .tl-nav .calmode{min-width:36px;font-size:13px;font-weight:600}
+
+/* ---- v0.27.1・F9-7: ふり返りの流れ ---- */
+.rtop{padding:12px 14px 0}
+.rtop .rep-lead{font-size:16px;font-weight:600;margin:0 0 2px;line-height:1.45}
+.rtop .rep-sub{margin:0 0 10px}
+.rtop .glance{margin:0 0 6px}
+.rtop .srow.rlink{margin:0 -14px;width:calc(100% + 28px);border-top:1px solid var(--line);min-height:44px}
+.dtomorrow{padding-top:6px}
+.dtomorrow .dfield{margin-top:4px}

@@ -11,7 +11,8 @@ import * as diary from './diary.js';
 import * as kiaiMod from './kiai.js';
 import * as ai from './ai.js';
 import * as sync from './sync.js';
-import { dateKey, minuteOfDay, windowFor, fmtMD, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
+import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
+import { dateKey, minuteOfDay, windowFor, fmtMD, fmtMin, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
 
 const S = () => store.state.data.settings;
 const E = () => store.state.data.entries;
@@ -119,6 +120,7 @@ export function renderDiary(view, ctx, dateArg = null) {
 
   // v0.26: 状態(満足 / 気分 / 疲れ)を 1 行ずつ → 3 行 → メモ(空なら「＋ メモ」に畳む) → 材料(横 1 列)
   const noteField = field('note', 'メモ', '自由に');
+  const tomorrowField = field('tomorrow', isToday ? '明日は' : '次の日は', 'ひとつだけ');
   const noteBtn = el('button.btn.sm.ghost.dmore', { type: 'button', onclick: () => revealNote(true) }, '＋ メモ');
   const revealNote = (focus = false) => { noteField.hidden = false; noteBtn.hidden = true; if (focus) fields.note.focus(); };
   if (draft.note && draft.note.trim()) revealNote(); else noteField.hidden = true;
@@ -126,7 +128,7 @@ export function renderDiary(view, ctx, dateArg = null) {
     el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))),
     field('good', 'よかったこと', isToday ? 'きょう、よかったこと' : 'よかったこと'),
     field('hard', 'ひっかかったこと', '気づき。なければ空でいい'),
-    field('tomorrow', '明日は', 'ひとつだけ'),
+    isToday ? null : tomorrowField, // v0.27.1: きょうは「明日を決める」の節へ。過去の日はこのカードの中
     noteField, noteBtn,
     seedChips,
   ].filter(Boolean));
@@ -162,7 +164,28 @@ export function renderDiary(view, ctx, dateArg = null) {
   // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
   const mems = diary.memories(Dy(), date);
   const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
-  view.append(...[el('h1', '日記'), head, card, aiBox, memBox, listBox].filter(Boolean));
+  // v0.27.1・案 A・F9-7: ふり返りの流れ=①きょうはどうだった(レポートの見出しとタイル)→ ②気持ちを残す(日記)→ ③明日を決める(明日は・明日の予定・近い期限)
+  const top = dayTop(date, nowMin);
+  const topSec = top ? el('section.group', [el('h2', isToday ? 'きょうはどうだった' : 'この日はどうだった'), top]) : null;
+  const cardSec = el('section.group', [el('h2', '気持ちを残す'), card]);
+  let tomorrowSec = null;
+  if (isToday) {
+    const tmr = addDays(date, 1);
+    const tmrPlans = plan.planBlocksOf(store.state.data.planBlocks || {}, tmr).length;
+    const near = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) > date && t.deadline.slice(0, 10) <= addDays(date, 7))
+      .sort((a, b) => (a.deadline < b.deadline ? -1 : 1)).slice(0, 5);
+    tomorrowSec = el('section.group', [
+      el('h2', '明日を決める'),
+      el('section.card.dcard.dtomorrow', [tomorrowField]),
+      el('div.list', [
+        el('button.srow', { type: 'button', onclick: () => { commit(); ctx.go('timeline', tmr); } }, [el('span.lbl', '明日の予定'), el('span.grow'), el('span.val', tmrPlans ? `${tmrPlans}件・カレンダーで直す` : 'カレンダーで置く'), el('span.chev', '›')]),
+        ...near.map((t) => el('button.srow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
+          el('span.lbl', t.name), el('span.grow'),
+          el('span.val', `${t.deadline.slice(0, 10) === tmr ? '明日' : fmtMD(t.deadline.slice(0, 10))}が期限${t.noTime ? '' : `・残り${fmtMin(plan.remainingMin(t, E()))}`}`), el('span.chev', '›')])),
+      ]),
+    ]);
+  }
+  view.append(...[el('h1', 'ふり返り'), head, topSec, cardSec, tomorrowSec, aiBox, memBox, listBox].filter(Boolean));
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
 }
 
@@ -264,5 +287,5 @@ export function diaryCue(n, ctx) {
   const W = windowFor(S(), n.date);
   const evening = !W || n.min >= W.end - 120;
   if (!evening || diary.isWritten(Dy()[n.date])) return null;
-  return el('button.srow.fresh.dcue', { type: 'button', onclick: () => ctx.go('diary') }, [el('span.lbl', 'きょうの日記'), el('span.grow'), el('span.val', '1行だけ書く'), el('span.chev', '›')]);
+  return el('button.srow.fresh.dcue', { type: 'button', onclick: () => ctx.go('diary') }, [el('span.lbl', 'きょうをふり返る'), el('span.grow'), el('span.val', '1 分で'), el('span.chev', '›')]);
 }
