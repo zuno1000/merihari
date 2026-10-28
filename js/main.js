@@ -23,7 +23,7 @@ import * as ai from './ai.js';
 
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
-export const APP_VERSION = '0.28.3';
+export const APP_VERSION = '0.28.4';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -140,8 +140,14 @@ document.addEventListener('visibilitychange', () => {
 
 // Service Worker と更新確認(F8-2)
 let reg = null;
+let reloading = false;
+/** 新しい版の SW が有効になった(= sw.js の CACHE が変わって一式を先読みし終えた)ら、この画面を一度だけ読み込み直す(v0.28.4)。初回の登録(controller が無かった)では何もしない */
+const reloadForUpdate = () => { if (reloading) return; reloading = true; toast('新しい版に更新します…'); setTimeout(() => location.reload(), 400); };
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then((r) => { reg = r; }).catch((e) => console.warn('SW 登録失敗', e));
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'activated' && hadController && e.data.cache !== `merihari-v${APP_VERSION}`) reloadForUpdate(); });
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reloadForUpdate(); });
 }
 async function checkUpdate() {
   if (!reg) { toast('この環境では更新確認できません'); return; }
@@ -150,9 +156,9 @@ async function checkUpdate() {
     const r = await reg.update();
     const w = r.installing || r.waiting;
     if (!w) { toast(`最新です(v${APP_VERSION})`); return; }
-    toast('更新しています…');
-    w.addEventListener('statechange', () => { if (w.state === 'activated') location.reload(); });
-    if (w.state === 'activated') location.reload();
+    toast('新しい版を取り込んでいます…');
+    w.addEventListener('statechange', () => { if (w.state === 'activated') reloadForUpdate(); });
+    if (w.state === 'activated') reloadForUpdate();
   } catch (e) { toast('更新確認に失敗: ' + e.message); }
 }
 

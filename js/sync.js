@@ -344,7 +344,7 @@ export function autoSyncDecision(s) {
 const autoState = () => ({ connected: isConnected(), hasToken: !!savedToken(), hasPass: !!getPass(), online: navigator.onLine, now: Date.now(), lastSyncAt: store.state.local.lastSyncAt || 0, pending: !!store.state.local.pendingSync });
 
 let gesturePending = false;
-const say = (r, auto) => { if (r === 'ok') toast('他の端末の記録を取り込みました'); else if (!auto) toast(r === 'same' ? '同期しました(この端末が最新)' : '同期を見送りました'); };
+const say = (r, auto) => { if (r === 'ok') toast('他の端末の記録を取り込みました'); else if (!auto) toast(r === 'same' ? '同期済み・この端末が最新' : '同期を見送りました'); };
 /** 自然なタップに乗せる同期(F7-3)。未同期の変更があり、鍵が揃っていて、前回から 5 分以上なら静かに実行 */
 export function autoSync() {
   const st = autoState();

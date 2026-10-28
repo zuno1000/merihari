@@ -83,6 +83,7 @@ ul.news{margin:6px 0 0;padding-left:1.2em;font-size:13px;color:var(--muted)}
 .sheet .row{margin-top:14px}
 #toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translate(-50%,8px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30;max-width:90vw}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#toast{white-space:nowrap;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis} /* v0.28.4: 1 行に収める(「新)」だけ折り返していた) */
 
 /* ---- 今日: ヒーロー・チップ・タイムライン(Phase 1) ---- */
 .hero.recording{border-color:var(--accent)}
