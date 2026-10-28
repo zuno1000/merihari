@@ -8,6 +8,7 @@ import * as google from './google.js';
 import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import * as report from './report.js';
+import * as weather from './weather.js';
 
 const S = () => store.state.data.settings;
 const DAYS7 = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -51,6 +52,7 @@ const summary = {
   palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット${(s.palettes || []).length}件`; },
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
+  weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに出す・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); return [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; },
 };
 
@@ -363,6 +365,43 @@ function sectionGoogle(rerender) {
 }
 
 /**
+ * 天気と服装(v0.29・F15・任意): 地域(Open-Meteo の地名検索 → 緯度経度を保存・5 つまで)と「ホームに出す」。地域は設定(同期する)、取得した天気は端末内(local.weatherCache・1 時間)。
+ * 接続先は api.open-meteo.com と geocoding-api.open-meteo.com だけ(CSP にもこの 2 つだけ)。端末の位置情報は使わない。
+ */
+function sectionWeather(rerender) {
+  const s = S();
+  s.weather = store.normalizeWeather(s.weather);
+  const w = s.weather;
+  const save = () => { s.weather = store.normalizeWeather(s.weather); store.touchSettings(); };
+  const results = el('div.list.wx-results', { hidden: true });
+  const q = el('input.text', { type: 'text', placeholder: '地名(例: 新宿、Kyoto)', maxlength: 60, autocomplete: 'off', 'aria-label': '地名で検索' });
+  const search = async () => {
+    const name = q.value.trim(); if (!name) { toast('地名を入れてください'); return; }
+    if (!navigator.onLine) { toast('オフラインです'); return; }
+    clear(results); results.hidden = false; results.append(el('div.srow.plain', el('span.val.left', '検索中…')));
+    try {
+      const list = await weather.searchPlace(name);
+      clear(results);
+      if (!list.length) { results.append(el('div.srow.plain', el('span.val.left', '見つかりませんでした'))); return; }
+      for (const r of list) results.append(el('button.srow', { type: 'button', onclick: () => {
+        if (w.regions.length >= weather.MAX_REGIONS) { toast(`地域は ${weather.MAX_REGIONS} つまでです`); return; }
+        if (w.regions.some((x) => x.lat === r.lat && x.lon === r.lon)) { toast('もう登録されています'); return; }
+        w.regions.push({ ...r, id: 'w_' + store.uid().slice(0, 8) }); w.enabled = true; save(); rerender(); toast(`${r.name} を登録しました`);
+      } }, [el('span.lbl', r.name), el('span.val', `${r.lat}, ${r.lon}`), el('span.chev', { 'aria-hidden': 'true' }, '＋')]));
+    } catch (e) { clear(results); results.append(el('div.srow.plain', el('span.val.left', '検索できませんでした(しばらくして もう一度)'))); }
+  };
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+  const rows = w.regions.map((r) => el('div.srow.plain.wx-reg', [el('span.lbl', r.name), el('span.val', `${r.lat}, ${r.lon}`), el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${r.name} を消す`, onclick: () => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); } }, '消す')]));
+  return card('天気と服装', '任意の機能です。地域を登録して「ホームに出す」にすると、ホームの日付の下に 地域ごとに 1 行(天気・最高 / 最低気温・降水確率)と服装の一言(ルールベース)が出ます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに出す')]),
+    el('h3.help-h', `地域(${w.regions.length} / ${weather.MAX_REGIONS})`),
+    rows.length ? el('div.list', rows) : el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
+    el('div.row.field', { style: { marginTop: '10px' } }, [q, el('button.btn', { type: 'button', onclick: search }, '検索')]),
+    results,
+    el('p.muted.small', '安全について: 接続先は api.open-meteo.com(予報)と geocoding-api.open-meteo.com(地名検索)の 2 つだけで、端末の位置情報(GPS)は使いません。送るのは登録した地域の緯度経度だけ、受け取るのは数値と天気コードだけです。地域の名前と座標は設定として同期し、取得した天気はこの端末に 1 時間だけ置きます。'));
+}
+
+/**
  * AI・ショートカット(v0.21・F11): 端末ごとの任意機能(local.ai・同期しない)。アプリ内に AI は置かず、iOS ショートカットの「モデルを使用」(Apple Intelligence・端末内モデル)に文を渡す。
  * ここで有効にすると日記に「AI に頼む」のカードが出る。ショートカットの作り方(3アクション)もここに。
  */
@@ -425,6 +464,8 @@ function sectionHelp() {
     li(['カレンダー: free/busy(予定の有無)だけ。タイトル・場所は取得せず、取得した予定は端末内だけに置きます。タイムラインでは記録の無いところにだけ薄く描き(記録したら消えます)、過去なら「予定の時間は?」で記録でき、そのとき選んだカテゴリを同じ曜日・時刻の予定の候補として覚えます。', 'Drive: アプリ専用領域に、端末でパスフレーズから鍵を作って暗号化したファイルを1つ置きます。パスフレーズはブラウザを閉じると消えます。', '同期の決まり: 記録とタスクは1件ごとに新しい方。カテゴリ・種別・配色セットも1つごとに統合します(片方の端末にしか無いものは消えず、両方にあれば最後に変えた方)。初期設定だけの端末と同期しても、元の端末のカテゴリは消えません。設定 › データ に「同期前の設定に戻す」があり、同期でカテゴリなどが変わったときは直前の設定を1つ控えています。', '顔認証 / パスキー(任意): 設定 › Google で有効にすると、この端末のパスキーの中の秘密でパスフレーズを包んで保存し、次回からは Face ID・指紋・Windows Hello などで解錠して同期します。パスフレーズそのものは保存しません。', '自動同期: アプリを開いたとき(と戻ったとき)、鍵があれば静かに同期して他の端末の記録を取り込みます。鍵がなければ最初のタップで Google の確認とパスフレーズ(またはパスキー)を聞いてから同期します。そのあとは記録やタブ切替に乗せて、前回から5分以上なら静かに行います。', 'アップデート(v0.28.4): 新しい版は開いたときに自動で取り込み、「新しい版に更新します…」と出て一度だけ読み込み直します。すぐ確かめたいときは 設定 の先頭「アップデートを確認」。', '手で同期するときは 設定 の先頭「いますぐ同期」(v0.28)。未同期の変更があると、ホーム右上の歯車に赤い点が付き、設定の先頭にも出ます(予定が古いとき・控えの書き出しの時期も同じ場所)。']),
     h('AI(ショートカット・任意)'),
     li(['設定 › AI で有効にすると、日記の下に「AI に頼む ›」の行が出ます(タップでシートが開きます)。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の3行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を押すと、読んでから日記のメモに追記できます。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
+    h('天気と服装(任意・v0.29)'),
+    li(['設定 › 天気と服装 で地名を検索して地域を登録(5 つまで)し「ホームに出す」にすると、ホームの日付の下に地域ごとに 1 行(天気・最高 / 最低気温・降水確率)と、服装の一言(最高気温と降水確率からのルール: 半袖 / 長袖 / 上着 / コート、朝晩の差、傘)が出ます。', 'データは Open-Meteo(無料・キー不要)。接続先はその 2 つのドメインだけで、端末の位置情報は使いません。取れないとき(オフライン・遅い)は何も出さず、起動も待たせません。取得した天気はこの端末に 1 時間、地域は設定として同期します。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),
@@ -443,6 +484,7 @@ const SECTIONS = {
   tiles: { title: 'レポートのタイル', build: (re) => sectionTiles(re) },
   money: { title: 'お金', build: (re) => sectionMoney(re) },
   ai: { title: 'AI(ショートカット)', build: (re) => sectionAI(re) },
+  weather: { title: '天気と服装', build: (re) => sectionWeather(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -561,7 +603,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('1日の目標', summary.goals(), open('goals')),
       srow('レポートのタイル', summary.tiles(), open('tiles')),
     ]),
-    group('お金・日記', [srow('お金', summary.money(), open('money')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
+    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後の書き出し ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {

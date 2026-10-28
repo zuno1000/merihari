@@ -13,6 +13,7 @@ import * as sync from './sync.js';
 import * as money from './money.js';
 import * as kiai from './kiai.js';
 import * as calendar from './calendar.js';
+import * as weather from './weather.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -256,6 +257,36 @@ export function calButton(onclick) {
   return el('button.btn.sm.ghost.gear.cal', { type: 'button', 'aria-label': 'カレンダーで日を選ぶ', title: 'カレンダー', onclick }, CAL_ICON());
 }
 
+/**
+ * 天気と服装(v0.29・F15・任意): 設定 › 天気 で地域を登録して有効にした人だけ。地域ごとに 1 行(名前・天気・最高 / 最低・降水確率)+服装の一言(ルールベース)。
+ * 取得した天気は local.weatherCache[regionId] = { at, data } に 1 時間。古ければ描いたあとに取りに行き、届いたら textContent を差し替える(起動を待たせない)。失敗・遅延・オフラインは黙る(行は控えがあるときだけ)。
+ */
+const wxInflight = new Set();
+function weatherBox() {
+  const w = S().weather;
+  if (!w || !w.enabled || !Array.isArray(w.regions) || !w.regions.length) return null;
+  const local = store.state.local;
+  const cache = () => local.weatherCache || {};
+  const box = el('section.wx', { 'aria-label': '天気と服装' });
+  const rowOf = (r, d) => el('div.wx-row', { dataset: { id: r.id } }, [el('span.wx-name', r.name), el('span.wx-main', weather.lineText(d)), el('span.wx-cloth', weather.clothing(d))]);
+  for (const r of w.regions) {
+    const c = cache()[r.id];
+    if (c && c.data) box.append(rowOf(r, c.data));
+    if (weather.isFresh(c, Date.now()) || wxInflight.has(r.id) || !navigator.onLine) continue;
+    wxInflight.add(r.id);
+    weather.fetchForecast(r.lat, r.lon).then((d) => {
+      if (!d) return;
+      local.weatherCache = { ...cache(), [r.id]: { at: Date.now(), data: d } }; store.saveLocal();
+      if (!box.isConnected) return;
+      const old = box.querySelector(`.wx-row[data-id="${CSS.escape(r.id)}"]`);
+      if (old) old.replaceWith(rowOf(r, d)); else box.append(rowOf(r, d));
+      box.hidden = false;
+    }).catch(() => { /* 黙る(§2 の注) */ }).finally(() => wxInflight.delete(r.id));
+  }
+  box.hidden = !box.childElementCount;
+  return box;
+}
+
 // ================= ホーム =================
 /**
  * ホーム(v0.28・実機 FB ①): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
@@ -292,6 +323,7 @@ export function renderNow(view, ctx, dateArg = null) {
   } }, [
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
+    isToday ? weatherBox() : null, // v0.29・F15: 天気と服装(設定で有効にした人だけ・失敗は黙る)
     hero?.node, breakdown(v, rerender, { isToday, ctx }),
   ].filter(Boolean));
   view.append(home);

@@ -23,7 +23,8 @@ import * as ai from './ai.js';
 
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
-export const APP_VERSION = '0.28.4';
+import * as weather from './weather.js';
+export const APP_VERSION = '0.29.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -168,6 +169,7 @@ if (ui.DEV) window.M = {
   loadNews,
   features: { FEATURES },
   calendar,
+  weather: { weatherLabel: weather.weatherLabel, parseForecast: weather.parseForecast, clothing: weather.clothing, lineText: weather.lineText, isFresh: weather.isFresh, normalizeRegion: weather.normalizeRegion, parsePlaces: weather.parsePlaces, TTL_MS: weather.TTL_MS, MAX_REGIONS: weather.MAX_REGIONS, FORECAST_URL: weather.FORECAST_URL, GEO_URL: weather.GEO_URL },
   kiai,
   time,
   log,
@@ -180,5 +182,5 @@ if (ui.DEV) window.M = {
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
   google: { busyIntervalsForDate: google.busyIntervalsForDate },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
+  store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, normalizeWeather: store.normalizeWeather, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole },
 };

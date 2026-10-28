@@ -930,3 +930,14 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .hgrid .hs{flex-wrap:nowrap}
 /* v0.28.3: ふり返りの保存の印は右端(hgrid の右の列は row-reverse なので、文字は右端に寄る) */
 .hgrid .hs.r .dsave{text-align:right;padding-right:4px}
+
+/* ---- v0.29・F15: 天気と服装(ホームの 1 行・設定の検索結果) ---- */
+.wx{display:flex;flex-direction:column;gap:4px;margin:0 2px 10px}
+.wx-row{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:baseline;font-size:13px;line-height:1.45}
+.wx-row .wx-name{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:9em}
+.wx-row .wx-main{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wx-row .wx-cloth{grid-column:2;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wx-row .wx-cloth:empty{display:none}
+.wx-results{margin-top:8px}
+.wx-results .srow .chev{color:var(--accent);font-size:18px}
+.wx-reg .btn.sm{flex:none}
