@@ -931,13 +931,33 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* v0.28.3: ふり返りの保存の印は右端(hgrid の右の列は row-reverse なので、文字は右端に寄る) */
 .hgrid .hs.r .dsave{text-align:right;padding-right:4px}
 
-/* ---- v0.29・F15: 天気と服装(ホームの 1 行・設定の検索結果) ---- */
-.wx{display:flex;flex-direction:column;gap:4px;margin:0 2px 10px}
-.wx-row{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:baseline;font-size:13px;line-height:1.45}
-.wx-row .wx-name{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:9em}
-.wx-row .wx-main{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wx-row .wx-cloth{grid-column:2;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wx-row .wx-cloth:empty{display:none}
+/* ---- v0.29・F15 / v0.29.1: 天気(ホーム右上の印+天気アプリ風のシート)・設定の検索結果 ---- */
+.wx-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.today-head .wxbtn{padding:4px;min-width:36px}
+.wx-h{margin:0 0 10px}
+.wxcards{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
+.wxcard{border-radius:16px;padding:14px 16px 12px;background:var(--bg);display:flex;flex-direction:column;gap:6px;--wx:var(--muted)}
+.wxcard .wx-name{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wxcard .wx-main{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:14px;align-items:center}
+.wxcard .wx-big{grid-row:1 / span 2;width:56px;height:56px;fill:none;stroke:var(--wx);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.wxcard .wx-temps{display:flex;align-items:baseline;gap:6px;line-height:1}
+.wxcard .wx-hi{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.wxcard .wx-lo{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wxcard .wx-label{font-size:14px;color:var(--fg);margin-top:2px}
+.wxchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.wxchip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 10px;font-size:12px;background:var(--card);color:var(--fg)}
+.wxchip.pop{color:var(--accent);font-weight:600}
+.wx-drop{display:inline-block;width:7px;height:9px;border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;background:var(--accent);transform:rotate(0deg)}
+.wx-foot{margin:0}
+.wx-actions{margin:0 0 10px}
+.wxcard.k-sun{background:color-mix(in srgb,#f6b73c 16%,var(--bg));--wx:#e09a1a}
+.wxcard.k-partly{background:color-mix(in srgb,#f6b73c 10%,var(--bg));--wx:#c98f2a}
+.wxcard.k-cloud{background:color-mix(in srgb,#8a94a6 14%,var(--bg));--wx:#6b7686}
+.wxcard.k-fog{background:color-mix(in srgb,#8a94a6 10%,var(--bg));--wx:#7a8494}
+.wxcard.k-rain{background:color-mix(in srgb,#3b82c4 14%,var(--bg));--wx:#2f6fc0}
+.wxcard.k-snow{background:color-mix(in srgb,#7fb0e8 16%,var(--bg));--wx:#5b8fc9}
+.wxcard.k-thunder{background:color-mix(in srgb,#6b5bd6 14%,var(--bg));--wx:#5b4bc0}
+@media (prefers-color-scheme:dark){.wxcard.k-sun{--wx:#f2b84b}.wxcard.k-partly{--wx:#e0aa4a}.wxcard.k-cloud{--wx:#aab3c2}.wxcard.k-fog{--wx:#aab3c2}.wxcard.k-rain{--wx:#7fb0e8}.wxcard.k-snow{--wx:#a9cdf2}.wxcard.k-thunder{--wx:#a69cf0}}
 .wx-results{margin-top:8px}
 .wx-results .srow .chev{color:var(--accent);font-size:18px}
 .wx-reg .btn.sm{flex:none}

@@ -52,7 +52,7 @@ const summary = {
   palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット${(s.palettes || []).length}件`; },
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
-  weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに出す・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
+  weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); return [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; },
 };
 
@@ -392,8 +392,8 @@ function sectionWeather(rerender) {
   };
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
   const rows = w.regions.map((r) => el('div.srow.plain.wx-reg', [el('span.lbl', r.name), el('span.val', `${r.lat}, ${r.lon}`), el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${r.name} を消す`, onclick: () => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); } }, '消す')]));
-  return card('天気と服装', '任意の機能です。地域を登録して「ホームに出す」にすると、ホームの日付の下に 地域ごとに 1 行(天気・最高 / 最低気温・降水確率)と服装の一言(ルールベース)が出ます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに出す')]),
+  return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに天気の印を出す')]),
     el('h3.help-h', `地域(${w.regions.length} / ${weather.MAX_REGIONS})`),
     rows.length ? el('div.list', rows) : el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
     el('div.row.field', { style: { marginTop: '10px' } }, [q, el('button.btn', { type: 'button', onclick: search }, '検索')]),
@@ -465,7 +465,7 @@ function sectionHelp() {
     h('AI(ショートカット・任意)'),
     li(['設定 › AI で有効にすると、日記の下に「AI に頼む ›」の行が出ます(タップでシートが開きます)。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の3行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を押すと、読んでから日記のメモに追記できます。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
     h('天気と服装(任意・v0.29)'),
-    li(['設定 › 天気と服装 で地名を検索して地域を登録(5 つまで)し「ホームに出す」にすると、ホームの日付の下に地域ごとに 1 行(天気・最高 / 最低気温・降水確率)と、服装の一言(最高気温と降水確率からのルール: 半袖 / 長袖 / 上着 / コート、朝晩の差、傘)が出ます。', 'データは Open-Meteo(無料・キー不要)。接続先はその 2 つのドメインだけで、端末の位置情報は使いません。取れないとき(オフライン・遅い)は何も出さず、起動も待たせません。取得した天気はこの端末に 1 時間、地域は設定として同期します。']),
+    li(['設定 › 天気と服装 で地名を検索して地域を登録(5 つまで)し「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印(先頭の地域の天気の絵)が出ます。タップすると地域ごとの札(大きな絵・最高 / 最低気温・天気・降水確率・服装のチップ: 半袖 / 長袖 / 上着 / コート、朝晩の差、傘)。「更新」で取り直し、「地域 ›」で設定へ(v0.29.1)。', 'データは Open-Meteo(無料・キー不要)。接続先はその 2 つのドメインだけで、端末の位置情報は使いません。取れないとき(オフライン・遅い)は何も出さず、起動も待たせません。取得した天気はこの端末に 1 時間、地域は設定として同期します。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),

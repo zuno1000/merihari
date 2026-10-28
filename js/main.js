@@ -24,7 +24,7 @@ import * as ai from './ai.js';
 import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
-export const APP_VERSION = '0.29.0';
+export const APP_VERSION = '0.29.1';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -169,7 +169,7 @@ if (ui.DEV) window.M = {
   loadNews,
   features: { FEATURES },
   calendar,
-  weather: { weatherLabel: weather.weatherLabel, parseForecast: weather.parseForecast, clothing: weather.clothing, lineText: weather.lineText, isFresh: weather.isFresh, normalizeRegion: weather.normalizeRegion, parsePlaces: weather.parsePlaces, TTL_MS: weather.TTL_MS, MAX_REGIONS: weather.MAX_REGIONS, FORECAST_URL: weather.FORECAST_URL, GEO_URL: weather.GEO_URL },
+  weather: { weatherLabel: weather.weatherLabel, iconKey: weather.iconKey, parseForecast: weather.parseForecast, clothing: weather.clothing, lineText: weather.lineText, isFresh: weather.isFresh, normalizeRegion: weather.normalizeRegion, parsePlaces: weather.parsePlaces, TTL_MS: weather.TTL_MS, MAX_REGIONS: weather.MAX_REGIONS, FORECAST_URL: weather.FORECAST_URL, GEO_URL: weather.GEO_URL },
   kiai,
   time,
   log,

@@ -891,6 +891,7 @@ document.getElementById('app').addEventListener('load', async () => {
     {
       const X = M.weather;
       ok(X && X.FORECAST_URL.startsWith('https://api.open-meteo.com/') && X.GEO_URL.startsWith('https://geocoding-api.open-meteo.com/') && X.MAX_REGIONS === 5 && X.TTL_MS === 3600000, 'weather: 接続先は Open-Meteo の 2 つだけ・地域は 5 つまで・控えは 1 時間');
+      ok(X.iconKey(0) === 'sun' && X.iconKey(2) === 'partly' && X.iconKey(3) === 'cloud' && X.iconKey(48) === 'fog' && X.iconKey(55) === 'rain' && X.iconKey(81) === 'rain' && X.iconKey(75) === 'snow' && X.iconKey(86) === 'snow' && X.iconKey(96) === 'thunder' && X.iconKey(42) === 'none' && X.iconKey(null) === 'none', 'iconKey(v0.29.1): 天気コード → 絵の種類(知らないコードは none)');
       ok(X.weatherLabel(0) === '快晴' && X.weatherLabel(3) === 'くもり' && X.weatherLabel(63) === '雨' && X.weatherLabel(95) === '雷雨' && X.weatherLabel(42) === null && X.weatherLabel('1') === null, 'weatherLabel: 既知の WMO コードだけ日本語(知らないコード・文字列は null)');
       const pf = X.parseForecast({ daily: { weather_code: [61], temperature_2m_max: [18.4], temperature_2m_min: [9.6], precipitation_probability_max: [70] } });
       ok(pf && pf.code === 61 && pf.label === '雨' && pf.tmax === 18 && pf.tmin === 10 && pf.pop === 70, 'parseForecast: daily の [0] を数値で取り出して丸める');

@@ -19,6 +19,18 @@ export function weatherLabel(code) {
   const hit = CODES.find(([ids]) => ids.includes(code));
   return hit ? hit[1] : null;
 }
+/** 天気コード → 絵の種類(v0.29.1・ホームの印とシートの大きな絵): sun / partly / cloud / fog / rain / snow / thunder。知らない・無いコードは 'none' */
+export function iconKey(code) {
+  if (!Number.isInteger(code)) return 'none';
+  if (code === 0 || code === 1) return 'sun';
+  if (code === 2) return 'partly';
+  if (code === 3) return 'cloud';
+  if (code === 45 || code === 48) return 'fog';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+  if (code >= 95 && code <= 99) return 'thunder';
+  return 'none';
+}
 const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : null);
 /**
  * 予報の応答から今日の分だけを数値で取り出す(純関数): daily.weather_code / temperature_2m_max / temperature_2m_min / precipitation_probability_max の [0]。

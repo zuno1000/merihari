@@ -258,33 +258,92 @@ export function calButton(onclick) {
 }
 
 /**
- * 天気と服装(v0.29・F15・任意): 設定 › 天気 で地域を登録して有効にした人だけ。地域ごとに 1 行(名前・天気・最高 / 最低・降水確率)+服装の一言(ルールベース)。
- * 取得した天気は local.weatherCache[regionId] = { at, data } に 1 時間。古ければ描いたあとに取りに行き、届いたら textContent を差し替える(起動を待たせない)。失敗・遅延・オフラインは黙る(行は控えがあるときだけ)。
+ * 天気と服装(v0.29・F15・任意。v0.29.1: ホームには出さず、歯車の左の「天気の印」をタップでシート): 設定 › 天気 で地域を登録して有効にした人だけ。
+ * 取得した天気は local.weatherCache[regionId] = { at, data } に 1 時間。シートは控えを即描き、古ければ取りに行って届いた札だけ差し替える。失敗・遅延・オフラインは「いまは取れません」だけ(責めない・待たせない)。
  */
 const wxInflight = new Set();
-function weatherBox() {
+const wxCache = () => store.state.local.weatherCache || {};
+/** 地域 1 つの天気を取りに行く(古いときだけ)。届いたら onData(data)。失敗は onFail() */
+function loadWeather(r, onData, onFail = () => {}) {
+  const c = wxCache()[r.id];
+  if (weather.isFresh(c, Date.now()) || wxInflight.has(r.id)) return false;
+  if (!navigator.onLine) { onFail(); return false; }
+  wxInflight.add(r.id);
+  weather.fetchForecast(r.lat, r.lon).then((d) => {
+    if (!d) { onFail(); return; }
+    store.state.local.weatherCache = { ...wxCache(), [r.id]: { at: Date.now(), data: d } }; store.saveLocal();
+    onData(d);
+  }).catch(() => onFail()).finally(() => wxInflight.delete(r.id));
+  return true;
+}
+/** 天気の絵(v0.29.1): 線の SVG(タブのアイコンと同じ流儀)。key は weather.iconKey */
+export function weatherIcon(key, cls = 'wx-ico') {
+  const P = (d, extra = {}) => svg('path', { d, ...extra });
+  const cloud = 'M7 17.5h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 9.6 4 4 0 0 0 7 17.5z';
+  const kids = {
+    sun: [svg('circle', { cx: 12, cy: 12, r: 4 }), P('M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4')],
+    partly: [svg('circle', { cx: 9, cy: 9, r: 3.2 }), P('M9 3v1.6M3 9h1.6M4.8 4.8l1.1 1.1M13.2 4.8l-1.1 1.1'), P('M9.5 19.5H17a3.2 3.2 0 0 0 .4-6.37A4.6 4.6 0 0 0 9.6 12 3.8 3.8 0 0 0 9.5 19.5z')],
+    cloud: [P(cloud)],
+    fog: [P('M7 14.5h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 6.6 4 4 0 0 0 7 14.5z'), P('M5 18h12M8 21h9')],
+    rain: [P('M7 15.5h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 7.6 4 4 0 0 0 7 15.5z'), P('M9 18.5l-1 2.5M13 18.5l-1 2.5M17 18.5l-1 2.5')],
+    snow: [P('M7 15.5h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 7.6 4 4 0 0 0 7 15.5z'), P('M9 19.5v2M8 20.5h2M13 19.5v2M12 20.5h2M17 19.5v2M16 20.5h2')],
+    thunder: [P('M7 15h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 7.1 4 4 0 0 0 7 15z'), P('M12.5 15.5L10 20h3l-1.5 3.5')],
+    none: [P(cloud), P('M11 9.5a1.8 1.8 0 0 1 3.5.6c0 1.2-1.7 1.4-1.7 2.6M12.8 15.2h.01')],
+  };
+  return svg('svg', { class: `${cls} ${cls}-${key}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, kids[key] || kids.none);
+}
+/** ホーム右上の天気の印(v0.29.1): 控えがあれば先頭の地域の天気の絵、無ければ一般の絵。タップでシート */
+function weatherButton(ctx) {
   const w = S().weather;
   if (!w || !w.enabled || !Array.isArray(w.regions) || !w.regions.length) return null;
-  const local = store.state.local;
-  const cache = () => local.weatherCache || {};
-  const box = el('section.wx', { 'aria-label': '天気と服装' });
-  const rowOf = (r, d) => el('div.wx-row', { dataset: { id: r.id } }, [el('span.wx-name', r.name), el('span.wx-main', weather.lineText(d)), el('span.wx-cloth', weather.clothing(d))]);
-  for (const r of w.regions) {
-    const c = cache()[r.id];
-    if (c && c.data) box.append(rowOf(r, c.data));
-    if (weather.isFresh(c, Date.now()) || wxInflight.has(r.id) || !navigator.onLine) continue;
-    wxInflight.add(r.id);
-    weather.fetchForecast(r.lat, r.lon).then((d) => {
-      if (!d) return;
-      local.weatherCache = { ...cache(), [r.id]: { at: Date.now(), data: d } }; store.saveLocal();
-      if (!box.isConnected) return;
-      const old = box.querySelector(`.wx-row[data-id="${CSS.escape(r.id)}"]`);
-      if (old) old.replaceWith(rowOf(r, d)); else box.append(rowOf(r, d));
-      box.hidden = false;
-    }).catch(() => { /* 黙る(§2 の注) */ }).finally(() => wxInflight.delete(r.id));
-  }
-  box.hidden = !box.childElementCount;
-  return box;
+  const c = wxCache()[w.regions[0].id];
+  const key = c && c.data ? weather.iconKey(c.data.code) : 'none';
+  const b = el('button.btn.sm.ghost.gear.wxbtn', { type: 'button', 'aria-label': '天気と服装', title: '天気と服装', onclick: () => weatherSheet(ctx) }, weatherIcon(key));
+  if (key === 'none') loadWeather(w.regions[0], (d) => { if (b.isConnected) b.replaceChildren(weatherIcon(weather.iconKey(d.code))); });
+  return b;
+}
+const fmtClock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
+/**
+ * 天気のシート(v0.29.1・天気アプリ風): 地域ごとに 1 枚の札 ─ 大きな絵・最高(大)/ 最低・天気の言葉・降水確率・服装のチップ。札の地の色は天気の種類で薄く変わる。
+ * 下に「取得 HH:MM・Open-Meteo」「更新」「地域を足す ›」。取れないときは札に「いまは取れません」
+ */
+export function weatherSheet(ctx) {
+  const w = S().weather;
+  const regions = w && w.enabled ? (w.regions || []) : [];
+  sheet((close) => {
+    const cards = el('div.wxcards');
+    const foot = el('p.wx-foot.muted.small');
+    const cardOf = (r, d, state) => {
+      const key = d ? weather.iconKey(d.code) : 'none';
+      const chips = d ? [d.pop != null ? el('span.wxchip.pop', [el('i.wx-drop', { 'aria-hidden': 'true' }), `降水 ${d.pop}%`]) : null, ...weather.clothing(d).split('・').filter(Boolean).map((x) => el('span.wxchip', x))].filter(Boolean) : [];
+      return el('div.wxcard', { class: `wxcard k-${key}`, dataset: { id: r.id } }, [
+        el('span.wx-name', r.name),
+        el('div.wx-main', [
+          weatherIcon(key, 'wx-big'),
+          d ? el('div.wx-temps', [el('b.wx-hi', d.tmax != null ? `${d.tmax}°` : '–'), el('span.wx-lo', d.tmin != null ? `/ ${d.tmin}°` : '')]) : el('div.wx-temps', el('span.wx-lo', state === 'loading' ? '取得中…' : 'いまは取れません')),
+          d ? el('span.wx-label', d.label || '') : null,
+        ]),
+        chips.length ? el('div.wxchips', chips) : null,
+      ]);
+    };
+    const draw = (r, d, state) => { const n = cardOf(r, d, state); const old = cards.querySelector(`.wxcard[data-id="${CSS.escape(r.id)}"]`); if (old) old.replaceWith(n); else cards.append(n); refoot(); };
+    const refoot = () => { const ats = regions.map((r) => wxCache()[r.id]?.at).filter(Boolean); foot.textContent = ats.length ? `取得 ${fmtClock(Math.max(...ats))}・Open-Meteo` : 'Open-Meteo'; };
+    const load = (force = false) => {
+      for (const r of regions) {
+        const c = wxCache()[r.id];
+        if (force && c) { store.state.local.weatherCache = { ...wxCache(), [r.id]: { ...c, at: 0 } }; }
+        const started = loadWeather(r, (d) => draw(r, d, 'ok'), () => { if (!(wxCache()[r.id]?.data)) draw(r, null, 'fail'); });
+        draw(r, wxCache()[r.id]?.data || null, started ? 'loading' : (wxCache()[r.id]?.data ? 'ok' : 'fail'));
+      }
+    };
+    load();
+    return [
+      el('h2.wx-h', 'きょうの天気'),
+      regions.length ? cards : el('p.muted.small', '地域がありません。設定 › 天気と服装 で登録します。'),
+      el('div.row.wx-actions', [foot, el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: () => load(true) }, '更新'), el('button.btn.sm.ghost', { type: 'button', onclick: () => { close(); ctx.go('settings', 'weather'); } }, '地域 ›')]),
+      el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+    ];
+  });
 }
 
 // ================= ホーム =================
@@ -312,7 +371,7 @@ export function renderNow(view, ctx, dateArg = null) {
   const head = headBar({
     left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [gear],
+    right: [weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左
   });
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {
@@ -323,7 +382,6 @@ export function renderNow(view, ctx, dateArg = null) {
   } }, [
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
-    isToday ? weatherBox() : null, // v0.29・F15: 天気と服装(設定で有効にした人だけ・失敗は黙る)
     hero?.node, breakdown(v, rerender, { isToday, ctx }),
   ].filter(Boolean));
   view.append(home);
