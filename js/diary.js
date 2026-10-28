@@ -14,11 +14,12 @@ export const moodLabel = (v) => MOODS.find((m) => m.v === v)?.label || '';
  * どれか 1 つでも「書いた日」。期間のまとめ(summarize)はそれぞれの平均を返す。
  */
 export const SCALES = Object.freeze({
-  sat: { label: '満足', hint: '作業の進み', levels: [{ v: 1, label: '物足りない' }, { v: 2, label: 'すこし' }, { v: 3, label: 'ふつう' }, { v: 4, label: 'よい' }, { v: 5, label: 'はかどった' }] },
-  mood: { label: '気分', hint: 'きょう一日', levels: MOODS },
-  tired: { label: '疲れ', hint: 'からだ', levels: [{ v: 1, label: '元気' }, { v: 2, label: 'すこし' }, { v: 3, label: 'ふつう' }, { v: 4, label: '疲れた' }, { v: 5, label: 'くたくた' }] },
+  mood: { label: '気分', hint: '快・不快', levels: MOODS },
+  energy: { label: '元気', hint: '活力(低い=疲れ)', levels: [{ v: 1, label: 'くたくた' }, { v: 2, label: '疲れぎみ' }, { v: 3, label: 'ふつう' }, { v: 4, label: '元気' }, { v: 5, label: 'とても元気' }] },
 });
-export const SCALE_KEYS = Object.freeze(['sat', 'mood', 'tired']);
+// v0.26.1: 3 本(満足 sat / 気分 / 疲れ tired)→ 2 本に。気分(快・不快)と元気(活力)は感情の円環モデル(Russell)の 2 軸で重ならず、どちらも「右ほど良い」で色が同じ。
+// 満足は気分と重なり、作業の進みはレポートが数字で言うので外した。旧データは sat をそのまま持ち、tired は validateDiary で energy(6−tired)に引き継ぐ。
+export const SCALE_KEYS = Object.freeze(['mood', 'energy']);
 export const scaleLabel = (key, v) => SCALES[key]?.levels.find((m) => m.v === v)?.label || '';
 /** 一覧やレポートの 1 行に添える状態(「満足 よい・気分 ふつう・疲れ すこし」)。無ければ '' */
 export const scalesText = (d) => SCALE_KEYS.filter((k) => d && d[k] != null).map((k) => `${SCALES[k].label} ${scaleLabel(k, d[k])}`).join('・');
@@ -27,7 +28,7 @@ const txt = (s) => (typeof s === 'string' ? s.trim() : '');
 
 /** 何か1つでも書いてあれば「書いた日」(気分だけでも可) */
 export function isWritten(d) {
-  return !!(alive(d) && (d.mood != null || d.sat != null || d.tired != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
+  return !!(alive(d) && (d.mood != null || d.energy != null || d.sat != null || d.tired != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
 }
 
 /** 続けて書いた日数。date に書いていなくても途切れ扱いにしない(昨日から数える) */
@@ -39,19 +40,19 @@ export function streak(diary, date) {
   return n;
 }
 
-/** 書いた日の数と 満足・気分・疲れ の平均(期間)。list は日ごと { key, written, mood, sat, tired } */
+/** 書いた日の数と 気分・元気 の平均(期間)。list は日ごと { key, written, mood, energy } */
 export function summarize(diary, from, to) {
   let days = 0;
-  const sums = { mood: [0, 0], sat: [0, 0], tired: [0, 0] };
+  const sums = { mood: [0, 0], energy: [0, 0] };
   const list = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const x = diary?.[d];
     const w = isWritten(x);
     if (w) { days++; for (const k of SCALE_KEYS) if (x[k] != null) { sums[k][0] += x[k]; sums[k][1]++; } }
-    list.push({ key: d, written: w, mood: w ? x.mood ?? null : null, sat: w ? x.sat ?? null : null, tired: w ? x.tired ?? null : null });
+    list.push({ key: d, written: w, mood: w ? x.mood ?? null : null, energy: w ? x.energy ?? null : null });
   }
   const avg = (k) => (sums[k][1] ? Math.round((sums[k][0] / sums[k][1]) * 10) / 10 : null);
-  return { days, moodAvg: avg('mood'), satAvg: avg('sat'), tiredAvg: avg('tired'), list };
+  return { days, moodAvg: avg('mood'), energyAvg: avg('energy'), list };
 }
 
 /**

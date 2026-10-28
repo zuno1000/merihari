@@ -84,6 +84,7 @@ export function defaultSettings() {
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
+    tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
     goals: { workMin: null, driftMax: null }, // v0.17: 1 日の目標(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
     fieldStamps: {},         // v0.17: スカラー設定(window/dayStart/gapAbsorbMin/startFromLast/goals)ごとの updatedAt。同期で項目ごとに新しい方を採る(「1日の始まり」が他端末の初期値に戻されていた)
     categories: defaultCategories(),
@@ -91,7 +92,13 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles'];
+/** レポートのタイルの既定(v0.26.1・F3-13): 作業として数える種別(設定の順)+ダラダラとして数える種別。純関数 */
+export function defaultTiles(settings) {
+  const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
+  return [...kinds.filter((k) => k.work).map((k) => `kind:${k.id}`), ...kinds.filter((k) => k.drift && !k.work).map((k) => `kind:${k.id}`)];
+}
+const TILE_KEY = /^(kind|cat):[A-Za-z0-9_-]{1,40}$/;
 
 export function defaultData() {
   return {
@@ -164,6 +171,8 @@ function normalizeSettings(raw) {
   const gMin = (v, max) => (v != null && v !== '' && Number.isFinite(+v) && +v >= 0 && +v <= max ? Math.round(+v) : null);
   const gw = isObj(raw.goals) ? gMin(raw.goals.workMin, 960) : null;
   s.goals = { workMin: gw != null && gw >= 15 ? gw : null, driftMax: isObj(raw.goals) ? gMin(raw.goals.driftMax, 720) : null };
+  // v0.26.1: レポートのタイル('kind:id' / 'cat:id' の文字列だけ・6 つまで・無ければ null=既定)
+  s.tiles = Array.isArray(raw.tiles) ? raw.tiles.filter((x) => typeof x === 'string' && TILE_KEY.test(x)).slice(0, 6) : null;
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
   // v0.19: お金のカテゴリ(無ければ既定)と月の予算
@@ -285,8 +294,9 @@ export function validateKiai(r, id) {
 export function validateDiary(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;
   const lv = (v) => (v != null && Number.isInteger(+v) && +v >= 1 && +v <= 5 ? +v : null); // 1〜5 の整数か null
-  const mood = lv(r.mood);
-  return { ...stripUnsafe(r), date: r.date || id, mood, sat: lv(r.sat), tired: lv(r.tired), good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  const mood = lv(r.mood), tired = lv(r.tired);
+  const energy = lv(r.energy) ?? (tired != null ? 6 - tired : null); // v0.26.1: 疲れ(1=元気〜5=くたくた)は 元気(5=元気)へ引き継ぐ
+  return { ...stripUnsafe(r), date: r.date || id, mood, sat: lv(r.sat), tired, energy, good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 
 /** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数)。レコードは型を検証する */

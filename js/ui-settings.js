@@ -49,6 +49,7 @@ const summary = {
   kinds() { const k = S().kinds || []; return `${k.slice(0, 4).map((x) => x.name).join('・')}${k.length > 4 ? ` …全${k.length}件` : ''}`; },
   palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット${(s.palettes || []).length}件`; },
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
+  tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); return [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; },
 };
 
@@ -106,6 +107,26 @@ function sectionGoals() {
     el('p.muted.small', '「作業として数える」種別のカテゴリ(研究・授業など)の1日の合計。'),
     el('div.row.field', [el('span.label', `${drift}の上限`), select(opts(driftList), s.goals.driftMax == null ? '' : String(s.goals.driftMax), (v) => { s.goals.driftMax = v === '' ? null : +v; store.touchSettings(); })]),
     el('p.muted.small', '「ダラダラとして数える」種別(SNS・動画など)の1日の合計がこれ以内なら、ふり返りで「上限の中」と言います。'));
+}
+/** レポートのタイル(v0.26.1・F3-13・ユーザー FB「目立たせるカテゴリを自分で変えたい」): 種別かカテゴリを 6 つまで・選んだ順。null=既定(作業の種別+ダラダラ) */
+function sectionTiles(rerender) {
+  const s = S();
+  const cur = () => s.tiles || store.defaultTiles(s);
+  const toggle = (key) => {
+    const list = cur().slice(); const i = list.indexOf(key);
+    if (i >= 0) list.splice(i, 1); else { if (list.length >= 6) { toast('タイルは 6 つまでです'); return; } list.push(key); }
+    s.tiles = list; store.touchSettings(); rerender();
+  };
+  const chip = (key, name, color) => el('button.chip.sm2', { type: 'button', class: `chip sm2${cur().includes(key) ? ' on' : ''}`, 'aria-pressed': cur().includes(key) ? 'true' : 'false', onclick: () => toggle(key) }, [color ? el('span.dot', { style: { background: color } }) : null, name]);
+  const kinds = (s.kinds || []).map((k) => chip(`kind:${k.id}`, k.name, null));
+  const cats = s.categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order).map((c) => chip(`cat:${c.id}`, c.name, c.color));
+  const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name);
+  const order = cur().map(nm).filter(Boolean);
+  return card('レポートのタイル', 'レポート「今日」の見出しの下に並ぶタイル(大きな数字)に出すものを選びます。種別(カテゴリの束)でもカテゴリでも、6 つまで。タップした順に並びます。種別の名前は 設定 › 種別 で変えられます。',
+    el('span.chips-cap', '種別'), el('div.chips.small', kinds),
+    el('span.chips-cap', 'カテゴリ'), el('div.chips.small', cats),
+    el('p.muted.small', order.length ? `いまの並び: ${order.join(' / ')}${s.tiles ? '' : '(既定: 作業の種別+ダラダラ)'}` : 'なにも選んでいません(タイルは出ません)'),
+    el('div.row', [el('span.grow'), el('button.btn.sm.ghost', { type: 'button', disabled: !s.tiles, onclick: () => { s.tiles = null; store.touchSettings(); rerender(); } }, '既定に戻す')]));
 }
 /** お金(v0.19・F10): 月の予算と、お金のカテゴリ(名前・色・並び・非表示・追加)。時間のカテゴリとは別 */
 function sectionMoney(rerender) {
@@ -364,7 +385,7 @@ function sectionHelp() {
     h('お金'),
     li(['入力は2タップ: 金額を入れて、カテゴリをタップした時点で記録します(「きょう・いま」。タップすると きょう / きのう / おととい / 日付 と時刻を選べます)。「+ 収入」は収入。', '支出の時刻は、タイムラインのその時間の記録に自動で紐づきます(一覧に「研究の最中」、タイムラインのブロックに ¥ の印、レポート「今日」の表に支出の行)。', '月の予算(設定 › お金)を決めると、「予算 ◯ / 残り ◯・1日 ◯ まで(あと ◯ 日)」のメーターが出ます。決めなければ1日平均と件数だけです。', '収入があれば「収入 ◯・差し引き ±◯」。設定 › お金 の開始残高(記録を始めた時点の手持ち)を入れると「資産 = 開始残高 + これまでの収入 − 支出」が出ます。入れなければ資産は出しません。', '右上の貯金箱は「ほしいもの」: 名前・値段・目標日(任意)・メモ。目標日があれば「月 ◯円ずつ」、今月の差し引きが黒字なら「今のペースで ◯か月」。「買った」で支出として記録できます(カテゴリは編集で選ぶ)。買ったものは折りたたみに残ります。', 'カテゴリは少ないほど続きます。設定 › お金 で名前・色・並び・非表示・追加。お金のカテゴリは時間のカテゴリとは別です。', '一覧の行をタップすると 金額 / カテゴリ / 日時 / メモ の修正と削除。‹ › で前の月。「月ごとの推移」は折りたたみ。']),
     h('日記'),
-    li(['満足(作業の進み)・気分・疲れ の 3 つを 5 段階でタップ(もう一度で外す)、3行(よかったこと / ひっかかったこと / 明日は)、メモ(「＋ メモ」で開く)。書くたびに自動で保存します。1つでも「書いた日」です。', '「きょうの材料」: その日の記録・レポートのふり返り・昨日の「明日は」から短い文を出します。タップすると欄に入ります。', '右上のカレンダーで月ごとにさかのぼれます(書いた日は気分の色)。‹ › で前の日。レポート「今日」にも抜粋が出ます。', 'ホームには作業時間帯の終わりの2時間前から「きょうの日記 › 1行だけ書く」の行(書けば消えます)。']),
+    li(['気分(つらい〜最高)と元気(くたくた〜とても元気)の 2 つを 5 段階でタップ(もう一度で外す・右ほど良い)、3行(よかったこと / ひっかかったこと / 明日は)、メモ(「＋ メモ」で開く)。書くたびに自動で保存します。1つでも「書いた日」です。', '「きょうの材料」: その日の記録・レポートのふり返り・昨日の「明日は」から短い文を出します。タップすると欄に入ります。', '右上のカレンダーで月ごとにさかのぼれます(書いた日は気分の色)。‹ › で前の日。レポート「今日」にも抜粋が出ます。', 'ホームには作業時間帯の終わりの2時間前から「きょうの日記 › 1行だけ書く」の行(書けば消えます)。']),
     h('1日の目標'),
     li(['設定 › 1日の目標 で「作業の合計の目標」と「ダラダラの上限」を決められます。決めると、レポート「今日」のふり返りは先週の平均ではなく目標と比べて書き、ホームの円の下に細いメーターが出ます。決めなければ先週の平均と比べます。']),
     h('レポート'),
@@ -388,6 +409,7 @@ const SECTIONS = {
   palettes: { title: '配色', build: (re) => sectionPalettes(re) },
   logging: { title: '記録のすき間', build: () => sectionLogging() },
   goals: { title: '1日の目標', build: () => sectionGoals() },
+  tiles: { title: 'レポートのタイル', build: (re) => sectionTiles(re) },
   money: { title: 'お金', build: (re) => sectionMoney(re) },
   ai: { title: 'AI(ショートカット)', build: (re) => sectionAI(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
@@ -496,6 +518,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('配色', summary.palettes(), open('palettes')),
       srow('すき間', summary.logging(), open('logging')),
       srow('1日の目標', summary.goals(), open('goals')),
+      srow('レポートのタイル', summary.tiles(), open('tiles')),
     ]),
     group('お金・日記', [srow('お金', summary.money(), open('money')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),

@@ -99,7 +99,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
       weekBox(date),
       bullets(r),
       tiles(r, baseDrift),
-      el('p.muted.small.tile-hint', ['上のタイル(作業 / 決まった作業 / ダラダラ)の名前と中身は ', el('button.btn.inline', { type: 'button', onclick: () => { close(); hooks.go?.('settings', 'kinds'); } }, '設定 › 種別'), ' で変えられます。']), // v0.26・ユーザー FB
+      el('p.muted.small.tile-hint', ['見出しの下のタイルに出すもの(種別・カテゴリ・順番)は ', el('button.btn.inline', { type: 'button', onclick: () => { close(); hooks.go?.('settings', 'tiles'); } }, '設定 › レポートのタイル'), ' で選べます。']), // v0.26.1・F3-13
       dayStrip(entries, W, nowMin, isToday),
       trendFigure(days, '7日間の推移'),
       tables(r, days),
@@ -292,13 +292,6 @@ function delta(cur, base, upGood) {
   if (base == null) return el('span.kpi-delta.muted', '先週の記録なし');
   return deltaText(cur, base, upGood);
 }
-/** 作業の種別ごとの合計(v0.24・実機 FB「作業と決まった作業を分けて」): 種別 id → 分(work:true の種別だけ・多い順) */
-function workKinds(r) {
-  const out = {};
-  for (const [id, v] of Object.entries(r.byCategory || {})) { const c = S().categories.find((x) => x.id === id); const k = c ? c.kind : 'work'; if (kindRole(S(), k).work && v.actual > 0) out[k] = (out[k] || 0) + v.actual; }
-  return Object.entries(out).sort((a, b) => b[1] - a[1]).map(([k, min]) => ({ id: k, name: kindRole(S(), k).name, min }));
-}
-/** パッと見の1行(v0.24・v0.24.1 実機 FB): 作業の種別(作業 / 決まった作業 … 設定の種別の順・0 でも出す)と ダラダラ。記録率は「くわしく」のタイルに */
 /** 気合(v0.25.1・F13-4): その日の気合を 時刻・タグ・メモ の行で。押していない日は出さない(責めない) */
 function kiaiBox(date) {
   const list = kiaiMod.listOf(store.state.data.kiai, date);
@@ -318,15 +311,30 @@ function kiaiPeriod(from, to) {
   const pills = sm.tags.map((t) => el('span.kiai-pill', [t.id === 'none' ? null : el('i.dot', { style: { background: displayColor(catOf(t.id).color) } }), el('span', t.id === 'none' ? 'タグなし' : catOf(t.id).name), el('b', String(t.count))].filter(Boolean)));
   return el('section.group.kiai-rep', [el('h2', '気合'), el('div.card', [el('p.small.plan-lead', lead), el('div.kiai-pills.wrap', pills)])]);
 }
+/**
+ * パッと見のタイル(v0.24・v0.26.1 設定で選べる・F3-13): settings.tiles('kind:id' / 'cat:id'・選んだ順・null=既定 store.defaultTiles)ごとに、その日の合計(分)。
+ * 種別はそのカテゴリの合計(設定に無いカテゴリは役割から推定)、カテゴリはそのまま。ダラダラの種別は 2 時間以上で warn。空なら出さない
+ */
+function glanceRows(r) {
+  const s = S();
+  const keys = s.tiles || store.defaultTiles(s);
+  const kindOfCat = (cid) => { const c = s.categories.find((x) => x.id === cid); if (c) return c.kind; const role = store.catRole(s, cid); return role.work ? 'work' : role.drift ? 'drift' : role.rest ? 'rest' : 'life'; };
+  const rows = [];
+  for (const key of keys) {
+    const i = key.indexOf(':'); const type = key.slice(0, i), id = key.slice(i + 1);
+    if (type === 'kind') {
+      let min = 0;
+      for (const [cid, v] of Object.entries(r.byCategory || {})) if (kindOfCat(cid) === id) min += v.actual || 0;
+      const role = kindRole(s, id);
+      rows.push({ key, name: role.name, min, warn: role.drift && min >= 120 });
+    } else if (type === 'cat') rows.push({ key, name: catOf(id).name, min: r.byCategory?.[id]?.actual || 0, warn: false, color: colorOf(id) });
+  }
+  return rows;
+}
 function glance(r) {
-  const got = Object.fromEntries(workKinds(r).map((k) => [k.id, k.min]));
-  const kinds = (S().kinds || []).filter((k) => k.work).map((k) => ({ id: k.id, name: k.name, min: got[k.id] || 0 }));
-  for (const k of workKinds(r)) if (!kinds.some((x) => x.id === k.id)) kinds.push(k); // 設定に無い種別(旧データ)も落とさない
-  const tile = (k, v, cls = '') => el('div.gl-tile', { class: `gl-tile ${cls}` }, [el('span.gl-k', k), el('b.gl-v', v)]);
-  return el('div.glance', [
-    ...kinds.map((k) => tile(k.name, fmtMin(k.min) || '0m')),
-    tile(driftLabel(), fmtMin(r.driftMin) || '0m', r.driftMin >= 120 ? 'warn' : ''),
-  ]);
+  const rows = glanceRows(r);
+  if (!rows.length) return null;
+  return el('div.glance', rows.map((x) => el('div.gl-tile', { class: `gl-tile${x.warn ? ' warn' : ''}` }, [el('span.gl-k', [x.color ? el('i.dot', { style: { background: x.color } }) : null, x.name]), el('b.gl-v', fmtMin(x.min) || '0m')])));
 }
 /** 気分の推移(v0.24・muute のムードフロー / Daylio の気分グラフに倣う): 日記の気分を日ごとの棒で。書いた日数・平均・いちばん良かった日 */
 function moodFigure(from, to) {
@@ -339,7 +347,7 @@ function moodFigure(from, to) {
     n <= 8 ? el('span.mf-lab', DAY_JA[weekday(x.key)]) : (i === 0 || i === n - 1 || i % 7 === 0 ? el('span.mf-lab', `${+x.key.slice(8, 10)}`) : null),
   ].filter(Boolean)));
   return el('section.group', [el('h2', '気分の推移(日記)'), el('div.card.moodflow', [el('div.mf-row', cells),
-    el('p.small.muted.mf-note', `書いた日${sm.days}/${n}${sm.moodAvg ? `・気分の平均 ${sm.moodAvg}`: ''}${sm.satAvg ? `・満足 ${sm.satAvg}` : ''}${sm.tiredAvg ? `・疲れ ${sm.tiredAvg}` : ''}${best ? `・いちばん良かった日${fmtMD(best.key, true)}` : ''}`)])]); // v0.26: 満足・疲れの平均も
+    el('p.small.muted.mf-note', `書いた日${sm.days}/${n}${sm.moodAvg ? `・気分の平均 ${sm.moodAvg}`: ''}${sm.energyAvg ? `・元気の平均 ${sm.energyAvg}` : ''}${best ? `・いちばん良かった日${fmtMD(best.key, true)}` : ''}`)])]); // v0.26: 満足・疲れの平均も
 }
 function heroFigure(r, baseWork) {
   // 1日の目標(v0.17・F3-11)があれば先週平均ではなく目標と比べる(メーターつき)

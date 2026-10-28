@@ -830,16 +830,21 @@ document.getElementById('app').addEventListener('load', async () => {
     }
 
     // ---- v0.26: 整理(FEATURES・日記の 満足/疲れ・割合) ----
-    log('\n# v0.26 features / diary scales / sharePct');
+    log('\n# v0.26 features / diary scales / sharePct / tiles');
     ok(M.features && M.features.FEATURES.TASK_START === false && Object.isFrozen(M.features.FEATURES), 'features: TASK_START は既定で false(▶ と区切りは非表示・true で復活)・凍結されている');
-    ok(Dg.SCALE_KEYS.join() === 'sat,mood,tired' && Dg.SCALES.sat.levels.length === 5 && Dg.scaleLabel('tired', 5) === 'くたくた' && Dg.scaleLabel('mood', 3) === 'ふつう' && Dg.scaleLabel('sat', 9) === '', 'diary.SCALES: 満足・気分・疲れ の 5 段階とラベル(範囲外は空)');
-    ok(Dg.isWritten({ date: 'x', sat: 3 }) && Dg.isWritten({ date: 'x', tired: 2 }) && !Dg.isWritten({ date: 'x', sat: null, tired: null }), 'isWritten: 満足・疲れだけでも書いた日');
-    ok(Dg.scalesText({ sat: 4, mood: 3, tired: 2 }) === '満足 よい・気分 ふつう・疲れ すこし' && Dg.scalesText({ mood: 5 }) === '気分 最高' && Dg.scalesText({}) === '', 'scalesText: 1 行の状態(満足 → 気分 → 疲れ の順)');
-    const vD = S.validateDiary({ date: '2026-10-28', sat: 4, tired: '2', mood: 9 }, '2026-10-28');
-    ok(vD.sat === 4 && vD.tired === 2 && vD.mood === null && S.validateDiary({ good: 'a' }, '2026-10-28').sat === null, 'validateDiary: sat/tired は 1〜5 の整数・範囲外や無しは null');
-    const sm2 = Dg.summarize({ '2026-10-27': { date: '2026-10-27', mood: 4, sat: 2, tired: 5, updatedAt: 'x', deletedAt: null }, '2026-10-28': { date: '2026-10-28', mood: 2, sat: 4, updatedAt: 'x', deletedAt: null } }, '2026-10-27', '2026-10-28');
-    ok(sm2.days === 2 && sm2.moodAvg === 3 && sm2.satAvg === 3 && sm2.tiredAvg === 5 && sm2.list[0].tired === 5 && sm2.list[1].tired === null, 'summarize: 満足・疲れの平均と日ごとの値(無い日は null)');
+    ok(Dg.SCALE_KEYS.join() === 'mood,energy' && Dg.SCALES.energy.levels.length === 5 && Dg.scaleLabel('energy', 5) === 'とても元気' && Dg.scaleLabel('mood', 3) === 'ふつう' && Dg.scaleLabel('energy', 9) === '', 'diary.SCALES(v0.26.1): 気分・元気 の 2 本(5 段階・範囲外は空)');
+    ok(Dg.isWritten({ date: 'x', energy: 3 }) && Dg.isWritten({ date: 'x', tired: 2 }) && Dg.isWritten({ date: 'x', sat: 2 }) && !Dg.isWritten({ date: 'x', energy: null }), 'isWritten: 元気(旧 疲れ・満足も)だけでも書いた日');
+    ok(Dg.scalesText({ mood: 4, energy: 2 }) === '気分 よい・元気 疲れぎみ' && Dg.scalesText({ mood: 5 }) === '気分 最高' && Dg.scalesText({ sat: 3 }) === '', 'scalesText: 気分 → 元気 の順(旧 満足は出さない)');
+    const vD = S.validateDiary({ date: '2026-10-28', energy: 4, mood: 9 }, '2026-10-28');
+    ok(vD.energy === 4 && vD.mood === null && S.validateDiary({ good: 'a' }, '2026-10-28').energy === null && S.validateDiary({ tired: 2 }, '2026-10-28').energy === 4 && S.validateDiary({ tired: 2, energy: 1 }, '2026-10-28').energy === 1, 'validateDiary: energy は 1〜5・無ければ 旧 疲れ(tired)を 6−tired で引き継ぐ');
+    const sm2 = Dg.summarize({ '2026-10-27': { date: '2026-10-27', mood: 4, energy: 5, updatedAt: 'x', deletedAt: null }, '2026-10-28': { date: '2026-10-28', mood: 2, updatedAt: 'x', deletedAt: null } }, '2026-10-27', '2026-10-28');
+    ok(sm2.days === 2 && sm2.moodAvg === 3 && sm2.energyAvg === 5 && sm2.list[0].energy === 5 && sm2.list[1].energy === null, 'summarize: 気分・元気の平均と日ごとの値(無い日は null)');
     ok(M.report.sharePct(30, 120) === 25 && M.report.sharePct(1, 0) === 0 && M.report.sharePct(1, 3) === 33, 'report.sharePct: 割合(%)・合計 0 は 0');
+    // タイル(v0.26.1・F3-13)
+    const dT = S.defaultTiles(S.defaultSettings());
+    ok(dT[0] === 'kind:work' && dT.includes('kind:fixed') && dT[dT.length - 1] === 'kind:drift' && !dT.includes('kind:rest'), 'defaultTiles: 作業の種別(設定の順)+ダラダラの種別');
+    const mT = S.migrate({ schema: 1, settings: { tiles: ['kind:work', 'cat:research', 'bad', 'cat:' + 'x'.repeat(50), 7, 'kind:a', 'kind:b', 'kind:c', 'kind:d', 'kind:e'] } }).settings;
+    ok(eq(mT.tiles, ['kind:work', 'cat:research', 'kind:a', 'kind:b', 'kind:c', 'kind:d']) && S.migrate({ schema: 1, settings: {} }).settings.tiles === null && S.SCALAR_FIELDS.includes('tiles'), 'migrate: tiles は kind:/cat: の文字列だけ・6 つまで・無ければ null(既定)・同期は項目ごと(SCALAR_FIELDS)');
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {

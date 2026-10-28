@@ -500,7 +500,7 @@ function goalsBox(n, rerender, isToday = true, ctx = null) {
       : () => { t.checks = plan.toggleCheck(t, n.date); saveTask(t); toast(plan.isChecked(t, n.date) ? '済み(明日もまた出ます)' : '印を外しました'); rerender(); };
     return el('div.srow.goal', { class: `srow goal${g.done ? ' done' : ''}` }, [
       checkable ? el('button.check', { type: 'button', class: `check${g.done ? ' on' : ''}`, 'aria-label': `${g.name} を${g.done ? '戻す' : '済ませる'}`, onclick: onCheck }, g.done ? '✓' : '') : null,
-      el('button.gmain', { type: 'button', 'aria-label': checkable ? `${g.name}` : `${g.name} を後から記録`, onclick: checkable ? onCheck : () => entrySheet(sheetArg, rerender) }, [el('span.gname', [el('span.gtag', { deadline: '期限', todo: '用事', daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: c.color } }), g.name, g.done && !checkable ? el('span.gok', '✓') : null, rec ? el('span.rec-mark', '● 記録中') : null]), el('span.gmeta', meta), g.targetMin ? el('span.meter', el('i', { style: { width: `${g.checked ? 100 : pct}%`, background: c.color } })) : null]),
+      el('button.gmain', { type: 'button', 'aria-label': checkable ? `${g.name}` : `${g.name} を後から記録`, onclick: checkable ? onCheck : () => entrySheet(sheetArg, rerender) }, [el('span.gname', [el('span.gtag', { deadline: '期限', todo: '用事', daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: c.color } }), g.name, g.done && !checkable ? el('span.gok', '✓') : null, rec ? el('span.rec-mark', '● 記録中') : null]), el('span.gmeta', meta)]), // v0.26.1: 行ごとの細いメーターは出さない(進みは文で言う・ホームの線を減らす)
       FEATURES.TASK_START && isToday && !checkable ? el('button.tplay', { type: 'button', class: `tplay${rec ? ' on' : ''}`, 'aria-label': rec ? `${g.name} を記録中` : span ? `${g.name} を${span}分だけ始める` : `${g.name} をいまから記録`, title: span ? `${span}分だけ` : 'いまから', onclick: () => { if (rec) return; startCategory(g.categoryId, null, { taskId: g.taskId, plannedMin: span }); rerender(); } }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, rec ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])) : null,
     ]);
   };
@@ -679,9 +679,10 @@ function planBox(n, rerender, isToday, ctx) {
   const w = windowFor(S(), n.date);
   const nextStart = Math.min(1439, Math.max(w ? w.start : 0, Math.ceil(n.min / 30) * 30));
   const add = isToday ? el('button.srow', { type: 'button', onclick: () => planSheet({ date: n.date, start: nextStart, end: Math.min(nextStart + 60, 1800) }, rerender) }, [el('span.lbl', pc.blocks.length ? '予定を足す' : 'きょうの予定を置く'), el('span.grow'), el('span.chev', '›')]) : null;
-  const tomorrow = isToday ? el('button.srow', { type: 'button', onclick: () => ctx.go('timeline', addDays(n.date, 1)) }, [el('span.lbl', '明日の予定'), el('span.grow'), el('span.val', plan.planBlocksOf(PB(), addDays(n.date, 1)).length ? `${plan.planBlocksOf(PB(), addDays(n.date, 1)).length}件` : 'タイムラインで置く'), el('span.chev', '›')]) : null;
+  const tomorrowN = isToday ? plan.planBlocksOf(PB(), addDays(n.date, 1)).length : 0; // v0.26.1: 「明日の予定」は行ではなく見出しの右(線を減らす)
   const summary = pc.endedCount ? el('div.srow.plain', [el('span.lbl', '予定どおり'), el('span.val', `${pc.doneCount} / ${pc.endedCount}件(予定の時間の${Math.round((pc.rate || 0) * 100)}%)`)]) : null;
-  return el('section.group', [el('h2', isToday ? 'きょうの予定' : 'この日の予定'), el('div.list', [...rows, summary, add, tomorrow].filter(Boolean))]);
+  const head = el('div.row.between.gh', [el('h2', isToday ? 'きょうの予定' : 'この日の予定'), isToday ? el('button.btn.sm.ghost', { type: 'button', onclick: () => ctx.go('timeline', addDays(n.date, 1)) }, `明日${tomorrowN ? `(${tomorrowN})` : ''} ›`) : null]);
+  return el('section.group', [head, el('div.list', [...rows, summary, add].filter(Boolean))]);
 }
 
 /**

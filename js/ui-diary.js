@@ -1,4 +1,4 @@
-// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1日1件。満足 / 気分 / 疲れ(v0.26: 5 段階を 1 行ずつ)+ 3行(よかったこと / ひっかかったこと / 明日は)+ メモ(空なら「＋ メモ」に畳む)。
+// merihari ─ ui-diary.js: 「日記」画面(v0.18・F9・§4.4)。1日1件。気分 / 元気(v0.26.1: 5 段階を 1 行ずつ)+ 3行(よかったこと / ひっかかったこと / 明日は)+ メモ(空なら「＋ メモ」に畳む)。
 // v0.26: 「AI に頼む」はカードではなく 1 行(タップでシート)。材料は横 1 列。見た目は Apple ジャーナル / Google Keep に倣い、線と部品を減らす。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。「きょうの材料」(その日の記録・ふり返り・昨日の「明日は」)はタップで欄に入る。
 // 下に続いた日数と最近14日の一覧(気分の点・1行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
@@ -36,7 +36,7 @@ function saveEntry(d) {
 
 /**
  * 5 段階の 1 行(v0.26・F9-1 改): 左に名前(満足 / 気分 / 疲れ)、まん中に 5 つの丸、右に選んだ言葉。もう一度タップで外す。
- * 丸の色は 気分・満足 が m1〜m5(日記のカレンダーと同じ)、疲れ が t1〜t5(元気=緑 → くたくた=赤)。
+ * 丸の色はどちらも m1〜m5(日記のカレンダーと同じ・右ほど良い)。v0.26.1: 気分 / 元気 の 2 本。
  */
 export function scalePicker(key, value, onpick) {
   const sc = diary.SCALES[key];
@@ -47,7 +47,7 @@ export function scalePicker(key, value, onpick) {
     clear(dots);
     for (const m of sc.levels) {
       const on = value === m.v;
-      dots.append(el('button.sc-dot', { type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', class: `sc-dot ${key === 'tired' ? 't' : 'm'}${m.v}${on ? ' on' : ''}`, 'aria-label': `${sc.label}: ${m.label}`, title: m.label, onclick: () => { value = on ? null : m.v; onpick(value); draw(); } }, el('i')));
+      dots.append(el('button.sc-dot', { type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', class: `sc-dot m${m.v}${on ? ' on' : ''}`, 'aria-label': `${sc.label}: ${m.label}`, title: m.label, onclick: () => { value = on ? null : m.v; onpick(value); draw(); } }, el('i')));
     }
     word.textContent = value ? diary.scaleLabel(key, value) : '';
   };

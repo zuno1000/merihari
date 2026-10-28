@@ -830,3 +830,11 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* レポート: タイルの案内 */
 .tile-hint{margin:8px 0 0}
 .btn.inline{display:inline;min-height:0;padding:0 2px;border:0;background:none;color:var(--accent);font-size:inherit;font-weight:600;cursor:pointer}
+
+/* ---- v0.26.1: ホームの線を減らす・タイルのカテゴリ色 ---- */
+.home .list .srow{border-top-color:color-mix(in srgb,var(--line) 55%,var(--card))}
+.home .gtag{border-color:transparent}
+.home .srow.goal .gmeta{margin-top:1px}
+.gl-tile .gl-k{display:flex;align-items:center;gap:4px}
+.gl-tile .gl-k .dot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
+.chip.sm2 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
