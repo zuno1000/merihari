@@ -304,7 +304,7 @@ function weatherButton(ctx) {
 }
 const fmtClock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 /**
- * 天気のシート(v0.29.1・天気アプリ風): 地域ごとに 1 枚の札 ─ 大きな絵・最高(大)/ 最低・天気の言葉・降水確率・服装のチップ。札の地の色は天気の種類で薄く変わる。
+ * 天気のシート(v0.29.1・天気アプリ風): 地域ごとに 1 枚の札 ─ 大きな絵・最高(大)/ 最低・天気の言葉・降水確率・服装のチップ・あすの予報(v0.29.2・小さく 1 行)。札の地の色は天気の種類で薄く変わる。
  * 下に「取得 HH:MM・Open-Meteo」「更新」「地域を足す ›」。取れないときは札に「いまは取れません」
  */
 export function weatherSheet(ctx) {
@@ -324,6 +324,7 @@ export function weatherSheet(ctx) {
           d ? el('span.wx-label', d.label || '') : null,
         ]),
         chips.length ? el('div.wxchips', chips) : null,
+        d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.iconKey(d.tomorrow.code), 'wx-sm'), el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)
       ]);
     };
     const draw = (r, d, state) => { const n = cardOf(r, d, state); const old = cards.querySelector(`.wxcard[data-id="${CSS.escape(r.id)}"]`); if (old) old.replaceWith(n); else cards.append(n); refoot(); };

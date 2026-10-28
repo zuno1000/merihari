@@ -961,3 +961,8 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .wx-results{margin-top:8px}
 .wx-results .srow .chev{color:var(--accent);font-size:18px}
 .wx-reg .btn.sm{flex:none}
+/* v0.29.2: 札の下に あす の予報(小さく 1 行) */
+.wx-tmr{display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--fg) 8%,transparent);font-size:12px;color:var(--muted)}
+.wx-tmr .wx-tmr-k{font-weight:600;flex:none}
+.wx-tmr .wx-sm{width:18px;height:18px;fill:none;stroke:var(--wx);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wx-tmr .wx-tmr-t{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

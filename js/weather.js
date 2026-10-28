@@ -39,11 +39,16 @@ const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >
 export function parseForecast(json) {
   const d = json && typeof json === 'object' && json.daily && typeof json.daily === 'object' && !Array.isArray(json.daily) ? json.daily : null;
   if (!d) return null;
-  const first = (k) => (Array.isArray(d[k]) ? d[k][0] : undefined);
-  const code = num(first('weather_code'), 0, 99), tmax = num(first('temperature_2m_max'), -80, 60), tmin = num(first('temperature_2m_min'), -80, 60), pop = num(first('precipitation_probability_max'), 0, 100);
-  if (code == null && tmax == null && tmin == null && pop == null) return null;
-  const c = code == null ? null : Math.round(code);
-  return { code: c, label: weatherLabel(c), tmax: tmax == null ? null : Math.round(tmax), tmin: tmin == null ? null : Math.round(tmin), pop: pop == null ? null : Math.round(pop) };
+  const day = (i) => {
+    const at = (k) => (Array.isArray(d[k]) ? d[k][i] : undefined);
+    const code = num(at('weather_code'), 0, 99), tmax = num(at('temperature_2m_max'), -80, 60), tmin = num(at('temperature_2m_min'), -80, 60), pop = num(at('precipitation_probability_max'), 0, 100);
+    if (code == null && tmax == null && tmin == null && pop == null) return null;
+    const c = code == null ? null : Math.round(code);
+    return { code: c, label: weatherLabel(c), tmax: tmax == null ? null : Math.round(tmax), tmin: tmin == null ? null : Math.round(tmin), pop: pop == null ? null : Math.round(pop) };
+  };
+  const today = day(0);
+  if (!today) return null;
+  return { ...today, tomorrow: day(1) }; // v0.29.2: 翌日の予報(無ければ null)
 }
 /** 服装の一言(ルールベース・純関数): 最高気温のしきい値+朝晩の差+降水確率。材料が無ければ '' */
 export function clothing({ tmax = null, tmin = null, pop = null } = {}) {
@@ -101,7 +106,7 @@ export async function fetchForecast(lat, lon) {
   const u = new URL(FORECAST_URL);
   u.searchParams.set('latitude', String(lat)); u.searchParams.set('longitude', String(lon));
   u.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max');
-  u.searchParams.set('timezone', 'auto'); u.searchParams.set('forecast_days', '1');
+  u.searchParams.set('timezone', 'auto'); u.searchParams.set('forecast_days', '2'); // v0.29.2: きょうと あす
   return parseForecast(await getJSON(u.toString()));
 }
 /** 地名で検索(設定 › 天気)。候補は parsePlaces で正規化したものだけ */
