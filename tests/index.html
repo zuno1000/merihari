@@ -846,6 +846,28 @@ document.getElementById('app').addEventListener('load', async () => {
     const mT = S.migrate({ schema: 1, settings: { tiles: ['kind:work', 'cat:research', 'bad', 'cat:' + 'x'.repeat(50), 7, 'kind:a', 'kind:b', 'kind:c', 'kind:d', 'kind:e'] } }).settings;
     ok(eq(mT.tiles, ['kind:work', 'cat:research', 'kind:a', 'kind:b', 'kind:c', 'kind:d']) && S.migrate({ schema: 1, settings: {} }).settings.tiles === null && S.SCALAR_FIELDS.includes('tiles'), 'migrate: tiles は kind:/cat: の文字列だけ・6 つまで・無ければ null(既定)・同期は項目ごと(SCALAR_FIELDS)');
 
+    // ---- v0.27・F14: カレンダー(純関数) ----
+    log('\n# v0.27 calendar');
+    {
+      const C = M.calendar;
+      const st = S.defaultSettings();
+      const ent = { a: { id: 'a', date: '2026-10-05', start: '09:00', end: '10:30', categoryId: 'research' }, b: { id: 'b', date: '2026-10-05', start: '20:00', end: '21:00', categoryId: 'sns' }, c: { id: 'c', date: '2026-10-06', start: '09:00', end: null, categoryId: 'research' }, d: { id: 'd', date: '2026-10-07', start: '09:00', end: '09:30', categoryId: 'research', deletedAt: 'x' } };
+      const tot = C.dayTotals(ent, st, '2026-10-01', '2026-10-31');
+      ok(tot['2026-10-05'].work === 90 && tot['2026-10-05'].logged === 150 && !tot['2026-10-06'] && !tot['2026-10-07'], 'calendar.dayTotals: 作業と記録の合計(分)・開いた記録と消した記録は数えない');
+      const tk = { t1: { id: 't1', name: '論文', kind: 'duty', deadline: '2026-10-31T17:00' }, t2: { id: 't2', name: '済', kind: 'duty', deadline: '2026-10-31', doneAt: 'x' }, t3: { id: 't3', name: '習慣', kind: 'duty', deadline: '2026-10-31', repeat: { type: 'daily', min: 10 } }, t4: { id: 't4', name: '来月', kind: 'duty', deadline: '2026-11-02' }, t5: { id: 't5', name: 'メモ', kind: 'memo', deadline: '2026-10-31' } };
+      ok(eq(C.deadlinesByDate(tk, '2026-10-01', '2026-10-31'), { '2026-10-31': ['論文'] }), 'calendar.deadlinesByDate: 未完了の期限だけ(済・習慣・メモ・範囲外は除く)');
+      ok(eq(C.plansByDate({ p1: { id: 'p1', date: '2026-10-29' }, p2: { id: 'p2', date: '2026-10-29' }, p3: { id: 'p3', date: '2026-10-29', deletedAt: 'x' } }, '2026-10-01', '2026-10-31'), { '2026-10-29': 2 }), 'calendar.plansByDate: 置いた予定の数');
+      ok(C.weekStart('2026-10-28') === '2026-10-26' && C.weekStart('2026-10-26') === '2026-10-26' && C.weekStart('2026-11-01') === '2026-10-26' && C.addMonthsYM('2026-12', 1) === '2027-01' && C.addMonthsYM('2026-01', -1) === '2025-12', 'calendar.weekStart / addMonthsYM: 月曜始まり・年またぎ');
+      const g = C.monthCells({ ym: '2026-10', today: '2026-10-28', entries: ent, settings: st, diary: { '2026-10-05': { date: '2026-10-05', mood: 4 } }, planBlocks: { p1: { id: 'p1', date: '2026-10-29' } }, tasks: tk });
+      const flat = g.weeks.flat();
+      const c5 = flat.find((c) => c.key === '2026-10-05'), c29 = flat.find((c) => c.key === '2026-10-29'), c31 = flat.find((c) => c.key === '2026-10-31');
+      ok(g.weeks.length === 5 && g.weeks[0][0].key === '2026-09-28' && !g.weeks[0][0].inMonth && g.weeks[4][6].key === '2026-11-01' && g.first === '2026-10-01' && g.last === '2026-10-31', 'calendar.monthCells: 月曜始まりで 5 週・前後の月は inMonth=false');
+      ok(c5.work === 90 && c5.mood === 4 && !c5.future && c29.future && c29.plans === 1 && c29.work === 0 && eq(c31.deadlines, ['論文']) && flat.find((c) => c.key === '2026-10-28').today && g.maxWork === 90, 'calendar.monthCells: 升目に 作業・気分・予定・期限・きょう・未来');
+      const w = C.weekCells({ date: '2026-10-28', today: '2026-10-28', entries: ent, settings: st });
+      ok(w.cells.length === 7 && w.start === '2026-10-26' && w.end === '2026-11-01' && w.cells[2].today && w.cells[3].future && w.cells.every((c) => c.inMonth), 'calendar.weekCells: date を含む月曜始まりの 7 日');
+      ok(C.barHeight(0, 300) === 0 && C.barHeight(300, 300) === 16 && C.barHeight(5, 300) === 3 && C.barHeight(30, 10) === 8, 'calendar.barHeight: 0 は 0・最大 16px・最低 3px・分母は 60 分以上');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

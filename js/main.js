@@ -22,7 +22,8 @@ import * as money from './money.js';
 import * as ai from './ai.js';
 
 import { FEATURES } from './features.js';
-export const APP_VERSION = '0.26.1';
+import * as calendar from './calendar.js';
+export const APP_VERSION = '0.27.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -159,6 +160,7 @@ if (ui.DEV) window.M = {
   APP_VERSION,
   loadNews,
   features: { FEATURES },
+  calendar,
   kiai,
   time,
   log,

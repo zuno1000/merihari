@@ -1,4 +1,4 @@
-// merihari ─ ui-today.js: 「ホーム」と「タイムライン」の画面と、記録の共通操作。
+// merihari ─ ui-today.js: 「ホーム」と「カレンダー」(v0.27・案 A: 週の帯 / 月の升目 + その日のタイムライン。タブの id は 'timeline' のまま)の画面と、記録の共通操作。
 // v0.15: 理想スケジュール(時間割)を廃止。ホーム=きょうの内訳(円)+「何をしていた?」+ きょうの目安。タイムライン=実績1レーン(カレンダーの予定は背景)。
 // 記録の入口は右下の「＋」(既定は「時刻を決めて」= 最後の記録の終わり〜いま をカテゴリのタップで記録。「いまから」はタイマー)。
 import { el, clear, toast, sheet, confirmSheet, timeField, clockSheet, svg, DAY_JA } from './ui.js';
@@ -13,6 +13,7 @@ import * as sync from './sync.js';
 import { diaryCue } from './ui-diary.js';
 import * as money from './money.js';
 import * as kiai from './kiai.js';
+import * as calendar from './calendar.js';
 import { exportJSONFile, shouldRemindExport } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -769,6 +770,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
     el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の日', onclick: () => goDate(addDays(date, 1)) }, '›'),
     showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
     el('span.grow'),
+    el('button.btn.sm.ghost.calmode', { type: 'button', 'aria-label': store.state.local.calMode === 'month' ? '週の帯にする' : '月の升目にする', title: '週 / 月', onclick: () => { store.state.local.calMode = store.state.local.calMode === 'month' ? 'week' : 'month'; store.saveLocal(); rerender(); } }, store.state.local.calMode === 'month' ? '週' : '月'), // v0.27・F14
     el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
     el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), redoCount() ? el('span.undo-n', String(redoCount())) : null]),
   ]);
@@ -776,7 +778,7 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const busy = [...google.busyForDate(date), ...(ds > 0 ? google.busyForDate(next).filter((b) => b.start < ds).map((b) => ({ ...b, start: b.start + 1440, end: Math.min(ds, b.end) + 1440 })) : [])];
   const plans = plan.planCompare(PB(), E(), date, showNow ? e.min : (date > e.date ? 0 : 1800)).blocks; // v0.23: 予定(状態つき)
   const tl = buildTimeline({ date, ds, nowRel, busy, plans, entries: log.entriesOf(E(), date), nextEntries: ds > 0 ? log.entriesOf(E(), next).filter((x) => hm(x.start) < ds) : [], showNow, gapUpto, onSwipe: (d) => goDate(addDays(date, d)) }, rerender);
-  view.append(nav, tl.node, fab);
+  view.append(nav, calendarStrip(date, e.date, goDate), tl.node, fab); // v0.27・F14: 手帳の升目(週 / 月)を日のタイムラインの上に
   view.dataset.date = date;
   timelineDate = showNow ? null : date;
   if (showNow) ctx.setTick(() => { const m = nowInfo(); const em = effectiveDay(S(), m.date, m.min); if (em.date !== date) { ctx.go('timeline'); return; } tl.tick(em.min); });
@@ -785,6 +787,41 @@ export function renderTimeline(view, ctx, dateArg = null) {
     // 開いたら現在時刻が見えるところへ(v0.11)。main.js の go() が先頭に戻したあとに動かす
     requestAnimationFrame(() => { const top = tl.nowTop(); if (top != null) window.scrollTo({ top: Math.max(0, top - Math.round(window.innerHeight * 0.4)) }); });
   }
+}
+
+/**
+ * カレンダーの升目(v0.27・F14・案 A): 週の帯(既定)か月の升目(local.calMode)。手帳のマンスリーに倣い、1 升は 日付・棒(作業の合計)・色(日記の気分)・点(予定)・三角(期限)だけ。
+ * 升目のタップでその日のタイムラインへ(未来の日は予定と期限だけ・「ここに予定」で置ける)。月は ‹ › で前後。材料は calendar.js(純関数)。
+ */
+function calendarStrip(date, today, goDate) {
+  const d = store.state.data;
+  const base = { today, entries: d.entries, settings: S(), diary: d.diary || {}, planBlocks: PB(), tasks: T() };
+  const cell = (c, maxWork, withDow = false) => el('button.cal-cell', {
+    type: 'button',
+    class: `cal-cell${c.inMonth ? '' : ' out'}${c.future ? ' future' : ''}${c.today ? ' today' : ''}${c.key === date ? ' cur' : ''}${c.mood ? ` m${c.mood}` : ''}`,
+    'aria-label': `${fmtMD(c.key, true)}${c.work ? `・作業${fmtMinJa(c.work)}` : ''}${c.plans ? `・予定${c.plans}件` : ''}${c.deadlines.length ? `・期限 ${c.deadlines.join('・')}` : ''}`,
+    'aria-current': c.key === date ? 'date' : null,
+    onclick: () => { if (c.key !== date) goDate(c.key); },
+  }, [
+    withDow ? el('span.cal-w', DAY_JA[weekday(c.key)]) : null,
+    el('span.cal-d', String(+c.key.slice(8, 10))),
+    el('span.cal-marks', [c.plans ? el('i.cal-plan', { title: `予定${c.plans}件` }) : null, c.deadlines.length ? el('i.cal-dl', { title: `期限: ${c.deadlines.join('・')}` }) : null]),
+    c.work ? el('i.cal-bar', { style: { height: `${calendar.barHeight(c.work, maxWork)}px` } }) : null,
+  ]);
+  if (store.state.local.calMode === 'month') {
+    const g = calendar.monthCells({ ym: date.slice(0, 7), ...base });
+    const ym = date.slice(0, 7);
+    const title = `${+ym.slice(0, 4)}年${+ym.slice(5, 7)}月`;
+    const jump = (n) => { const t = calendar.addMonthsYM(ym, n); const day = Math.min(+date.slice(8, 10), new Date(+t.slice(0, 4), +t.slice(5, 7), 0).getDate()); goDate(`${t}-${String(day).padStart(2, '0')}`); };
+    return el('div.mcal', [
+      el('div.mcal-head', [el('button.btn.sm.ghost', { type: 'button', 'aria-label': '前の月', onclick: () => jump(-1) }, '‹'), el('b', title), el('button.btn.sm.ghost', { type: 'button', 'aria-label': '次の月', onclick: () => jump(1) }, '›')]),
+      el('div.cal-row.cal-h', ['月', '火', '水', '木', '金', '土', '日'].map((x) => el('span', x))),
+      ...g.weeks.map((w) => el('div.cal-row', w.map((c) => cell(c, g.maxWork)))),
+      el('p.cal-legend.muted.small', '棒=作業の合計・色=気分・点=予定・▲=期限。タップでその日へ'),
+    ]);
+  }
+  const g = calendar.weekCells({ date, ...base });
+  return el('div.wcal', el('div.cal-row', g.cells.map((c) => cell(c, g.maxWork, true))));
 }
 
 /**
