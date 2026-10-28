@@ -239,7 +239,8 @@ function setupGate(view, ctx) {
  * ホーム(左: カレンダー・今日 / 右: 歯車)・カレンダー(左: 今日 / 右: 月・↶ ↷)・ふり返り(左: 保存の印・今日 / 右: カレンダー)で共通。
  */
 export function headBar({ left = [], center = [], right = [], cls = 'today-head' } = {}) {
-  return el(`div.${cls}.hgrid`, [el('span.hs.l', left), el('span.hmid', center), el('span.hs.r', right)]);
+  // v0.28.2(実機 FB「月 / 週 が › と被る」): 右の列は DOM を逆順にして CSS で row-reverse。中身が列より広くても右(画面の外)へはみ出し、中央の日付に重ならない
+  return el(`div.${cls}.hgrid`, [el('span.hs.l', left), el('span.hmid', center), el('span.hs.r', right.flat().filter(Boolean).reverse())]);
 }
 /** ‹ 日付 ›。next を渡さなければ › は見えないまま場所だけ取る(日付が中心からずれない) */
 export function dateNav(date, { prev, next = null, label = null } = {}) {
@@ -707,10 +708,13 @@ export function renderTimeline(view, ctx, dateArg = null) {
   const total = Object.values(totals).reduce((a, b) => a + b, 0);
   // v0.28(実機 FB ④⑧): 日付は中央(hgrid)・日付の横のレポートの印(グラフのアイコン)は廃止(レポートは ふり返りタブ から)
   const nav = headBar({ cls: 'tl-nav',
-    left: [showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')],
+    // v0.28.2: 「月 / 週」は左端(› と被っていた)、「今日」はその右。右は ↶ ↷ だけ
+    left: [
+      el('button.btn.sm.ghost.calmode', { type: 'button', 'aria-label': store.state.local.calMode === 'month' ? '週の帯にする' : '月の升目にする', title: '週 / 月', onclick: () => { store.state.local.calMode = store.state.local.calMode === 'month' ? 'week' : 'month'; store.saveLocal(); rerender(); } }, store.state.local.calMode === 'month' ? '週' : '月'), // v0.27・F14
+      showNow ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日'),
+    ],
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: () => goDate(addDays(date, 1)), label: el('b.tl-date', md(date)) }),
     right: [
-      el('button.btn.sm.ghost.calmode', { type: 'button', 'aria-label': store.state.local.calMode === 'month' ? '週の帯にする' : '月の升目にする', title: '週 / 月', onclick: () => { store.state.local.calMode = store.state.local.calMode === 'month' ? 'week' : 'month'; store.saveLocal(); rerender(); } }, store.state.local.calMode === 'month' ? '週' : '月'), // v0.27・F14
       el('button.btn.sm.ghost.undo', { type: 'button', disabled: !undoCount(), 'aria-label': undoCount() ? `ひとつ前に戻す: ${undoLabel()}` : '戻す操作はありません', title: undoCount() ? `戻す: ${undoLabel()}` : '', onclick: () => { const l = undoLast(); if (l) { toast(`戻しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' })]), undoCount() ? el('span.undo-n', String(undoCount())) : null]),
       el('button.btn.sm.ghost.undo.redo', { type: 'button', disabled: !redoCount(), 'aria-label': redoCount() ? `やり直す: ${redoLabel()}` : 'やり直す操作はありません', title: redoCount() ? `やり直す: ${redoLabel()}` : '', onclick: () => { const l = redoLast(); if (l) { toast(`やり直しました: ${l}`); rerender(); } } }, [svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3' })]), redoCount() ? el('span.undo-n', String(redoCount())) : null]),
     ],

@@ -867,10 +867,10 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .dtomorrow .dfield{margin-top:4px}
 
 /* ---- v0.28(実機 FB ①②③④⑦⑧): ホームは 円と棒だけ・上の 1 行は 3 列(日付が中心)・歯車の赤い点・設定の先頭「同期」・月のカレンダーのシートを共通に ---- */
-.hgrid{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;min-height:40px;margin:0 0 6px}
+.hgrid{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:6px;min-height:40px;margin:0 0 6px}
 .hgrid .hs{display:flex;align-items:center;gap:4px;min-width:0}
 .hgrid .hs.l{justify-self:start}
-.hgrid .hs.r{justify-self:end;justify-content:flex-end}
+.hgrid .hs.r{justify-self:stretch;flex-direction:row-reverse;justify-content:flex-start} /* v0.28.2: 逆順+row-reverse。広すぎても右へはみ出す(中央に重ならない) */
 .hgrid .hmid{display:flex;flex-direction:row;align-items:center;gap:4px;justify-content:center}
 .hgrid .hmid b{font-size:17px;white-space:nowrap}
 .hgrid .btn.sm.ghost{padding:4px 8px;min-width:40px;min-height:40px;flex:none;font-size:18px;line-height:1}
@@ -919,3 +919,11 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .catlist .catrow.lifting{position:relative;z-index:2;background:var(--card);box-shadow:0 6px 18px rgba(0,0,0,.18);transition:none;border-radius:10px}
 .sheet .swatches{margin-top:8px}
 @media (prefers-reduced-motion:reduce){.catlist.sorting .catrow{transition:none}}
+
+/* ---- v0.28.2: カレンダータブの上の 1 行(月 / 週 は左端・今日はその右・↶ ↷ は右端)。390px で 左 84 + 中央 167 + 右 82 に収まるように詰める ---- */
+.tl-nav.hgrid .hmid .btn.sm.ghost{min-width:34px;padding:4px 5px}
+.tl-nav.hgrid .tl-date{font-size:16px}
+.tl-nav.hgrid .calmode{min-width:34px;padding:4px 6px}
+.tl-nav.hgrid .btn.sm:not(.ghost){padding:4px 9px;min-height:36px;font-size:13px}
+.tl-nav.hgrid .undo{min-width:36px;padding:4px 6px}
+.hgrid .hs{flex-wrap:nowrap}
