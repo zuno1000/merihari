@@ -330,7 +330,7 @@ export function validateDiary(r, id) {
   const lv = (v) => (v != null && Number.isInteger(+v) && +v >= 1 && +v <= 5 ? +v : null); // 1〜5 の整数か null
   const mood = lv(r.mood), tired = lv(r.tired);
   const energy = lv(r.energy) ?? (tired != null ? 6 - tired : null); // v0.26.1: 疲れ(1=元気〜5=くたくた)は 元気(5=元気)へ引き継ぐ
-  return { ...stripUnsafe(r), date: r.date || id, mood, sat: lv(r.sat), tired, energy, good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  return { ...stripUnsafe(r), date: r.date || id, mood, sat: lv(r.sat), tired, energy, good: str(r.good, 2000), hard: str(r.hard, 2000), tomorrow: str(r.tomorrow, 2000), note: str(r.note, 4000), ai: str(r.ai, 6000), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) }; // ai: v0.29.4・AI の返事(F11-6)
 }
 
 /** 読み込んだ JSON を現在のスキーマへ正規化する。壊れた部分だけ既定値に戻し、未知キーは保持する(純関数)。レコードは型を検証する */

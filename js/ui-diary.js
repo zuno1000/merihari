@@ -155,8 +155,30 @@ export function renderDiary(view, ctx, dateArg = null) {
   // AI(v0.21・F11): 設定 › AI で有効にした人だけ。文をショートカットへ渡し、返事はクリップボードから貼り付ける(アプリ内に AI は無い)
   // v0.26: カードではなく 1 行。タップでシート(中身は aiCard のまま)
   const aiOpts = { date, isToday, nowMin, agg, fb, gs, draft, fields, queue, revealNote, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) };
-  const aiBox = store.state.local.ai?.enabled ? el('div.list.freshline', el('button.srow.fresh', { type: 'button', onclick: () => sheet(() => [aiCard(aiOpts)]) },
-    [el('span.lbl', 'AI に頼む'), el('span.grow'), el('span.val', `ショートカット「${store.state.local.ai.shortcutName || ai.DEFAULT_SHORTCUT}」`), el('span.chev', '›')])) : null;
+  // v0.29.4(実機 FB・F11-6): 「AI」の節 ─ 返事の欄(メモとは別・自動保存)+「頼む」「返事を貼り付け」(1 タップでクリップボードから欄へ)「相談 ›」(シート)
+  const aiOn = !!store.state.local.ai?.enabled;
+  let aiBox = null;
+  if (aiOn || (draft.ai && draft.ai.trim())) {
+    const aiField = field('ai', 'AI の返事', aiOn ? '「返事を貼り付け」で入ります(手で貼ってもよい)' : '');
+    aiOpts.aiField = fields.ai;
+    const pasteInto = async () => {
+      let text = '';
+      try { text = (await navigator.clipboard.readText()) || ''; } catch { toast('貼り付けの許可が要ります。欄を長押しして「ペースト」でも入ります'); fields.ai.focus(); return; }
+      text = text.trim();
+      if (!text) { toast('クリップボードが空です'); return; }
+      const cur = (fields.ai.value || '').trim();
+      if (cur === text) { toast('同じ返事がもう入っています'); return; }
+      fields.ai.value = cur ? `${cur}\n\n${text}` : text; draft.ai = fields.ai.value; fields.ai.fit(); queue(); toast('返事を貼り付けました');
+    };
+    aiBox = el('section.group', [el('h2', 'AI'), el('section.card.dcard.aisec', [
+      aiField,
+      aiOn ? el('div.row.wrap.airow', [
+        el('button.btn.sm', { type: 'button', onclick: () => aiCard(aiOpts).send?.() }, isToday ? 'きょうのふり返りを頼む' : 'この日のふり返りを頼む'),
+        el('button.btn.sm.primary', { type: 'button', onclick: pasteInto }, '返事を貼り付け'),
+        isToday ? el('button.btn.sm.ghost', { type: 'button', onclick: () => sheet(() => [aiCard(aiOpts).node]) }, '相談 ›') : null,
+      ].filter(Boolean)) : null,
+    ].filter(Boolean))]);
+  }
   // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
   const mems = diary.memories(Dy(), date);
   const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
@@ -170,15 +192,20 @@ export function renderDiary(view, ctx, dateArg = null) {
     const tmrPlans = plan.planBlocksOf(store.state.data.planBlocks || {}, tmr).length;
     const near = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) > date && t.deadline.slice(0, 10) <= addDays(date, 7))
       .sort((a, b) => (a.deadline < b.deadline ? -1 : 1)).slice(0, 5);
+    // v0.29.4(実機 FB「タスクの一覧が見にくい・明日の予定のボタンも」): 明日の予定は札(件数+「カレンダーで置く ›」)、期限のタスクは 2 行(色の点・名前 / 期限・残り)で、小見出しつき
+    const catOf = (id) => S().categories.find((c) => c.id === id) || null;
+    const dlText = (t) => { const k = t.deadline.slice(0, 10); const dd = plan.daysBetween(date, k); return k === tmr ? '明日が期限' : `${fmtMD(k)}が期限(あと${dd}日)`; };
     tomorrowSec = el('section.group', [
       el('h2', '明日を決める'),
       el('section.card.dcard.dtomorrow', [tomorrowField]),
-      el('div.list', [
-        el('button.srow', { type: 'button', onclick: () => { commit(); ctx.go('timeline', tmr); } }, [el('span.lbl', '明日の予定'), el('span.grow'), el('span.val', tmrPlans ? `${tmrPlans}件・カレンダーで直す` : 'カレンダーで置く'), el('span.chev', '›')]),
-        ...near.map((t) => el('button.srow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
-          el('span.lbl', t.name), el('span.grow'),
-          el('span.val', `${t.deadline.slice(0, 10) === tmr ? '明日' : fmtMD(t.deadline.slice(0, 10))}が期限${t.noTime ? '' : `・残り${fmtMin(plan.remainingMin(t, E()))}`}`), el('span.chev', '›')])),
+      el('button.srow.plan-cta', { type: 'button', onclick: () => { commit(); ctx.go('timeline', tmr); } }, [
+        el('span.pc-main', [el('b', '明日の予定'), el('span.pc-sub', tmrPlans ? `${tmrPlans} 件 置いてあります` : 'まだ置いていません')]),
+        el('span.pc-act', tmrPlans ? 'カレンダーで直す ›' : 'カレンダーで置く ›'),
       ]),
+      el('h3.help-h.dl-h', '期限が近いタスク(7 日以内)'),
+      el('div.list', near.length ? near.map((t) => { const c = catOf(t.categoryId); return el('button.srow.goal.dlrow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
+        el('span.gmain', [el('span.gname', [c ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, t.name]), el('span.gmeta', `${dlText(t)}${t.noTime ? '・用事' : `・残り ${fmtMin(plan.remainingMin(t, E()))}`}`)]),
+        el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
   view.append(...[el('h1', 'ふり返り'), head, topSec, cardSec, tomorrowSec, aiBox, memBox, listBox].filter(Boolean));
@@ -187,7 +214,7 @@ export function renderDiary(view, ctx, dateArg = null) {
 
 /**
  * AI に頼む(v0.21・F11): 「きょうのふり返りを頼む」と「相談」(定型のチップ+自由入力)。文は ai.js の純関数で作り、ショートカット(端末内モデル)へ。
- * 返事は「返事を貼り付け」でクリップボードから読み、シートで見せてからメモに追記できる。PC など開けない環境のために「文をコピー」も。
+ * v0.29.4: 返事は「AI」の節の「返事を貼り付け」(1 タップ)で「AI の返事」の欄へ(F11-6)。PC など開けない環境のために「文をコピー」も。戻り値 { node, send }
  */
 function aiCard(o) {
   const local = store.state.local;
@@ -210,29 +237,14 @@ function aiCard(o) {
     return ai.consultText({ question: question.value, nowMin: n.min, open: openInfo, workMin, goals: S().goals, gs: plan.goals(T(), E(), n.date, n.min), near, mood: entryFor(n.date).mood });
   };
   const chips = el('div.chips.small', ai.QUICK_QUESTIONS.map((q) => el('button.chip.sm2', { type: 'button', onclick: () => { question.value = q; send(consult()); } }, q)));
-  const paste = async () => {
-    let text = '';
-    try { text = (await navigator.clipboard.readText()) || ''; } catch { toast('貼り付けの許可が要ります(もう一度タップして「ペースト」を選ぶ)'); return; }
-    text = text.trim();
-    if (!text) { toast('クリップボードが空です'); return; }
-    sheet((close) => [
-      el('h2', 'AI の返事'),
-      el('p.aireply', text.slice(0, 2000)),
-      el('div.row', [el('button.btn', { type: 'button', onclick: close }, '閉じる'), el('button.btn.primary.grow', { type: 'button', onclick: () => {
-        const ta = o.fields.note; const cur = (ta.value || '').trim();
-        o.revealNote?.(); ta.value = cur ? `${cur}\n${text}` : text; o.draft.note = ta.value; ta.fit(); o.queue(); close(); toast('メモに追記しました');
-      } }, 'メモに追記')]),
-    ]);
-  };
-  return el('section.card.aicard', [
-    el('div.row.between', [el('span.dlabel', `AI に頼む(ショートカット「${name}」)`), el('button.btn.sm.ghost', { type: 'button', onclick: () => copyOnly(summary()) }, '文をコピー')]),
-    el('div.row', [
-      el('button.btn.grow', { type: 'button', onclick: () => send(summary()) }, o.isToday ? 'きょうのふり返りを頼む' : 'この日のふり返りを頼む'),
-      el('button.btn', { type: 'button', onclick: paste }, '返事を貼り付け'),
-    ]),
+  // v0.29.4: 返事の貼り付けは「AI」の節(1 タップで欄へ)に移した。このカードは「相談」のシートと「頼む」の送り手
+  const node = el('section.card.aicard', [
+    el('div.row.between', [el('span.dlabel', `AI に相談(ショートカット「${name}」)`), el('button.btn.sm.ghost', { type: 'button', onclick: () => copyOnly(summary()) }, '文をコピー')]),
     o.isToday ? el('div.row', [question, el('button.btn.primary', { type: 'button', onclick: () => send(consult()) }, '相談')]) : null,
     o.isToday ? chips : null,
+    el('p.muted.small', '返事はショートカットの中に出て、クリップボードにも入ります。戻って「返事を貼り付け」を押すと「AI の返事」の欄に入ります。'),
   ].filter(Boolean));
+  return { node, send: () => send(summary()) };
 }
 
 /** レポート「今日」の抜粋(ui-report から): 書いてあれば 満足/気分/疲れ と3行、無ければ「日記を書く ›」(1日の終わり近くだけ) */

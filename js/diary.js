@@ -28,7 +28,7 @@ const txt = (s) => (typeof s === 'string' ? s.trim() : '');
 
 /** 何か1つでも書いてあれば「書いた日」(気分だけでも可) */
 export function isWritten(d) {
-  return !!(alive(d) && (d.mood != null || d.energy != null || d.sat != null || d.tired != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note)));
+  return !!(alive(d) && (d.mood != null || d.energy != null || d.sat != null || d.tired != null || txt(d.good) || txt(d.hard) || txt(d.tomorrow) || txt(d.note) || txt(d.ai))); // ai: v0.29.4
 }
 
 /** 続けて書いた日数。date に書いていなくても途切れ扱いにしない(昨日から数える) */
