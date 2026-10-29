@@ -1124,8 +1124,9 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], plans = [], ent
       const was = st;
       finish();
       if (!was.grab) return; // ただのタップ(長押し前) → click に任せる
-      suppress = true;
-      if ((was.ns !== o.start || was.ne !== o.end) && o.commit) o.commit(was.ns, was.ne); else { reset(); if (!was.moved && was.kind === 'move') suppress = false; }
+      if (was.moved && (was.ns !== o.start || was.ne !== o.end) && o.commit) { suppress = true; o.commit(was.ns, was.ne); return; }
+      reset();
+      suppress = was.moved; // 動かさずに離した(端を押しただけ・長押しだけ)→ click に任せる。細いブロック(20 分以下)は端(.hdl 12px × 2)が全面を覆うので、ここで拾わないとタップで直せなかった(v0.31.2)
     };
     const onCancel = (ev) => { if (!st || ev.pointerId !== st.id) return; finish(); reset(); };
     node.addEventListener('pointerdown', (ev) => { if (ev.target.classList && ev.target.classList.contains('hdl')) return; if (o.move) begin(ev, 'move'); });
