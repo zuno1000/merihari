@@ -60,7 +60,14 @@ export function renderMoney(view, ctx, dateArg = null) {
   const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
 
   // 月のまとめ: ‹ 月 › ・支出(大きく)・収入と差し引き・資産・予算のメーター(または 1 日平均)・内訳の円・日ごとの合計(タップでその日へ)・推移
-  const jumpMonth = (n) => { const t = money.addMonths(ym, n); const last = money.monthRange(t).days; const k = `${t}-${String(Math.min(+date.slice(8, 10), last)).padStart(2, '0')}`; goDate(k > today ? today : k); };
+  // v0.30.1(実機 FB「月を前後すると画面が上に飛ぶ」): ctx.go は先頭にスクロールするので、月の見出しが同じ位置に来るように戻す
+  const jumpMonth = (n) => {
+    const t = money.addMonths(ym, n); const last = money.monthRange(t).days; const k = `${t}-${String(Math.min(+date.slice(8, 10), last)).padStart(2, '0')}`;
+    const top = monthHead.getBoundingClientRect().top;
+    goDate(k > today ? today : k);
+    const h = view.querySelector('.mmonth-h');
+    if (h) window.scrollTo(0, Math.max(0, window.scrollY + h.getBoundingClientRect().top - top));
+  };
   const monthHead = el('div.row.mmonth-h', [
     el('h2', money.fmtYM(ym)),
     el('span.grow'),

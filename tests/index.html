@@ -950,6 +950,10 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(S.needsKindFilter(kgf) && S.needsKindFilter(few(['english', 'life'])) && !S.needsKindFilter(few(['english', 'research'])) && !S.needsKindFilter(S.kindGroups(s2, cats.filter((c) => ['research', 'life'].includes(c.id)))), 'needsKindFilter: ★ があれば件数に関わらず絞る(種別が 2 つ以上のとき)。★ 無しは従来どおり 8 件以上');
       const mf = S.migrate({ schema: 1, settings: { categories: [{ id: 'a', name: 'A', kind: 'work', fav: true }, { id: 'b', name: 'B', kind: 'work', fav: 'yes' }] } }).settings.categories;
       ok(mf[0].fav === true && mf[1].fav === false && S.defaultSettings().categories.every((c) => !c.fav), 'migrate: カテゴリの fav は true だけ(既定は無し)');
+      // 数え方の選択肢(v0.30.1): 種別の pick
+      const dkq = S.defaultKinds();
+      const mk = S.migrate({ schema: 1, settings: { kinds: [{ id: 'a', name: 'A', work: true }, { id: 'b', name: 'B', work: false, drift: false, pick: true }, { id: 'c', name: 'C', work: true, pick: false }, { id: 'd', name: 'D' }] } }).settings.kinds;
+      ok(dkq.filter((k) => k.pick).map((k) => k.id).join() === 'work,fixed,drift' && mk.map((k) => k.pick).join() === 'true,true,false,false' && S.pickKinds({ kinds: mk }).map((k) => k.id).join() === 'a,b' && S.pickKinds({}).map((k) => k.id).join() === 'work,fixed,drift', 'pickKinds / migrate: 数え方の選択肢は pick(無ければ 作業 か ダラダラ の種別)');
       // お金の日ごと
       const Mo = M.money;
       const mny = { a: { id: 'a', date: '2026-10-30', time: '12:00', amount: 500, type: 'out', categoryId: 'food' }, b: { id: 'b', date: '2026-10-30', time: null, amount: 1000, type: 'in', categoryId: 'inc', updatedAt: '2' }, c: { id: 'c', date: '2026-10-30', time: '18:30', amount: 300, type: 'out', categoryId: 'food' }, d: { id: 'd', date: '2026-10-29', time: '09:00', amount: 100, type: 'out', categoryId: 'food' }, e: { id: 'e', date: '2026-10-30', time: '08:00', amount: 999, type: 'out', categoryId: 'x', deletedAt: '1' } };

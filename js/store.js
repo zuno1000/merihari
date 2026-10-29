@@ -12,12 +12,12 @@ import { normalizeRegion, MAX_REGIONS } from './weather.js';
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
 export function defaultKinds() {
   return [
-    { id: 'work', name: '作業', work: true, drift: false },
-    { id: 'fixed', name: '決まった作業', work: true, drift: false },
-    { id: 'life', name: '生活', work: false, drift: false },
-    { id: 'rest', name: '休憩', work: false, drift: false },
-    { id: 'drift', name: 'ダラダラ', work: false, drift: true },
-    { id: 'hobby', name: '趣味', work: false, drift: false },
+    { id: 'work', name: '作業', work: true, drift: false, pick: true }, // pick: v0.30.1 記録の「数え方」の選択肢に出す
+    { id: 'fixed', name: '決まった作業', work: true, drift: false, pick: true },
+    { id: 'life', name: '生活', work: false, drift: false, pick: false },
+    { id: 'rest', name: '休憩', work: false, drift: false, pick: false },
+    { id: 'drift', name: 'ダラダラ', work: false, drift: true, pick: true },
+    { id: 'hobby', name: '趣味', work: false, drift: false, pick: false },
   ];
 }
 export const CATEGORY_KINDS = Object.fromEntries(defaultKinds().map((k) => [k.id, k.name]));
@@ -43,6 +43,11 @@ export function effectiveKind(settings, entry) {
   if (c) return c.kind;
   const id = entry?.categoryId;
   return id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' || id === 'sleep' ? 'life' : 'work';
+}
+/** 記録の「数え方」の選択肢に出す種別(v0.30.1): 設定 › 種別 の「数え方に出す」(pick)。無ければ 作業 / ダラダラ として数える種別。純関数 */
+export function pickKinds(settings) {
+  const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
+  return kinds.filter((k) => (k.pick === undefined ? k.work || k.drift : k.pick === true));
 }
 export function entryRole(settings, entry) {
   return kindRole(settings, effectiveKind(settings, entry));
@@ -198,7 +203,7 @@ function normalizeSettings(raw) {
   s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
   // 種別(v0.15.2): 無ければ既定。カテゴリの種別は存在するものだけ(無ければ work か先頭)
-  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true, ...(typeof k.updatedAt === 'string' ? { updatedAt: k.updatedAt.slice(0, 40) } : {}) })) : null;
+  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true, pick: k.pick === true || (k.pick === undefined && (k.work === true || k.drift === true)), ...(typeof k.updatedAt === 'string' ? { updatedAt: k.updatedAt.slice(0, 40) } : {}) })) : null;
   s.kinds = kindsRaw && kindsRaw.length ? kindsRaw : defaultKinds();
   const kindIds = new Set(s.kinds.map((k) => k.id));
   const kindFallback = kindIds.has('work') ? 'work' : s.kinds[0].id;
