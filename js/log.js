@@ -86,7 +86,7 @@ export function start(entries, opts, ctx) {
   let { entries: out } = closeOpen(entries, { date, at: startMin, windowEndOf: opts.windowEndOf }, ctx);
   const e = {
     id: ctx.uid(), date, start: mm(startMin), end: null, categoryId,
-    taskId: opts.taskId ?? null, note: typeof opts.note === 'string' ? opts.note.slice(0, 500) : '', plannedMin: opts.plannedMin ?? null, updatedAt: ctx.nowISO(), deletedAt: null, // note: v0.23.1
+    taskId: opts.taskId ?? null, note: typeof opts.note === 'string' ? opts.note.slice(0, 500) : '', plannedMin: opts.plannedMin ?? null, asKind: opts.asKind ?? null, updatedAt: ctx.nowISO(), deletedAt: null, // note: v0.23.1・asKind: v0.30(F1-20)
   };
   out[e.id] = e;
   out = resolveOverlap(out, e.id, nowMin, ctx);
@@ -94,17 +94,17 @@ export function start(entries, opts, ctx) {
 }
 
 /** 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める */
-export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '' }, ctx, dayEnd = 1440) {
+export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '', asKind = null }, ctx, dayEnd = 1440) {
   if (startMin == null || endMin == null) throw new Error('終了は開始より後にしてください');
   if (endMin <= startMin) { // 日付をまたぐ(v0.13.2/0.13.4): 終了が翌日の深夜なら、切れ目(dayEnd)までは同じ日の記録(end '24:10')、無ければ 24:00 で分ける
     if (!(endMin <= 360 && startMin > 360)) throw new Error('終了は開始より後にしてください');
-    if (endMin + 1440 <= dayEnd) return addEntry(entries, { date, startMin, endMin: endMin + 1440, categoryId, taskId, note }, ctx, dayEnd);
-    let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note }, ctx, dayEnd);
-    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note }, ctx, dayEnd);
+    if (endMin + 1440 <= dayEnd) return addEntry(entries, { date, startMin, endMin: endMin + 1440, categoryId, taskId, note, asKind }, ctx, dayEnd);
+    let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note, asKind }, ctx, dayEnd);
+    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note, asKind }, ctx, dayEnd);
     return out;
   }
   const out = clone(entries);
-  const e = { id: ctx.uid(), date, start: mm(startMin), end: mm(endMin), categoryId, taskId, note, plannedMin: null, updatedAt: ctx.nowISO(), deletedAt: null };
+  const e = { id: ctx.uid(), date, start: mm(startMin), end: mm(endMin), categoryId, taskId, note, plannedMin: null, asKind: asKind || null, updatedAt: ctx.nowISO(), deletedAt: null };
   out[e.id] = e;
   return resolveOverlap(out, e.id, 1440, ctx);
 }
@@ -174,8 +174,8 @@ export function switchFrom(entries, id, at, categoryId, nowMin, ctx) {
   if (!alive(e)) return { entries: out, tailId: null };
   const s = hm(e.start), en = effectiveEnd(e, e.date, nowMin);
   if (at >= en) throw new Error('終わりより前の時刻にしてください');
-  if (at <= s) { Object.assign(e, { categoryId, taskId: null, plannedMin: null, updatedAt: ctx.nowISO() }); return { entries: out, tailId: e.id }; }
-  const tail = { ...e, id: ctx.uid(), start: mm(at), categoryId, taskId: null, plannedMin: null, note: '', updatedAt: ctx.nowISO() };
+  if (at <= s) { Object.assign(e, { categoryId, taskId: null, plannedMin: null, asKind: null, updatedAt: ctx.nowISO() }); return { entries: out, tailId: e.id }; } // asKind: 別のカテゴリに移すので数え方は種別どおりに戻す(v0.30)
+  const tail = { ...e, id: ctx.uid(), start: mm(at), categoryId, taskId: null, plannedMin: null, asKind: null, note: '', updatedAt: ctx.nowISO() };
   e.end = mm(at); e.updatedAt = ctx.nowISO();
   out[tail.id] = tail;
   return { entries: out, tailId: tail.id };
@@ -267,6 +267,24 @@ export function totalsByCategory(entries, date, nowMin) {
   for (const e of entriesOf(entries, date)) {
     const d = effectiveEnd(e, date, nowMin) - hm(e.start);
     if (d > 0) t[e.categoryId] = (t[e.categoryId] || 0) + d;
+  }
+  return t;
+}
+
+/**
+ * その日の 作業 / ダラダラ / 休憩 の合計(分)(v0.30・F1-20): roleOf(entry) → { work, drift, rest } を記録ごとに引く(記録の「数え方」asKind を反映できる)。記録中は nowMin まで。
+ * 戻り値 { work, drift, rest, byKind:{kindId: 分}(roleOf が kind を返せば) }。純関数
+ */
+export function totalsByRole(entries, date, nowMin, roleOf) {
+  const t = { work: 0, drift: 0, rest: 0, byKind: {} };
+  for (const e of entriesOf(entries, date)) {
+    const d = effectiveEnd(e, date, nowMin) - hm(e.start);
+    if (d <= 0) continue;
+    const r = roleOf(e) || {};
+    if (r.work) t.work += d;
+    if (r.drift) t.drift += d;
+    if (r.rest) t.rest += d;
+    if (typeof r.kind === 'string') t.byKind[r.kind] = (t.byKind[r.kind] || 0) + d;
   }
   return t;
 }

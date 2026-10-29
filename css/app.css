@@ -982,3 +982,27 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .srow.goal.dlrow .gname{font-size:15px}
 .srow.goal.dlrow .gmeta{font-size:12px;color:var(--muted)}
 .list>.pad{padding:12px 14px;margin:0}
+
+/* v0.30: 記録の数え方(F1-20)・お気に入り ★(F1-21)・お金の日ごと(F10-9)・ふり返りの並び */
+.now-card.big{flex-wrap:wrap}
+.countas-row{flex-basis:100%;display:flex;margin-top:2px}
+.asrow{margin-top:6px}
+.chip.aswork{gap:6px}
+.chip.aswork .aw-mark{font-size:11px;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);color:var(--muted);flex:none;line-height:1}
+.chip.aswork.on .aw-mark{background:var(--accent);color:#fff}
+.countas .chip.on{font-weight:600}
+.blk-tag{font-size:10px;color:var(--accent);background:var(--accent-bg);padding:0 5px;border-radius:999px;white-space:nowrap;flex:none;line-height:1.5;align-self:flex-start}
+.ktab.fav{color:#b8860b}
+.ktab.fav[aria-selected="true"]{background:#fff1c7;color:#7a5600}
+@media (prefers-color-scheme:dark){.ktab.fav{color:#e6c062}.ktab.fav[aria-selected="true"]{background:#3a2f12;color:#f3d57a}}
+.catrow .cstar{width:36px;height:44px;border:0;background:none;color:var(--muted);font-size:18px;font-family:inherit;cursor:pointer;flex:none;padding:0;line-height:1;opacity:.55}
+.catrow .cstar.on{color:#e0a800;opacity:1}
+.mdaycard .mnet{margin:6px 0 0}
+.mmonth-h{align-items:center;margin:14px 0 4px}
+.mmonth-h h2{margin:0}
+.mmonth .card{margin-bottom:10px}
+.mdrow{gap:8px}
+.mdrow .lbl{font-weight:500}
+.mdrow.cur .lbl{color:var(--accent);font-weight:600}
+.mdrow .chev{color:var(--muted);font-size:20px;line-height:1;flex:none}
+.mdrow .val{flex:none}

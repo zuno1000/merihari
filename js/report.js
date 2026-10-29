@@ -3,9 +3,9 @@
 // v0.15.1: 期間(7日・30日・すべて)のふり返り(periodSummary / goalsSummary / weeklyBuckets)。
 import { planCompare } from './plan.js';
 import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
-import { entriesOf, totalsByCategory } from './log.js';
+import { entriesOf, totalsByCategory, totalsByRole } from './log.js';
 import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked } from './plan.js';
-import { catRole, kindRole, defaultKinds } from './store.js';
+import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
@@ -18,9 +18,9 @@ export function datesWithEntries(entries) {
 }
 
 /** ベースライン: date を除く直近 days 日のうち記録がある日のカテゴリ別平均。記録日が無ければ null */
-export function baseline(entries, date, days = 7) {
+export function baseline(entries, date, days = 7, settings = null) {
   const sums = {};
-  let n = 0;
+  let n = 0, work = 0, drift = 0;
   for (let i = 1; i <= days; i++) {
     const d = addDays(date, -i);
     const t = totalsByCategory(entries, d, 1440);
@@ -28,11 +28,12 @@ export function baseline(entries, date, days = 7) {
     if (!keys.length) continue;
     n++;
     for (const k of keys) sums[k] = (sums[k] || 0) + t[k];
+    if (settings) { const r = totalsByRole(entries, d, 1440, (e) => entryRole(settings, e)); work += r.work; drift += r.drift; } // v0.30: 記録の「数え方」を反映した作業 / ダラダラの平均
   }
   if (!n) return null;
   const by = {};
   for (const k of Object.keys(sums)) by[k] = Math.round(sums[k] / n);
-  return { byCategory: by, days: n };
+  return { byCategory: by, days: n, workMin: settings ? Math.round(work / n) : null, driftMin: settings ? Math.round(drift / n) : null };
 }
 
 /** 作業時間帯の中で記録が無い分(未記録)とカバー率。today なら nowMin までを対象にする */
@@ -64,22 +65,20 @@ export function streak(entries, date) {
 export function aggregate({ entries, date, nowMin = 1440, settings }) {
   const categories = settings?.categories || [];
   const actual = totalsByCategory(entries, date, nowMin);
-  const base = baseline(entries, date);
+  const base = baseline(entries, date, 7, settings);
   const ids = new Set([...Object.keys(actual), ...Object.keys(base?.byCategory || {})]);
   const by = {};
-  let workMin = 0, driftMin = 0, restMin = 0, baselineWorkMin = 0;
   for (const id of ids) {
     const role = catRole(settings, id);
-    const row = { actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: (categories.find((c) => c.id === id) || {}).kind || null, work: role.work, drift: role.drift, rest: role.rest, name: nameOf(categories, id) };
-    by[id] = row;
-    if (row.work) { workMin += row.actual; baselineWorkMin += row.baseline || 0; }
-    if (row.drift) driftMin += row.actual;
-    if (row.rest) restMin += row.actual;
+    by[id] = { actual: actual[id] || 0, baseline: base ? (base.byCategory[id] || 0) : null, kind: (categories.find((c) => c.id === id) || {}).kind || null, work: role.work, drift: role.drift, rest: role.rest, name: nameOf(categories, id) };
   }
+  // v0.30(F1-20): 作業 / ダラダラ / 休憩 の合計は記録ごとの「数え方」(asKind)を反映。byKind は種別ごとの合計(レポートのタイル用)
+  const roles = totalsByRole(entries, date, nowMin, (e) => ({ ...entryRole(settings, e), kind: effectiveKind(settings, e) }));
+  const workMin = roles.work, driftMin = roles.drift, restMin = roles.rest;
   const W = windowFor(settings, date);
   const u = unlogged(entries, date, W, nowMin);
   const dayDone = !W || nowMin >= W.end;
-  return { date, byCategory: by, workMin, dayDone, driftMin, restMin, baselineWorkMin: base ? baselineWorkMin : null, baselineDays: base?.days || 0,
+  return { date, byCategory: by, byKind: roles.byKind, workMin, dayDone, driftMin, restMin, baselineWorkMin: base ? base.workMin : null, baselineDays: base?.days || 0,
     unloggedMin: u.unloggedMin, coverage: u.coverage, loggedMin: u.loggedMin, streak: streak(entries, date) };
 }
 
@@ -303,7 +302,7 @@ export function weekSummary(entries, settings, date) {
       const d = addDays(from, -i);
       const t = totalsByCategory(entries, d, 1440);
       if (Object.keys(t).length) days++;
-      for (const [id, m] of Object.entries(t)) { const r = catRole(settings, id); if (r.work) workMin += m; else if (r.drift) driftMin += m; }
+      const r = totalsByRole(entries, d, 1440, (e) => entryRole(settings, e)); workMin += r.work; driftMin += r.drift; // v0.30: 記録の数え方を反映
     }
     return { workMin, driftMin, days };
   };
@@ -320,12 +319,10 @@ export function periodSummary(entries, settings, from, to, { nowDate = null, now
   let loggedMin = 0, workMin = 0, driftMin = 0, loggedDays = 0;
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const t = totalsByCategory(entries, d, d === nowDate ? nowMin : 1440);
-    let w = 0, dr = 0, lg = 0;
-    for (const [id, m] of Object.entries(t)) {
-      by[id] = (by[id] || 0) + m; lg += m;
-      const r = catRole(settings, id);
-      if (r.work) w += m; else if (r.drift) dr += m;
-    }
+    let lg = 0;
+    for (const [id, m] of Object.entries(t)) { by[id] = (by[id] || 0) + m; lg += m; }
+    const rr = totalsByRole(entries, d, d === nowDate ? nowMin : 1440, (e) => entryRole(settings, e)); // v0.30: 記録の数え方を反映
+    const w = rr.work, dr = rr.drift;
     if (lg > 0) loggedDays++;
     loggedMin += lg; workMin += w; driftMin += dr;
     daily.push({ key: d, workMin: w, driftMin: dr, loggedMin: lg });

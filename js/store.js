@@ -32,6 +32,21 @@ export function catRole(settings, catId) {
   const c = (settings?.categories || []).find((x) => x.id === catId);
   return kindRole(settings, c ? c.kind : (catId === 'rest' ? 'rest' : catId === 'sns' ? 'drift' : catId === 'life' || catId === 'transit' || catId === 'sleep' ? 'life' : 'work'));
 }
+/**
+ * 記録ごとの「数え方」(v0.30・F1-20): entry.asKind(種別 id)があればその種別の役割、無ければカテゴリの種別の役割。
+ * 「サークル(趣味)でも作業をした日は作業に数える」をカテゴリを分けずに実現する。純関数
+ */
+export function effectiveKind(settings, entry) {
+  const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
+  if (entry && typeof entry.asKind === 'string' && kinds.some((k) => k.id === entry.asKind)) return entry.asKind;
+  const c = (settings?.categories || []).find((x) => x.id === entry?.categoryId);
+  if (c) return c.kind;
+  const id = entry?.categoryId;
+  return id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' || id === 'sleep' ? 'life' : 'work';
+}
+export function entryRole(settings, entry) {
+  return kindRole(settings, effectiveKind(settings, entry));
+}
 
 /** 既定カテゴリ(§3・§13-2)。id は固定で、名前・並び・種別は編集可 */
 export function defaultCategories() {
@@ -112,17 +127,22 @@ const TILE_KEY = /^(kind|cat):[A-Za-z0-9_-]{1,40}$/;
  * カテゴリを種別で束ねる(v0.28.1・実機 FB ⑤「カテゴリが増えるほど煩雑」): 設定の種別の順に { id, name, cats }。カテゴリが 1 つも無い種別は出さない。
  * 種別が無い(消えた)カテゴリは末尾の 'other'「その他」に。純関数
  */
-export function kindGroups(settings, cats) {
+export function kindGroups(settings, cats, { fav = false } = {}) {
   const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
   const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id) })).filter((g) => g.cats.length);
   const rest = cats.filter((c) => !kinds.some((k) => k.id === c.kind));
   if (rest.length) groups.push({ id: 'other', name: 'その他', cats: rest });
+  // v0.30(F1-21 お気に入り): fav=true なら ★ を付けたカテゴリの束を先頭に(id 'fav'・fav: true)。1 つも無ければ付けない
+  if (fav) { const favs = cats.filter((c) => c.fav); if (favs.length) groups.unshift({ id: 'fav', name: '★', fav: true, cats: favs }); }
   return groups;
 }
-/** 種別で絞る価値があるか: 種別が 2 つ以上あり、カテゴリが min(既定 8)以上。純関数 */
+/** 種別で絞る価値があるか: 種別が 2 つ以上あり、カテゴリが min(既定 8)以上。★ の束があれば(種別が 2 つ以上なら)件数に関わらず絞る。純関数 */
 export const KIND_FILTER_MIN = 8;
 export function needsKindFilter(groups, min = KIND_FILTER_MIN) {
-  return groups.length >= 2 && groups.reduce((a, g) => a + g.cats.length, 0) >= min;
+  const real = groups.filter((g) => !g.fav);
+  if (real.length < 2) return false;
+  if (groups.some((g) => g.fav)) return true;
+  return real.reduce((a, g) => a + g.cats.length, 0) >= min;
 }
 /** 並べ替え(v0.28.1・設定のドラッグ): list の from 番目を to 番目へ動かした新しい配列(order は 1 から振り直す)。範囲外や同じ位置ならそのまま(同じ参照を返す)。純関数 */
 export function moveItem(list, from, to) {
@@ -186,6 +206,7 @@ function normalizeSettings(raw) {
         ...c, id: String(c.id), name: String(c.name || c.id),
         kind: typeof c.kind === 'string' && kindIds.has(c.kind) ? c.kind : kindFallback,
         archived: c.archived === true, // v0.15.2: 消す代わりに非表示(記録は名前と色のまま残る)
+        fav: c.fav === true, // v0.30: お気に入り(チップの先頭の ★ の束に出す)
         color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
           ? (!raw.palette && (LEGACY_COLORS[c.id] || []).includes(c.color.toLowerCase()) ? DEFAULT_COLORS[c.id] : c.color) // 過去の既定色は新しい既定色へ(自分で選んだ色・配色のプリセットを選んだあとは保持)
           : (DEFAULT_COLORS[c.id] || DEFAULT_COLORS.life),
@@ -259,7 +280,8 @@ function stripUnsafe(rec) { const o = {}; for (const k of Object.keys(rec)) if (
 export function validateEntry(r, id) {
   if (!isObj(r) || !isDate(r.date) || !isHM(r.start) || (r.end != null && !isHM(r.end))) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, start: r.start, end: r.end == null ? null : r.end, categoryId: str(r.categoryId, 40, 'other'), taskId: optStr(r.taskId, 80), note: str(r.note, 500),
-    plannedMin: r.plannedMin == null ? null : num(r.plannedMin, 0, 1440, null), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+    plannedMin: r.plannedMin == null ? null : num(r.plannedMin, 0, 1440, null), asKind: optStr(r.asKind, 40), // asKind: v0.30・F1-20(種別 id・null=カテゴリの種別どおり)
+    updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 export function validateTask(r, id) {
   if (!isObj(r) || typeof r.name !== 'string') return null;
@@ -346,7 +368,7 @@ export function migrate(raw) {
   for (const e of Object.values(out.entries)) {
     if (e.deletedAt || !e.categoryId || known.has(e.categoryId)) continue;
     known.add(e.categoryId);
-    out.settings.categories.push({ id: e.categoryId, name: '消したカテゴリ', kind: (out.settings.kinds.find((k) => k.id === 'work') || out.settings.kinds[0]).id, color: DEFAULT_COLORS.other, order: out.settings.categories.length + 1, archived: true, restored: true });
+    out.settings.categories.push({ id: e.categoryId, name: '消したカテゴリ', kind: (out.settings.kinds.find((k) => k.id === 'work') || out.settings.kinds[0]).id, color: DEFAULT_COLORS.other, order: out.settings.categories.length + 1, archived: true, fav: false, restored: true }); // fav: v0.30(normalize と同じ形にして冪等に)
   }
   out.tasks = cleanMap(raw.tasks, validateTask);
   if (!out.settings.habitsMigrated) { const m = migrateHabits({ ...out.settings, habits: raw.settings?.habits }, out.tasks); out.settings = m.settings; out.tasks = cleanMap(m.tasks, validateTask); delete out.settings.habits; }

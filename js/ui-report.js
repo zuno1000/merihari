@@ -68,9 +68,9 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
     : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks });
   const entries = log.entriesOf(d.entries, date);
   const W = windowFor(d.settings, date) || { start: 420, end: 1410 };
-  const base = report.baseline(d.entries, date);
-  const baseWork = base ? Object.entries(base.byCategory).filter(([id]) => roleOf(id).work).reduce((a, [, v]) => a + v, 0) : null;
-  const baseDrift = base ? Object.entries(base.byCategory).filter(([id]) => roleOf(id).drift).reduce((a, [, v]) => a + v, 0) : null;
+  const base = report.baseline(d.entries, date, 7, d.settings);
+  const baseWork = base ? base.workMin : null; // v0.30: 記録の「数え方」を反映した平均(report.baseline)
+  const baseDrift = base ? base.driftMin : null;
   const days = Array.from({ length: 8 }, (_, i) => addDays(date, i - 7)).map((k) => ({ key: k, label: k === date ? (isToday ? '今日' : `${+k.slice(8, 10)}日`) : DAY_JA[weekday(k)], ...daySummary(k, k === today ? nowMin : 1440 + dayCut(d.settings, k)) }));
   const title = isToday ? '今日のレポート' : `${fmtMD(date, true)}のレポート`;
   const recompute = () => {
@@ -344,7 +344,8 @@ function glanceRows(r) {
     const i = key.indexOf(':'); const type = key.slice(0, i), id = key.slice(i + 1);
     if (type === 'kind') {
       let min = 0;
-      for (const [cid, v] of Object.entries(r.byCategory || {})) if (kindOfCat(cid) === id) min += v.actual || 0;
+      if (r.byKind) min = r.byKind[id] || 0; // v0.30: 記録ごとの「数え方」を反映した種別の合計(aggregate.byKind)。古い確定レポートには無いのでカテゴリから
+      else for (const [cid, v] of Object.entries(r.byCategory || {})) if (kindOfCat(cid) === id) min += v.actual || 0;
       const role = kindRole(s, id);
       rows.push({ key, name: role.name, min, warn: role.drift && min >= 120 });
     } else if (type === 'cat') rows.push({ key, name: catOf(id).name, min: r.byCategory?.[id]?.actual || 0, warn: false, color: colorOf(id) });

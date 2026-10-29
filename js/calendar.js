@@ -3,7 +3,7 @@
 // 文字は入れない(スマホの 390px で 7 列だと読めない)。棒(作業の合計)・色(気分)・点(予定)・三角(期限)の 4 つだけ。
 // 「期限までの空き」は計算しない(ユーザー決定 2026-10-28: 自分で見て確かめられればよい)。
 import { addDays, weekday, hm } from './time.js';
-import { catRole } from './store.js';
+import { entryRole } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
 
@@ -16,7 +16,7 @@ export function dayTotals(entries, settings, from, to) {
     if (s == null || t == null || t <= s) continue;
     const o = out[e.date] || (out[e.date] = { work: 0, logged: 0 });
     o.logged += t - s;
-    if (catRole(settings, e.categoryId).work) o.work += t - s;
+    if (entryRole(settings, e).work) o.work += t - s; // v0.30: 記録の「数え方」(asKind)を反映
   }
   return out;
 }

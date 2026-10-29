@@ -915,6 +915,48 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(S.SCALAR_FIELDS.includes('weather') && eq(S.defaultSettings().weather, { enabled: false, regions: [] }) && S.migrate({ schema: 1, settings: { weather: { enabled: true, regions: [{ name: '大阪', lat: 34.7, lon: 135.5 }] } } }).settings.weather.regions[0].name === '大阪', 'weather は設定として項目ごとに同期(SCALAR_FIELDS)・既定は無効・migrate で検証');
     }
 
+    // ---- v0.30: 記録の数え方(F1-20)・お気に入り ★(F1-21)・お金の日ごと(F10-9) ----
+    log('\n# v0.30 asKind / fav / money.dayOf');
+    {
+      const st = S.defaultSettings();
+      const cats = [...st.categories, { id: 'circle', name: 'サークル', kind: 'hobby', color: '#aabbcc', order: 99 }];
+      const s2 = { ...st, categories: cats };
+      const e1 = { id: 'e1', date: '2026-10-30', start: '09:00', end: '10:00', categoryId: 'circle' };
+      const e2 = { ...e1, id: 'e2', start: '10:00', end: '11:30', asKind: 'work' };
+      const e3 = { ...e1, id: 'e3', start: '12:00', end: '12:30', categoryId: 'research', asKind: 'drift' };
+      const e4 = { ...e1, id: 'e4', start: '13:00', end: '13:10', categoryId: 'sns', asKind: 'nope' };
+      ok(S.effectiveKind(s2, e1) === 'hobby' && S.effectiveKind(s2, e2) === 'work' && S.effectiveKind(s2, e4) === 'drift' && !S.entryRole(s2, e1).work && S.entryRole(s2, e2).work && S.entryRole(s2, e3).drift && !S.entryRole(s2, e3).work && S.entryRole(s2, { categoryId: 'gone_rest' }).work, 'effectiveKind / entryRole: asKind があればその種別、無い・存在しない種別ならカテゴリの種別(設定に無いカテゴリは役割から推定)');
+      const ents = { e1, e2, e3, e4 };
+      const tr = L.totalsByRole(ents, '2026-10-30', 1440, (e) => ({ ...S.entryRole(s2, e), kind: S.effectiveKind(s2, e) }));
+      ok(tr.work === 90 && tr.drift === 40 && tr.rest === 0 && tr.byKind.work === 90 && tr.byKind.hobby === 60 && tr.byKind.drift === 40 && L.totalsByRole({ o: { ...e1, id: 'o', start: '14:00', end: null, asKind: 'work' } }, '2026-10-30', 870, (e) => S.entryRole(s2, e)).work === 30, 'totalsByRole: 記録ごとの数え方で 作業 / ダラダラ / 種別ごとに合計(記録中は nowMin まで)');
+      const ag = Rp.aggregate({ entries: ents, date: '2026-10-30', nowMin: 1440, settings: s2 });
+      ok(ag.workMin === 90 && ag.driftMin === 40 && ag.byCategory.circle.actual === 150 && !ag.byCategory.circle.work && ag.byKind.work === 90 && ag.byKind.hobby === 60, 'aggregate: workMin / driftMin は数え方を反映、byCategory の実績と役割はカテゴリのまま、byKind(種別ごと)を持つ');
+      const prevE = { p1: { id: 'p1', date: '2026-10-29', start: '09:00', end: '10:00', categoryId: 'circle', asKind: 'work' }, p2: { id: 'p2', date: '2026-10-28', start: '09:00', end: '09:30', categoryId: 'circle' } };
+      const bl = Rp.baseline(prevE, '2026-10-30', 7, s2);
+      ok(bl.days === 2 && bl.byCategory.circle === 45 && bl.workMin === 30 && bl.driftMin === 0 && Rp.baseline(prevE, '2026-10-30').workMin === null, 'baseline: settings を渡すと数え方を反映した作業 / ダラダラの平均(渡さなければ null)');
+      ok(M.calendar.dayTotals(ents, s2, '2026-10-30', '2026-10-30')['2026-10-30'].work === 90 && Rp.weekSummary(ents, s2, '2026-10-30').week.workMin === 90 && Rp.periodSummary(ents, s2, '2026-10-30', '2026-10-30').workMin === 90, 'calendar.dayTotals / weekSummary / periodSummary: 棒と週・期間の作業も数え方を反映');
+      const ve = S.validateEntry({ id: 'v', date: '2026-10-30', start: '09:00', end: '10:00', categoryId: 'circle', asKind: 'work' }, 'v');
+      ok(ve.asKind === 'work' && S.validateEntry({ date: '2026-10-30', start: '09:00', end: '10:00' }, 'w').asKind === null && S.validateEntry({ date: '2026-10-30', start: '09:00', end: '10:00', asKind: 7 }, 'w').asKind === null, 'validateEntry: asKind は文字列だけ(無ければ null)');
+      const C30 = { uid: () => 'k' + (++seq), nowISO: () => '2026-10-30T10:00:00+09:00' };
+      const sA = L.start({}, { date: '2026-10-30', nowMin: 600, categoryId: 'circle', asKind: 'work' }, C30);
+      const sB = L.addEntry({}, { date: '2026-10-30', startMin: 540, endMin: 600, categoryId: 'circle', asKind: 'work' }, C30);
+      const sC = L.switchFrom(sB, Object.keys(sB)[0], 570, 'research', 1440, C30);
+      ok(sA.entry.asKind === 'work' && Object.values(sB)[0].asKind === 'work' && L.start({}, { date: '2026-10-30', nowMin: 600, categoryId: 'circle' }, C30).entry.asKind === null && sC.entries[sC.tailId].asKind === null && sC.entries[Object.keys(sB)[0]].asKind === 'work', 'log.start / addEntry: asKind を持てる(省略は null)。switchFrom の切り出した後半は種別どおりに戻る');
+      // お気に入り ★
+      const favCats = cats.map((c) => (c.id === 'english' || c.id === 'circle' ? { ...c, fav: true } : c));
+      const kgf = S.kindGroups(s2, favCats, { fav: true });
+      ok(kgf[0].id === 'fav' && kgf[0].fav === true && kgf[0].cats.map((c) => c.id).join() === 'english,circle' && kgf[1].id === 'work' && kgf[1].cats.some((c) => c.id === 'english') && S.kindGroups(s2, favCats).every((g) => g.id !== 'fav') && S.kindGroups(s2, cats, { fav: true }).every((g) => g.id !== 'fav'), 'kindGroups(fav): ★ の束を先頭に(カテゴリの順・種別の束にも残る)・★ が無ければ付かない・既定では付けない');
+      const few = (ids) => S.kindGroups(s2, favCats.filter((c) => ids.includes(c.id)), { fav: true });
+      ok(S.needsKindFilter(kgf) && S.needsKindFilter(few(['english', 'life'])) && !S.needsKindFilter(few(['english', 'research'])) && !S.needsKindFilter(S.kindGroups(s2, cats.filter((c) => ['research', 'life'].includes(c.id)))), 'needsKindFilter: ★ があれば件数に関わらず絞る(種別が 2 つ以上のとき)。★ 無しは従来どおり 8 件以上');
+      const mf = S.migrate({ schema: 1, settings: { categories: [{ id: 'a', name: 'A', kind: 'work', fav: true }, { id: 'b', name: 'B', kind: 'work', fav: 'yes' }] } }).settings.categories;
+      ok(mf[0].fav === true && mf[1].fav === false && S.defaultSettings().categories.every((c) => !c.fav), 'migrate: カテゴリの fav は true だけ(既定は無し)');
+      // お金の日ごと
+      const Mo = M.money;
+      const mny = { a: { id: 'a', date: '2026-10-30', time: '12:00', amount: 500, type: 'out', categoryId: 'food' }, b: { id: 'b', date: '2026-10-30', time: null, amount: 1000, type: 'in', categoryId: 'inc', updatedAt: '2' }, c: { id: 'c', date: '2026-10-30', time: '18:30', amount: 300, type: 'out', categoryId: 'food' }, d: { id: 'd', date: '2026-10-29', time: '09:00', amount: 100, type: 'out', categoryId: 'food' }, e: { id: 'e', date: '2026-10-30', time: '08:00', amount: 999, type: 'out', categoryId: 'x', deletedAt: '1' } };
+      const dy = Mo.dayOf(mny, '2026-10-30');
+      ok(dy.out === 800 && dy.in === 1000 && dy.count === 3 && dy.items.map((x) => x.id).join() === 'c,a,b' && Mo.dayOf(mny, '2026-10-01').count === 0 && Mo.dayOf(null, '2026-10-30').out === 0, 'money.dayOf: その日の支出・収入・件数・時刻の遅い順(時刻なしは末尾)・消したものは見ない');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

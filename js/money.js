@@ -101,6 +101,15 @@ export function groupByDay(money, from, to) {
   return Object.keys(by).sort().reverse().map((date) => ({ date, total: by[date].filter((x) => x.type !== 'in').reduce((a, x) => a + x.amount, 0), items: by[date].sort((a, b) => ((b.time || '') > (a.time || '') ? 1 : (b.time || '') < (a.time || '') ? -1 : ((b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1))) }));
 }
 
+/** その日の記録(v0.30・F10-9: 日ごとに登録・管理): { date, items(時刻の遅い順・時刻なしは末尾), out, in, count }。純関数 */
+export function dayOf(money, date) {
+  const items = Object.values(money || {}).filter((x) => alive(x) && x.date === date)
+    .sort((a, b) => ((b.time || '') > (a.time || '') ? 1 : (b.time || '') < (a.time || '') ? -1 : ((b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1)));
+  let out = 0, inc = 0;
+  for (const x of items) { if (x.type === 'in') inc += x.amount; else out += x.amount; }
+  return { date, items, out, in: inc, count: items.length };
+}
+
 /** 直近 n か月の支出(古い順)。[{ ym, out }] */
 export function monthlyTrend(money, ym, n = 6) {
   const out = [];
