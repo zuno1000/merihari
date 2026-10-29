@@ -193,7 +193,7 @@ export function renderDiary(view, ctx, dateArg = null) {
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
-  view.append(...[el('h1', 'ふり返り'), head, topSec, bgmRecap(date, rerender, { isToday }), cardSec, aiBox, taskSec, memBox, listBox].filter(Boolean)); // v0.32.1: きょうの BGM は「きょうはどうだった」の下
+  view.append(...[el('h1', 'ふり返り'), head, topSec, cardSec, aiBox, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): きょうの BGM は 期限が近いタスク と 最近 の間
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
 }
 

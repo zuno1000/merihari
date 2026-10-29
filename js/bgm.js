@@ -137,6 +137,8 @@ export function stats(plays, catalog) {
   return { heard: n, total: songs.length, up, down, updated: typeof catalog?.updated === 'string' ? catalog.updated : null };
 }
 export const watchUrl = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+/** サムネイル(v0.32.2・ふり返りの「きょうの BGM」だけ。16:9・黒帯なし。CSP の img-src に i.ytimg.com) */
+export const thumbUrl = (id) => `https://i.ytimg.com/vi/${encodeURIComponent(id)}/mqdefault.jpg`;
 /** iPhone / iPad: YouTube アプリの URL スキーム。Android: intent(アプリが無ければブラウザへ) */
 export const appUrl = (id) => `youtube://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
 export const intentUrl = (id) => `intent://www.youtube.com/watch?v=${encodeURIComponent(id)}#Intent;package=com.google.android.youtube;scheme=https;S.browser_fallback_url=${encodeURIComponent(watchUrl(id))};end`;

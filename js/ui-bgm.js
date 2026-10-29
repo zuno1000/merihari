@@ -95,7 +95,8 @@ export function bgmStrip(date, rerender) {
   ]);
 }
 /**
- * ふり返りの「きょうの BGM」(v0.32.1): その日に流した曲を時刻順に。1 曲 1 行(時刻・題名・ジャンル / 好き・ちがう の小さな印)。タップでもう一度開く・印をタップで切替。流していない日は出さない
+ * ふり返りの「きょうの BGM」(v0.32.1): その日に流した曲を時刻順に。1 曲 1 行(サムネイル・題名・「流した時刻・ジャンル」/ 好き・ちがう の小さな印)。タップでもう一度開く・印をタップで切替。流していない日は出さない。
+ * v0.32.2(実機 FB): 左はサムネイル(i.ytimg.com・読めなければ ♪ の印)、時刻は下の行の先頭(再生時間と取り違えないよう「流した時刻」の順に)
  */
 export function bgmRecap(date, rerender, { isToday = true } = {}) {
   const list = bgm.playsOf(P(), date);
@@ -107,13 +108,20 @@ export function bgmRecap(date, rerender, { isToday = true } = {}) {
     const mark = (v, label, glyph) => el('button.bgm-mark', { type: 'button', class: `bgm-mark${p.rating === v ? ' on' : ''}`, 'aria-pressed': p.rating === v ? 'true' : 'false', 'aria-label': label, onclick: () => rate(p.id, v, rerender) }, glyph);
     return el('div.bgm-rrow', [
       el('button.bgm-ropen', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [
-        el('span.bgm-rtime', bgm.clockOf(p.at)),
-        el('span.bgm-rmain', [el('span.bgm-title', song ? song.t : 'きょうの BGM'), el('span.bgm-rsub.muted', song && song.g.length ? song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・') : '')]),
+        thumb(p.id),
+        el('span.bgm-rmain', [el('span.bgm-title', song ? song.t : 'きょうの BGM'), el('span.bgm-rsub.muted', [el('span.bgm-rtime', bgm.clockOf(p.at)), song && song.g.length ? el('span', song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・')) : null])]),
       ]),
       el('span.bgm-marks', [mark(1, '好き', HEART()), mark(-1, 'ちがう', MINUS())]),
     ]);
   });
   return el('section.group.bgm-recap', [el('h2', isToday ? 'きょうの BGM' : 'この日の BGM'), el('section.card.bgm-rcard', rows)]);
+}
+/** サムネイル(16:9・読めなければ ♪ の印に差し替え・オフラインでも崩れない) */
+function thumb(id) {
+  const box = el('span.bgm-thumb', { 'aria-hidden': 'true' });
+  const img = el('img', { src: bgm.thumbUrl(id), alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', onerror: () => { img.remove(); box.append(NOTE_ICON('bgm-ico')); } });
+  box.append(img);
+  return box;
 }
 const HEART = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' })]);
 const MINUS = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 8.5 }), svg('path', { d: 'M8 12h8' })]);
