@@ -21,11 +21,20 @@ export function timeSlotMood(hour) {
   if (hour >= 17 && hour < 22) return 'calm';
   return 'night';
 }
-/** 設定 settings.bgm を正規化(純関数): enabled は true だけ・genres は存在するジャンルだけ(重複なし)・app(YouTube アプリで開く)は既定 true */
+/** 設定 settings.bgm を正規化(純関数): enabled は true だけ・genres は存在するジャンルだけ(重複なし)・app(YouTube アプリで開く)と strip(ホームに きょうの曲の行)は既定 true */
 export function normalizeBgm(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GENRES.includes(g)))].slice(0, MAX_GENRES);
-  return { enabled: o.enabled === true, genres, app: o.app !== false };
+  return { enabled: o.enabled === true, genres, app: o.app !== false, strip: o.strip !== false };
+}
+/** その日に流した曲(古い順・消したものは除く)。ふり返りの「きょうの BGM」とホームの 1 行(末尾が最新)に */
+export function playsOf(plays, date) {
+  return Object.values(plays || {}).filter((p) => p && !p.deletedAt && p.date === date).sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+}
+/** ISO の時刻 → HH:MM(端末のローカル)。壊れていれば '' */
+export function clockOf(iso) {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 const alive = (p) => p && !p.deletedAt;
 /** 聞いた曲の id の集合(消したものは数えない) */
@@ -149,7 +158,7 @@ let catalogPromise = null, catalog = null;
 /** カタログ(同梱・SW の先読み)を一度だけ読む。すでにあれば同期的に返る(タップの中で await しないため) */
 export function loadCatalog() {
   if (catalog) return Promise.resolve(catalog);
-  if (!catalogPromise) catalogPromise = fetch(CATALOG_URL, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(`bgm ${r.status}`); return r.json(); }).then((j) => {
+  if (!catalogPromise) catalogPromise = fetch(CATALOG_URL).then((r) => { if (!r.ok) throw new Error(`bgm ${r.status}`); return r.json(); }).then((j) => {
     const songs = (Array.isArray(j?.songs) ? j.songs : []).filter((s) => s && typeof s.id === 'string' && /^[A-Za-z0-9_-]{6,20}$/.test(s.id)).map((s) => ({ id: s.id, t: typeof s.t === 'string' ? s.t.slice(0, 120) : '', g: Array.isArray(s.g) ? s.g.filter((x) => GENRES.includes(x)) : [], m: Array.isArray(s.m) ? s.m.filter((x) => typeof x === 'string').slice(0, 4) : [], d: Number.isFinite(s.d) ? s.d : null, c: typeof s.c === 'string' ? s.c.slice(0, 40) : '' }));
     catalog = { updated: typeof j?.updated === 'string' ? j.updated.slice(0, 10) : null, songs };
     return catalog;

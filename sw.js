@@ -7,16 +7,23 @@
 // v0.25: ①ネットワークを待つのは最長 2 秒(超えたら手元のキャッシュから出す・取れたものは裏で入れ替える)。
 //        気合(F13)の「開いてすぐ押す」のため、電波の弱いところで起動が数秒止まらないように。
 //        ②index.html へのフォールバックは画面の遷移(navigate)だけ(レビュー A-3: JS/CSS に HTML が返って構文エラーになっていた)。
-const CACHE = 'merihari-v0.32.0';
+const CACHE = 'merihari-v0.32.1';
 const NET_TIMEOUT_MS = 2000;
 const ASSETS = [
   './', './index.html', './css/app.css', './manifest.webmanifest', './icon.svg', './icon-512.png', './news.json',
-  './js/main.js', './js/store.js', './js/time.js', './js/log.js', './js/plan.js', './js/report.js', './js/palette.js', './js/ui-report.js', './js/google.js', './js/sync.js', './js/passkey.js', './js/ui.js', './js/ui-today.js', './js/ui-tasks.js', './js/ui-settings.js', './js/diary.js', './js/ui-diary.js', './js/money.js', './js/ui-money.js', './js/ai.js', './js/kiai.js', './js/features.js', './js/calendar.js', './js/weather.js', './js/bgm.js', './js/ui-bgm.js', './data/bgm.json',
+  './js/main.js', './js/store.js', './js/time.js', './js/log.js', './js/plan.js', './js/report.js', './js/palette.js', './js/ui-report.js', './js/google.js', './js/sync.js', './js/passkey.js', './js/ui.js', './js/ui-today.js', './js/ui-tasks.js', './js/ui-settings.js', './js/diary.js', './js/ui-diary.js', './js/money.js', './js/ui-money.js', './js/ai.js', './js/kiai.js', './js/features.js', './js/calendar.js', './js/weather.js', './js/bgm.js', './js/ui-bgm.js',
 ];
+/** v0.32.1: 版と一緒に固定しないデータ(作業用 BGM のカタログ・Actions が毎週更新)。先読みはするが、取得は「手元から即出し、裏で新しいものに入れ替え」(stale-while-revalidate) */
+const DATA = ['./data/bgm.json'];
 const SCOPE = new URL('./', self.location.href).pathname;
-const assetPath = (url) => { const u = new URL(url); if (u.origin !== self.location.origin || !u.pathname.startsWith(SCOPE)) return null; const rel = './' + u.pathname.slice(SCOPE.length); return ASSETS.includes(rel) ? rel : null; };
+const relPath = (url) => { const u = new URL(url); if (u.origin !== self.location.origin || !u.pathname.startsWith(SCOPE)) return null; return './' + u.pathname.slice(SCOPE.length); };
+const assetPath = (url) => { const rel = relPath(url); return rel && ASSETS.includes(rel) ? rel : null; };
+const dataPath = (url) => { const rel = relPath(url); return rel && DATA.includes(rel) ? rel : null; };
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => Promise.all(ASSETS.map((u) => fetch(new Request(u, { cache: 'reload' })).then((r) => { if (!r.ok) throw new Error(`precache ${u}: ${r.status}`); return c.put(u, r); })))).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => Promise.all([
+    ...ASSETS.map((u) => fetch(new Request(u, { cache: 'reload' })).then((r) => { if (!r.ok) throw new Error(`precache ${u}: ${r.status}`); return c.put(u, r); })),
+    ...DATA.map((u) => fetch(new Request(u, { cache: 'reload' })).then((r) => (r.ok ? c.put(u, r) : null)).catch(() => null)), // データは取れなくても版の導入は止めない
+  ])).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
@@ -24,6 +31,17 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
+  const dkey = dataPath(e.request.url);
+  if (dkey) {
+    // データ(DATA): 手元にあれば即出し、裏で取り直して次に備える(HTTP キャッシュは迂回)。無ければネットワーク
+    e.respondWith(caches.open(CACHE).then(async (c) => {
+      const net = fetch(new Request(e.request.url, { cache: 'no-cache' })).then((r) => { if (r.ok) c.put(dkey, r.clone()); return r; });
+      const m = await c.match(dkey);
+      if (m) { e.waitUntil(net.catch(() => null)); return m; }
+      return net;
+    }));
+    return;
+  }
   const key = e.request.mode === 'navigate' ? './index.html' : assetPath(e.request.url);
   if (key) {
     // アプリ本体(ASSETS): この版の先読みから出す(一式が同じ版)。無ければネットワーク(HTTP キャッシュは迂回)

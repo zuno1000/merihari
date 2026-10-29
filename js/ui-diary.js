@@ -11,7 +11,8 @@ import * as diary from './diary.js';
 import * as ai from './ai.js';
 import * as sync from './sync.js';
 import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
-import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js'; // v0.28: 上の 1 行と月のカレンダーはホームと共通(循環 import だが呼ぶのは描画時だけ)
+import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js';
+import { bgmRecap } from './ui-bgm.js'; // v0.32.1: きょうの BGM(F16-6) // v0.28: 上の 1 行と月のカレンダーはホームと共通(循環 import だが呼ぶのは描画時だけ)
 import { dateKey, minuteOfDay, windowFor, fmtMD, fmtMin, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
 
 const S = () => store.state.data.settings;
@@ -192,7 +193,7 @@ export function renderDiary(view, ctx, dateArg = null) {
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
-  view.append(...[el('h1', 'ふり返り'), head, topSec, cardSec, aiBox, taskSec, memBox, listBox].filter(Boolean));
+  view.append(...[el('h1', 'ふり返り'), head, topSec, bgmRecap(date, rerender, { isToday }), cardSec, aiBox, taskSec, memBox, listBox].filter(Boolean)); // v0.32.1: きょうの BGM は「きょうはどうだった」の下
   if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
 }
 

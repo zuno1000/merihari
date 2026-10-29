@@ -25,7 +25,7 @@ import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import * as bgm from './bgm.js';
-export const APP_VERSION = '0.32.0';
+export const APP_VERSION = '0.32.1';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -172,7 +172,7 @@ if (ui.DEV) window.M = {
   features: { FEATURES },
   calendar,
   weather: { weatherLabel: weather.weatherLabel, iconKey: weather.iconKey, parseForecast: weather.parseForecast, clothing: weather.clothing, lineText: weather.lineText, isFresh: weather.isFresh, normalizeRegion: weather.normalizeRegion, parsePlaces: weather.parsePlaces, TTL_MS: weather.TTL_MS, MAX_REGIONS: weather.MAX_REGIONS, FORECAST_URL: weather.FORECAST_URL, GEO_URL: weather.GEO_URL },
-  bgm: { timeSlotMood: bgm.timeSlotMood, normalizeBgm: bgm.normalizeBgm, heard: bgm.heard, affinityTable: bgm.affinityTable, channelStats: bgm.channelStats, score: bgm.score, rank: bgm.rank, draw: bgm.draw, perGenreOf: bgm.perGenreOf, pick: bgm.pick, recent: bgm.recent, stats: bgm.stats, watchUrl: bgm.watchUrl, appUrl: bgm.appUrl, intentUrl: bgm.intentUrl, platformOf: bgm.platformOf, urlFor: bgm.urlFor, loadCatalog: bgm.loadCatalog, GENRES: bgm.GENRES, GENRE_LABELS: bgm.GENRE_LABELS, W: bgm.W, POOL: bgm.POOL, PER_GENRE: bgm.PER_GENRE, CATALOG_URL: bgm.CATALOG_URL },
+  bgm: { timeSlotMood: bgm.timeSlotMood, normalizeBgm: bgm.normalizeBgm, heard: bgm.heard, affinityTable: bgm.affinityTable, channelStats: bgm.channelStats, score: bgm.score, rank: bgm.rank, draw: bgm.draw, perGenreOf: bgm.perGenreOf, pick: bgm.pick, recent: bgm.recent, playsOf: bgm.playsOf, clockOf: bgm.clockOf, stats: bgm.stats, watchUrl: bgm.watchUrl, appUrl: bgm.appUrl, intentUrl: bgm.intentUrl, platformOf: bgm.platformOf, urlFor: bgm.urlFor, loadCatalog: bgm.loadCatalog, GENRES: bgm.GENRES, GENRE_LABELS: bgm.GENRE_LABELS, W: bgm.W, POOL: bgm.POOL, PER_GENRE: bgm.PER_GENRE, CATALOG_URL: bgm.CATALOG_URL },
   kiai,
   time,
   log,

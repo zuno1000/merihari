@@ -73,11 +73,15 @@ export function bgmButton(rerender) {
 }
 /** その日に流した曲(いちばん新しいもの) */
 export function playOf(date) {
-  return Object.values(P()).filter((p) => !p.deletedAt && p.date === date).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0] || null;
+  const l = bgm.playsOf(P(), date);
+  return l.length ? l[l.length - 1] : null;
 }
-/** その日の BGM の 1 行: ♪ 題名(タップでもう一度開く)・好き / ちがう。流していない日は出さない(ホームは円と棒だけ、の約束) */
+/** ホームの 1 行を その日だけ消す(× ・端末内・同期しない)。設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出さない(v0.32.1) */
+export function hideStrip(date) { store.state.local.bgmStripHidden = date; store.saveLocal(); }
+export const stripHidden = (date) => store.state.local.bgmStripHidden === date;
+/** その日の BGM の 1 行: ♪ 題名(タップでもう一度開く)・好き / ちがう・×(その日だけ消す)。流していない日は出さない(ホームは円と棒だけ、の約束) */
 export function bgmStrip(date, rerender) {
-  if (!bgmOn()) return null;
+  if (!bgmOn() || S().bgm.strip === false || stripHidden(date)) return null;
   const p = playOf(date);
   if (!p) return null;
   const cat = bgm.catalogNow();
@@ -87,5 +91,29 @@ export function bgmStrip(date, rerender) {
   return el('div.bgm-strip', [
     el('button.bgm-open', { type: 'button', 'aria-label': 'この曲をもう一度 YouTube で開く', onclick: () => reopen(p.id) }, [NOTE_ICON('bgm-ico'), title]),
     rateChips(p, rerender),
+    el('button.bgm-x', { type: 'button', 'aria-label': 'この行を消す(きょうだけ。いつも出さないなら設定 › 作業用 BGM)', title: '消す', onclick: () => { hideStrip(date); toast('きょうは出しません。いつも出さないなら 設定 › 作業用 BGM'); if (rerender) rerender(); } }, '×'),
   ]);
 }
+/**
+ * ふり返りの「きょうの BGM」(v0.32.1): その日に流した曲を時刻順に。1 曲 1 行(時刻・題名・ジャンル / 好き・ちがう の小さな印)。タップでもう一度開く・印をタップで切替。流していない日は出さない
+ */
+export function bgmRecap(date, rerender, { isToday = true } = {}) {
+  const list = bgm.playsOf(P(), date);
+  if (!list.length) return null;
+  const cat = bgm.catalogNow();
+  if (!cat) bgm.loadCatalog().then(() => { if (rerender) rerender(); }).catch(() => {});
+  const rows = list.map((p) => {
+    const song = cat ? cat.songs.find((s) => s.id === p.id) : null;
+    const mark = (v, label, glyph) => el('button.bgm-mark', { type: 'button', class: `bgm-mark${p.rating === v ? ' on' : ''}`, 'aria-pressed': p.rating === v ? 'true' : 'false', 'aria-label': label, onclick: () => rate(p.id, v, rerender) }, glyph);
+    return el('div.bgm-rrow', [
+      el('button.bgm-ropen', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [
+        el('span.bgm-rtime', bgm.clockOf(p.at)),
+        el('span.bgm-rmain', [el('span.bgm-title', song ? song.t : 'きょうの BGM'), el('span.bgm-rsub.muted', song && song.g.length ? song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・') : '')]),
+      ]),
+      el('span.bgm-marks', [mark(1, '好き', HEART()), mark(-1, 'ちがう', MINUS())]),
+    ]);
+  });
+  return el('section.group.bgm-recap', [el('h2', isToday ? 'きょうの BGM' : 'この日の BGM'), el('section.card.bgm-rcard', rows)]);
+}
+const HEART = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' })]);
+const MINUS = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 8.5 }), svg('path', { d: 'M8 12h8' })]);

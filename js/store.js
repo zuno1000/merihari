@@ -105,7 +105,7 @@ export function defaultSettings() {
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
-    bgm: { enabled: false, genres: [], app: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
+    bgm: { enabled: false, genres: [], app: true, strip: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
     weather: { enabled: false, regions: [] }, // v0.29・F15: 天気(任意)。地域 [{ id, name, lat, lon }](5 つまで・同期する)。取得した天気は local.weatherCache(端末内・1 時間)
     tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
     goals: { workMin: null, driftMax: null, chunkMin: 30 }, // v0.17: 1 日の目標。v0.31.4: chunkMin=期限つきの目安の 1 回の大きさ(分・既定 30・plan.CHUNK_MIN)(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
