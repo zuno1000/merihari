@@ -403,9 +403,9 @@ export function renderNow(view, ctx, dateArg = null) {
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   if (attentionItems().length) { gear.append(el('i.badge', { 'aria-hidden': 'true' })); gear.setAttribute('aria-label', '設定(お知らせあり)'); } // v0.28: 未同期・予定が古い・控えの書き出し → 赤い点(中身は設定の先頭)
   const head = headBar({
-    left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)
+    left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? bgmButton(rerender) : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)。v0.32.3(実機 FB「› と ♪ が重なる」): ♪ は左上(カレンダーの右・きょうだけ)。右は 天気・歯車 の 2 つまでにして日付の › と重ならない
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [bgmButton(rerender), weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左。v0.32: ♪(作業用 BGM・F16)はその左
+    right: [weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左
   });
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {

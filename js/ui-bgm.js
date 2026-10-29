@@ -37,7 +37,7 @@ export function playBgm(rerender = null, { opener = null, nav = null } = {}) {
     const r = bgm.pick(cat, P(), S(), { hour: new Date().getHours(), mood: moodNow() });
     if (!r) { toast('曲のカタログがありません'); return null; }
     markPlayed(r.song.id, n.date);
-    const url = bgm.openSong(r.song.id, { app: S().bgm?.app !== false, opener, nav });
+    const url = bgm.openSong(r.song.id, { app: S().bgm?.app !== false, opener, nav, onStay });
     toast(r.repeat ? `全部聞いたので もう一度: ${r.song.t}` : `♪ ${r.song.t}`);
     if (rerender) rerender();
     return { ...r, url };
@@ -48,8 +48,10 @@ export function playBgm(rerender = null, { opener = null, nav = null } = {}) {
 }
 /** 聞いた曲をもう一度開く(きょうの 1 行のタップ・設定の一覧) */
 export function reopen(id, { opener = null, nav = null } = {}) {
-  return bgm.openSong(id, { app: S().bgm?.app !== false, opener, nav });
+  return bgm.openSong(id, { app: S().bgm?.app !== false, opener, nav, onStay });
 }
+/** iOS でアプリが開かなかった(3 秒たっても画面がそのまま)ときの案内。自動では何も開かない(v0.32.3) */
+const onStay = () => toast('YouTube アプリが開かないときは、設定 › 作業用 BGM の「YouTube アプリで開く」を外してください');
 /** 好き / ちがう を切り替える(同じものをもう一度で取り消し)。次の推薦から効く */
 export function rate(id, v, rerender = null) {
   const prev = P()[id]; if (!prev) return;

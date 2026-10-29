@@ -169,18 +169,25 @@ export function loadCatalog() {
 }
 export const catalogNow = () => catalog;
 /**
- * YouTube で開く(副作用)。iOS はアプリのスキーム(location.href)→ 1.5 秒たっても画面がそのままならブラウザ(アプリが無い)。Android は intent。それ以外は新しいタブ。
- * 戻り値は開いた URL(プローブ用)。opener は差し替えられる(テスト)
+ * YouTube で開く(副作用)。iOS はアプリのスキーム(location.href・タップの中で)。Android は intent(アプリが無ければブラウザ)。それ以外は新しいタブ。
+ * v0.32.3(実機 FB「ポップアップの警告のあと Web 版が開いた」): iOS の「1.5 秒たっても画面がそのままならブラウザで開く」保険を廃止。
+ *   iOS はスキームを開く前に「"YouTube"で開きますか?」の確認を出すことがあり、その間に保険が window.open(ユーザー操作の外)を実行して ポップアップの警告 → Web 版、になっていた。
+ *   代わりに 3 秒たっても画面が見えたままなら onStay(設定で「YouTube アプリで開く」を外す案内のトースト)。自動では何も開かない。
+ * 戻り値は開いた URL(プローブ用)。opener / nav は差し替えられる(テスト)
  */
-export function openSong(id, { app = true, nav = null, opener = null } = {}) {
+export const STAY_MS = 3000;
+export function openSong(id, { app = true, nav = null, opener = null, onStay = null } = {}) {
   const plat = platformOf(navigator.userAgent, navigator.maxTouchPoints || 0, navigator.platform || '');
   const url = urlFor(id, app, plat);
   const open = opener || ((u) => window.open(u, '_blank', 'noopener'));
   const go = nav || ((u) => { location.href = u; });
   if (app && plat === 'ios') {
-    const t0 = Date.now();
+    let left = false;
+    const leave = () => { left = true; };
+    document.addEventListener('visibilitychange', leave, { once: true });
+    window.addEventListener('pagehide', leave, { once: true });
     go(url);
-    setTimeout(() => { if (document.visibilityState === 'visible' && Date.now() - t0 < 2500) open(watchUrl(id)); }, 1500);
+    setTimeout(() => { document.removeEventListener('visibilitychange', leave); window.removeEventListener('pagehide', leave); if (!left && document.visibilityState === 'visible' && onStay) onStay(); }, STAY_MS);
   } else if (app && plat === 'android') go(url);
   else open(url);
   return url;
