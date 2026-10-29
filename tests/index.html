@@ -955,7 +955,7 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(eq(ma[0].alsoKinds, ['work', 'drift']) && eq(ma[1].alsoKinds, []) && eq(ma[2].alsoKinds, []) && S.defaultKinds().every((k) => k.pick === undefined) && S.migrate({ schema: 1, settings: {} }).settings.categories.every((c) => Array.isArray(c.alsoKinds) && !c.alsoKinds.length), 'migrate: alsoKinds は存在する種別だけ・主の種別と重複を除く・無ければ []。種別の pick は廃止');
       const ca = { id: 'circle', name: 'サークル', kind: 'hobby', alsoKinds: ['work'], order: 1 };
       const kga = S.kindGroups(s2, [...cats.filter((c) => c.id !== 'circle'), ca]);
-      ok(kga.find((g) => g.id === 'work').cats.some((c) => c.id === 'circle') && kga.find((g) => g.id === 'hobby').cats.some((c) => c.id === 'circle') && !kga.find((g) => g.id === 'drift').cats.some((c) => c.id === 'circle') && eq(S.catKinds(ca), ['hobby', 'work']) && eq(S.catKinds({ kind: 'work' }), ['work']), 'kindGroups / catKinds: ほかの種別の束にも出る(主の種別の束にも残る)');
+      ok(!kga.find((g) => g.id === 'work').cats.some((c) => c.id === 'circle') && kga.find((g) => g.id === 'hobby').cats.some((c) => c.id === 'circle') && eq(S.catKinds(ca), ['hobby', 'work']) && eq(S.catKinds({ kind: 'work' }), ['work']), 'kindGroups / catKinds: チップは主の種別の束にだけ(v0.31.1)・catKinds は 主+ほかの種別');
       const sD = L.switchFrom(sB, Object.keys(sB)[0], 570, 'circle', 1440, C30, 'work');
       ok(sD.entries[sD.tailId].asKind === 'work' && L.switchFrom(sB, Object.keys(sB)[0], 500, 'circle', 1440, C30, 'work').entries[Object.keys(sB)[0]].asKind === 'work', 'switchFrom(asKind): 切り出した先の種別を持てる(丸ごとでも)');
       // お金の日ごと

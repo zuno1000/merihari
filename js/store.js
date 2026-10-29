@@ -133,7 +133,7 @@ const TILE_KEY = /^(kind|cat):[A-Za-z0-9_-]{1,40}$/;
  */
 export function kindGroups(settings, cats, { fav = false } = {}) {
   const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
-  const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id || (Array.isArray(c.alsoKinds) && c.alsoKinds.includes(k.id))) })).filter((g) => g.cats.length); // v0.31: ほかの種別(alsoKinds)の束にも出る
+  const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id) })).filter((g) => g.cats.length); // v0.31.1: チップは主の種別の束にだけ(ほかの種別はタップのあとに選ぶ)
   const rest = cats.filter((c) => !kinds.some((k) => k.id === c.kind));
   if (rest.length) groups.push({ id: 'other', name: 'その他', cats: rest });
   // v0.30(F1-21 お気に入り): fav=true なら ★ を付けたカテゴリの束を先頭に(id 'fav'・fav: true)。1 つも無ければ付けない

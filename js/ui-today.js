@@ -120,10 +120,19 @@ const kindNameOf = (id) => (S().kinds || []).find((k) => k.id === id)?.name || n
 export function asKindTag(e) { return e && e.asKind && e.asKind !== catOf(e.categoryId).kind ? kindNameOf(e.asKind) : null; }
 /**
  * v0.31(F1-20 改・実機 FB「種別と数え方の使い分けがややこしい」): 「数え方」という別の概念をやめ、記録の種別は 1 つの軸にした。
- * カテゴリは主の種別のほかに「ほかの種別」(category.alsoKinds)を持てる(サークル=趣味・ほかに 作業)。チップはそれぞれの種別のタブに出て、どのタブから記録したかが記録の種別(entry.asKind・主の種別なら null)。
- * 選ぶ UI は種別のタブそのものなので、記録のシートに余分な行は無い。記録中カードと記録の編集では、カテゴリにほかの種別があるときだけ種別のチップを出す。
+ * カテゴリは主の種別のほかに「ほかの種別」(category.alsoKinds)を持てる(サークル=趣味・ほかに 作業)。
+ * v0.31.1(ユーザー案「カテゴリを選んだあとに種別を選ぶ」): チップは主の種別のタブにだけ出し、ほかの種別があるカテゴリをタップしたときだけ「どの種別?」を聞く(kindAskSheet)。
+ * 記録の種別は entry.asKind(主の種別なら null)。記録中カードと記録の編集では、ほかの種別があるときだけ種別のチップ。
  */
-const asKindOf = (c, g) => (g && !g.fav && g.id !== c.kind && (c.alsoKinds || []).includes(g.id) ? g.id : null);
+/** ほかの種別があるカテゴリなら「<名前>、どの種別?」のシート(主の種別が先)。無ければそのまま onPick(null) */
+function kindAskSheet(c, onPick) {
+  const ks = store.catKinds(c);
+  if (ks.length < 2) { onPick(null); return; }
+  sheet((close) => [
+    el('h2', [el('i.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' }), `${c.name}、どの種別?`]),
+    el('div.col', ks.map((k) => el('button.btn.block', { type: 'button', class: `btn block${k === c.kind ? ' primary' : ''}`, onclick: () => { close(); onPick(k === c.kind ? null : k); } }, kindNameOf(k) || k))),
+  ]);
+}
 /** カテゴリの種別のチップ(主の種別+ほかの種別): cur=いまの記録の種別(null=主)。ほかの種別が無ければ null を返す */
 function kindChips(c, cur, onPick) {
   const ks = store.catKinds(c);
@@ -651,7 +660,7 @@ function chipsSheet(n0, rerender, mode0 = null, opts = {}) {
     }, [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), label]);
   };
   const lastCid = o ? o.categoryId : (log.entriesOf(E(), n.date).filter((x) => x.end != null).pop()?.categoryId || null); // v0.28.1: 種別のタブは 記録中(か直前)のカテゴリの種別から
-  const chips = groupedChips(cats(), (c, g) => chip(c, c.name, () => pick(c.id, null, asKindOf(c, g)), o && o.categoryId === c.id && !o.taskId && (o.asKind || null) === asKindOf(c, g)), { current: lastCid });
+  const chips = groupedChips(cats(), (c) => chip(c, c.name, () => kindAskSheet(c, (ak) => pick(c.id, null, ak)), o && o.categoryId === c.id && !o.taskId), { current: lastCid });
   // タスクのチップ(v0.11): 目安のあるタスクをそのまま記録できる(紐づけ)
   const gs = plan.goals(T(), E(), n.date, n.min).filter((g) => T()[g.taskId] && g.kind !== 'todo' && !g.noTime); // 時間を計らないもの(v0.17)はチップに出さない
   const taskChips = gs.length ? el('div.chips', { role: 'group', 'aria-label': 'タスク' }, gs.map((g) => chip(catOf(g.categoryId), g.name, () => pick(g.categoryId, g.taskId), o && o.taskId === g.taskId))) : null;
@@ -694,20 +703,16 @@ export function groupedChips(cats, chipOf, { current = null, small = false, labe
   // v0.30(F1-21): ★ を付けたカテゴリの束を先頭のタブに。★ があれば ★ から始める(無ければ current の種別のタブから)
   const groups = store.kindGroups(S(), cats, { fav: true });
   const row = el(`div.chips${small ? '.small' : ''}`, { role: 'group', 'aria-label': label });
-  // v0.31: chipOf(c, g) ─ g はそのチップが出ている束(種別)。ほかの種別(alsoKinds)のチップはその種別のタブにも出る。タブが無いときは「名前+種別」の小さな札つきで並べる
-  if (!store.needsKindFilter(groups)) {
-    for (const c of cats) { row.append(chipOf(c, null)); for (const k of (c.alsoKinds || [])) { const n = chipOf(c, { id: k, name: kindNameOf(k) || k }); n.append(el('span.kn', kindNameOf(k) || k)); row.append(n); } }
-    return row;
-  }
+  if (!store.needsKindFilter(groups)) { row.append(...cats.map((c) => chipOf(c))); return row; }
   let kid = groups.some((g) => g.fav) ? 'fav' : (groups.find((g) => g.cats.some((c) => c.id === current)) || groups[0]).id; // ★ があれば必ず ★ から(探す手間を減らすのが目的。他の種別は 1 タップ)
   const tabs = el('div.ktabs', { role: 'tablist', 'aria-label': '種別で絞る' }, groups.map((g) => el('button.ktab', { type: 'button', role: 'tab', class: `ktab${g.fav ? ' fav' : ''}`, 'aria-label': g.fav ? 'お気に入り' : null, 'aria-selected': g.id === kid ? 'true' : 'false', dataset: { kind: g.id }, onclick: () => { kid = g.id; draw(); } }, [g.name, el('span.kn', String(g.cats.length))])));
-  const draw = () => { const g = groups.find((x) => x.id === kid); clear(row); row.append(...g.cats.map((c) => chipOf(c, g))); tabs.querySelectorAll('.ktab').forEach((b) => b.setAttribute('aria-selected', b.dataset.kind === kid ? 'true' : 'false')); };
+  const draw = () => { clear(row); row.append(...groups.find((g) => g.id === kid).cats.map((c) => chipOf(c))); tabs.querySelectorAll('.ktab').forEach((b) => b.setAttribute('aria-selected', b.dataset.kind === kid ? 'true' : 'false')); };
   draw();
   return el('div.grouped', [tabs, row]);
 }
 function catChipPicker(initial, onPick) {
   let cid = initial;
-  const node = groupedChips(cats(), (c, g) => el('button.chip', { type: 'button', class: `chip cat${c.id === cid ? ' on' : ''}`, 'data-id': c.id, style: { '--c': c.color }, onclick: () => { cid = c.id; node.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); onPick(cid, asKindOf(c, g)); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: cid }); // onPick(cid, asKind): v0.31
+  const node = groupedChips(cats(), (c) => el('button.chip', { type: 'button', class: `chip cat${c.id === cid ? ' on' : ''}`, 'data-id': c.id, style: { '--c': c.color }, onclick: () => { cid = c.id; node.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); onPick(cid); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: cid });
   return node;
 }
 
@@ -767,11 +772,15 @@ export function entrySheet(o, rerender) {
   // v0.23.1: どの記録にもメモ(任意)。予定(busy)の時間なら「予定のメモ」(v0.22・F6-6): 保存すると予定のメモにも残る
   const bn = el('input.text.note-in', { type: 'text', value: o.busyNote || '', placeholder: o.busyAt ? '何の予定?' : 'メモ', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ' });
   const keepBusyNote = () => { const v = bn.value.trim(); if (o.busyAt && v !== (o.busyNote || '')) saveBusyNote(o.date, o.busyAt.start, v); return v; };
-  let asKind = null; // v0.31: どの種別のタブからカテゴリを選んだか(ほかの種別のときだけ)
+  let asKind = null; // v0.31.1: ほかの種別があるカテゴリを選ぶと、その下に種別のチップ(主の種別が既定)
   const asKindFor = () => asKind;
+  const kindBox = el('div.kindbox');
+  const drawKind = () => { clear(kindBox); asKind = null; const kc = kindChips(catOf(cid), null, (v) => { asKind = v; }); if (kc) kindBox.append(el('span.chips-cap', '種別'), kc); };
+  drawKind();
   sheet((close) => [
     el('h2', o.title || (isToday && o.start === defaultStart(n.date, n.min) ? `${nm()}、いつ?` : `${md(o.date)} ${nm()}`)),
-    o.taskId ? el('p.muted.small', `タスク「${T()[o.taskId]?.name || ''}」に紐づけます`) : catChipPicker(cid, (v, ak) => { cid = v; asKind = ak; }),
+    o.taskId ? el('p.muted.small', `タスク「${T()[o.taskId]?.name || ''}」に紐づけます`) : catChipPicker(cid, (v) => { cid = v; drawKind(); }),
+    kindBox,
     el('div.row.field', [el('span.label', 'いつ'), st, el('span', '〜'), en]),
     el('div.row.field', [el('span.label', o.busyAt ? '予定のメモ' : 'メモ'), bn]),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
@@ -1155,7 +1164,7 @@ function editEntrySheet(id, n0, rerender) {
   const fixed = (v, base) => (v ? mm(lateFix(hm(v), hm(base))) : v);
   const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: fixed(v, e.start), end: e.end }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の開始時刻の変更`)) });
   const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: fixed(v, e.end) || null }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の終了時刻の変更`)) });
-  const switchChips = groupedChips(cats().filter((x) => x.id !== e.categoryId), (x, g) => el('button.chip.sm2.cat', { type: 'button', style: { '--c': x.color }, onclick: () => { close(); switchSheet(e, x, n, rerender, asKindOf(x, g)); } }, [el('span.dot', { style: { background: x.color } }), x.name]), { small: true, current: e.categoryId });
+  const switchChips = groupedChips(cats().filter((x) => x.id !== e.categoryId), (x) => el('button.chip.sm2.cat', { type: 'button', style: { '--c': x.color }, onclick: () => { close(); kindAskSheet(x, (ak) => switchSheet(e, x, n, rerender, ak)); } }, [el('span.dot', { style: { background: x.color } }), x.name]), { small: true, current: e.categoryId });
   const kc = kindChips(c, e.asKind || null, (v) => { commit(log.update(E(), e.id, { asKind: v }, LCTX), '種別の変更'); sync.autoSync(); rerender(); }); // v0.31: ほかの種別があるときだけ
   close = sheet((cl) => { close = cl; return [
     el('h2', [el('i.dot.big', { style: { background: c.color }, 'aria-hidden': 'true' }), title]),
@@ -1194,7 +1203,7 @@ function switchSheet(e, cat, n, rerender, asKind = null) {
 function categorySheet(e, rerender) {
   sheet((close) => [
     el('h2', 'カテゴリを変更'),
-    groupedChips(cats(), (c, g) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { commit(log.update(E(), e.id, { categoryId: c.id, asKind: asKindOf(c, g) }, LCTX), `カテゴリを ${c.name} に変更`); close(); rerender(); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: e.categoryId }),
+    groupedChips(cats(), (c) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { close(); kindAskSheet(c, (ak) => { commit(log.update(E(), e.id, { categoryId: c.id, asKind: ak }, LCTX), `カテゴリを ${c.name} に変更`); rerender(); }); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: e.categoryId }),
   ]);
 }
 function taskLinkSheet(e, rerender) {
