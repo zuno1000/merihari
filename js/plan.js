@@ -61,12 +61,14 @@ export function isEligible(t, date) {
 
 /** 1 回の目安の大きさ(分)(v0.31.3・F5-2 改): 期限つきの目安はこれ以上の塊にまとめる(15 分 × 4 ではなく 30 分 × 2) */
 export const CHUNK_MIN = 30;
+/** 設定の塊の大きさ(v0.31.4: settings.goals.chunkMin・設定 › 1日の目標)。無ければ CHUNK_MIN。純関数 */
+export function chunkOf(settings) { const v = +(settings?.goals?.chunkMin); return Number.isFinite(v) && v >= 15 ? v : CHUNK_MIN; }
 /**
  * 今日の目安(v0.15・§6.4改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)= 均等割(rawMin)。5分丸め・15分未満は0(期限当日は残り全部)。
  * 残りは前日までの記録を引いたもの(今日の記録は doneMin 側で見る)。期限のない・繰り返しのタスクは含めない。期限順。
  * v0.31.3(F5-2 改・実機 FB「15 分 × 4 のように細かく分かれる」): 均等割の合計(きょうの量)は変えず、塊(CHUNK_MIN=30 分)にまとめる。
  * 期限順(同じなら均等割の大きい順)に、1 つずつ max(均等割, 30 分)(残り以下)を割り当て、合計がきょうの量に届いたら残りのタスクは別の日へ(todayMin 0・deferred)。
- * 期限当日(残り全部)と、きょうすでに記録したタスクは必ず入れる。opts.chunk で塊の大きさを変えられる(0 なら均等割のまま)。
+ * 期限当日(残り全部)と、きょうすでに記録したタスクは必ず入れる。opts.chunk で塊の大きさを変えられる(0 なら均等割のまま・v0.31.4: 設定 › 1日の目標 の chunkMin を chunkOf(settings) で渡す)。
  * 戻り値 [{ taskId, todayMin, rawMin, deferred, remainingMin, deadline, daysLeft }]
  */
 export function todayShare(tasks, date, entries = {}, opts = {}) {
@@ -159,10 +161,10 @@ export function lastLoggedDate(entries, taskId) {
  * - wish: 目安なし。直近7日の記録と最後にふれた日
  * 戻り値 [{ taskId, name, categoryId, kind, targetMin|null, doneMin, done, lastDate?, deadline?, daysLeft? }]。並び: 期限順 → 毎日 → 毎週 → やりたい
  */
-export function goals(tasks, entries, date, nowMin = 1440) {
+export function goals(tasks, entries, date, nowMin = 1440, opts = {}) {
   const logged = loggedByTask(entries, date, nowMin);
   const out = [];
-  for (const s of todayShare(tasks, date, entries)) {
+  for (const s of todayShare(tasks, date, entries, opts)) { // opts.chunk(v0.31.4): 塊の大きさ
     if (s.todayMin <= 0) continue;
     const t = tasks[s.taskId];
     out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'deadline', targetMin: s.todayMin, doneMin: logged[t.id] || 0, deadline: s.deadline, daysLeft: s.daysLeft });

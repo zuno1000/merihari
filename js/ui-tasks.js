@@ -199,7 +199,7 @@ export function renderTasks(view, ctx, listKey = null) {
   const today = eff.date, nowMin = eff.min;
   const rerender = (refocus = false) => { renderTasks(view, ctx, listKey); if (refocus === true) view.querySelector('.quick input')?.focus(); };
   const tasks = Object.values(T()).filter(alive);
-  const gs = plan.goals(T(), E(), today, nowMin);
+  const gs = plan.goals(T(), E(), today, nowMin, { chunk: plan.chunkOf(S()) });
   const goalOf = Object.fromEntries(gs.map((g) => [g.taskId, g]));
   const overdue = plan.overdueTasks(T(), today, E());
   const overdueIds = new Set(overdue.map((t) => t.id));

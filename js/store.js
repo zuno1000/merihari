@@ -106,7 +106,7 @@ export function defaultSettings() {
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
     weather: { enabled: false, regions: [] }, // v0.29・F15: 天気(任意)。地域 [{ id, name, lat, lon }](5 つまで・同期する)。取得した天気は local.weatherCache(端末内・1 時間)
     tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
-    goals: { workMin: null, driftMax: null }, // v0.17: 1 日の目標(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
+    goals: { workMin: null, driftMax: null, chunkMin: 30 }, // v0.17: 1 日の目標。v0.31.4: chunkMin=期限つきの目安の 1 回の大きさ(分・既定 30・plan.CHUNK_MIN)(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
     fieldStamps: {},         // v0.17: スカラー設定(window/dayStart/gapAbsorbMin/startFromLast/goals)ごとの updatedAt。同期で項目ごとに新しい方を採る(「1日の始まり」が他端末の初期値に戻されていた)
     categories: defaultCategories(),
     settingsUpdatedAt: null,
@@ -230,7 +230,8 @@ function normalizeSettings(raw) {
   // v0.17: 1 日の目標(分)。作業は 15 分〜16 時間、ダラダラの上限は 0〜12 時間。他は null
   const gMin = (v, max) => (v != null && v !== '' && Number.isFinite(+v) && +v >= 0 && +v <= max ? Math.round(+v) : null);
   const gw = isObj(raw.goals) ? gMin(raw.goals.workMin, 960) : null;
-  s.goals = { workMin: gw != null && gw >= 15 ? gw : null, driftMax: isObj(raw.goals) ? gMin(raw.goals.driftMax, 720) : null };
+  const gc = isObj(raw.goals) ? gMin(raw.goals.chunkMin, 180) : null; // v0.31.4: 塊の大きさは 15〜180 分。他は既定の 30
+  s.goals = { workMin: gw != null && gw >= 15 ? gw : null, driftMax: isObj(raw.goals) ? gMin(raw.goals.driftMax, 720) : null, chunkMin: gc != null && gc >= 15 ? gc : d.goals.chunkMin };
   // v0.26.1: レポートのタイル('kind:id' / 'cat:id' の文字列だけ・6 つまで・無ければ null=既定)
   s.tiles = Array.isArray(raw.tiles) ? raw.tiles.filter((x) => typeof x === 'string' && TILE_KEY.test(x)).slice(0, 6) : null;
   s.weather = normalizeWeather(raw.weather); // v0.29・F15

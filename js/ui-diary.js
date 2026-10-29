@@ -98,7 +98,7 @@ export function renderDiary(view, ctx, dateArg = null) {
   // その日の集計・ふり返り・目安(AI に渡す文のため。v0.30: 「材料」のチップは廃止 ─ 実機 FB「使っていない」)
   const agg = report.aggregate({ entries: E(), date, nowMin, settings: S() });
   const fb = report.dayFeedback(agg, { tasks: T(), entries: E(), date, settings: S(), nowMin, planBlocks: store.state.data.planBlocks });
-  const gs = plan.goals(T(), E(), date, nowMin);
+  const gs = plan.goals(T(), E(), date, nowMin, { chunk: plan.chunkOf(S()) });
   const fields = {};
   const field = (key, label, placeholder) => {
     const ta = growArea(draft[key], placeholder, (v) => { draft[key] = v; queue(); });

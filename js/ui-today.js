@@ -662,7 +662,7 @@ function chipsSheet(n0, rerender, mode0 = null, opts = {}) {
   const lastCid = o ? o.categoryId : (log.entriesOf(E(), n.date).filter((x) => x.end != null).pop()?.categoryId || null); // v0.28.1: 種別のタブは 記録中(か直前)のカテゴリの種別から
   const chips = groupedChips(cats(), (c) => chip(c, c.name, () => kindAskSheet(c, (ak) => pick(c.id, null, ak)), o && o.categoryId === c.id && !o.taskId), { current: lastCid });
   // タスクのチップ(v0.11): 目安のあるタスクをそのまま記録できる(紐づけ)
-  const gs = plan.goals(T(), E(), n.date, n.min).filter((g) => T()[g.taskId] && g.kind !== 'todo' && !g.noTime); // 時間を計らないもの(v0.17)はチップに出さない
+  const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => T()[g.taskId] && g.kind !== 'todo' && !g.noTime); // 時間を計らないもの(v0.17)はチップに出さない
   const taskChips = gs.length ? el('div.chips', { role: 'group', 'aria-label': 'タスク' }, gs.map((g) => chip(catOf(g.categoryId), g.name, () => pick(g.categoryId, g.taskId), o && o.taskId === g.taskId))) : null;
   const title = el('h2', '');
   const seg = el('div.seg', [['timed', '時刻を決めて'], ['now', 'いまから']].map(([k, label]) => el('button', { type: 'button', class: k === mode ? 'active' : '', onclick: (e) => { mode = k; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); show(); } }, label)));

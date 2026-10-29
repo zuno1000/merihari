@@ -4,7 +4,7 @@
 import { planCompare } from './plan.js';
 import { hm, mm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory, totalsByRole } from './log.js';
-import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked } from './plan.js';
+import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked, chunkOf } from './plan.js';
 import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
@@ -138,7 +138,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date, settings = nu
     if (r.work && r.baseline != null && r.actual - r.baseline >= 15) pos.push({ pri: 2, d: r.actual - r.baseline, text: `${r.name}は先週の平均より${fmtMinJa(r.actual - r.baseline)}多くなりました。` });
   }
   // 目安(毎日/毎週)に届いた日(v0.15)
-  for (const g of goals(tasks, entries, day, 1440)) {
+  for (const g of goals(tasks, entries, day, 1440, { chunk: chunkOf(settings) })) {
     const byMark = g.checked && g.doneMin < g.targetMin; // 「済んだ」の印で届いた扱い(v0.16): 時間ではなく印を言う
     if (g.kind === 'daily' && g.done) pos.push({ pri: 2, d: g.doneMin, text: byMark ? `${g.name}は済みました(印)。` : `${g.name}は${fmtMinJa(g.doneMin)}で、毎日の目安${fmtMinJa(g.targetMin)}に届きました。` });
     if (g.kind === 'weekly' && g.done && g.doneMin - g.targetMin < 1440) pos.push({ pri: 2, d: g.doneMin, text: byMark ? `${g.name}は今週の分が済みました(印)。` : `${g.name}は今週${fmtMinJa(g.doneMin)}で、毎週の目安${fmtMinJa(g.targetMin)}に届きました。` });
@@ -240,7 +240,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   const day = date || agg.date;
   const by = agg.byCategory;
   const lines = reportLines(agg, { tasks, entries, date: day, settings });
-  const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin);
+  const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin, { chunk: chunkOf(settings) });
   const dailyGs = gs.filter((g) => g.kind === 'daily');
   const pc = planBlocks ? planCompare(planBlocks, entries, day, agg.dayDone ? 1800 : nowMin) : null; // v0.23・F12-4: 予定を置いた日だけ
   const hasBase = agg.baselineWorkMin != null && agg.baselineDays >= 3;
@@ -309,7 +309,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     if (g) next = `きょうはあと ${g.name} を${fmtMinJa(g.targetMin - g.doneMin)}。`;
   } else {
     const tomorrow = addDays(day, 1);
-    const sh = todayShare(tasks, tomorrow, entries).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
+    const sh = todayShare(tasks, tomorrow, entries, { chunk: chunkOf(settings) }).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
     const dl = dailyGs.find((g) => !g.done);
     const wk = gs.find((g) => g.kind === 'weekly' && !g.done && g.to > day);
     if (sh) next = `明日は ${tasks[sh.taskId].name} を${fmtMinJa(sh.todayMin)}(残り${fmtMinJa(sh.remainingMin)}を${sh.daysLeft}日で)。`;
