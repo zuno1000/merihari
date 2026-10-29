@@ -950,10 +950,14 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(S.needsKindFilter(kgf) && S.needsKindFilter(few(['english', 'life'])) && !S.needsKindFilter(few(['english', 'research'])) && !S.needsKindFilter(S.kindGroups(s2, cats.filter((c) => ['research', 'life'].includes(c.id)))), 'needsKindFilter: ★ があれば件数に関わらず絞る(種別が 2 つ以上のとき)。★ 無しは従来どおり 8 件以上');
       const mf = S.migrate({ schema: 1, settings: { categories: [{ id: 'a', name: 'A', kind: 'work', fav: true }, { id: 'b', name: 'B', kind: 'work', fav: 'yes' }] } }).settings.categories;
       ok(mf[0].fav === true && mf[1].fav === false && S.defaultSettings().categories.every((c) => !c.fav), 'migrate: カテゴリの fav は true だけ(既定は無し)');
-      // 数え方の選択肢(v0.30.1): 種別の pick
-      const dkq = S.defaultKinds();
-      const mk = S.migrate({ schema: 1, settings: { kinds: [{ id: 'a', name: 'A', work: true }, { id: 'b', name: 'B', work: false, drift: false, pick: true }, { id: 'c', name: 'C', work: true, pick: false }, { id: 'd', name: 'D' }] } }).settings.kinds;
-      ok(dkq.filter((k) => k.pick).map((k) => k.id).join() === 'work,fixed,drift' && mk.map((k) => k.pick).join() === 'true,true,false,false' && S.pickKinds({ kinds: mk }).map((k) => k.id).join() === 'a,b' && S.pickKinds({}).map((k) => k.id).join() === 'work,fixed,drift', 'pickKinds / migrate: 数え方の選択肢は pick(無ければ 作業 か ダラダラ の種別)');
+      // ほかの種別(v0.31・F1-20 改): category.alsoKinds
+      const ma = S.migrate({ schema: 1, settings: { categories: [{ id: 'a', name: 'A', kind: 'hobby', alsoKinds: ['work', 'hobby', 'nope', 'work', 'drift'] }, { id: 'b', name: 'B', kind: 'work' }, { id: 'c', name: 'C', kind: 'work', alsoKinds: 'work' }] } }).settings.categories;
+      ok(eq(ma[0].alsoKinds, ['work', 'drift']) && eq(ma[1].alsoKinds, []) && eq(ma[2].alsoKinds, []) && S.defaultKinds().every((k) => k.pick === undefined) && S.migrate({ schema: 1, settings: {} }).settings.categories.every((c) => Array.isArray(c.alsoKinds) && !c.alsoKinds.length), 'migrate: alsoKinds は存在する種別だけ・主の種別と重複を除く・無ければ []。種別の pick は廃止');
+      const ca = { id: 'circle', name: 'サークル', kind: 'hobby', alsoKinds: ['work'], order: 1 };
+      const kga = S.kindGroups(s2, [...cats.filter((c) => c.id !== 'circle'), ca]);
+      ok(kga.find((g) => g.id === 'work').cats.some((c) => c.id === 'circle') && kga.find((g) => g.id === 'hobby').cats.some((c) => c.id === 'circle') && !kga.find((g) => g.id === 'drift').cats.some((c) => c.id === 'circle') && eq(S.catKinds(ca), ['hobby', 'work']) && eq(S.catKinds({ kind: 'work' }), ['work']), 'kindGroups / catKinds: ほかの種別の束にも出る(主の種別の束にも残る)');
+      const sD = L.switchFrom(sB, Object.keys(sB)[0], 570, 'circle', 1440, C30, 'work');
+      ok(sD.entries[sD.tailId].asKind === 'work' && L.switchFrom(sB, Object.keys(sB)[0], 500, 'circle', 1440, C30, 'work').entries[Object.keys(sB)[0]].asKind === 'work', 'switchFrom(asKind): 切り出した先の種別を持てる(丸ごとでも)');
       // お金の日ごと
       const Mo = M.money;
       const mny = { a: { id: 'a', date: '2026-10-30', time: '12:00', amount: 500, type: 'out', categoryId: 'food' }, b: { id: 'b', date: '2026-10-30', time: null, amount: 1000, type: 'in', categoryId: 'inc', updatedAt: '2' }, c: { id: 'c', date: '2026-10-30', time: '18:30', amount: 300, type: 'out', categoryId: 'food' }, d: { id: 'd', date: '2026-10-29', time: '09:00', amount: 100, type: 'out', categoryId: 'food' }, e: { id: 'e', date: '2026-10-30', time: '08:00', amount: 999, type: 'out', categoryId: 'x', deletedAt: '1' } };

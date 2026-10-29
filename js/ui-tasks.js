@@ -66,7 +66,7 @@ function segRow(options, value, onpick) {
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
  */
 function quickAdd(today, rerender, preset = null) {
-  const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く(Enter でメモ)', autocomplete: 'off', maxlength: 200 });
+  const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く', autocomplete: 'off', maxlength: 200 });
   let type = preset || 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
   const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today, onchange: () => refresh() });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true, onchange: () => refresh() });
@@ -106,7 +106,7 @@ function quickAdd(today, rerender, preset = null) {
   const pills = el('div.qpills', Object.values(P).map((x) => x.pill));
   const applyType = (k) => {
     type = k;
-    name.placeholder = type === 'memo' ? '思いついたことを書く(Enter でメモ)' : '何をする?(Enter で追加)';
+    name.placeholder = type === 'memo' ? '思いついたことを書く' : '何をする?';
     refresh();
   };
   const typeSeg = segRow(TYPES, type, applyType);

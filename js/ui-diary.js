@@ -149,7 +149,7 @@ export function renderDiary(view, ctx, dateArg = null) {
   const aiOn = !!store.state.local.ai?.enabled;
   let aiBox = null;
   if (aiOn || (draft.ai && draft.ai.trim())) {
-    const aiField = field('ai', 'AI の返事', aiOn ? '「返事を貼り付け」で入ります(手で貼ってもよい)' : '');
+    const aiField = field('ai', 'AI の返事', aiOn ? '「返事を貼り付け」で入ります' : '');
     aiOpts.aiField = fields.ai;
     const pasteInto = async () => {
       let text = '';
@@ -212,7 +212,7 @@ function aiCard(o) {
   };
   const copyOnly = async (text) => { try { await navigator.clipboard.writeText(text); toast('文をコピーしました(ショートカットに貼って使えます)'); } catch { toast('コピーできませんでした'); } };
   const summary = () => ai.summaryText({ date: o.date, agg: o.agg, fb: o.fb, gs: o.gs, diary: o.draft, categories: S().categories, goals: S().goals, nowMin: o.nowMin, dayDone: o.dayDone });
-  const question = el('input.text', { type: 'text', placeholder: '相談(例: 次に何をやる?)', maxlength: 200, autocomplete: 'off' });
+  const question = el('input.text', { type: 'text', placeholder: '相談', maxlength: 200, autocomplete: 'off' });
   const consult = () => {
     const open = log.openEntry(E());
     const openInfo = open ? { name: (open.taskId && T()[open.taskId]?.name) || (S().categories.find((c) => c.id === open.categoryId)?.name) || '記録', elapsedMin: log.elapsedMin(open, n.date, n.min) } : null;
@@ -223,7 +223,7 @@ function aiCard(o) {
   const chips = el('div.chips.small', ai.QUICK_QUESTIONS.map((q) => el('button.chip.sm2', { type: 'button', onclick: () => { question.value = q; send(consult()); } }, q)));
   // v0.29.4: 返事の貼り付けは「AI」の節(1 タップで欄へ)に移した。このカードは「相談」のシートと「頼む」の送り手
   const node = el('section.card.aicard', [
-    el('div.row.between', [el('span.dlabel', `AI に相談(ショートカット「${name}」)`), el('button.btn.sm.ghost', { type: 'button', onclick: () => copyOnly(summary()) }, '文をコピー')]),
+    el('div.row.between', [el('span.dlabel', 'AI に相談'), el('button.btn.sm.ghost', { type: 'button', onclick: () => copyOnly(summary()) }, '文をコピー')]),
     o.isToday ? el('div.row', [question, el('button.btn.primary', { type: 'button', onclick: () => send(consult()) }, '相談')]) : null,
     o.isToday ? chips : null,
     el('p.muted.small', '返事はショートカットの中に出て、クリップボードにも入ります。戻って「返事を貼り付け」を押すと「AI の返事」の欄に入ります。'),

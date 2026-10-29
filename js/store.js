@@ -12,12 +12,12 @@ import { normalizeRegion, MAX_REGIONS } from './weather.js';
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
 export function defaultKinds() {
   return [
-    { id: 'work', name: '作業', work: true, drift: false, pick: true }, // pick: v0.30.1 記録の「数え方」の選択肢に出す
-    { id: 'fixed', name: '決まった作業', work: true, drift: false, pick: true },
-    { id: 'life', name: '生活', work: false, drift: false, pick: false },
-    { id: 'rest', name: '休憩', work: false, drift: false, pick: false },
-    { id: 'drift', name: 'ダラダラ', work: false, drift: true, pick: true },
-    { id: 'hobby', name: '趣味', work: false, drift: false, pick: false },
+    { id: 'work', name: '作業', work: true, drift: false },
+    { id: 'fixed', name: '決まった作業', work: true, drift: false },
+    { id: 'life', name: '生活', work: false, drift: false },
+    { id: 'rest', name: '休憩', work: false, drift: false },
+    { id: 'drift', name: 'ダラダラ', work: false, drift: true },
+    { id: 'hobby', name: '趣味', work: false, drift: false },
   ];
 }
 export const CATEGORY_KINDS = Object.fromEntries(defaultKinds().map((k) => [k.id, k.name]));
@@ -44,10 +44,9 @@ export function effectiveKind(settings, entry) {
   const id = entry?.categoryId;
   return id === 'rest' ? 'rest' : id === 'sns' ? 'drift' : id === 'life' || id === 'transit' || id === 'sleep' ? 'life' : 'work';
 }
-/** 記録の「数え方」の選択肢に出す種別(v0.30.1): 設定 › 種別 の「数え方に出す」(pick)。無ければ 作業 / ダラダラ として数える種別。純関数 */
-export function pickKinds(settings) {
-  const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
-  return kinds.filter((k) => (k.pick === undefined ? k.work || k.drift : k.pick === true));
+/** カテゴリの種別の一覧(v0.31): 主の種別 + ほかの種別(alsoKinds)。純関数 */
+export function catKinds(cat) {
+  return [cat?.kind, ...((cat && Array.isArray(cat.alsoKinds)) ? cat.alsoKinds : [])].filter((k, i, a) => typeof k === 'string' && a.indexOf(k) === i);
 }
 export function entryRole(settings, entry) {
   return kindRole(settings, effectiveKind(settings, entry));
@@ -134,7 +133,7 @@ const TILE_KEY = /^(kind|cat):[A-Za-z0-9_-]{1,40}$/;
  */
 export function kindGroups(settings, cats, { fav = false } = {}) {
   const kinds = Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds();
-  const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id) })).filter((g) => g.cats.length);
+  const groups = kinds.map((k) => ({ id: k.id, name: k.name, cats: cats.filter((c) => c.kind === k.id || (Array.isArray(c.alsoKinds) && c.alsoKinds.includes(k.id))) })).filter((g) => g.cats.length); // v0.31: ほかの種別(alsoKinds)の束にも出る
   const rest = cats.filter((c) => !kinds.some((k) => k.id === c.kind));
   if (rest.length) groups.push({ id: 'other', name: 'その他', cats: rest });
   // v0.30(F1-21 お気に入り): fav=true なら ★ を付けたカテゴリの束を先頭に(id 'fav'・fav: true)。1 つも無ければ付けない
@@ -203,13 +202,15 @@ function normalizeSettings(raw) {
   s.startFromLast = raw.startFromLast === true;
   s.gapAbsorbMin = Number.isFinite(+raw.gapAbsorbMin) && +raw.gapAbsorbMin >= 0 && +raw.gapAbsorbMin <= 60 ? Math.round(+raw.gapAbsorbMin) : d.gapAbsorbMin;
   // 種別(v0.15.2): 無ければ既定。カテゴリの種別は存在するものだけ(無ければ work か先頭)
-  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true, pick: k.pick === true || (k.pick === undefined && (k.work === true || k.drift === true)), ...(typeof k.updatedAt === 'string' ? { updatedAt: k.updatedAt.slice(0, 40) } : {}) })) : null;
+  const kindsRaw = Array.isArray(raw.kinds) ? raw.kinds.filter((k) => isObj(k) && k.id && String(k.name || '').length <= 40).map((k) => ({ id: String(k.id).slice(0, 40), name: String(k.name || k.id).slice(0, 40), work: k.work === true, drift: k.drift === true, ...(typeof k.updatedAt === 'string' ? { updatedAt: k.updatedAt.slice(0, 40) } : {}) })) : null;
   s.kinds = kindsRaw && kindsRaw.length ? kindsRaw : defaultKinds();
   const kindIds = new Set(s.kinds.map((k) => k.id));
   const kindFallback = kindIds.has('work') ? 'work' : s.kinds[0].id;
   s.categories = (Array.isArray(raw.categories) && raw.categories.length ? raw.categories : d.categories).filter((c) => isObj(c) && c.id).map((c, i) => ({
         ...c, id: String(c.id), name: String(c.name || c.id),
         kind: typeof c.kind === 'string' && kindIds.has(c.kind) ? c.kind : kindFallback,
+        // v0.31(F1-20 改): ほかの種別でも記録できる(存在する種別だけ・主の種別は除く・重複なし・5 つまで)
+        alsoKinds: (Array.isArray(c.alsoKinds) ? c.alsoKinds : []).filter((k, j, a) => typeof k === 'string' && kindIds.has(k) && k !== (typeof c.kind === 'string' && kindIds.has(c.kind) ? c.kind : kindFallback) && a.indexOf(k) === j).slice(0, 5),
         archived: c.archived === true, // v0.15.2: 消す代わりに非表示(記録は名前と色のまま残る)
         fav: c.fav === true, // v0.30: お気に入り(チップの先頭の ★ の束に出す)
         color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)
@@ -373,7 +374,7 @@ export function migrate(raw) {
   for (const e of Object.values(out.entries)) {
     if (e.deletedAt || !e.categoryId || known.has(e.categoryId)) continue;
     known.add(e.categoryId);
-    out.settings.categories.push({ id: e.categoryId, name: '消したカテゴリ', kind: (out.settings.kinds.find((k) => k.id === 'work') || out.settings.kinds[0]).id, color: DEFAULT_COLORS.other, order: out.settings.categories.length + 1, archived: true, fav: false, restored: true }); // fav: v0.30(normalize と同じ形にして冪等に)
+    out.settings.categories.push({ id: e.categoryId, name: '消したカテゴリ', kind: (out.settings.kinds.find((k) => k.id === 'work') || out.settings.kinds[0]).id, color: DEFAULT_COLORS.other, order: out.settings.categories.length + 1, archived: true, fav: false, alsoKinds: [], restored: true }); // fav / alsoKinds: normalize と同じ形にして冪等に
   }
   out.tasks = cleanMap(raw.tasks, validateTask);
   if (!out.settings.habitsMigrated) { const m = migrateHabits({ ...out.settings, habits: raw.settings?.habits }, out.tasks); out.settings = m.settings; out.tasks = cleanMap(m.tasks, validateTask); delete out.settings.habits; }

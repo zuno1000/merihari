@@ -168,14 +168,14 @@ export function split(entries, id, at, nowMin, ctx) {
  * at が開始以前なら丸ごと変更。記録中の後半は記録中のまま(= 止め忘れたまま SNS に移った、を後から直せる)。
  * 戻り値 { entries, tailId }(tailId は切り出した後半の id。丸ごと変更なら元の id)
  */
-export function switchFrom(entries, id, at, categoryId, nowMin, ctx) {
+export function switchFrom(entries, id, at, categoryId, nowMin, ctx, asKind = null) {
   const out = clone(entries);
   const e = out[id];
   if (!alive(e)) return { entries: out, tailId: null };
   const s = hm(e.start), en = effectiveEnd(e, e.date, nowMin);
   if (at >= en) throw new Error('終わりより前の時刻にしてください');
-  if (at <= s) { Object.assign(e, { categoryId, taskId: null, plannedMin: null, asKind: null, updatedAt: ctx.nowISO() }); return { entries: out, tailId: e.id }; } // asKind: 別のカテゴリに移すので数え方は種別どおりに戻す(v0.30)
-  const tail = { ...e, id: ctx.uid(), start: mm(at), categoryId, taskId: null, plannedMin: null, asKind: null, note: '', updatedAt: ctx.nowISO() };
+  if (at <= s) { Object.assign(e, { categoryId, taskId: null, plannedMin: null, asKind: asKind || null, updatedAt: ctx.nowISO() }); return { entries: out, tailId: e.id }; } // asKind: 切り出した先の種別(v0.31・無ければ種別どおり)
+  const tail = { ...e, id: ctx.uid(), start: mm(at), categoryId, taskId: null, plannedMin: null, asKind: asKind || null, note: '', updatedAt: ctx.nowISO() };
   e.end = mm(at); e.updatedAt = ctx.nowISO();
   out[tail.id] = tail;
   return { entries: out, tailId: tail.id };

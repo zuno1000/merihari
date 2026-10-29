@@ -137,10 +137,10 @@ function wantsSheet(today, sum, rerender) {
     ].filter(Boolean)); // v0.20.1: null を渡すと "null" の文字が出る
   };
   // 追加の欄
-  const name = el('input.text', { type: 'text', placeholder: 'ほしいもの(例: ノイズキャンセリングのイヤホン)', maxlength: 100, autocomplete: 'off' });
+  const name = el('input.text', { type: 'text', placeholder: 'ほしいもの', maxlength: 100, autocomplete: 'off' });
   const price = el('input.yenin.sm', { type: 'text', inputmode: 'numeric', placeholder: '0', 'aria-label': '値段(円)' });
-  const target = el('input.date', { type: 'date', min: today, 'aria-label': '目標日(任意)' });
-  const note = el('input.text', { type: 'text', placeholder: 'メモ・計画(任意)', maxlength: 200, autocomplete: 'off' });
+  const target = el('input.date', { type: 'date', min: today, 'aria-label': '目標日' });
+  const note = el('input.text', { type: 'text', placeholder: 'メモ・計画', maxlength: 200, autocomplete: 'off' });
   const add = () => {
     const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); name.focus(); return; }
     const yen = money.parseYen(price.value) ?? 0;
@@ -188,7 +188,7 @@ function quickInput(date, today, rerender) {
   let time = isToday ? mm(minuteOfDay()) : null;
   let auto = isToday; // 時刻を触っていなければ保存時の「いま」(きょうだけ)
   const amount = el('input.yenin', { type: 'text', inputmode: 'numeric', placeholder: '0', autocomplete: 'off', 'aria-label': '金額(円)', maxlength: 11 });
-  const note = el('input.text.mnote', { type: 'text', placeholder: 'メモ(任意)', maxlength: 60, autocomplete: 'off' });
+  const note = el('input.text.mnote', { type: 'text', placeholder: 'メモ', maxlength: 60, autocomplete: 'off' });
   const whenBtn = el('button.btn.sm.ghost.mwhen', { type: 'button', 'aria-label': '時刻を変える' }, '');
   const showWhen = () => { whenBtn.textContent = auto ? 'いま' : (time || '時刻なし'); };
   showWhen();

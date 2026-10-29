@@ -161,11 +161,21 @@ function catEditSheet(c, { kinds = null, canHide, onHide, rerender, favable = fa
     onchange: (e) => { const v = e.target.value.trim().toLowerCase(); if (isHex(v)) setColor(v); else { toast('#RRGGBB の形で入れてください'); e.target.value = c.color; } } });
   const pick = el('input.color', { type: 'color', value: c.color, 'aria-label': '色を選ぶ', oninput: (e) => setColor(e.target.value, false), onchange: (e) => setColor(e.target.value) });
   const swatches = el('div.swatches', paletteSwatches().map((x) => el('button.sw', { type: 'button', 'aria-label': `色 ${x}`, title: x, style: { background: x }, onclick: () => setColor(x) }))); // v0.29.3: 適用中の配色セット(予備の色を含む)が先
+  // v0.31: ほかの種別(チップの切替・主の種別は出さない)
+  const alsoRow = el('div.chips.small', { role: 'group', 'aria-label': 'ほかの種別' });
+  const drawAlso = () => {
+    if (!kinds) return;
+    clear(alsoRow);
+    c.alsoKinds = c.alsoKinds || [];
+    alsoRow.append(...Object.entries(kinds).filter(([id]) => id !== c.kind).map(([id, name]) => { const on = c.alsoKinds.includes(id); return el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { c.alsoKinds = on ? c.alsoKinds.filter((k) => k !== id) : [...c.alsoKinds, id].slice(0, 5); store.touchSettings(); drawAlso(); } }, name); }));
+  };
+  drawAlso();
   sheet((close) => [
     el('h2', [dot, 'カテゴリ']),
     el('label.field.col', [el('span.label', '名前'), textInput(c.name, (v) => { c.name = v || c.id; store.touchSettings(); }, { 'aria-label': 'カテゴリ名', maxlength: 40 })]),
-    kinds ? el('div.row.field', [el('span.label', '種別'), select(kinds, c.kind, (v) => { c.kind = v; store.touchSettings(); })]) : null,
-    favable ? el('label.row.field', [el('input', { type: 'checkbox', checked: !!c.fav, onchange: (e) => { c.fav = e.target.checked; store.touchSettings(); } }), el('span', 'お気に入り(記録・予定・タスクのチップで ★ の束の先頭に)')]) : null, // v0.30・F1-21
+    kinds ? el('div.row.field', [el('span.label', '種別'), select(kinds, c.kind, (v) => { c.kind = v; c.alsoKinds = (c.alsoKinds || []).filter((k) => k !== v); store.touchSettings(); drawAlso(); })]) : null,
+    kinds ? el('div.field.col.alsobox', [el('span.label', 'ほかの種別でも記録できる'), alsoRow]) : null, // v0.31・F1-20 改: サークル(趣味)を「作業」のタブからも記録 → その記録は作業
+    favable ? el('label.row.field', [el('input', { type: 'checkbox', checked: !!c.fav, onchange: (e) => { c.fav = e.target.checked; store.touchSettings(); } }), el('span', 'お気に入り')]) : null, // v0.30・F1-21
     el('div.row.colorrow', [el('span.label', '色'), pick, hex]),
     swatches,
     el('div.row', { style: { marginTop: '12px' } }, [
@@ -204,7 +214,7 @@ function sectionCategories(rerender) {
   const live = s.categories.filter((c) => !c.archived).sort((a, b) => a.order - b.order);
   const archived = s.categories.filter((c) => c.archived);
   const renumber = () => { live.forEach((c, i) => { c.order = i + 1; }); store.touchSettings(); rerender(); };
-  return card('カテゴリ', '記録と集計の単位。≡ を引っ張って並べ替え(記録のチップもこの順)。★ でお気に入り(記録・予定・タスクのチップの先頭に ★ の束として出ます)。行をタップで 名前・種別・色・非表示。消す代わりに「非表示」にするので、これまでの記録は消えません。色をまとめて変えるには 設定 › 配色。',
+  return card('カテゴリ', '記録と集計の単位。≡ を引っ張って並べ替え(記録のチップもこの順)。★ でお気に入り(記録・予定・タスクのチップの先頭に ★ の束として出ます)。行をタップで 名前・種別・ほかの種別・色・非表示。「ほかの種別」を付けると、そのカテゴリのチップがその種別のタブにも出て、そこから記録した分はその種別として数えます(例: サークル=趣味、ほかに 作業)。消す代わりに「非表示」にするので、これまでの記録は消えません。色をまとめて変えるには 設定 › 配色。',
     catList(live, { tagOf: (c) => kinds[c.kind] || null, onStar: (c) => { c.fav = !c.fav; store.touchSettings(); rerender(); }, onEdit: (c) => catEditSheet(c, { kinds, canHide: live.length > 1, onHide: (x) => { x.archived = true; renumber(); toast('非表示にしました(記録は残っています)'); }, rerender, favable: true }), onMove: (from, to) => { const moved = store.moveItem(live, from, to); moved.forEach((m) => { const c = s.categories.find((x) => x.id === m.id); if (c) c.order = m.order; }); store.touchSettings(); rerender(); } }),
     addBtn('カテゴリを追加', () => {
       const c = { id: 'c_' + store.uid().slice(0, 8), name: '新しいカテゴリ', kind: (s.kinds[0] || { id: 'work' }).id, color: EXTRA_COLORS[live.length % EXTRA_COLORS.length], order: live.length + 1, archived: false };
@@ -300,14 +310,13 @@ function editPaletteSheet(p, live, rerender) {
 function sectionKinds(rerender) {
   const s = S();
   const used = (k) => s.categories.filter((c) => c.kind === k.id).length;
-  const tagOf = (k) => [k.work ? '作業' : null, k.drift ? 'ダラダラ' : null, k.pick ? '数え方' : null].filter(Boolean).join('・') || null;
+  const tagOf = (k) => [k.work ? '作業' : null, k.drift ? 'ダラダラ' : null].filter(Boolean).join('・') || null;
   const edit = (k) => sheet((close) => [
     el('h2', '種別'),
     el('label.field.col', [el('span.label', '名前'), textInput(k.name, (v) => { k.name = v || k.id; store.touchSettings(); }, { 'aria-label': '種別名', maxlength: 40 })]),
     el('p.muted.small', `この種別のカテゴリ: ${used(k)} 件`),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.work, onchange: (e) => { k.work = e.target.checked; store.touchSettings(); } }), el('span', '「作業」として数える(レポートの作業の合計に入る)')]),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.drift, onchange: (e) => { k.drift = e.target.checked; store.touchSettings(); } }), el('span', '「ダラダラ」として数える(減ると良い)')]),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.pick, onchange: (e) => { k.pick = e.target.checked; store.touchSettings(); } }), el('span', '記録の「数え方」に出す(どのカテゴリの記録も、この種別として数えられる・v0.30.1)')]),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.work, onchange: (e) => { k.work = e.target.checked; store.touchSettings(); } }), el('span', '「作業」として数える')]),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!k.drift, onchange: (e) => { k.drift = e.target.checked; store.touchSettings(); } }), el('span', '「ダラダラ」として数える')]),
     el('div.row', { style: { marginTop: '12px' } }, [
       el('button.btn.ghost', { type: 'button', disabled: used(k) > 0 || s.kinds.length <= 1, title: used(k) > 0 ? 'この種別のカテゴリがあるので消せません' : '', onclick: () => confirmSheet(`種別「${k.name}」を削除しますか?`, null, '削除', () => { s.kinds = s.kinds.filter((x) => x !== k); store.touchSettings(); close(); rerender(); }, true) }, '削除'),
       el('span.grow'),
@@ -316,7 +325,7 @@ function sectionKinds(rerender) {
   ], () => rerender());
   return card('種別', 'カテゴリを束ねる区分(例: 決まった作業=授業・バイト、作業=研究、趣味)。≡ を引っ張って並べ替え。行をタップで 名前・「作業」「ダラダラ」として数えるか・削除。レポートの「作業」の合計に入る種別と、「ダラダラ」として先週と比べる種別をここで決めます。',
     catList(s.kinds, { tagOf, onEdit: edit, onMove: (from, to) => { const arr = s.kinds.slice(); const [x] = arr.splice(from, 1); arr.splice(to, 0, x); s.kinds = arr; store.touchSettings(); rerender(); } }),
-    addBtn('種別を追加', () => { const k = { id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false, pick: false }; s.kinds.push(k); store.touchSettings(); rerender(); edit(k); }));
+    addBtn('種別を追加', () => { const k = { id: 'k_' + store.uid().slice(0, 6), name: '新しい種別', work: false, drift: false }; s.kinds.push(k); store.touchSettings(); rerender(); edit(k); }));
 }
 
 const fmtTs = (ms) => { if (!ms) return 'なし'; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }; // v0.25: 日付と時刻の間の空き(スペース除去で消えて「10/2723:41」になっていた)
@@ -408,7 +417,7 @@ function sectionWeather(rerender) {
   const w = s.weather;
   const save = () => { s.weather = store.normalizeWeather(s.weather); store.touchSettings(); };
   const results = el('div.list.wx-results', { hidden: true });
-  const q = el('input.text', { type: 'text', placeholder: '地名(例: 新宿、Kyoto)', maxlength: 60, autocomplete: 'off', 'aria-label': '地名で検索' });
+  const q = el('input.text', { type: 'text', placeholder: '地名', maxlength: 60, autocomplete: 'off', 'aria-label': '地名で検索' });
   const search = async () => {
     const name = q.value.trim(); if (!name) { toast('地名を入れてください'); return; }
     if (!navigator.onLine) { toast('オフラインです'); return; }
@@ -475,7 +484,7 @@ function sectionHelp() {
     h('5つのタブと設定'),
     li(['ホーム(v0.28): きょうの内訳(円とカテゴリ別の棒)だけ。円をタップするとその日のレポート。未記録の行をタップすると「何をしていた?」(最後の記録の終わり〜いま)。記録中はその上にタイマー。左上のカレンダー(‹ › でも)で過去の日のホームへ。右上の歯車が設定で、未同期の変更・予定が古い・控えの書き出し があると赤い点が付きます。v0.27 まであった きょうのタスク・きょうの予定・「きょうをふり返る」・気合のカード はホームから外しました(タスクはタスクタブ、予定はカレンダータブ、ふり返りはふり返りタブ。気合は廃止)。', 'カレンダー(旧 タイムライン): 上に手帳の升目(週の帯・左上の「月」で月の升目)、下にその日の実績を縦に。升目のタップ・左右にスワイプ(または ‹ ›)で前後の日。他のタブから開いたときだけ現在時刻の位置に移ります(升目や「今日」で戻ったときは先頭のまま・v0.28)。カレンダーの予定は記録の無いところにだけ薄く描きます(内容は読みません)。右下の ＋ でその日に記録を足せます(記録中は ●)。自分で置いた予定は枠線だけで描きます。支出が紐づく記録には ¥ の印。', 'お金: 今月の支出と予算の残り。金額を入れてカテゴリをタップで記録(きょう・いま。「きょう・いま」をタップで日時を変更)。内訳の円・日ごとの一覧(タップで修正)・月ごとの推移。', 'タスク: 名前を入れて Enter。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と いつまで / 繰り返す / どれくらい / カテゴリ の札が出て、札をタップするとその選択肢だけが下に出ます(キーボードが出ていても画面の上半分に収まる・v0.28.1)。行のタップは編集。', 'ふり返り(旧 日記): きょうはどうだった → 気持ちを残す(気分 / 元気と 3 行)→ 明日を決める。書くたびに自動保存。左上のカレンダー(ホームと同じ印・同じ升目)で過去の日へ。右端は保存の印。', '設定(ホーム右上の歯車): 先頭に「いますぐ同期」と「アップデートを確認」(v0.28.4)。作業時間帯・カテゴリ・種別・配色・すき間・1日の目標・レポートのタイル・お金(予算・カテゴリ)・Google・データ。']),
     h('記録する(タイムライン右下の ＋)'),
-    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを1回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'カテゴリが 8 つ以上あり種別が 2 つ以上なら、チップの上に種別のタブが出て、選んだ種別のカテゴリだけが並びます(v0.28.1・記録のシート・記録の直し・予定・タスクの追加で同じ)。最初は記録中(か直前)のカテゴリの種別。', 'お気に入り ★(v0.30): 設定 › カテゴリ の行の ★ を点けると、チップの先頭に「★」のタブ(お気に入りだけの束)が出て、そこから始まります。よく使うカテゴリを探す手間が減ります。', '記録の「数え方」(v0.30): カテゴリの種別は変えずに、その記録だけ別の種別として数えられます(例: サークルは趣味だが、サークルの作業をした時間は作業に入れたい)。選択肢は 設定 › 種別 の「数え方に出す」で決めます(既定: 作業・決まった作業・ダラダラ)。記録のシートの「数え方」は既定が「種別どおり」で、選んでからカテゴリをタップ。「この時間は?」のシートではカテゴリの種別が既定で選ばれていて、カテゴリを変えると追いかけます。記録中のカードにも同じチップ(作業でない種別のカテゴリだけ)、あとからは記録をタップして「数え方」。数え方の「作業」は種別の「作業」と同じもので、作業の合計・円の下の目標・レポートのタイル・カレンダーの棒にそのまま入り、タイムラインのブロックには小さな札が付きます。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、カレンダーの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが10分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00など)なら、0:00を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
+    li(['既定は「時刻を決めて」: 開始(最後の記録の終わり)〜終了(いま)が先に入っているので、カテゴリを1回タップするとその時間を記録します。時刻は時計で直せ、候補(15分前・30分前・1時間前)もあります。終了を「なし」にすると、その時刻から記録中になります。', '「いまから」: カテゴリをタップして記録を始め、次のカテゴリをタップすると前の記録が閉じます(連続記録)。● は記録中、「終わる」で終了。SNS・動画は「あと何分?」で区切りを置きます。', 'チップの長押し(PC は右クリック)= そのカテゴリを時刻を決めて記録。', 'カテゴリが 8 つ以上あり種別が 2 つ以上なら、チップの上に種別のタブが出て、選んだ種別のカテゴリだけが並びます(v0.28.1・記録のシート・記録の直し・予定・タスクの追加で同じ)。最初は記録中(か直前)のカテゴリの種別。', 'お気に入り ★(v0.30): 設定 › カテゴリ の行の ★ を点けると、チップの先頭に「★」のタブ(お気に入りだけの束)が出て、そこから始まります。よく使うカテゴリを探す手間が減ります。', 'ほかの種別でも記録する(v0.31): 「サークルは趣味だが、サークルの作業をした時間は作業に入れたい」なら、設定 › カテゴリ でサークルの「ほかの種別」に 作業 を付けます。するとサークルのチップが「作業」のタブにも出て、作業のタブから記録した分だけが作業として数えられます(趣味のタブや ★ から記録すれば趣味のまま)。記録中のカードと記録の編集には「趣味 / 作業」のチップが出て、あとから変えられます。タイムラインのブロックには小さな札が付きます。種別は「カテゴリの束」と「作業 / ダラダラ として数えるか」の 1 つの軸だけで、別の「数え方」はありません。', 'ホームの内訳の行(未記録の行は「何をしていた?」)、カレンダーの「この時間は?」「寝ていた?」「予定の時間は?」からも、その時間・そのカテゴリ・そのタスクで記録のシートが開きます。', 'すき間: 前の記録を終えてから次を始めるまでが10分以内(設定 › 記録 › すき間)なら、次の記録に含めて空白にしません。', 'タスクに紐づけた記録は、残り見積から自動で引きます(タスクの「残り」は記録を引いた値)。', '作業時間帯が深夜にまたぐ(7:00〜1:00など)なら、0:00を過ぎてもホームとタイムラインは前の日のまま続きます。', '3時間以上記録中のまま開くと「実際は?」と聞きます。日付をまたいだ記録中は作業時間帯の終わりで閉じます。']),
     h('記録を直す(完璧でなくていい)'),
     li(['タイムラインの記録をタップ。開始/終了をタップすると時計の文字盤。時 → 分の順にタップ。分はなぞると1分刻み、下の −5/−1/+1/+5でも動かせます。選んだ時点で保存します。', 'タイムラインでは、記録の上下の端を引っ張って時刻を直せます(5分刻み・隣の記録の端に吸い付く)。本体を長押しすると上下に動かせます。', '「途中から別のことをしていた」: カテゴリをタップ → 15分前 / 30分前 / 1時間前 / 最初から / 時計 のどれか。その時刻以降を切り出します。', '隣の記録と重なる分は隣を詰めます。未記録の区間は「この時間は?」をタップして埋められます(埋めなくても大丈夫)。']),
     h('配色'),
