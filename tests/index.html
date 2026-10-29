@@ -989,6 +989,61 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(dy.out === 800 && dy.in === 1000 && dy.count === 3 && dy.items.map((x) => x.id).join() === 'c,a,b' && Mo.dayOf(mny, '2026-10-01').count === 0 && Mo.dayOf(null, '2026-10-30').out === 0, 'money.dayOf: その日の支出・収入・件数・時刻の遅い順(時刻なしは末尾)・消したものは見ない');
     }
 
+    // ---- v0.32 bgm(作業用 BGM・F16) ----
+    log('\n# v0.32 bgm');
+    {
+      const B = M.bgm;
+      const song = (id, g, m, d = 60, c = 'ch') => ({ id, t: 'T' + id, g, m, d, c });
+      const cat = { updated: '2026-08-15', songs: [song('aaaaaa01', ['lofi'], ['focus', 'calm'], 90, 'c1'), song('aaaaaa02', ['jazz'], ['calm', 'night'], 120, 'c2'), song('aaaaaa03', ['lofi'], ['focus'], 60, 'c1'), song('aaaaaa04', ['piano'], ['morning', 'calm'], 45, 'c3'), song('aaaaaa05', ['edm'], ['focus'], 10, 'c4'), song('aaaaaa06', ['lofi'], ['calm'], 100, 'c5')] };
+      ok(B.CATALOG_URL === 'data/bgm.json' && B.GENRES.length === 12 && Object.keys(B.GENRE_LABELS).length === 12 && B.POOL === 7 && B.PER_GENRE === 2, 'bgm: カタログは同梱(data/bgm.json)・12 ジャンル・抽選は上位 7(同じジャンル 2 まで)');
+      ok(B.timeSlotMood(6) === 'morning' && B.timeSlotMood(12) === 'focus' && B.timeSlotMood(19) === 'calm' && B.timeSlotMood(23) === 'night' && B.timeSlotMood(2) === 'night', 'timeSlotMood: 5〜11 朝・11〜17 集中・17〜22 リラックス・それ以外 夜');
+      ok(eq(B.normalizeBgm(null), { enabled: false, genres: [], app: true }) && eq(B.normalizeBgm({ enabled: true, genres: ['lofi', 'nope', 'lofi', 7, 'jazz'], app: false }), { enabled: true, genres: ['lofi', 'jazz'], app: false }) && B.normalizeBgm({ enabled: 'yes' }).enabled === false, 'normalizeBgm: enabled は true だけ・ジャンルは存在するものだけ(重複なし)・app の既定は true');
+      ok(S.SCALAR_FIELDS.includes('bgm') && eq(S.defaultSettings().bgm, { enabled: false, genres: [], app: true }) && eq(S.migrate({ schema: 1, settings: { bgm: { enabled: true, genres: ['piano'] } } }).settings.bgm, { enabled: true, genres: ['piano'], app: true }), 'bgm は設定として項目ごとに同期(SCALAR_FIELDS)・既定は無効・migrate で検証');
+      const plays = { aaaaaa01: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', date: '2026-10-29', rating: 1, updatedAt: '2026-10-29T10:00:00+09:00', deletedAt: null }, aaaaaa02: { id: 'aaaaaa02', at: '2026-10-28T10:00:00+09:00', date: '2026-10-28', rating: -1, updatedAt: '2026-10-28T10:00:00+09:00', deletedAt: null }, gone: { id: 'aaaaaa04', at: '2026-10-27T10:00:00+09:00', date: '2026-10-27', rating: null, updatedAt: '2', deletedAt: '2026-10-27T11:00:00+09:00' } };
+      const hd = B.heard(plays);
+      ok(hd.has('aaaaaa01') && hd.has('aaaaaa02') && !hd.has('aaaaaa04') && hd.size === 2, 'heard: 聞いた曲の id(消したものは数えない)');
+      const byId = new Map(cat.songs.map((s) => [s.id, s]));
+      const tb = B.affinityTable(plays, byId);
+      ok(Math.abs(tb.lofi - 0.25) < 1e-9 && Math.abs(tb.jazz + 0.25) < 1e-9 && tb.focus > 0 && tb.night < 0 && Math.abs(tb.calm) < 1e-9 && eq(B.affinityTable({ x: { id: 'aaaaaa01', at: '1', rating: null } }, byId), {}), 'affinityTable: 👍 のタグは +・👎 は −(1 件では ±0.25・calm は打ち消し)・評価の無い曲は材料にしない');
+      const cs = B.channelStats(plays, byId);
+      ok(cs.count.c1 === 1 && cs.count.c2 === 1 && !cs.count.c3 && cs.disliked.has('c2') && !cs.disliked.has('c1'), 'channelStats: チャンネルごとの回数と 👎 の有無');
+      const ctx = { genres: ['lofi'], table: tb, mood: 'focus', channels: cs };
+      const sc = (id) => B.score(byId.get(id), ctx);
+      ok(sc('aaaaaa03') > sc('aaaaaa06') && sc('aaaaaa06') > sc('aaaaaa04') && B.score(byId.get('aaaaaa05'), ctx) < B.score({ ...byId.get('aaaaaa05'), d: 60 }, ctx) && B.score(byId.get('aaaaaa02'), { ...ctx, channels: cs }) < B.score(byId.get('aaaaaa02'), { ...ctx, channels: { count: {}, disliked: new Set() } }), 'score: 選んだジャンル+集中のムードが高い・同じチャンネルはやや低い・20 分未満は低い・👎 のチャンネルは大きく下がる');
+      const rk = B.rank(cat, plays, { bgm: { enabled: true, genres: ['lofi'] } }, { hour: 12 });
+      ok(rk.length === 4 && !rk.some((r) => r.song.id === 'aaaaaa01' || r.song.id === 'aaaaaa02') && rk[0].song.id === 'aaaaaa03' && rk.every((r, i) => i === 0 || rk[i - 1].score >= r.score), 'rank: 聞いた曲を外して点の高い順(消した記録の曲はまた出る)');
+      const many = { songs: Array.from({ length: 12 }, (_, i) => song('bbbbbb' + String(i).padStart(2, '0'), [i < 8 ? 'lofi' : 'jazz'], ['focus'], 60, 'c' + i)) };
+      const rk2 = B.rank(many, {}, { bgm: { enabled: true, genres: ['lofi'] } }, { hour: 12, rnd: () => 0 });
+      const picks = new Set(Array.from({ length: 40 }, (_, i) => B.draw(rk2, () => (i + 0.5) / 40).id));
+      ok(picks.size === 7 && [...picks].filter((id) => +id.slice(-2) < 8).length === 5 && B.draw(rk2, () => 0).id === rk2[0].song.id && B.draw([], Math.random) === null, 'draw: 上位 7 件(同じジャンルは 2 件まで → lofi 2 + jazz 2 + 補充で lofi 3)から順位の重みで抽選・乱数 0 なら 1 位・空なら null');
+      ok(B.perGenreOf(0) === 2 && B.perGenreOf(1) === 7 && B.perGenreOf(2) === 4 && B.perGenreOf(3) === 3 && B.perGenreOf(5) === 2, 'perGenreOf: ジャンルを選んでいなければ 2・1 つなら縛り無し(7)・2 つなら 4・3 つなら 3・多ければ 2');
+      const onlyLofi = new Set(Array.from({ length: 40 }, (_, i) => B.pick(many, {}, { bgm: { enabled: true, genres: ['lofi'] } }, { hour: 12, rnd: () => (i + 0.5) / 40 }).song.id));
+      ok(onlyLofi.size === 7 && [...onlyLofi].every((id) => +id.slice(-2) < 8), 'pick: ジャンルを 1 つだけ選んだら、そのジャンルの曲だけから(抽選の縛りで薄まらない)');
+      const p1 = B.pick(cat, plays, { bgm: { enabled: true, genres: [] } }, { hour: 12, rnd: () => 0 });
+      ok(p1 && !p1.repeat && !hd.has(p1.song.id), 'pick: まだ聞いていない曲から 1 つ');
+      const allHeard = Object.fromEntries(cat.songs.map((s, i) => [s.id, { id: s.id, at: `2026-10-${String(10 + i).padStart(2, '0')}T10:00:00+09:00`, date: `2026-10-${String(10 + i).padStart(2, '0')}`, rating: i === 0 ? -1 : null, updatedAt: '1', deletedAt: null }]));
+      const p2 = B.pick(cat, allHeard, { bgm: { enabled: true, genres: [] } }, { hour: 12 });
+      ok(p2 && p2.repeat && p2.song.id === 'aaaaaa02' && B.pick({ songs: [] }, {}, {}) === null, 'pick: 全部聞いていれば 👎 以外でいちばん昔の曲(repeat)・カタログが空なら null');
+      const rc = B.recent(plays, 5);
+      ok(rc.length === 2 && rc[0].id === 'aaaaaa01' && rc[1].id === 'aaaaaa02' && B.recent(plays, 1).length === 1, 'recent: 新しい順・消したものは除く・件数');
+      const st = B.stats(plays, cat);
+      ok(st.heard === 2 && st.total === 6 && st.up === 1 && st.down === 1 && st.updated === '2026-08-15' && B.stats({}, null).total === 0, 'stats: 聞いた数 / 全体・👍 / 👎 の数・カタログの日付');
+      ok(B.watchUrl('a b') === 'https://www.youtube.com/watch?v=a%20b' && B.appUrl('x').startsWith('youtube://www.youtube.com/watch?v=x') && B.intentUrl('x').startsWith('intent://www.youtube.com/watch?v=x#Intent;package=com.google.android.youtube;') && B.intentUrl('x').includes('S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com'), 'watchUrl / appUrl / intentUrl: id はエンコード・Android はブラウザへのフォールバックつき');
+      ok(B.platformOf('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)') === 'ios' && B.platformOf('Mozilla/5.0 (Macintosh)', 5, 'MacIntel') === 'ios' && B.platformOf('Mozilla/5.0 (Linux; Android 14)') === 'android' && B.platformOf('Mozilla/5.0 (Windows NT 10.0)') === 'other', 'platformOf: iPhone / iPad(MacIntel+タッチ)/ Android / それ以外');
+      ok(B.urlFor('x', true, 'ios') === B.appUrl('x') && B.urlFor('x', true, 'android') === B.intentUrl('x') && B.urlFor('x', true, 'other') === B.watchUrl('x') && B.urlFor('x', false, 'ios') === B.watchUrl('x'), 'urlFor: アプリで開くは iOS がスキーム・Android が intent・PC と「ブラウザで」は watch URL');
+      const vp = S.validateBgmPlay({ id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', rating: 1, note: 'x' }, 'k');
+      ok(vp && vp.id === 'aaaaaa01' && vp.date === '2026-10-29' && vp.rating === 1 && vp.deletedAt === null && S.validateBgmPlay({ at: '2026-10-29T10:00:00+09:00', rating: 5 }, 'bbbbbb02').rating === null && S.validateBgmPlay({ id: 'bad id!', at: '1' }, 'k') === null && S.validateBgmPlay({ id: 'aaaaaa01' }, 'k') === null, 'validateBgmPlay: id は動画 id の形・at 必須・date は at から・rating は 1 / -1 だけ');
+      const mg = S.migrate({ schema: 1, settings: {}, bgm: { k1: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00' }, aaaaaa02: { id: 'aaaaaa02', at: '2026-10-28T10:00:00+09:00', rating: -1 }, bad: { id: 'x', at: '1' } } });
+      ok(eq(Object.keys(mg.bgm).sort(), ['aaaaaa01', 'aaaaaa02']) && mg.bgm.aaaaaa02.rating === -1 && eq(S.defaultData().bgm, {}), 'migrate: data.bgm はキーを動画 id にそろえ壊れたものを捨てる・既定は空');
+      const ma = S.migrate({ schema: 1, settings: {}, bgm: { aaaaaa01: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', rating: 1, updatedAt: '2026-10-29T10:00:00+09:00' } } });
+      const mb = S.migrate({ schema: 1, settings: {}, bgm: { aaaaaa01: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', rating: -1, updatedAt: '2026-10-29T12:00:00+09:00' }, aaaaaa03: { id: 'aaaaaa03', at: '2026-10-30T10:00:00+09:00', updatedAt: '2026-10-30T10:00:00+09:00' } } });
+      const mm2 = M.sync.merge(ma, mb);
+      ok(mm2.bgm.aaaaaa01.rating === -1 && mm2.bgm.aaaaaa03 && Object.keys(mm2.bgm).length === 2 && Object.keys(M.sync.pruneTombstones({ ...S.defaultData(), bgm: { aaaaaa01: { id: 'aaaaaa01', at: '1', updatedAt: '1', deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-30T00:00:00+09:00').bgm).length === 0, 'sync.merge: 聞いた BGM は動画 id ごとに updatedAt の新しい方・古い tombstone は pruneTombstones で消える');
+      ok(sw.includes(`'./js/bgm.js'`) && sw.includes(`'./js/ui-bgm.js'`) && sw.includes(`'./data/bgm.json'`), 'sw.js の ASSETS に bgm.js / ui-bgm.js / data/bgm.json がある(オフラインでも選べる)');
+      const real = await B.loadCatalog();
+      ok(real && real.songs.length >= 600 && real.songs.every((s) => /^[A-Za-z0-9_-]{6,20}$/.test(s.id) && typeof s.t === 'string' && Array.isArray(s.g) && Array.isArray(s.m)) && new Set(real.songs.map((s) => s.id)).size === real.songs.length && real.songs.every((s) => s.g.every((g) => B.GENRES.includes(g))), `同梱のカタログ: ${real && real.songs.length} 曲・id の形・重複なし・ジャンルは 12 のどれか`);
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

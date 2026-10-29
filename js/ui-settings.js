@@ -9,6 +9,8 @@ import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import * as report from './report.js';
 import * as weather from './weather.js';
+import * as bgm from './bgm.js';
+import { playBgm, rateChips, reopen } from './ui-bgm.js';
 
 const S = () => store.state.data.settings;
 const DAYS7 = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -52,6 +54,7 @@ const summary = {
   palettes() { const s = S(); const p = (s.palettes || []).find((x) => x.id === s.palette) || (PALETTES[s.palette] ? { name: PALETTES[s.palette].name } : null); return `${p ? p.name : '既定'}・自分のセット${(s.palettes || []).length}件`; },
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
+  bgm() { const b = bgm.normalizeBgm(S().bgm); if (!b.enabled) return '使わない'; const n = Object.values(store.state.data.bgm || {}).filter((p) => !p.deletedAt).length; return `ホームに ♪・${b.genres.length ? b.genres.slice(0, 3).map((g) => bgm.GENRE_LABELS[g]).join(' / ') + (b.genres.length > 3 ? ' …' : '') : 'ジャンルはおまかせ'}${n ? `・聞いた ${n} 曲` : ''}`; },
   weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
 };
@@ -451,6 +454,38 @@ function sectionWeather(rerender) {
 }
 
 /**
+ * 作業用 BGM(v0.32・F16・任意): ホームの ♪ をタップ → まだ聞いていない曲を 1 つ選んで YouTube で開く。好みのジャンル(複数・無ければおまかせ)と「YouTube アプリで開く」は設定(同期する・SCALAR_FIELDS の bgm)。
+ * 聞いた曲と 好き / ちがう は data.bgm(同期する)。カタログは同梱(data/bgm.json・todaybgm から)で通信しない。
+ */
+function sectionBgm(rerender) {
+  const s = S();
+  s.bgm = bgm.normalizeBgm(s.bgm);
+  const b = s.bgm;
+  const save = () => { s.bgm = bgm.normalizeBgm(s.bgm); store.touchSettings(); };
+  const plays = store.state.data.bgm || {};
+  const cat = bgm.catalogNow();
+  if (!cat) bgm.loadCatalog().then(() => rerender()).catch(() => {});
+  const st = bgm.stats(plays, cat || { songs: [] });
+  const chips = el('div.chips.small', { role: 'group', 'aria-label': '好みのジャンル' }, bgm.GENRES.map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${b.genres.includes(g) ? ' on' : ''}`, 'aria-pressed': b.genres.includes(g) ? 'true' : 'false', onclick: () => { b.genres = b.genres.includes(g) ? b.genres.filter((x) => x !== g) : [...b.genres, g]; save(); rerender(); } }, bgm.GENRE_LABELS[g] || g)));
+  const recent = bgm.recent(plays, 10);
+  const rows = recent.length ? el('div.list', recent.map((p) => { const song = cat ? cat.songs.find((x) => x.id === p.id) : null; return el('div.srow.plain.bgm-row', [
+    el('button.bgm-open', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [el('span.bgm-title', song ? song.t : p.id), el('span.muted.small', `${p.date}${song && song.g.length ? '・' + song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・') : ''}`)]),
+    rateChips(p, rerender)]); })) : null;
+  return card('作業用 BGM', '任意の機能です。ホーム右上の ♪ をタップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。同じ曲は二度すすめません。曲の一覧(todaybgm のカタログ)はアプリに入っていて、選ぶのに通信はしません。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!b.enabled, onchange: (e) => { b.enabled = e.target.checked; save(); rerender(); } }), el('span', 'ホームに ♪ を出す')]),
+    el('h3.help-h', '好みのジャンル'),
+    chips,
+    el('p.muted.small', '選んだジャンルを多めに。何も選ばなければ全部から。流したあとの「好き / ちがう」も次の選び方に効きます(好きと言った曲に近いジャンルやムードを多めに、ちがうと言った曲のチャンネルは控えめに)。時間帯でも変わります(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中)。'),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.app !== false, onchange: (e) => { b.app = e.target.checked; save(); } }), el('span', 'YouTube アプリで開く')]),
+    el('p.muted.small', 'iPhone / Android で YouTube アプリがあればそちらで開きます(無ければブラウザ)。外すと いつもブラウザで。'),
+    b.enabled ? el('div.row', { style: { marginTop: '10px' } }, [el('button.btn', { type: 'button', onclick: () => playBgm(rerender) }, '1 曲ためす')]) : null,
+    el('h3.help-h', `聞いた曲(${st.heard} / ${st.total || '…'})`),
+    rows || el('p.muted.small', 'まだありません。ホームの ♪ をタップすると ここに残ります。'),
+    rows ? el('p.muted.small', '題名をタップで もう一度開く。') : null,
+    el('p.muted.small', `安全について: このアプリからの通信はありません(曲の一覧は同梱・${st.updated ? st.updated + ' 時点・' : ''}todaybgm.pages.dev と同じ作者のカタログ)。♪ のタップで YouTube を開くだけで、YouTube 側の再生や広告はこのアプリの外です。聞いた曲と 好き / ちがう は記録として同期します。`));
+}
+
+/**
  * AI・ショートカット(v0.21・F11): 端末ごとの任意機能(local.ai・同期しない)。アプリ内に AI は置かず、iOS ショートカットの「モデルを使用」(Apple Intelligence・端末内モデル)に文を渡す。
  * ここで有効にすると日記に「AI に頼む」のカードが出る。ショートカットの作り方(3アクション)もここに。
  */
@@ -517,6 +552,8 @@ function sectionHelp() {
     li(['設定 › AI で有効にすると、ふり返りに「AI」の節(「AI の返事」の欄と 頼む / 返事を貼り付け / 相談 › のボタン)が出ます(v0.29.4)。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の3行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を 1 回押すと、そのまま「AI の返事」の欄に入って自動で保存されます(メモとは別の欄。iOS が最初に「ペースト」の許可を聞くことがあります)。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
     h('天気と服装(任意・v0.29)'),
     li(['設定 › 天気と服装 で地名を検索して地域を登録(5 つまで)し「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印(先頭の地域の天気の絵)が出ます。タップすると地域ごとの札(大きな絵・最高 / 最低気温・天気・降水確率・服装のチップ: 半袖 / 長袖 / 上着 / コート、朝晩の差、傘)。札の下に あす の予報も小さく 1 行(v0.29.2)。「更新」で取り直し、「地域 ›」で設定へ(v0.29.1)。', 'データは Open-Meteo(無料・キー不要)。接続先はその 2 つのドメインだけで、端末の位置情報は使いません。取れないとき(オフライン・遅い)は何も出さず、起動も待たせません。取得した天気はこの端末に 1 時間、地域は設定として同期します。']),
+    h('作業用 BGM(任意・v0.32)'),
+    li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム右上(天気の左)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう)。題名をタップで もう一度開きます。流していない日は何も出ません。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),
@@ -536,6 +573,7 @@ const SECTIONS = {
   money: { title: 'お金', build: (re) => sectionMoney(re) },
   ai: { title: 'AI(ショートカット)', build: (re) => sectionAI(re) },
   weather: { title: '天気と服装', build: (re) => sectionWeather(re) },
+  bgm: { title: '作業用 BGM', build: (re) => sectionBgm(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -654,7 +692,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('1日の目標', summary.goals(), open('goals')),
       srow('レポートのタイル', summary.tiles(), open('tiles')),
     ]),
-    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
+    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後の書き出し ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {

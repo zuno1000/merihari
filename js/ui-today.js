@@ -14,6 +14,7 @@ import * as money from './money.js';
 import * as kiai from './kiai.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
+import { bgmButton, bgmStrip } from './ui-bgm.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -404,7 +405,7 @@ export function renderNow(view, ctx, dateArg = null) {
   const head = headBar({
     left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左
+    right: [bgmButton(rerender), weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左。v0.32: ♪(作業用 BGM・F16)はその左
   });
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {
@@ -415,7 +416,7 @@ export function renderNow(view, ctx, dateArg = null) {
   } }, [
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
-    hero?.node, breakdown(v, rerender, { isToday, ctx }),
+    hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す
