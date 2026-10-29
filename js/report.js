@@ -2,7 +2,7 @@
 // v0.15: 理想スケジュールとの比較は廃止。比べる相手は「先週の平均(ベースライン)」と「目安」だけ。
 // v0.15.1: 期間(7日・30日・すべて)のふり返り(periodSummary / goalsSummary / weeklyBuckets)。
 import { planCompare } from './plan.js';
-import { hm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
+import { hm, mm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory, totalsByRole } from './log.js';
 import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked } from './plan.js';
 import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './store.js';
@@ -175,11 +175,66 @@ const driftLabelOf = (settings) => (Array.isArray(settings?.kinds) && settings.k
 const r5 = (m) => Math.max(5, Math.round(m / 5) * 5);
 
 /**
+ * きょうの「ここをこうしたら」(v0.31.3・F3-9 改・実機 FB「どれだけダラダラしても改善が促されない」)。
+ * その日の記録の並びだけから、時刻つきの事実 1 つ+小さな試し 1 つを文にする(純関数・先週平均や目標は要らない)。
+ * 材料: 同じ役割(作業 / ダラダラ / 休憩)の記録が 10 分以内の間で続いたものを 1 つの「続き」にまとめ、
+ *  A) ダラダラの続き: 2 回以上で合計 60 分以上(回数・合計・いちばん長い続き)/ 1 回でも 45 分以上(その続き)。作業時間帯のあとなら「終わりの時刻を決めてから」
+ *  B) 最初の作業の前のダラダラ(作業時間帯の始まりから最初の作業まで)が 30 分以上 / 1 日が終わって作業が無く ダラダラ 30 分以上
+ *  C) 休憩を挟まない作業の続きが 150 分以上(「間に休憩を 1 つ」)
+ *  D) 作業のあとにダラダラへ移ったのが 3 回以上(「次にやることを先に決めておく」)
+ * 文は責めない(事実+「次は…してみてください」)。戻り値 [{ key, d, text }] を効き目(分)の大きい順。
+ */
+export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDone = true } = {}) {
+  const drift = driftLabelOf(settings);
+  const cats = settings?.categories || [];
+  const W = windowFor(settings, date);
+  const list = entriesOf(entries, date).map((e) => {
+    const start = hm(e.start), end = e.end == null ? (e.date === date ? nowMin : 1440) : hm(e.end); // 閉じた記録は深夜(24:xx)もそのまま(totalsByCategory と同じ)
+    const r = entryRole(settings, e);
+    return { start, end, min: Math.max(0, end - start), role: r.work ? 'work' : r.drift ? 'drift' : r.rest ? 'rest' : 'other', name: nameOf(cats, e.categoryId) };
+  }).filter((x) => x.min > 0);
+  // 続き: 同じ役割が 10 分以内の間で続いたもの
+  const runs = [];
+  for (const x of list) {
+    const last = runs[runs.length - 1];
+    if (last && last.role === x.role && x.start - last.end <= 10) { last.end = Math.max(last.end, x.end); last.min += x.min; last.by[x.name] = (last.by[x.name] || 0) + x.min; }
+    else runs.push({ role: x.role, start: x.start, end: x.end, min: x.min, by: { [x.name]: x.min } });
+  }
+  for (const r of runs) r.name = Object.entries(r.by).sort((a, b) => b[1] - a[1])[0][0];
+  const span = (r) => `${mm(r.start % 1440)}〜${mm(r.end % 1440)}`;
+  const out = [];
+  const dr = runs.filter((r) => r.role === 'drift');
+  const total = dr.reduce((a, r) => a + r.min, 0);
+  const longest = dr.slice().sort((a, b) => b.min - a.min)[0];
+  // A) ダラダラの続き
+  if (longest) {
+    const after = W && longest.start >= W.end;
+    const tip = after ? '作業時間帯のあとなので、終わりの時刻を決めてから始めると切り上げやすいです。' : '次は 30 分で区切ってみてください。';
+    if (dr.length >= 2 && total >= 60) out.push({ key: 'drift-runs', d: total, text: `${drift}は${dr.length}回・合計${fmtMinJa(total)}でした。いちばん長かったのは ${span(longest)} の ${longest.name}(${fmtMinJa(longest.min)})。${tip}` });
+    else if (longest.min >= 45) out.push({ key: 'drift-long', d: longest.min, text: `${span(longest)} の ${longest.name} が${fmtMinJa(longest.min)}続きました。${tip}` });
+  }
+  // B) 最初の作業の前
+  const firstWork = runs.find((r) => r.role === 'work');
+  if (W && firstWork) {
+    const before = list.filter((x) => x.role === 'drift').reduce((a, x) => a + Math.max(0, Math.min(x.end, firstWork.start) - Math.max(x.start, W.start)), 0);
+    if (before >= 30) out.push({ key: 'late-start', d: before, text: `最初の作業(${mm(firstWork.start % 1440)})の前に ${drift} が${fmtMinJa(before)}ありました。次は 5 分だけ先に始めてみてください。` });
+  } else if (!firstWork && dayDone && total >= 30) out.push({ key: 'no-work', d: total, text: `きょうは作業の記録が無く、${drift}は${fmtMinJa(total)}でした。明日は最初の 1 つを 5 分だけ始めてみてください。` });
+  // C) 休憩を挟まない作業の続き
+  const longWork = runs.filter((r) => r.role === 'work' && r.min >= 150).sort((a, b) => b.min - a.min)[0];
+  if (longWork) out.push({ key: 'no-break', d: Math.round(longWork.min / 3), text: `${span(longWork)} は ${longWork.name} が${fmtMinJa(longWork.min)}続きました。間に休憩を 1 つ置くと、後半が軽くなります。` });
+  // D) 作業のあとにダラダラ
+  let slips = 0;
+  for (let i = 1; i < runs.length; i++) if (runs[i].role === 'drift' && runs[i - 1].role === 'work' && runs[i].start - runs[i - 1].end <= 10) slips++;
+  if (slips >= 3) out.push({ key: 'after-work', d: slips * 15, text: `作業のあとに ${drift} へ移ったのが${slips}回ありました。作業の次にやることを先に決めておくと、流れにくくなります。` });
+  return out.sort((a, b) => b.d - a.d);
+}
+
+/**
  * きょうのふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
  * 判定の材料: 作業の合計 vs 先週平均(±15分かつ ±10%)/ ダラダラ vs 先週平均(−15 / +30分)/ 毎日の目安に届いたか(済んだの印も可)。
  * 材料が無いとき(先週の記録が3日未満で目安も無い・記録が作業時間帯の半分以下・まだ1日の途中)は判定しない(judged=false)。
  * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる1件だけ。「明日は」は目安から計算した量1件。
- * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null }
+ * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null, lookBack:[string](v0.31.3・2 つまで) }
  */
 export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440, planBlocks = null } = {}) {
   const day = date || agg.date;
@@ -263,7 +318,9 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     else if (lines.tomorrow) next = lines.tomorrow;
     else if (goalWork != null && agg.workMin < goalWork) next = `明日は作業${fmtMinJa(goalWork)}を(きょうは${fmtMinJa(agg.workMin)})。`;
   }
-  return { judged, score, verdict, head, reasons, good, better, next };
+  // ここをこうしたら(v0.31.3): 時刻つきの事実+小さな試し。途中でも出す(いまの時点まで)。2 つまで
+  const lb = lookBack(entries, day, settings, agg.dayDone ? 1440 : nowMin, { dayDone: agg.dayDone }).slice(0, 2).map((x) => x.text);
+  return { judged, score, verdict, head, reasons, good, better, next, lookBack: lb };
 }
 
 /** 種別ごとの合計(v0.16・F3-10): カテゴリ別の分 {id:min} を種別にまとめる。色は種別の中でいちばん大きいカテゴリのもの。多い順 */

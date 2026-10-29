@@ -504,11 +504,12 @@ function planFigure(date, nowMin, r) {
 // ---- ふり返り(v0.16・F3-9): よかったこと / 良くするには / 明日は(途中なら きょうはあと) ----
 function feedbackBox(fb, leadIsFirstGood) {
   const good = leadIsFirstGood ? fb.good.slice(1) : fb.good;
-  if (!good.length && !fb.better && !fb.next) return null;
+  const better = [...(fb.better ? [fb.better] : []), ...(fb.lookBack || [])]; // v0.31.3: 「ここをこうしたら」(時刻つき・2 つまで)を 良くするには に続けて
+  if (!good.length && !better.length && !fb.next) return null;
   const block = (title, items, cls = '') => (items.length ? el('div.fb-block', [el('span.fb-title', title), ...items.map((t) => el('p', { class: cls }, t))]) : null);
   return el('section.report-lines.fb', [
     block('よかったこと', good),
-    block('良くするには', fb.better ? [fb.better] : [], 'muted'),
+    block('良くするには', better, 'muted'),
     block(fb.next && fb.next.startsWith('きょうはあと') ? 'このあと' : '明日は', fb.next ? [fb.next] : [], 'tomorrow'),
   ]);
 }

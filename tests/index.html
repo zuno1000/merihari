@@ -197,6 +197,15 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1日あたりが15分未満なら今日は0');
     ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: null, remainingH: 20 } }, MON).length === 0 && Pn.todayShare({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5 }, remainingH: 5 } }, MON).length === 0, 'todayShare: 期限なし・繰り返しは含めない(目安は goals で)');
     ok(Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ0.5時間=30分)');
+    // v0.31.3(F5-2 改): 均等割の合計は変えず 30 分の塊にまとめる(実機 FB「15 分 × 4 より 30 分 × 2」)
+    const q4 = Object.fromEntries(['a', 'b', 'c', 'd'].map((n) => [n, { id: n, name: n, kind: 'duty', deadline: '2026-10-15', remainingH: 1, deletedAt: null, doneAt: null }])); // 60 分 / 4 日 = 15 × 4
+    const sh4 = Pn.todayShare(q4, MON);
+    ok(sh4.map((s) => s.todayMin).join() === '30,30,0,0' && sh4.map((s) => s.rawMin).join() === '15,15,15,15' && sh4[2].deferred && !sh4[0].deferred && sh4.reduce((a, s) => a + s.todayMin, 0) === 60 && Pn.CHUNK_MIN === 30, 'todayShare(v0.31.3): 15 分 × 4 は 30 分 × 2 に(合計は同じ・残りの 2 つは別の日へ deferred)');
+    ok(Pn.todayShare(q4, MON, {}, { chunk: 0 }).map((s) => s.todayMin).join() === '15,15,15,15' && Pn.todayShare(q4, MON, {}, { chunk: 60 }).map((s) => s.todayMin).join() === '60,0,0,0', 'todayShare: chunk 0 なら均等割のまま・60 なら 1 時間 × 1');
+    const q3 = { a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-13', remainingH: 1.5, deletedAt: null, doneAt: null }, b: q4.b, c: q4.c }; // 90/2=45・15・15
+    ok(Pn.todayShare(q3, MON).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:45,b:30,c:0', 'todayShare: 期限順に 均等割か 30 分の大きい方・合計(75)に届いたら残りは別の日へ');
+    ok(Pn.todayShare(q4, MON, { e: { id: 'e', date: MON, start: '09:00', end: '09:20', taskId: 'd', categoryId: 'research' } }).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:30,b:0,c:0,d:30', 'todayShare: きょう記録したタスクは必ず入れる(d が先に 30・合計 60 は同じ)');
+    ok(Pn.goals(q4, {}, MON, 600).length === 2 && Pn.goals(q4, {}, MON, 600).every((g) => g.targetMin === 30), 'goals(期限): 別の日へ回したタスク(todayMin 0)は きょうの目安に出ない');
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
     const lbE = { a: { date: '2026-10-12', start: '09:00', end: '10:00', taskId: 'w' }, b: { date: '2026-10-15', start: '09:00', end: '09:30', taskId: 'w' }, c: { date: '2026-10-19', start: '09:00', end: '10:00', taskId: 'w' }, d: { date: '2026-10-13', start: '09:00', end: null, taskId: 'w' }, e: { date: '2026-10-14', start: '12:00', end: '13:00', taskId: 'x' } };
     ok(Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18') === 90 && Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18', '2026-10-13', 600) === 90 + 60, 'loggedBetween: 期間内の紐づく記録。記録中は今日なら now まで');
@@ -284,6 +293,17 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Rp.dayFeedback(Rp.aggregate({ entries: fbGap, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbGap, date: RD, settings: ds }).better === '未記録が5時間あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。', 'dayFeedback: 未記録が1時間以上でカバー率80%未満なら「埋めると正確になる」と言う(責めない)');
     const fbMid = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 600, settings: ds }), { tasks: dailyT, entries: fbGood, date: RD, settings: ds, nowMin: 600 });
     ok(!fbMid.judged && fbMid.verdict === null && fbMid.better === null && fbMid.next === 'きょうはあと 英語 を30分。', 'dayFeedback: 1日の途中は判定せず「きょうはあと ◯◯ を ◯分」だけ');
+    // v0.31.3(F3-9 改): ここをこうしたら(lookBack)─ 時刻つきの事実+小さな試し
+    const lkE = toMap([mkE(RD, '07:00', '07:50', 'sns'), mkE(RD, '07:50', '11:00', 'research'), mkE(RD, '11:00', '12:30', 'sns'), mkE(RD, '12:30', '14:00', 'research'), mkE(RD, '14:00', '14:20', 'sns'), mkE(RD, '14:20', '16:00', 'research'), mkE(RD, '16:00', '16:30', 'sns')]);
+    const lk = Rp.lookBack(lkE, RD, ds);
+    ok(lk.map((x) => x.key).join() === 'drift-runs,no-break,late-start,after-work', 'lookBack: ダラダラの続き(合計)→ 休憩なしの作業 → 最初の作業の前 → 作業のあとのダラダラ の順(効き目の分)');
+    ok(lk[0].text === 'ダラダラは4回・合計3時間10分でした。いちばん長かったのは 11:00〜12:30 の SNS・動画(1時間30分)。次は 30 分で区切ってみてください。', 'lookBack: ダラダラ 2 回以上・60 分以上は 回数・合計・いちばん長い続き(時刻つき)+ 30 分で区切る');
+    ok(lk[1].text === '07:50〜11:00 は 研究 が3時間10分続きました。間に休憩を 1 つ置くと、後半が軽くなります。' && lk[2].text === '最初の作業(07:50)の前に ダラダラ が50分ありました。次は 5 分だけ先に始めてみてください。' && lk[3].text.startsWith('作業のあとに ダラダラ へ移ったのが3回'), 'lookBack: 休憩なし 150 分以上・最初の作業の前 30 分以上・作業のあとに 3 回');
+    ok(Rp.lookBack(toMap([mkE(RD, '09:00', '10:00', 'research'), mkE(RD, '10:00', '10:30', 'sns')]), RD, ds).length === 0, 'lookBack: 短いダラダラ 1 回(45 分未満)なら何も言わない');
+    ok(Rp.lookBack(toMap([mkE(RD, '23:30', '24:50', 'sns')]), RD, ds)[0]?.text === '23:30〜00:50 の SNS・動画 が1時間20分続きました。作業時間帯のあとなので、終わりの時刻を決めてから始めると切り上げやすいです。', 'lookBack: 作業時間帯のあとの続きは「終わりの時刻を決めてから」(深夜は %1440 で表示)');
+    ok(Rp.lookBack(toMap([mkE(RD, '10:00', '11:00', 'sns')]), RD, ds, 1440, { dayDone: true }).some((x) => x.key === 'no-work') && Rp.lookBack(toMap([mkE(RD, '10:00', '11:00', 'sns')]), RD, ds, 700, { dayDone: false }).map((x) => x.key).join() === 'drift-long', 'lookBack: 作業が無い日(終わった日だけ)は「最初の 1 つを 5 分だけ」・途中なら言わない');
+    const fbLb = Rp.dayFeedback(Rp.aggregate({ entries: lkE, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: lkE, date: RD, settings: ds });
+    ok(fbLb.lookBack.length === 2 && fbLb.lookBack[0] === lk[0].text && Rp.dayFeedback(fbAggGood, { tasks: {}, entries: fbGood, date: RD, settings: ds }).lookBack.join() === '09:00〜12:00 は 研究 が3時間続きました。間に休憩を 1 つ置くと、後半が軽くなります。', 'dayFeedback: lookBack は 2 つまで(先週平均や目標が無くても出る)');
     const fbThin = toMap([...fbBase, mkE(RD, '09:00', '12:00', 'research')]);
     const fb2 = Rp.dayFeedback(Rp.aggregate({ entries: fbThin, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbThin, date: RD, settings: ds });
     ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の18%なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
@@ -436,7 +456,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Pn.remainingMin(rt, rE) === 300 - 90 - 30 && Pn.remainingMin(rt, rE, '2026-10-12') === 300 - 90 && Pn.remainingMin(rt, {}) === 300, 'remainingMin: remainingSetAt より後の閉じた記録を引く(beforeDate で今日の分は引かない・記録中は引かない)');
     ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0で止まる');
     const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', rE)[0];
-    ok(ts0 && ts0.remainingMin === 210 && ts0.todayMin === 25, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9日 → 25分)');
+    ok(ts0 && ts0.remainingMin === 210 && ts0.rawMin === 25 && ts0.todayMin === 30, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9日 → 均等割 25分・v0.31.3 の塊で 30分)');
     ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが0なら出さない');
     const gE2 = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
     const gR = L.closeSmallGaps(gE2, '2026-10-12', 10, PC);

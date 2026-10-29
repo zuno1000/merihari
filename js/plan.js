@@ -59,13 +59,21 @@ export function isEligible(t, date) {
   return dl == null || dl >= date;
 }
 
+/** 1 回の目安の大きさ(分)(v0.31.3・F5-2 改): 期限つきの目安はこれ以上の塊にまとめる(15 分 × 4 ではなく 30 分 × 2) */
+export const CHUNK_MIN = 30;
 /**
- * 今日の目安(v0.15・§6.4改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)。5分丸め・15分未満は0(期限当日は残り全部)。
+ * 今日の目安(v0.15・§6.4改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)= 均等割(rawMin)。5分丸め・15分未満は0(期限当日は残り全部)。
  * 残りは前日までの記録を引いたもの(今日の記録は doneMin 側で見る)。期限のない・繰り返しのタスクは含めない。期限順。
- * 戻り値 [{ taskId, todayMin, remainingMin, deadline, daysLeft }]
+ * v0.31.3(F5-2 改・実機 FB「15 分 × 4 のように細かく分かれる」): 均等割の合計(きょうの量)は変えず、塊(CHUNK_MIN=30 分)にまとめる。
+ * 期限順(同じなら均等割の大きい順)に、1 つずつ max(均等割, 30 分)(残り以下)を割り当て、合計がきょうの量に届いたら残りのタスクは別の日へ(todayMin 0・deferred)。
+ * 期限当日(残り全部)と、きょうすでに記録したタスクは必ず入れる。opts.chunk で塊の大きさを変えられる(0 なら均等割のまま)。
+ * 戻り値 [{ taskId, todayMin, rawMin, deferred, remainingMin, deadline, daysLeft }]
  */
-export function todayShare(tasks, date, entries = {}) {
+export function todayShare(tasks, date, entries = {}, opts = {}) {
+  const chunk = opts.chunk == null ? CHUNK_MIN : Math.max(0, +opts.chunk || 0);
   const out = [];
+  const loggedToday = new Set();
+  for (const e of Object.values(entries || {})) if (alive(e) && e.date === date && e.taskId) loggedToday.add(e.taskId);
   for (const t of Object.values(tasks || {})) {
     if (!isEligible(t, date) || t.repeat || t.noTime) continue; // 時間を計らない用事(v0.17)は量を持たない
     const deadline = deadlineKey(t, date);
@@ -75,9 +83,22 @@ export function todayShare(tasks, date, entries = {}) {
     const daysLeft = Math.max(1, daysBetween(date, deadline) + 1);
     let share = daysLeft === 1 ? remMin : r5(remMin / daysLeft);
     if (daysLeft > 1 && share < 15) share = 0;
-    out.push({ taskId: t.id, todayMin: Math.min(share, remMin), remainingMin: remMin, deadline, daysLeft });
+    const raw = Math.min(share, remMin);
+    out.push({ taskId: t.id, todayMin: raw, rawMin: raw, deferred: false, remainingMin: remMin, deadline, daysLeft, must: daysLeft === 1 || loggedToday.has(t.id) });
   }
-  return out.sort((a, b) => (a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : (tasks[a.taskId].name || '').localeCompare(tasks[b.taskId].name || '')));
+  const byDeadline = (a, b) => (a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : (tasks[a.taskId]?.name || '').localeCompare(tasks[b.taskId]?.name || ''));
+  if (chunk > 0) {
+    const total = out.reduce((a, s) => a + s.rawMin, 0);
+    let acc = 0;
+    const order = out.slice().sort((a, b) => (b.must - a.must) || byDeadline(a, b) || (b.rawMin - a.rawMin)); // 必ず入れるもの → 期限順 → 均等割の大きい順
+    for (const s of order) {
+      if (!s.must && (acc >= total || s.rawMin <= 0)) { s.todayMin = 0; s.deferred = s.rawMin > 0; continue; }
+      s.todayMin = Math.min(s.remainingMin, Math.max(s.rawMin, chunk));
+      acc += s.todayMin;
+    }
+  }
+  for (const s of out) delete s.must;
+  return out.sort(byDeadline);
 }
 
 /** タスクに紐づく今日の実績(分)。記録中は nowMin まで */

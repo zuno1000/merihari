@@ -63,6 +63,7 @@ export function summaryText(o) {
     if (fb.verdict) t.push(fb.verdict);
     for (const x of (fb.good || []).slice(0, 2)) t.push(x);
     if (fb.better) t.push(fb.better);
+    for (const x of (fb.lookBack || []).slice(0, 2)) t.push(x); // v0.31.3: 時刻つきの「ここをこうしたら」
     if (fb.next) t.push(fb.next);
     if (t.length) lines.push('', '【アプリのふり返り(規則で作った文)】', ...t);
   }
