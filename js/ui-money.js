@@ -1,6 +1,8 @@
 // merihari ─ ui-money.js: 「お金」画面(v0.19・F10・§4.5)。v0.30(実機 FB「他のタブと同じ UI に・支出は日ごとに登録・管理」・F10-9):
 // 上段はホーム・カレンダー・ふり返りと同じ(左上のカレンダーの印・‹ 日付 ›・「今日」・右上の貯金箱)。
-// 上から: その日の支出(大きく)+ 2 タップ入力(金額 → カテゴリ・その日に登録)+ その日の一覧(タップで直す)→ 月のまとめ(予算・内訳の円・日ごとの合計(タップでその日へ)・月ごとの推移)。
+// 上から: その日の支出(大きく)+ その日の一覧(タップで直す)+ 2 タップ入力(金額 → カテゴリ・その日に登録)→ 月のまとめ(予算・内訳の円・日ごとの合計(タップでその場で内訳)・月ごとの推移)。
+// v0.33(実機 FB「日毎の内訳を見ようとするとその日に遷移するが見にくい。支出と内訳の間に入力欄があって視線が誘導されない。下から上への移動が毎回挟まる」):
+//   ①並びを 支出 → 内訳(その日の一覧)→ 入力 に(数字を見てから足す)。②月のまとめの「日ごと」はタップでその場で内訳が開く(アコーディオン・1 日ずつ・遷移しない)。内訳の行のタップで直せ、「◯/◯ を開く ›」で上段をその日に。
 // 支出の時刻はタイムラインの記録に紐づく(その時間に何をしていたか)。タイムラインのブロックに ¥ の印、レポート「今日」に支出の行。
 import { el, clear, toast, sheet, confirmSheet, timeField, svg } from './ui.js';
 import * as store from './store.js';
@@ -58,6 +60,7 @@ export function renderMoney(view, ctx, dateArg = null) {
     el('span.myen', { class: `myen${x.type === 'in' ? ' in' : ''}` }, (x.type === 'in' ? '+' : '') + money.fmtYen(x.amount)),
   ]);
   const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
+  const addHead = el('h3.help-h.dl-h.madd-h', isToday ? 'きょうの支出を足す' : `${fmtMD(date)} の支出を足す`); // v0.33: 入力は一覧の下(見出しで視線を誘導)
 
   // 月のまとめ: ‹ 月 › ・支出(大きく)・収入と差し引き・資産・予算のメーター(または 1 日平均)・内訳の円・日ごとの合計(タップでその日へ)・推移
   // v0.30.1(実機 FB「月を前後すると画面が上に飛ぶ」): ctx.go は先頭にスクロールするので、月の見出しが同じ位置に来るように戻す
@@ -90,19 +93,33 @@ export function renderMoney(view, ctx, dateArg = null) {
   const rows = Object.entries(sum.byCategory).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, yen]) => ({ id, yen }));
   const donut = rows.length ? yenDonut(rows, sum.out) : null;
   const groups = money.groupByDay(M(), sum.from, sum.to);
-  const dayRows = groups.length ? el('div.list', groups.map((g) => el('button.srow.mdrow', { type: 'button', class: `srow mdrow${g.date === date ? ' cur' : ''}`, 'aria-label': `${fmtMD(g.date)} の記録を見る`, onclick: () => goDate(g.date) }, [
-    el('span.lbl', `${fmtMD(g.date)}(${DAY_JA[weekday(g.date)]})`),
-    el('span.muted.small', `${g.items.length}件`),
-    el('span.grow'),
-    el('span.val', money.fmtYen(g.total)),
-    el('span.chev', { 'aria-hidden': 'true' }, '›'),
-  ]))) : null;
+  // v0.33: 日ごとの行はタップでその場に内訳(アコーディオン・開くのは 1 日ずつ・画面は動かない)。内訳の行をタップで直す。「◯/◯ を開く ›」で上段をその日に
+  const panels = new Map();
+  const toggleDay = (k) => { expandedDay = expandedDay === k ? null : k; for (const [d, x] of panels) { x.panel.hidden = d !== expandedDay; x.btn.classList.toggle('open', d === expandedDay); x.btn.setAttribute('aria-expanded', d === expandedDay ? 'true' : 'false'); } };
+  const dayRows = groups.length ? el('div.list.mdays', groups.flatMap((g) => {
+    const open = expandedDay === g.date;
+    const btn = el('button.srow.mdrow', { type: 'button', class: `srow mdrow${g.date === date ? ' cur' : ''}${open ? ' open' : ''}`, 'aria-expanded': open ? 'true' : 'false', 'aria-label': `${fmtMD(g.date)} の内訳`, onclick: () => toggleDay(g.date) }, [
+      el('span.lbl', `${fmtMD(g.date)}(${DAY_JA[weekday(g.date)]})`),
+      el('span.muted.small', `${g.items.length}件`),
+      el('span.grow'),
+      el('span.val', money.fmtYen(g.total)),
+      el('span.chev', { 'aria-hidden': 'true' }, '›'),
+    ]);
+    const panel = el('div.mdpanel', { hidden: !open }, [
+      ...money.dayOf(M(), g.date).items.map(row),
+      g.date === date ? null : el('div.row.mdgo', el('button.btn.sm.ghost', { type: 'button', onclick: () => goDate(g.date) }, `${fmtMD(g.date)} を開く ›`)),
+    ].filter(Boolean));
+    panels.set(g.date, { btn, panel });
+    return [btn, panel];
+  })) : null;
   const trend = money.monthlyTrend(M(), ym, 6);
   const trendBox = trend.some((t) => t.out > 0) ? el('details.rep-details', [el('summary.muted.small', '月ごとの推移'), monthBars(trend, ym), el('p.muted.small.center', `これまでの差し引き ${signed(money.netAll(M()).net)}(収入${money.fmtYen(money.netAll(M()).in)} − 支出${money.fmtYen(money.netAll(M()).out)})`)]) : null;
-  const monthSec = el('section.group.mmonth', [monthHead, summary, donut, dayRows ? el('h3.help-h.dl-h', '日ごと(タップでその日へ)') : null, dayRows, trendBox].filter(Boolean));
+  const monthSec = el('section.group.mmonth', [monthHead, summary, donut, dayRows ? el('h3.help-h.dl-h', '日ごと(タップで内訳)') : null, dayRows, trendBox].filter(Boolean));
 
-  view.append(...[el('h1', 'お金'), head, dayCard, quick, dayList, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)
+  view.append(...[el('h1', 'お金'), head, dayCard, dayList, addHead, quick, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)。v0.33: 支出 → 一覧 → 入力 → 月
 }
+/** v0.33: 月のまとめの「日ごと」で開いている日(描き直しても保つ・1 日ずつ) */
+let expandedDay = null;
 
 const W = () => (store.state.data.wants = store.state.data.wants || {});
 function saveWant(w) { w.updatedAt = store.nowISO(); W()[w.id] = w; store.save(); sync.autoSync(); }

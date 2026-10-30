@@ -61,6 +61,8 @@ export function isEligible(t, date) {
 
 /** 1 回の目安の大きさ(分)(v0.31.3・F5-2 改): 期限つきの目安はこれ以上の塊にまとめる(15 分 × 4 ではなく 30 分 × 2) */
 export const CHUNK_MIN = 30;
+/** 記録・予定に紐づけられるタスク(v0.33・純関数): 開いているもの(消した・済んだは除く)・メモは除く(v0.22)・期限の近い順(期限なしは後ろ) */
+export function linkable(tasks) { return Object.values(tasks || {}).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'memo').sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0)); }
 /** 設定の塊の大きさ(v0.31.4: settings.goals.chunkMin・設定 › 1日の目標)。無ければ CHUNK_MIN。純関数 */
 export function chunkOf(settings) { const v = +(settings?.goals?.chunkMin); return Number.isFinite(v) && v >= 15 ? v : CHUNK_MIN; }
 /**

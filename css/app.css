@@ -1037,3 +1037,14 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .mdrow.cur .lbl{color:var(--accent);font-weight:600}
 .mdrow .chev{color:var(--muted);font-size:20px;line-height:1;flex:none}
 .mdrow .val{flex:none}
+/* v0.33: お金 ─ 入力は一覧の下(見出し)・月の「日ごと」はその場で内訳(アコーディオン) */
+.madd-h{margin-top:4px}
+.mday{margin-bottom:12px}
+.mdrow .chev{transition:transform .15s}
+.mdrow.open .chev{transform:rotate(90deg)}
+.mdrow.open{background:var(--accent-bg)}
+.mdpanel{background:var(--bg);border-top:1px solid var(--line);padding:2px 0 6px}
+.mdpanel .mrow{padding-left:22px;font-size:14px}
+.mdpanel .mrow .mname{font-size:14px}
+.mdpanel .mdgo{justify-content:flex-end;padding:4px 10px 2px}
+.mdpanel[hidden]{display:none}

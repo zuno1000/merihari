@@ -25,7 +25,7 @@ import { FEATURES } from './features.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import * as bgm from './bgm.js';
-export const APP_VERSION = '0.32.3';
+export const APP_VERSION = '0.33.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 

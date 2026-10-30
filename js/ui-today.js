@@ -729,7 +729,7 @@ export function planSheet(o, rerender) {
   const s0 = cur ? hm(cur.start) : o.start, e0 = cur ? hm(cur.end) : o.end;
   const st = timeField(mm(s0 % 1440), { label: '開始' });
   const en = timeField(mm(e0 % 1440), { label: '終了' });
-  const tasks = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'memo').sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1));
+  const tasks = linkableTasks();
   const picker = catChipPicker(cid, (v) => { cid = v; });
   const sel = el('select', [el('option', { value: '' }, 'タスクを決めない'), ...tasks.map((t) => el('option', { value: t.id, selected: t.id === taskId }, t.name))]);
   sel.addEventListener('change', () => { taskId = sel.value || null; const t = taskId ? T()[taskId] : null; if (t?.categoryId && cats().some((c) => c.id === t.categoryId)) { cid = t.categoryId; picker.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); } });
@@ -760,16 +760,24 @@ export function planSheet(o, rerender) {
   ].filter(Boolean));
 }
 /**
- * 1件の記録を書くシート(v0.15・F1-2/F1-5を統合): 開始〜終了(時計)とカテゴリ(タスクが決まっていればカテゴリは固定)。
+ * 1件の記録を書くシート(v0.15・F1-2/F1-5を統合): 開始〜終了(時計)とカテゴリ。
+ * v0.33(実機 FB「タスクの紐付けを後からの記入の段階でできるように」): 「タスク」の選択(開いているタスク・期限の近い順・メモは除く)。選ぶとカテゴリはそのタスクのものに。
+ *   o.taskId(予定からの推定「◯◯ だった?」)は初期値で、選び直せる(それまではタスクが決まっているとカテゴリ固定・選び直せなかった)。
  * o = { date, start, end(分), categoryId?, taskId?, title?, busyKey?(予定の時間なら記憶する) }。今日なら終了を「なし」にして その時刻から記録中にもできる。
  */
 export function entrySheet(o, rerender) {
   const n = effNow();
   const isToday = o.date === n.date;
   let cid = o.categoryId || cats()[0]?.id;
+  let taskId = o.taskId && T()[o.taskId] && !T()[o.taskId].deletedAt ? o.taskId : null;
   const st = timeField(mm(o.start % 1440), { label: '開始' });
   const en = timeField(o.end == null ? '' : mm(o.end % 1440), { label: '終了', emptyLabel: 'いまも続けている', allowEmpty: isToday });
-  const nm = () => taskName(o.taskId, cid);
+  const nm = () => taskName(taskId, cid);
+  // v0.33: タスクの選択(planSheet と同じ select)。選ぶとカテゴリのチップもそのタスクのものに(カテゴリの無いタスクなら そのまま)
+  const picker = catChipPicker(cid, (v) => { cid = v; drawKind(); });
+  const tasks = linkableTasks();
+  const sel = tasks.length ? el('select', { 'aria-label': 'タスク' }, [el('option', { value: '' }, 'タスクを決めない'), ...tasks.map((t) => el('option', { value: t.id, selected: t.id === taskId }, t.name))]) : null;
+  if (sel) sel.addEventListener('change', () => { taskId = sel.value || null; const t = taskId ? T()[taskId] : null; if (t?.categoryId && t.categoryId !== cid && cats().some((c) => c.id === t.categoryId)) { cid = t.categoryId; picker.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); drawKind(); } });
   // v0.23.1: どの記録にもメモ(任意)。予定(busy)の時間なら「予定のメモ」(v0.22・F6-6): 保存すると予定のメモにも残る
   const bn = el('input.text.note-in', { type: 'text', value: o.busyNote || '', placeholder: o.busyAt ? '何の予定?' : 'メモ', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ' });
   const keepBusyNote = () => { const v = bn.value.trim(); if (o.busyAt && v !== (o.busyNote || '')) saveBusyNote(o.date, o.busyAt.start, v); return v; };
@@ -780,7 +788,8 @@ export function entrySheet(o, rerender) {
   drawKind();
   sheet((close) => [
     el('h2', o.title || (isToday && o.start === defaultStart(n.date, n.min) ? `${nm()}、いつ?` : `${md(o.date)} ${nm()}`)),
-    o.taskId ? el('p.muted.small', `タスク「${T()[o.taskId]?.name || ''}」に紐づけます`) : catChipPicker(cid, (v) => { cid = v; drawKind(); }),
+    picker,
+    sel ? el('div.row.field', [el('span.label', 'タスク'), sel]) : null,
     kindBox,
     el('div.row.field', [el('span.label', 'いつ'), st, el('span', '〜'), en]),
     el('div.row.field', [el('span.label', o.busyAt ? '予定のメモ' : 'メモ'), bn]),
@@ -791,11 +800,11 @@ export function entrySheet(o, rerender) {
         try {
           const e1 = en.value ? lateFix(hm(en.value), o.end ?? o.start) : null;
           const tidy = s0 === o.start && (e1 == null || e1 === o.end); // 時計で変えた時刻はそのまま保存(v0.24)
-          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); const note = keepBusyNote(); startCategory(cid, s0, { taskId: o.taskId ?? null, note, tidy, asKind: asKindFor() }); rerender(); return; }
-          close(); const note = keepBusyNote(); addClosed({ date: o.date, startMin: s0, endMin: e1, categoryId: cid, taskId: o.taskId ?? null, busyKey: o.busyKey || null, note, tidy, asKind: asKindFor() }); rerender();
+          if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); const note = keepBusyNote(); startCategory(cid, s0, { taskId, note, tidy, asKind: asKindFor() }); rerender(); return; }
+          close(); const note = keepBusyNote(); addClosed({ date: o.date, startMin: s0, endMin: e1, categoryId: cid, taskId, busyKey: o.busyKey || null, note, tidy, asKind: asKindFor() }); rerender();
         } catch (err) { toast(err.message); }
       } }, '記録')]),
-  ]);
+  ].filter(Boolean));
 }
 
 // ---- 予定のメモ(v0.22・F6-6): カレンダーの予定は free/busy だけなので中身が無い。何の予定かをひと言で残す(日付:開始分がキー・同期する) ----
@@ -1208,8 +1217,10 @@ function categorySheet(e, rerender) {
     groupedChips(cats(), (c) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { close(); kindAskSheet(c, (ak) => { commit(log.update(E(), e.id, { categoryId: c.id, asKind: ak }, LCTX), `カテゴリを ${c.name} に変更`); rerender(); }); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: e.categoryId }),
   ]);
 }
+/** 記録・予定に紐づけられるタスク(開いているもの・期限の近い順。v0.22: メモは紐づけない)。entrySheet(v0.33)・planSheet・taskLinkSheet で共通 */
+export function linkableTasks() { return plan.linkable(T()); }
 function taskLinkSheet(e, rerender) {
-  const tasks = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'memo').sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1)); // v0.22: メモは紐づけない
+  const tasks = linkableTasks();
   sheet((close) => [
     el('h2', 'タスクを紐づけ'),
     tasks.length ? null : el('p.muted.small', 'タスクがありません。'),

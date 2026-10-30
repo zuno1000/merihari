@@ -1046,6 +1046,13 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(real && real.songs.length >= 600 && real.songs.every((s) => /^[A-Za-z0-9_-]{6,20}$/.test(s.id) && typeof s.t === 'string' && Array.isArray(s.g) && Array.isArray(s.m)) && new Set(real.songs.map((s) => s.id)).size === real.songs.length && real.songs.every((s) => s.g.every((g) => B.GENRES.includes(g))), `同梱のカタログ: ${real && real.songs.length} 曲・id の形・重複なし・ジャンルは 12 のどれか`);
     }
 
+    // ---- v0.33 後から記入のタスク紐づけ(plan.linkable) ----
+    log('\n# v0.33 linkable');
+    {
+      const tk = { a: { id: 'a', name: 'A', kind: 'duty', deadline: '2026-12-01' }, b: { id: 'b', name: 'B', kind: 'duty', deadline: '2026-11-01' }, c: { id: 'c', name: 'C', kind: 'wish' }, d: { id: 'd', name: 'D', kind: 'memo' }, e: { id: 'e', name: 'E', kind: 'duty', doneAt: '2026-10-01T00:00:00+09:00' }, f: { id: 'f', name: 'F', kind: 'duty', deletedAt: '2026-10-01T00:00:00+09:00' }, g: null };
+      ok(eq(M.plan.linkable(tk).map((t) => t.id), ['b', 'a', 'c']) && eq(M.plan.linkable(null), []), 'plan.linkable: 開いているタスクを期限の近い順(期限なしは後ろ)・メモ / 済み / 消したものは除く(entrySheet の「タスク」・planSheet・紐づけ直しで共通)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
