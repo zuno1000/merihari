@@ -498,6 +498,7 @@ function sectionBgm(rerender) {
 let feedSrcOpen = false; // 取得元の折りたたみの開閉(描き直しても保つ)
 let feedKwOpen = false; // ジャンルごとの語の折りたたみ(v0.39)
 let feedHueOpen = false; // ジャンルの色の折りたたみ(v0.42)
+let feedOrderOpen = false; // ジャンルの並びの折りたたみ(v0.43)
 function sectionFeed(rerender) {
   const s = S();
   s.feed = feed.normalizeFeed(s.feed);
@@ -510,9 +511,18 @@ function sectionFeed(rerender) {
   const st = feed.stats(marks, f);
   const js = feed.jaStats(f);
   const unreadN = f ? feed.unread(f.items, marks, c.genres, c.off).length : 0;
-  const gchips = f ? el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, f.genres.map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${c.genres.includes(g.id) ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, c) }, 'aria-pressed': c.genres.includes(g.id) ? 'true' : 'false', onclick: () => { c.genres = c.genres.includes(g.id) ? c.genres.filter((x) => x !== g.id) : [...c.genres, g.id]; save(); rerender(); } }, `${g.name}(${f.items.filter((x) => x.g === g.id).length})`))) : el('p.muted.small', '記事の一覧を読み込んでいます…(オフラインなら次に開いたとき)');
+  const gchips = f ? el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, feed.orderedGenres(f, c).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${c.genres.includes(g.id) ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, c) }, 'aria-pressed': c.genres.includes(g.id) ? 'true' : 'false', onclick: () => { c.genres = c.genres.includes(g.id) ? c.genres.filter((x) => x !== g.id) : [...c.genres, g.id]; save(); rerender(); } }, `${g.name}(${f.items.filter((x) => x.g === g.id).length})`))) : el('p.muted.small', '記事の一覧を読み込んでいます…(オフラインなら次に開いたとき)');
   // v0.42(FB「ジャンルのチップを色分けしたい」): ジャンルごとに 8 色から選ぶ(無ければ並び順で自動)。チップ・札・画像の無いカードの地に効く
-  const hueBox = f ? el('details.rep-details.huebox', { open: feedHueOpen }, [el('summary.muted.small', 'ジャンルの色'), ...f.genres.map((g) => el('div.row.huerow', [
+  // v0.43(FB「表示するジャンルの順番を並べ替えたい」): ≡ を引っ張って並べ替え(settings.feed.order・同期)。ホーム / 一覧 / 設定のチップに効く
+  const orderBox = f ? (() => {
+    const ids = feed.orderedGenres(f, c).map((g) => g.id);
+    const list = el('div.list.catlist.gorder', feed.orderedGenres(f, c).map((g) => el('div.srow.catrow', [el('span.handle', { role: 'button', tabindex: '0', 'aria-label': `${g.name} を並べ替え(引っ張る)`, title: '引っ張って並べ替え' }, '≡'), el('span.chip.sm2.gc.on', { style: { '--fh': feed.genreHue(f, g.id, c) } }, g.name)])));
+    sortable(list, { rowSelector: '.catrow', handleSelector: '.handle', onMove: (from, to) => { c.order = feed.moveGenre(ids, from, to); save(); rerender(); } });
+    const box = el('details.rep-details.orderbox', { open: feedOrderOpen }, [el('summary.muted.small', 'ジャンルの並び(≡ を引っ張る)'), list]);
+    box.addEventListener('toggle', () => { feedOrderOpen = box.open; });
+    return box;
+  })() : null;
+  const hueBox = f ? el('details.rep-details.huebox', { open: feedHueOpen }, [el('summary.muted.small', 'ジャンルの色'), ...feed.orderedGenres(f, c).map((g) => el('div.row.huerow', [
     el('span.chip.sm2.gc.on', { style: { '--fh': feed.genreHue(f, g.id, c) } }, g.name),
     el('span.swatches', { role: 'group', 'aria-label': `${g.name} の色` }, feed.HUE_CHOICES.map((h) => el('button.swatch', { type: 'button', class: `swatch${feed.genreHue(f, g.id, c) === h ? ' on' : ''}`, style: { '--fh': h }, 'aria-label': `色相 ${h}`, onclick: () => { c.hue = { ...c.hue, [g.id]: h }; save(); rerender(); } }))),
   ])), el('p.muted.small', '選ばなければ並び順で自動。ジャンルのチップ・記事の札・画像の無いカードの色になります。')]) : null;
@@ -527,7 +537,7 @@ function sectionFeed(rerender) {
     return el('div.kwgroup', [main ? null : el('h4.help-h', `${label}(${words.length})`), chips, el('div.row.field', [inp, el('button.btn.sm', { type: 'button', onclick: add }, '追加')])].filter(Boolean));
   };
   const kwCommon = kwGroup('*', '共通', { main: true });
-  const kwGenres = f ? el('details.rep-details.kwbox', { open: feedKwOpen || Object.keys(c.kw).some((g) => g !== '*') }, [el('summary.muted.small', `ジャンルごとの語(${Object.entries(c.kw).filter(([g]) => g !== '*').reduce((a, [, w]) => a + w.length, 0)})`), ...f.genres.map((g) => kwGroup(g.id, g.name))]) : null;
+  const kwGenres = f ? el('details.rep-details.kwbox', { open: feedKwOpen || Object.keys(c.kw).some((g) => g !== '*') }, [el('summary.muted.small', `ジャンルごとの語(${Object.entries(c.kw).filter(([g]) => g !== '*').reduce((a, [, w]) => a + w.length, 0)})`), ...feed.orderedGenres(f, c).map((g) => kwGroup(g.id, g.name))]) : null;
   if (kwGenres) kwGenres.addEventListener('toggle', () => { feedKwOpen = kwGenres.open; });
   // v0.35: 取得元のカタログ(data/feeds.json にあるもの)をジャンルごとに ON / OFF(OFF の id を settings.feed.off に)
   const srcs = f ? feed.sourcesOf(f) : [];
@@ -550,6 +560,7 @@ function sectionFeed(rerender) {
     el('h3.help-h', 'ジャンル'),
     gchips,
     el('p.muted.small', '選んだジャンルだけ出します。何も選ばなければ全部から、ジャンルを順に回して混ぜます(1 つのジャンルに偏りません)。'),
+    orderBox,
     hueBox,
     srcBox,
     el('h3.help-h', '気になる語(共通)'),
@@ -644,7 +655,7 @@ function sectionHelp() {
     h('作業用 BGM(任意・v0.32)'),
     li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム左上(カレンダーの右・きょうだけ)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう・×)。題名をタップで もう一度開きます。× でその日だけ消え、設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出しません。流していない日は何も出ません。', 'ふり返り(期限が近いタスク と 最近 の間)に「きょうの BGM」: その日に流した曲を順に(サムネイル・題名・流した時刻・ジャンル・♡ / ⊖ で 好き / ちがう)。タップでもう一度開きます(v0.32.1〜v0.32.2)。', '曲の一覧は毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直し、アプリは次に開いたときから新しい一覧を使います(版の更新は要りません・v0.32.1)。']),
     h('キャッチアップ(任意・v0.34)'),
-    li(['v0.42: ジャンルは色分け(設定 › キャッチアップ › ジャンルの色 で 8 色から。選ばなければ自動)。ホームのチップは、ジャンルを切り替えても横スクロールの位置が戻りません。', 'v0.41: 設定 › キャッチアップ の「自分のリポジトリに切り替える」で、取得元の一覧と記事の一覧を自分の private リポジトリに置けます(他の人には見えない・無料)。GitHub で private リポジトリを作り、Fine-grained token(そのリポジトリだけ・Contents と Workflows の Read and write)を貼って「書き込む」と、ツールと workflow と取得元の写しが書き込まれ、数分で最初の一覧ができます。以後の取得元の管理もそのリポジトリに。リポジトリ名は同期し、トークンは端末ごと。', 'v0.40: 開いた記事は消えず ✓(既読)の印になります(ホームは未読を先に出し、足りなければ既読を ✓ つきで)。✓ をタップで既読 / 未読、☆ はいつでも(読んだあとでも)ブックマーク、× は読まない(消える)。「ぜんぶ見る」の下の「ここまで非表示にする」は未読だけを消します。設定 › キャッチアップ に GitHub のトークンの欄と「取得元とジャンルの管理」(ジャンルの追加・削除・取得元の追加・削除)。', 'v0.39: 気になる語は 共通 と ジャンルごと(研究の語は研究の記事にだけ効く)。ホームの「＋ ◯◯の語」は選んでいるジャンルの語に、「＋ 共通の語」は共通に。設定 › キャッチアップ の「ジャンルごとの語」でも。取得元は 設定 › キャッチアップ › 取得元の ON / OFF の「＋ 取得元を足す」から(RSS / Atom の URL か arXiv の検索語。GitHub のトークン(このリポジトリの Contents: Read and write だけ・端末内)を貼ればアプリから保存、無ければ JSON をコピーして GitHub で貼る)。キャッチアップの中のチップを横にスクロールしても日付は動きません。', 'v0.38: ホームの「キャッチアップ」に ジャンルのチップ(すべて / 各ジャンル・読んでいない件数)と 気になる語のチップ(タップで絞る(複数は OR)・× で消す・＋ 語 で足す)。絞り込みは端末ごとに覚えます。カードと行の ☆ でブックマーク(「ぜんぶ見る ›」の ★ に・一覧から消えても開ける・同期する)。', 'v0.37/38: 英語の題名(論文は要旨の 1 文目も)を日本語で出します(無料・登録不要)。既定は Google 翻訳の無料経路(非公式・止まることがある)で、DeepL API Free の鍵を GitHub の Secrets に DEEPL_API_KEY として登録すればそちら。日本語の題名のときは「ぜんぶ見る」の行に原題も小さく。気になる語は原題・日本語の題名・要旨のどれに当たっても効きます。', 'v0.36: ホームの「キャッチアップ」は 2 列のカード(記事の代表画像・ジャンルの札・題名・出どころ)。画像が無い記事はジャンルの色の札。設定「記事の画像を出す」で切れます。', 'v0.35: 取得元はカタログ(研究: arXiv の Physical AI / VLA・デジタルツイン・BIM / Scan-to-BIM・インフラ管理・cs.RO、建築DX、技術、ガジェット、趣味、料理)になり、設定 › キャッチアップ の「取得元の ON / OFF」でジャンルごとに選べます。気になる語はチップ(タップで外す・「追加」で足す)。', '設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
+    li(['v0.43: ジャンルの並びは 設定 › キャッチアップ › ジャンルの並び で ≡ を引っ張って変えられます(ホーム・一覧・設定のチップに効く)。ホームで選択中のジャンルのチップをもう一度タップすると、そのジャンルの一覧(ぜんぶ見る)が開きます。一覧は上の「未読 / 既読 / ★ / すべて」とジャンルのチップで絞れます(既読から ☆ でブックマーク、★ はジャンルごとに・一覧から消えた昔の記事も)。', 'v0.42: ジャンルは色分け(設定 › キャッチアップ › ジャンルの色 で 8 色から。選ばなければ自動)。ホームのチップは、ジャンルを切り替えても横スクロールの位置が戻りません。', 'v0.41: 設定 › キャッチアップ の「自分のリポジトリに切り替える」で、取得元の一覧と記事の一覧を自分の private リポジトリに置けます(他の人には見えない・無料)。GitHub で private リポジトリを作り、Fine-grained token(そのリポジトリだけ・Contents と Workflows の Read and write)を貼って「書き込む」と、ツールと workflow と取得元の写しが書き込まれ、数分で最初の一覧ができます。以後の取得元の管理もそのリポジトリに。リポジトリ名は同期し、トークンは端末ごと。', 'v0.40: 開いた記事は消えず ✓(既読)の印になります(ホームは未読を先に出し、足りなければ既読を ✓ つきで)。✓ をタップで既読 / 未読、☆ はいつでも(読んだあとでも)ブックマーク、× は読まない(消える)。「ぜんぶ見る」の下の「ここまで非表示にする」は未読だけを消します。設定 › キャッチアップ に GitHub のトークンの欄と「取得元とジャンルの管理」(ジャンルの追加・削除・取得元の追加・削除)。', 'v0.39: 気になる語は 共通 と ジャンルごと(研究の語は研究の記事にだけ効く)。ホームの「＋ ◯◯の語」は選んでいるジャンルの語に、「＋ 共通の語」は共通に。設定 › キャッチアップ の「ジャンルごとの語」でも。取得元は 設定 › キャッチアップ › 取得元の ON / OFF の「＋ 取得元を足す」から(RSS / Atom の URL か arXiv の検索語。GitHub のトークン(このリポジトリの Contents: Read and write だけ・端末内)を貼ればアプリから保存、無ければ JSON をコピーして GitHub で貼る)。キャッチアップの中のチップを横にスクロールしても日付は動きません。', 'v0.38: ホームの「キャッチアップ」に ジャンルのチップ(すべて / 各ジャンル・読んでいない件数)と 気になる語のチップ(タップで絞る(複数は OR)・× で消す・＋ 語 で足す)。絞り込みは端末ごとに覚えます。カードと行の ☆ でブックマーク(「ぜんぶ見る ›」の ★ に・一覧から消えても開ける・同期する)。', 'v0.37/38: 英語の題名(論文は要旨の 1 文目も)を日本語で出します(無料・登録不要)。既定は Google 翻訳の無料経路(非公式・止まることがある)で、DeepL API Free の鍵を GitHub の Secrets に DEEPL_API_KEY として登録すればそちら。日本語の題名のときは「ぜんぶ見る」の行に原題も小さく。気になる語は原題・日本語の題名・要旨のどれに当たっても効きます。', 'v0.36: ホームの「キャッチアップ」は 2 列のカード(記事の代表画像・ジャンルの札・題名・出どころ)。画像が無い記事はジャンルの色の札。設定「記事の画像を出す」で切れます。', 'v0.35: 取得元はカタログ(研究: arXiv の Physical AI / VLA・デジタルツイン・BIM / Scan-to-BIM・インフラ管理・cs.RO、建築DX、技術、ガジェット、趣味、料理)になり、設定 › キャッチアップ の「取得元の ON / OFF」でジャンルごとに選べます。気になる語はチップ(タップで外す・「追加」で足す)。', '設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),

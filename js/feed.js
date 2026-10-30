@@ -32,7 +32,8 @@ export function normalizeFeed(raw) {
   const repo = typeof o.repo === 'string' && REPO_RE.test(o.repo.trim()) ? o.repo.trim().slice(0, 100) : '';
   const hue = {}; // v0.42: ジャンルの色(色相 0〜359・無ければ並び順で自動)
   if (isObj(o.hue)) for (const [g, v] of Object.entries(o.hue).slice(0, MAX_KW_GROUPS)) if (GID_RE.test(g) && Number.isFinite(+v)) hue[g] = ((Math.round(+v) % 360) + 360) % 360; // v0.41: 自分だけの取得元リポジトリ(owner/repo・空なら公開のカタログ)
-  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false, repo, hue };
+  const order = [...new Set((Array.isArray(o.order) ? o.order : []).filter((g) => typeof g === 'string' && GID_RE.test(g)))].slice(0, MAX_GENRES); // v0.43: 表示するジャンルの並び(無いものは一覧の順で後ろに)
+  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false, repo, hue, order };
 }
 /** そのジャンルの記事に効く語 = 共通('*')+ジャンルの語(v0.39)。genre が無ければ共通だけ */
 export function wordsFor(settings, genre = null) { const s = isObj(settings) && isObj(settings.kw) ? settings : normalizeFeed(settings); return [...new Set([...(s.kw['*'] || []), ...(genre && s.kw[genre] ? s.kw[genre] : [])])]; }
@@ -142,6 +143,16 @@ export function summaryLine(list, feed, max = Infinity) { const e = Object.entri
 /** ジャンルの色相(画像の無いカードの地の色・ジャンルの並び順で回す) */
 export const GENRE_HUES = [212, 150, 28, 282, 348, 96, 190, 60];
 export function genreHue(feed, gid, settings = null) { const h = settings && isObj(settings.hue) ? settings.hue[gid] : undefined; if (Number.isFinite(h)) return h; const i = (feed?.genres || []).findIndex((g) => g.id === gid); return GENRE_HUES[(i < 0 ? 0 : i) % GENRE_HUES.length]; }
+/** ジャンルを設定の並び(order)で(v0.43): order に無いものは一覧の順で後ろに。色(genreHue)は一覧の元の順で決まるので並べ替えても変わらない */
+export function orderedGenres(feed, settings) {
+  const gs = feed?.genres || []; const order = isObj(settings) && Array.isArray(settings.order) ? settings.order : [];
+  const idx = (g) => { const i = order.indexOf(g.id); return i < 0 ? order.length + gs.indexOf(g) : i; };
+  return [...gs].sort((a, b) => idx(a) - idx(b));
+}
+/** 並べ替え(純関数): いまの並び ids の from を to へ → 新しい order */
+export function moveGenre(ids, from, to) { const a = [...ids]; if (from < 0 || from >= a.length || to < 0 || to >= a.length) return a; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; }
+/** ブックマーク(v0.43): ジャンルで絞る(印に持つ g。無ければ feed の記事から) */
+export function savedOf(marks, genre = null, feed = null) { return saved(marks).filter((m) => !genre || (m.g || feed?.items?.find((x) => x.id === m.id)?.g) === genre); }
 /** 設定で選べる色(v0.42): 8 色相 */
 export const HUE_CHOICES = Object.freeze([212, 150, 28, 282, 348, 96, 190, 60]);
 /** 表示する題名(日本語の題名があればそれ・v0.37)と、添える 1 文(要旨の 1 文目の日本語・無ければ null) */

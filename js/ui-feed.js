@@ -130,8 +130,8 @@ function filterBars(f, rerender) {
   const counts = feed.countByGenre(base);
   const g0 = boxGenre();
   const gchips = el('div.chips.small.feed-gchips', { role: 'group', 'aria-label': 'ジャンル' }, [
-    el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 == null ? ' on' : ''}`, 'aria-pressed': g0 == null ? 'true' : 'false', onclick: () => { setBoxGenre(null); rerender(); } }, `すべて ${base.length}`),
-    ...f.genres.filter((g) => counts[g.id] || g.id === g0).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${g0 === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, 'aria-pressed': g0 === g.id ? 'true' : 'false', onclick: () => { setBoxGenre(g0 === g.id ? null : g.id); rerender(); } }, `${g.name} ${counts[g.id] || 0}`)),
+    el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 == null ? ' on' : ''}`, 'aria-pressed': g0 == null ? 'true' : 'false', title: '選択中にもう一度タップで一覧', onclick: () => { if (g0 == null) { feedSheet(rerender, { genre: null, words: boxWords() }); return; } setBoxGenre(null); rerender(); } }, `すべて ${base.length}`),
+    ...feed.orderedGenres(f, S().feed).filter((g) => counts[g.id] || g.id === g0).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${g0 === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, 'aria-pressed': g0 === g.id ? 'true' : 'false', title: '選択中にもう一度タップで一覧', onclick: () => { if (g0 === g.id) { feedSheet(rerender, { genre: g.id, words: boxWords() }); return; } setBoxGenre(g.id); rerender(); } }, `${g.name} ${counts[g.id] || 0}`)), // v0.43: 選択中のチップをもう一度タップ → そのジャンルの一覧(ぜんぶ見る)
   ]);
   keepScroll(gchips, 'g'); // v0.42(FB「ジャンルを切り替えるとスクロールが左端に戻る」): 横の位置を覚えて描き直し後に戻す
   const words = feed.wordsFor(S().feed, g0); // v0.39: ジャンルを選んでいればそのジャンルの語+共通、すべて なら共通の語
@@ -174,34 +174,40 @@ export function feedBox(rerender) {
   return box;
 }
 
-/** 全部を見るシート: ジャンルのチップ(★ ブックマークも)で絞る(その場だけ)・新しい順・「ここまで読んだことにする」。ホームの絞り込み(ジャンル・語)を引き継ぐ */
-export function feedSheet(rerender, { genre = null, words = [] } = {}) {
+/**
+ * 全部を見るシート(v0.43 で再設計): 上に「未読 / 既読 / ★ / すべて」の切替、下にジャンルのチップ(その状態での件数)。ホームの絞り込み(ジャンル・語)を引き継ぐ。
+ * 未読: 新しい順・「ここまで非表示にする」。既読: 読んだ記事(ブックマークしやすいように)。★: ブックマーク(一覧から消えた昔の記事も)。すべて: 未読 → 既読。どれもジャンルで絞れる
+ */
+const MODES = [['unread', '未読'], ['read', '既読'], ['saved', '★'], ['all', 'すべて']];
+export function feedSheet(rerender, { genre = null, words = [], mode = 'unread' } = {}) {
   ensureSource();
   const f = feed.feedNow();
   if (!f) { toast('記事の一覧を読めませんでした'); return; }
-  let gsel = genre; // null=設定どおり(全部 or 選んだジャンル)・'★'=ブックマーク
+  let gsel = genre; // null=全部
+  let msel = MODES.some(([k]) => k === mode) ? mode : 'unread';
   const body = el('div');
+  const byD = (a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0);
   const draw = () => {
-    const shown = feed.filterItems(feed.visible(f.items, MK(), S().feed.genres, S().feed.off), { words }); // v0.40: 既読も残す(✓)。件数と「新着」は未読だけ
-    const base = shown.filter((x) => !feed.isReadMark(MK(), x.id));
-    const savedList = feed.saved(MK());
-    const byD = (a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0);
-    const pool = (gsel ? shown.filter((x) => x.g === gsel) : shown).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0, read: feed.isReadMark(MK(), x.id) }));
-    const list = gsel === '★' ? [] : [...pool.filter((x) => !x.read).sort(byD), ...pool.filter((x) => x.read).sort(byD)].slice(0, 100);
-    const counts = feed.countByGenre(base);
-    const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [
-      el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${base.length}`),
-      ...f.genres.filter((g) => counts[g.id] || g.id === gsel).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${gsel === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, onclick: () => { gsel = gsel === g.id ? null : g.id; draw(); } }, `${g.name} ${counts[g.id] || 0}`)),
-      el('button.chip.sm2.star', { type: 'button', class: `chip sm2 star${gsel === '★' ? ' on' : ''}`, onclick: () => { gsel = gsel === '★' ? null : '★'; draw(); } }, `★ ${savedList.length}`),
+    const shown = feed.filterItems(feed.visible(f.items, MK(), S().feed.genres, S().feed.off), { words }).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0, read: feed.isReadMark(MK(), x.id) }));
+    const savedAll = feed.savedOf(MK(), null, f).map((m) => ({ ...m, g: m.g || f.items.find((x) => x.id === m.id)?.g || '' }));
+    const poolOf = (m) => (m === 'unread' ? shown.filter((x) => !x.read).sort(byD) : m === 'read' ? shown.filter((x) => x.read).sort(byD) : m === 'all' ? [...shown.filter((x) => !x.read).sort(byD), ...shown.filter((x) => x.read).sort(byD)] : savedAll);
+    const pool = poolOf(msel);
+    const counts = feed.countByGenre(pool);
+    const list = (gsel ? pool.filter((x) => x.g === gsel) : pool).slice(0, 120);
+    const seg = el('div.seg.feed-seg', MODES.map(([k, label]) => el('button', { type: 'button', class: k === msel ? 'active' : '', 'aria-pressed': k === msel ? 'true' : 'false', onclick: () => { msel = k; draw(); } }, `${label} ${poolOf(k).length}`)));
+    const chips = el('div.chips.small.feed-schips', { role: 'group', 'aria-label': 'ジャンル' }, [
+      el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${pool.length}`),
+      ...feed.orderedGenres(f, S().feed).filter((g) => counts[g.id] || g.id === gsel).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${gsel === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, onclick: () => { gsel = gsel === g.id ? null : g.id; draw(); } }, `${g.name} ${counts[g.id] || 0}`)),
     ]);
     const redraw = () => { draw(); if (rerender) rerender(); };
+    const empty = { unread: '読んでいない記事はありません。', read: '読んだ記事はまだありません。', saved: 'ブックマークはまだありません。記事の ☆ で残せます(一覧から消えても開けます)。', all: '記事がありません。' }[msel];
+    const unreadHere = msel === 'unread' ? (gsel ? pool.filter((x) => x.g === gsel) : pool) : [];
     body.replaceChildren(...[
       words.length ? el('p.muted.small', `気になる語「${words.join('・')}」で絞っています(ホームのチップで外せます)。`) : null,
+      seg,
       chips,
-      gsel === '★'
-        ? (savedList.length ? el('div.list.feed-list', savedList.map((m) => savedRow(m, f, redraw))) : el('p.muted.small.pad', 'ブックマークはまだありません。記事の ☆ で残せます(一覧から消えても開けます)。'))
-        : (list.length ? el('div.list.feed-list', list.map((x) => feedRow(x, f, redraw))) : el('p.muted.small.pad', '読んでいない記事はありません。')),
-      gsel !== '★' && list.length ? el('div.row', { style: { marginTop: '10px' } }, el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('ここまでの未読を非表示にしますか?', `${gsel ? feed.genreName(f, gsel) : 'すべて'}の未読 ${gsel ? counts[gsel] : base.length} 件を「読まない」にして、次から出しません(既読・ブックマークはそのまま)。`, 'そうする', () => { const now = store.nowISO(); const m = { ...MK() }; for (const x of (gsel ? base.filter((y) => y.g === gsel) : base)) m[x.id] = { id: x.id, state: 'skip', at: now, date: dateKey(), updatedAt: now, deletedAt: null }; store.state.data.feed = m; store.save(); sync.autoSync(); redraw(); }) }, 'ここまで非表示にする')) : null,
+      list.length ? el('div.list.feed-list', list.map((x) => (msel === 'saved' ? savedRow(x, f, redraw) : feedRow(x, f, redraw)))) : el('p.muted.small.pad', empty),
+      unreadHere.length ? el('div.row', { style: { marginTop: '10px' } }, el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('ここまでの未読を非表示にしますか?', `${gsel ? feed.genreName(f, gsel) : 'すべて'}の未読 ${unreadHere.length} 件を「読まない」にして、次から出しません(既読・ブックマークはそのまま)。`, 'そうする', () => { const now = store.nowISO(); const m = { ...MK() }; for (const x of unreadHere) m[x.id] = { id: x.id, state: 'skip', at: now, date: dateKey(), updatedAt: now, deletedAt: null }; store.state.data.feed = m; store.save(); sync.autoSync(); redraw(); }) }, 'ここまで非表示にする')) : null,
     ].filter(Boolean));
   };
   draw();
