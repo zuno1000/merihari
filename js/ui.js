@@ -159,14 +159,15 @@ document.addEventListener('click', (e) => { if (e.isTrusted && performance.now()
 export const sheetJustClosed = () => performance.now() - lastSheetClose < SHEET_CLICK_GUARD_MS;
 
 /** 下から出るシート。build(close) が返す要素を中に入れる。背景タップで閉じる */
-export function sheet(build, onClose = null) {
+export function sheet(build, onClose = null, { cls = null } = {}) { // cls(v0.43.1): シートに足すクラス(高さを固定するキャッチアップの一覧など)
   const ov = el('div.overlay', { role: 'dialog', 'aria-modal': 'true' });
   let closed = false;
   const close = () => { if (closed) return; closed = true; lastSheetClose = performance.now(); ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
-  ov.appendChild(el('div.sheet', build(close)));
+  const node = el('div.sheet', build(close)); if (cls) node.classList.add(cls);
+  ov.appendChild(node);
   document.body.appendChild(ov);
   return close;
 }

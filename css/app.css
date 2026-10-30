@@ -1156,7 +1156,8 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 @media (prefers-color-scheme:dark){.chip.gc{border-color:hsl(var(--fh) 35% 40%);background:hsl(var(--fh) 30% 24%);color:hsl(var(--fh) 60% 82%)}.chip.gc.on{background:hsl(var(--fh) 45% 48%);border-color:hsl(var(--fh) 45% 48%);color:#fff}.feed-tag.gc{background:hsl(var(--fh) 30% 26%);color:hsl(var(--fh) 60% 82%)}.feed-tag.gc.hit{background:hsl(var(--fh) 45% 48%);color:#fff}}
 /* v0.43: 一覧の切替(未読 / 既読 / ★ / すべて)・ジャンルの並び */
 .feed-seg{margin:6px 0 8px}
-.feed-seg button{font-size:12px;padding:6px 2px}
+.feed-seg button{font-size:12px;padding:0 2px} /* v0.43.1: 上下の padding で文字が下にずれていた(height と line-height は 36px) */
+.sheet.feed-sheet{height:88vh;height:88dvh} /* v0.43.1: 件数が少なくても上端が動かない */
 .feed-schips{margin-bottom:6px}
 .gorder .catrow{padding:4px 8px 4px 0}
 .gorder .chip{pointer-events:none}

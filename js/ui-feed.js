@@ -211,7 +211,7 @@ export function feedSheet(rerender, { genre = null, words = [], mode = 'unread' 
     ].filter(Boolean));
   };
   draw();
-  sheet(() => [el('h2', 'キャッチアップ'), el('p.muted.small', `${f.updated ? `一覧は ${f.updated.slice(0, 10)} 時点。` : ''}タップで開きます(開いた記事は ✓ の既読になり、残ります)。☆ でブックマーク・✓ で既読 / 未読・× は読まない(消える)。`), body]);
+  sheet(() => [el('h2', 'キャッチアップ'), el('p.muted.small', `${f.updated ? `一覧は ${f.updated.slice(0, 10)} 時点。` : ''}タップで開きます(開いた記事は ✓ の既読になり、残ります)。☆ でブックマーク・✓ で既読 / 未読・× は読まない(消える)。`), body], null, { cls: 'feed-sheet' }); // v0.43.1: 高さを固定(件数で上端が動かない)
 }
 
 // ---- 取得元をアプリから足す(v0.39・F17-1): GitHub の contents API で data/feeds.json を書き換える(トークンを貼った人だけ・端末内 local.ghToken・同期しない)。無ければ JSON をコピーして GitHub の編集ページを開く ----
