@@ -1105,3 +1105,24 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-orig{font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .feed-lead{font-size:11.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .feed-card .feed-lead{font-size:11px}
+/* v0.38: ホームのキャッチアップ ─ ジャンルと気になる語のチップ・☆ ブックマーク */
+.feed-gchips,.feed-kchips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 2px 6px;margin:0 -2px;-webkit-overflow-scrolling:touch}
+.feed-gchips::-webkit-scrollbar,.feed-kchips::-webkit-scrollbar{display:none}
+.feed-gchips .chip,.feed-kchips .chip{flex:none;white-space:nowrap}
+.kwchip{display:inline-flex;align-items:stretch;flex:none;border:1.5px solid var(--line);border-radius:999px;background:var(--card);overflow:hidden;min-height:34px}
+.kwchip.on{border-color:var(--accent);background:var(--accent-bg)}
+.kwchip .kwtap{border:0;background:none;color:var(--fg);font:inherit;font-size:12px;padding:0 4px 0 12px;cursor:pointer;white-space:nowrap}
+.kwchip.on .kwtap{color:var(--accent);font-weight:600}
+.kwchip .kwdel{border:0;background:none;color:var(--muted);font-size:14px;padding:0 10px 0 6px;cursor:pointer;line-height:1}
+.chip.kwadd{border-style:dashed;color:var(--muted)}
+.feed-star{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;font-family:inherit}
+.feed-star.on{color:#e0a800}
+.feed-star:active{background:var(--accent-bg)}
+.feed-card .feed-star{position:absolute;top:4px;right:36px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);backdrop-filter:blur(4px);font-size:15px}
+.chip.star.on{color:#7a5600;background:#fff1c7;border-color:#e0a800}
+@media (prefers-color-scheme:dark){.chip.star.on{background:#3a2f12;color:#f3d57a}.feed-star.on{color:#e6c062}}
+/* v0.38: カードの幅を原題(nowrap)が押し広げないように。カードには原題を出さない(行だけ) */
+.feed-card .feed-orig{display:none}
+.feed-main{min-width:0;max-width:100%}
+.feed-main > *{min-width:0;max-width:100%}
+.feed-card-open,.feed-card .feed-main{width:100%}

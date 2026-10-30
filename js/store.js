@@ -363,11 +363,14 @@ export function validateBgmPlay(r, id) {
   if (!isObj(r) || !/^[A-Za-z0-9_-]{6,20}$/.test(vid) || typeof r.at !== 'string' || !r.at) return null;
   return { ...stripUnsafe(r), id: vid, at: r.at.slice(0, 40), date: isDate(r.date) ? r.date : r.at.slice(0, 10), rating: r.rating === 1 || r.rating === -1 ? r.rating : null, updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
-/** 記事の印(v0.34・F17): id は feed.json の記事 id(16 進 8〜16 桁)・state は open(開いた)/ skip(読まない)・at は ISO */
+/** 記事の印(v0.34・F17): id は feed.json の記事 id(16 進 8〜16 桁)・state は open(開いた)/ skip(読まない)/ save(ブックマーク・v0.38: 題名 t / tj・URL u(http(s))・出どころ s・ジャンル g も持つ)・at は ISO */
 export function validateFeedMark(r, id) {
   const fid = String((isObj(r) && r.id) || id || '');
   if (!isObj(r) || !/^[a-f0-9]{8,16}$/.test(fid) || typeof r.at !== 'string' || !r.at) return null;
-  return { ...stripUnsafe(r), id: fid, state: r.state === 'skip' ? 'skip' : 'open', at: r.at.slice(0, 40), date: isDate(r.date) ? r.date : r.at.slice(0, 10), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  const u = typeof r.u === 'string' && /^https?:\/\/\S+$/.test(r.u) ? r.u.slice(0, 500) : null;
+  const extra = {}; for (const [k, n] of [['t', 200], ['tj', 200], ['s', 40], ['g', 20]]) if (typeof r[k] === 'string' && r[k]) extra[k] = r[k].slice(0, n); if (u) extra.u = u;
+  const base = stripUnsafe(r); for (const k of ['t', 'tj', 'u', 's', 'g']) delete base[k]; // 検証を通らなかった値(javascript: の URL など)を残さない
+  return { ...base, ...extra, id: fid, state: r.state === 'skip' ? 'skip' : r.state === 'save' ? 'save' : 'open', at: r.at.slice(0, 40), date: isDate(r.date) ? r.date : r.at.slice(0, 10), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 export function validateKiai(r, id) {
   if (!isObj(r) || !isDate(r.date) || !isHM(r.time)) return null;

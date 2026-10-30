@@ -80,10 +80,10 @@ export function score(x, { today, keywords = [] } = {}) {
  * 出す記事を選ぶ(純関数): まだ読んでいない記事から n 件。気になる語に当たるものを先頭(点の高い順・n の 6 割まで)、残りは ジャンルを順に回して(round-robin・先頭の記事の点が高いジャンルから)新しい順に混ぜる(1 つのジャンルに偏らない)。当たった記事の残りは各ジャンルの列の先頭に来る(点が高い)。
  * 戻り値の各記事に hit(気になる語に当たったか)を付ける
  */
-export function pick(feed, marks, settings, { today, n = null } = {}) {
+export function pick(feed, marks, settings, { today, n = null, genre = null, words = [] } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
-  const list = unread(feed?.items, marks, s.genres, s.off).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: hitsOf(x, s.keywords) > 0 }));
+  const list = filterItems(unread(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: hitsOf(x, s.keywords) > 0 }));
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
   const hits = list.filter((x) => x.hit).sort(byDate);
   const out = hits.slice(0, hitCap(want));
@@ -102,6 +102,12 @@ export function pick(feed, marks, settings, { today, n = null } = {}) {
   }
   return out.map(({ pt, ...x }) => x);
 }
+/** ジャンルと選んだ語で絞る(v0.38・ホームのチップ): genre は 1 つ(null=全部)・words は OR(空=絞らない) */
+export function filterItems(items, { genre = null, words = [] } = {}) {
+  return (items || []).filter((x) => (!genre || x.g === genre) && (!words?.length || keywordHits([x.t, x.tj, x.a, x.aj].filter(Boolean).join(' \n '), words) > 0));
+}
+/** ブックマーク(state='save'・消していないもの)を新しい順に */
+export function saved(marks) { return Object.values(activeMarks(marks)).filter((m) => m.state === 'save').sort((a, b) => (a.at < b.at ? 1 : -1)); }
 export function countByGenre(list) { const o = {}; for (const x of list || []) o[x.g] = (o[x.g] || 0) + 1; return o; }
 /** 「研究 3・技術 2」 */
 export function summaryLine(list, feed, max = Infinity) { const e = Object.entries(countByGenre(list)); return e.slice(0, max).map(([g, n]) => `${genreName(feed, g)} ${n}`).join('・') + (e.length > max ? '…' : ''); }
