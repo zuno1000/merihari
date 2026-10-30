@@ -1,0 +1,34 @@
+# merihari ─ キャッチアップ(F17・v0.34)の記事一覧(data/feed.json)を data/feeds.json の取得元(RSS / Atom / arXiv API)から毎朝作り直す。
+# 無料: 公開リポジトリの GitHub Actions。毎朝 6:00 JST と、取得元(data/feeds.json)かツールを push したとき、手動(Run workflow)。変わったときだけ commit。
+# 版は上げない: data/feed.json は SW の「先読み+裏で更新」(stale-while-revalidate)なので、次に開いたときに新しい一覧になる。
+name: update-feed
+on:
+  schedule:
+    - cron: '0 21 * * *'   # 毎朝 6:00 JST(= 前日 21:00 UTC)
+  push:
+    branches: [main]
+    paths: ['data/feeds.json', 'tools/feed_fetch.py']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-feed
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: data/feed.json を作り直す
+        run: python -X utf8 -I tools/feed_fetch.py data/feeds.json
+      - name: 変わっていれば commit
+        run: |
+          if git diff --quiet -- data/feed.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/feed.json
+          git commit -m "feed: 記事の一覧を更新($(date -u +%Y-%m-%d))"
+          git push

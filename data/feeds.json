@@ -1,0 +1,35 @@
+{
+  "_help": [
+    "merihari ─ キャッチアップ(F17)の取得元。このファイルを編集して push すると(GitHub の Web エディタで OK)、GitHub Actions(update-feed)が data/feed.json を作り直す(毎朝 6:00 JST にも)。",
+    "genres[]: id(英数・変えない: 既読の印と設定のジャンル選択はこの id で持つ)・name(画面に出す名前)・sources[]。",
+    "sources[]: name(画面に出す出どころ・40 字まで)・url(RSS 2.0 / Atom / arXiv API の URL・https)・max(その取得元から取る最大の件数・既定 20)。",
+    "arXiv の分野は cat:cs.NI のところを変える(例: cs.CR 暗号とセキュリティ / cs.DC 分散・並列 / cs.LG 機械学習 / cs.AI / cs.SE / cs.HC / eess.SP)。複数は cat:cs.NI+OR+cat:cs.DC。",
+    "days: この日数より古い記事は入れない。perGenre: ジャンルごとに残す最大の件数(新しい順)。"
+  ],
+  "days": 14,
+  "perGenre": 40,
+  "genres": [
+    {
+      "id": "research",
+      "name": "研究",
+      "sources": [
+        { "name": "arXiv cs.NI", "url": "https://export.arxiv.org/api/query?search_query=cat:cs.NI&sortBy=submittedDate&sortOrder=descending&max_results=30", "max": 30 }
+      ]
+    },
+    {
+      "id": "tech",
+      "name": "技術",
+      "sources": [
+        { "name": "Publickey", "url": "https://www.publickey1.jp/atom.xml", "max": 20 },
+        { "name": "Hacker News", "url": "https://hnrss.org/frontpage", "max": 20 }
+      ]
+    },
+    {
+      "id": "hobby",
+      "name": "趣味",
+      "sources": [
+        { "name": "GIGAZINE", "url": "https://gigazine.net/news/rss_2.0/", "max": 20 }
+      ]
+    }
+  ]
+}

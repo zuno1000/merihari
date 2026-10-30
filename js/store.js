@@ -9,6 +9,7 @@ export const SCHEMA = 1;
 import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 import { normalizeRegion, MAX_REGIONS } from './weather.js';
 import { normalizeBgm } from './bgm.js';
+import { normalizeFeed } from './feed.js';
 
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
 export function defaultKinds() {
@@ -106,6 +107,7 @@ export function defaultSettings() {
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
     bgm: { enabled: false, genres: [], app: true, strip: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
+    feed: { enabled: false, genres: [], keywords: [], n: 5 }, // v0.34・F17: キャッチアップ(任意)。ホームの折りたたみ・ジャンル(空=全部)・気になる語・1 回の件数。開いた / 読まない の印は data.feed
     weather: { enabled: false, regions: [] }, // v0.29・F15: 天気(任意)。地域 [{ id, name, lat, lon }](5 つまで・同期する)。取得した天気は local.weatherCache(端末内・1 時間)
     tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
     goals: { workMin: null, driftMax: null, chunkMin: 30 }, // v0.17: 1 日の目標。v0.31.4: chunkMin=期限つきの目安の 1 回の大きさ(分・既定 30・plan.CHUNK_MIN)(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
@@ -115,7 +117,7 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed'];
 /** 天気の設定を正規化(v0.29・F15): enabled は true のときだけ true、地域は 5 つまで・id 必須(無ければ付ける)・name 40 字・緯度経度の範囲。純関数 */
 export function normalizeWeather(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -175,6 +177,7 @@ export function defaultData() {
     busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
     kiai: {},    // v0.25: 気合(F13・id → { id, date, time:'HH:MM', categoryId|null, entryId|null, updatedAt, deletedAt })。「気合を入れた」瞬間の印。ワンタップ・中身は持たない
     bgm: {},     // v0.32: 聞いた BGM(F16・動画 id → { id, at(ISO), date, rating: 1|-1|null, updatedAt, deletedAt })。同じ曲を二度すすめないための印と 👍 / 👎
+    feed: {},    // v0.34: 記事の印(F17・記事 id → { id, state:'open'|'skip', at(ISO), date, updatedAt, deletedAt })。開いた / 読まない 記事を次から出さない
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -239,6 +242,7 @@ function normalizeSettings(raw) {
   s.tiles = Array.isArray(raw.tiles) ? raw.tiles.filter((x) => typeof x === 'string' && TILE_KEY.test(x)).slice(0, 6) : null;
   s.weather = normalizeWeather(raw.weather); // v0.29・F15
   s.bgm = normalizeBgm(raw.bgm); // v0.32・F16
+  s.feed = normalizeFeed(raw.feed); // v0.34・F17
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
   // v0.19: お金のカテゴリ(無ければ既定)と月の予算
@@ -359,6 +363,12 @@ export function validateBgmPlay(r, id) {
   if (!isObj(r) || !/^[A-Za-z0-9_-]{6,20}$/.test(vid) || typeof r.at !== 'string' || !r.at) return null;
   return { ...stripUnsafe(r), id: vid, at: r.at.slice(0, 40), date: isDate(r.date) ? r.date : r.at.slice(0, 10), rating: r.rating === 1 || r.rating === -1 ? r.rating : null, updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
+/** 記事の印(v0.34・F17): id は feed.json の記事 id(16 進 8〜16 桁)・state は open(開いた)/ skip(読まない)・at は ISO */
+export function validateFeedMark(r, id) {
+  const fid = String((isObj(r) && r.id) || id || '');
+  if (!isObj(r) || !/^[a-f0-9]{8,16}$/.test(fid) || typeof r.at !== 'string' || !r.at) return null;
+  return { ...stripUnsafe(r), id: fid, state: r.state === 'skip' ? 'skip' : 'open', at: r.at.slice(0, 40), date: isDate(r.date) ? r.date : r.at.slice(0, 10), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+}
 export function validateKiai(r, id) {
   if (!isObj(r) || !isDate(r.date) || !isHM(r.time)) return null;
   return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: r.time, categoryId: optStr(r.categoryId, 40), note: str(r.note, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
@@ -398,6 +408,7 @@ export function migrate(raw) {
   out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
   out.kiai = cleanMap(raw.kiai, validateKiai); // v0.25
   out.bgm = {}; for (const [k, v] of Object.entries(cleanMap(raw.bgm, validateBgmPlay))) if (!out.bgm[v.id] || k === v.id) out.bgm[v.id] = v; // v0.32: キーは動画 id
+  out.feed = {}; for (const [k, v] of Object.entries(cleanMap(raw.feed, validateFeedMark))) if (!out.feed[v.id] || k === v.id) out.feed[v.id] = v; // v0.34: キーは記事 id
   out.busyNotes = {}; for (const [k, v] of Object.entries(cleanMap(raw.busyNotes, validateBusyNote))) if (!out.busyNotes[v.id] || k === v.id) out.busyNotes[v.id] = v; // v0.22: キーは id(日付:開始分)
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付
   out.meta = { ...d.meta, ...(isObj(raw.meta) ? stripUnsafe(raw.meta) : {}) };

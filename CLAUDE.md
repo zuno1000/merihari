@@ -13,7 +13,8 @@
 カレンダーは free/busy のみ・Drive は端末側暗号化(パスフレーズは sessionStorage)・提案はルールベース・外部依存は GIS のみ。
 
 ## 技術
-- 素の HTML/CSS/JS(ES2020+)、ビルド無し、npm 依存ゼロ。`js/` は役割別(main/store/time/plan/log/report/ui-*/google/sync)。
+- 素の HTML/CSS/JS(ES2020+)、ビルド無し、npm 依存ゼロ。`js/` は役割別(main/store/time/plan/log/report/ui-*/google/sync/bgm/feed)。
+- 同梱データ `data/bgm.json`(BGM のカタログ)と `data/feed.json`(キャッチアップの記事)は GitHub Actions(`.github/workflows/update-bgm.yml` 週次・`update-feed.yml` 毎朝)が `tools/*.py` で作り直す。SW の `DATA`(先読み+裏で更新)なので版は上げない。取得元は `data/feeds.json`(ユーザーが編集)。
 - ユーザー文字列は textContent で描画。innerHTML にユーザー入力を入れない。
 - 純関数は `window.M` に載せ `tests/index.html`(iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件)で検証。
 - 版: `APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新(tests が一致を確認)。

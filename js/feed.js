@@ -1,0 +1,109 @@
+// merihari ─ feed.js: キャッチアップ(v0.34・F17・任意)の純関数と読み込み。研究・趣味など複数のジャンルの記事(RSS / Atom / arXiv API)を、GitHub Actions が毎朝 data/feed.json に作り直す(通信は同じサイトの 1 ファイルだけ・無料)。
+// 画面はホームの折りたたみ「キャッチアップ」(ui-feed.js)。記事のタップでリンク(新しいタブ / Safari)として開き、既読の印(data.feed)を残す。推薦はルールベース: 気になる語(キーワード)の一致を先頭・あとは新しい順にジャンルを回して混ぜる。
+// 純関数(normalizeFeed / parseFeed / unread / keywordHits / score / pick / countByGenre / hostOf / daysAgo / recentMarks)はテストから M.feed で検証する。副作用は loadFeed(fetch)だけ。
+export const FEED_URL = 'data/feed.json';
+export const N_CHOICES = [3, 5, 8];
+export const DEFAULT_N = 5;
+export const MAX_KEYWORDS = 20;
+export const MAX_GENRES = 12;
+export const FRESH_DAYS = 14;   // 新しさの点はこの日数で 0 に
+export const W = Object.freeze({ hit: 3.0, fresh: 2.0 });
+export const HIT_SHARE = 0.6; // 気になる語に当たる記事が先頭を占めるのは n の 6 割まで(残りはジャンルを回す: 語が広すぎても 1 つのジャンルに埋まらない)
+export const hitCap = (n) => Math.max(1, Math.ceil(n * HIT_SHARE));
+const ID_RE = /^[a-f0-9]{8,16}$/;
+const GID_RE = /^[A-Za-z0-9_-]{1,20}$/;
+const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8) } */
+export function normalizeFeed(raw) {
+  const o = isObj(raw) ? raw : {};
+  const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GID_RE.test(g)))].slice(0, MAX_GENRES);
+  const keywords = [...new Set((Array.isArray(o.keywords) ? o.keywords : typeof o.keywords === 'string' ? splitKeywords(o.keywords) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
+  const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
+  return { enabled: o.enabled === true, genres, keywords, n };
+}
+/** 「lora, 6G、低遅延」のような 1 行 → 語の配列(読点・カンマ・空白で区切る) */
+export function splitKeywords(s) { return String(s || '').split(/[,、\s]+/).map((x) => x.trim()).filter(Boolean); }
+
+/** data/feed.json の形を検証: { updated, genres:[{id,name}], items:[{ id, g, t, u, s, d }] }。壊れた記事は捨てる(u は http(s) だけ) */
+export function parseFeed(j) {
+  const genres = (Array.isArray(j?.genres) ? j.genres : []).filter((g) => isObj(g) && typeof g.id === 'string' && GID_RE.test(g.id)).map((g) => ({ id: g.id, name: typeof g.name === 'string' && g.name.trim() ? g.name.trim().slice(0, 20) : g.id }));
+  const gids = new Set(genres.map((g) => g.id));
+  const seen = new Set();
+  const items = (Array.isArray(j?.items) ? j.items : []).filter((x) => isObj(x) && typeof x.id === 'string' && ID_RE.test(x.id) && typeof x.g === 'string' && gids.has(x.g) && typeof x.t === 'string' && x.t.trim() && typeof x.u === 'string' && /^https?:\/\/\S+$/.test(x.u) && !seen.has(x.id) && seen.add(x.id))
+    .map((x) => ({ id: x.id, g: x.g, t: x.t.trim().slice(0, 200), u: x.u.slice(0, 500), s: typeof x.s === 'string' ? x.s.slice(0, 40) : '', d: isDate(x.d) ? x.d : null }));
+  return { updated: typeof j?.updated === 'string' ? j.updated.slice(0, 40) : null, genres, items };
+}
+export const genreName = (feed, gid) => feed?.genres?.find((g) => g.id === gid)?.name || gid;
+
+/** 既読 / 読まない の印(data.feed・消したものは除く) */
+export function activeMarks(marks) { const o = {}; for (const [k, v] of Object.entries(marks || {})) if (v && !v.deletedAt) o[k] = v; return o; }
+/** まだ印の無い記事(設定のジャンルで絞る・空なら全部) */
+export function unread(items, marks, genres = []) {
+  const m = activeMarks(marks);
+  const gs = new Set(genres || []);
+  return (items || []).filter((x) => !m[x.id] && (!gs.size || gs.has(x.g)));
+}
+/** 題名に含まれる気になる語の数(大文字小文字は区別しない) */
+export function keywordHits(title, keywords) {
+  const t = String(title || '').toLowerCase();
+  return (keywords || []).filter((k) => k && t.includes(String(k).toLowerCase())).length;
+}
+export function daysAgo(d, today) {
+  if (!isDate(d) || !isDate(today)) return null;
+  const a = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)), b = Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+  return Math.round((a - b) / 86400000);
+}
+/** 点: 気になる語の一致 × 3.0 + 新しさ(きょう 2.0 → 14 日で 0) */
+export function score(x, { today, keywords = [] } = {}) {
+  const ago = daysAgo(x.d, today);
+  const fresh = ago == null ? 0.5 : Math.max(0, 1 - Math.max(0, ago) / FRESH_DAYS);
+  return W.hit * keywordHits(x.t, keywords) + W.fresh * fresh;
+}
+/**
+ * 出す記事を選ぶ(純関数): まだ読んでいない記事から n 件。気になる語に当たるものを先頭(点の高い順・n の 6 割まで)、残りは ジャンルを順に回して(round-robin・先頭の記事の点が高いジャンルから)新しい順に混ぜる(1 つのジャンルに偏らない)。当たった記事の残りは各ジャンルの列の先頭に来る(点が高い)。
+ * 戻り値の各記事に hit(気になる語に当たったか)を付ける
+ */
+export function pick(feed, marks, settings, { today, n = null } = {}) {
+  const s = normalizeFeed(settings);
+  const want = n || s.n;
+  const list = unread(feed?.items, marks, s.genres).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: keywordHits(x.t, s.keywords) > 0 }));
+  const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
+  const hits = list.filter((x) => x.hit).sort(byDate);
+  const out = hits.slice(0, hitCap(want));
+  const taken = new Set(out.map((x) => x.id));
+  const rest = list.filter((x) => !taken.has(x.id)).sort(byDate);
+  if (out.length < want) {
+    const queues = new Map();
+    for (const x of rest) { if (!queues.has(x.g)) queues.set(x.g, []); queues.get(x.g).push(x); }
+    const have = countByGenre(out); // まだ出ていないジャンルから回し、同じなら先頭の記事の点(語の一致・新しさ)が高いジャンルから
+    const order = [...queues.keys()].sort((a, b) => ((have[a] || 0) - (have[b] || 0)) || (queues.get(b)[0].pt - queues.get(a)[0].pt));
+    let added = true;
+    while (out.length < want && added) {
+      added = false;
+      for (const g of order) { const q = queues.get(g); if (q && q.length && out.length < want) { out.push(q.shift()); added = true; } }
+    }
+  }
+  return out.map(({ pt, ...x }) => x);
+}
+export function countByGenre(list) { const o = {}; for (const x of list || []) o[x.g] = (o[x.g] || 0) + 1; return o; }
+/** 「研究 3・技術 2」 */
+export function summaryLine(list, feed) { return Object.entries(countByGenre(list)).map(([g, n]) => `${genreName(feed, g)} ${n}`).join('・'); }
+export function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
+/** 開いた記事(新しい順・n 件) */
+export function recentMarks(marks, n = 20, state = 'open') { return Object.values(activeMarks(marks)).filter((m) => m.state === state).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, n); }
+export function stats(marks, feed) { const m = Object.values(activeMarks(marks)); return { opened: m.filter((x) => x.state === 'open').length, skipped: m.filter((x) => x.state === 'skip').length, total: feed?.items?.length || 0, updated: feed?.updated || null }; }
+
+// ---- 読み込み(副作用): fetch は既定の cache(SW の DATA: 手元から即出し・裏で更新)。失敗は呼び出し側で黙る ----
+let feed = null, feedPromise = null;
+export function loadFeed() {
+  if (feed) return Promise.resolve(feed);
+  if (!feedPromise) feedPromise = fetch(FEED_URL).then((r) => { if (!r.ok) throw new Error(`feed ${r.status}`); return r.json(); }).then((j) => { feed = parseFeed(j); return feed; }).catch((e) => { feedPromise = null; throw e; });
+  return feedPromise;
+}
+export const feedNow = () => feed;
+/** 裏で新しい一覧に入れ替える(SW が裏で取り直したあと・updated が変わっていれば true) */
+export function refreshFeed() {
+  return fetch(FEED_URL).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return false; const f = parseFeed(j); const changed = !feed || f.updated !== feed.updated; feed = f; return changed; }).catch(() => false);
+}

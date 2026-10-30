@@ -1048,3 +1048,26 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .mdpanel .mrow .mname{font-size:14px}
 .mdpanel .mdgo{justify-content:flex-end;padding:4px 10px 2px}
 .mdpanel[hidden]{display:none}
+/* v0.34: キャッチアップ(F17) ─ ホームの折りたたみ・記事の行 */
+.feed-box{margin-top:4px}
+.feed-box summary{display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;list-style:none}
+.feed-box summary::-webkit-details-marker{display:none}
+.feed-box summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transition:transform .15s;flex:none;width:12px;text-align:center}
+.feed-box[open] summary::before{transform:rotate(90deg)}
+.feed-h{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.feed-n{font-size:12px;margin-left:auto;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-row{display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);padding:0 4px 0 0}
+.feed-row:first-child{border-top:0}
+.feed-open{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;padding:10px 0 10px 14px;color:var(--fg);text-decoration:none;font:inherit}
+.feed-tag{flex:none;font-size:10px;color:var(--accent);background:var(--accent-bg);padding:1px 6px;border-radius:999px;margin-top:3px;white-space:nowrap;line-height:1.5}
+.feed-tag.hit{background:var(--accent);color:#fff}
+.feed-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.feed-title{font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.feed-sub{font-size:11px}
+.feed-x{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;font-family:inherit}
+.feed-x:active{background:var(--accent-bg)}
+.feed-more{justify-content:flex-end;margin-top:6px}
+.sheet .feed-list{margin-top:10px}
+.feed-hrow{flex-wrap:wrap;gap:6px 10px}
+.feed-hrow .feed-open{flex-direction:column;gap:2px;padding:4px 0;flex:1 1 180px}
+.feed-hrow .feed-title{font-size:13px}

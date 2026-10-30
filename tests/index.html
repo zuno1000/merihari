@@ -1041,7 +1041,7 @@ document.getElementById('app').addEventListener('load', async () => {
       const mb = S.migrate({ schema: 1, settings: {}, bgm: { aaaaaa01: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', rating: -1, updatedAt: '2026-10-29T12:00:00+09:00' }, aaaaaa03: { id: 'aaaaaa03', at: '2026-10-30T10:00:00+09:00', updatedAt: '2026-10-30T10:00:00+09:00' } } });
       const mm2 = M.sync.merge(ma, mb);
       ok(mm2.bgm.aaaaaa01.rating === -1 && mm2.bgm.aaaaaa03 && Object.keys(mm2.bgm).length === 2 && Object.keys(M.sync.pruneTombstones({ ...S.defaultData(), bgm: { aaaaaa01: { id: 'aaaaaa01', at: '1', updatedAt: '1', deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-30T00:00:00+09:00').bgm).length === 0, 'sync.merge: 聞いた BGM は動画 id ごとに updatedAt の新しい方・古い tombstone は pruneTombstones で消える');
-      ok(sw.includes(`'./js/bgm.js'`) && sw.includes(`'./js/ui-bgm.js'`) && /const DATA = \['\.\/data\/bgm\.json'\]/.test(sw) && !/ASSETS = \[[^\]]*bgm\.json/.test(sw), 'sw.js: bgm.js / ui-bgm.js は ASSETS・data/bgm.json は DATA(先読み+裏で更新・版と一緒に固定しない)');
+      ok(sw.includes(`'./js/bgm.js'`) && sw.includes(`'./js/ui-bgm.js'`) && /const DATA = \['\.\/data\/bgm\.json', '\.\/data\/feed\.json'\]/.test(sw) && !/ASSETS = \[[^\]]*bgm\.json/.test(sw), 'sw.js: bgm.js / ui-bgm.js は ASSETS・data/bgm.json は DATA(先読み+裏で更新・版と一緒に固定しない)');
       const real = await B.loadCatalog();
       ok(real && real.songs.length >= 600 && real.songs.every((s) => /^[A-Za-z0-9_-]{6,20}$/.test(s.id) && typeof s.t === 'string' && Array.isArray(s.g) && Array.isArray(s.m)) && new Set(real.songs.map((s) => s.id)).size === real.songs.length && real.songs.every((s) => s.g.every((g) => B.GENRES.includes(g))), `同梱のカタログ: ${real && real.songs.length} 曲・id の形・重複なし・ジャンルは 12 のどれか`);
     }
@@ -1051,6 +1051,50 @@ document.getElementById('app').addEventListener('load', async () => {
     {
       const tk = { a: { id: 'a', name: 'A', kind: 'duty', deadline: '2026-12-01' }, b: { id: 'b', name: 'B', kind: 'duty', deadline: '2026-11-01' }, c: { id: 'c', name: 'C', kind: 'wish' }, d: { id: 'd', name: 'D', kind: 'memo' }, e: { id: 'e', name: 'E', kind: 'duty', doneAt: '2026-10-01T00:00:00+09:00' }, f: { id: 'f', name: 'F', kind: 'duty', deletedAt: '2026-10-01T00:00:00+09:00' }, g: null };
       ok(eq(M.plan.linkable(tk).map((t) => t.id), ['b', 'a', 'c']) && eq(M.plan.linkable(null), []), 'plan.linkable: 開いているタスクを期限の近い順(期限なしは後ろ)・メモ / 済み / 消したものは除く(entrySheet の「タスク」・planSheet・紐づけ直しで共通)');
+    }
+
+    // ---- v0.34 feed(キャッチアップ・F17) ----
+    log('\n# v0.34 feed');
+    {
+      const F = M.feed;
+      ok(F.FEED_URL === 'data/feed.json' && eq(F.N_CHOICES, [3, 5, 8]) && F.DEFAULT_N === 5 && F.FRESH_DAYS === 14, 'feed: 一覧は同じサイトの data/feed.json・件数は 3 / 5 / 8(既定 5)');
+      ok(eq(F.normalizeFeed(null), { enabled: false, genres: [], keywords: [], n: 5 }) && eq(F.normalizeFeed({ enabled: true, genres: ['research', 'bad id!', 'research'], keywords: 'LoRa, 6G、低遅延  6G', n: 8 }), { enabled: true, genres: ['research'], keywords: ['LoRa', '6G', '低遅延'], n: 8 }) && F.normalizeFeed({ n: 4 }).n === 5, 'normalizeFeed: 既定は無効・ジャンル id の形と重複・気になる語は 1 行からも(読点 / カンマ / 空白・重複なし)・件数は 3/5/8 だけ');
+      ok(S.SCALAR_FIELDS.includes('feed') && eq(S.defaultSettings().feed, { enabled: false, genres: [], keywords: [], n: 5 }) && eq(S.migrate({ schema: 1, settings: { feed: { enabled: true, keywords: ['x'] } } }).settings.feed, { enabled: true, genres: [], keywords: ['x'], n: 5 }), 'feed は設定として項目ごとに同期(SCALAR_FIELDS)・migrate で検証');
+      const raw = { updated: '2026-10-30T06:00:00Z', genres: [{ id: 'research', name: '研究' }, { id: 'tech', name: '技術' }, { id: 'bad!', name: 'x' }], items: [
+        { id: 'aaaa000001', g: 'research', t: 'LoRa mesh for 6G', u: 'https://arxiv.org/abs/1', s: 'arXiv', d: '2026-10-30' },
+        { id: 'aaaa000002', g: 'research', t: 'Old paper', u: 'https://arxiv.org/abs/2', s: 'arXiv', d: '2026-10-20' },
+        { id: 'aaaa000003', g: 'tech', t: 'New JS runtime', u: 'https://example.com/a', s: 'Publickey', d: '2026-10-29' },
+        { id: 'aaaa000004', g: 'tech', t: 'Another tech story', u: 'https://example.com/b', s: 'HN', d: '2026-10-28' },
+        { id: 'aaaa000005', g: 'tech', t: 'Third tech', u: 'https://example.com/c', s: 'HN', d: '2026-10-27' },
+        { id: 'aaaa000006', g: 'nope', t: 'unknown genre', u: 'https://example.com/d', s: 'x', d: '2026-10-30' },
+        { id: 'aaaa000007', g: 'tech', t: 'javascript: bad', u: 'javascript:alert(1)', s: 'x', d: '2026-10-30' },
+        { id: 'ZZ', g: 'tech', t: 'bad id', u: 'https://example.com/e', s: 'x', d: '2026-10-30' },
+        { id: 'aaaa000001', g: 'tech', t: 'dup id', u: 'https://example.com/f', s: 'x', d: '2026-10-30' },
+      ] };
+      const f = F.parseFeed(raw);
+      ok(f.updated === '2026-10-30T06:00:00Z' && eq(f.genres.map((g) => g.id), ['research', 'tech']) && eq(f.items.map((x) => x.id), ['aaaa000001', 'aaaa000002', 'aaaa000003', 'aaaa000004', 'aaaa000005']) && F.genreName(f, 'tech') === '技術' && F.genreName(f, 'zz') === 'zz', 'parseFeed: ジャンル id の形・記事は id の形 / 知らないジャンル / http(s) 以外の URL / 重複 id を捨てる');
+      const marks = { aaaa000003: { id: 'aaaa000003', state: 'open', at: '2026-10-30T07:00:00+09:00', updatedAt: '…' }, aaaa000004: { id: 'aaaa000004', state: 'skip', at: '…', updatedAt: '…', deletedAt: '2026-10-30T08:00:00+09:00' } };
+      ok(eq(F.unread(f.items, marks).map((x) => x.id), ['aaaa000001', 'aaaa000002', 'aaaa000004', 'aaaa000005']) && eq(F.unread(f.items, marks, ['research']).map((x) => x.id), ['aaaa000001', 'aaaa000002']), 'unread: 開いた / 読まない の印が無い記事(消した印は無視)・ジャンルで絞る');
+      ok(F.keywordHits('LoRa mesh for 6G', ['lora', '6g', 'x']) === 2 && F.keywordHits('abc', []) === 0 && F.daysAgo('2026-10-28', '2026-10-30') === 2 && F.daysAgo(null, '2026-10-30') === null, 'keywordHits(大文字小文字を区別しない)/ daysAgo');
+      const today = '2026-10-30';
+      ok(F.score(f.items[0], { today, keywords: ['lora'] }) === 5 && F.score(f.items[0], { today }) === 2 && F.score(f.items[1], { today }) < F.score(f.items[2], { today }), 'score: 気になる語 ×3 + 新しさ(きょう 2 → 14 日で 0)');
+      const p1 = F.pick(f, {}, { enabled: true, genres: [], keywords: ['6G'], n: 3 }, { today });
+      ok(eq(p1.map((x) => x.id), ['aaaa000001', 'aaaa000003', 'aaaa000002']) && p1[0].hit === true && p1[1].hit === false && !('pt' in p1[0]), 'pick: 気になる語に当たる記事を先頭、残りはジャンルを順に回して新しい順(新しい記事のあるジャンルから: 技術 → 研究)');
+      const p2 = F.pick(f, marks, { enabled: true, genres: ['tech'], keywords: [], n: 5 }, { today });
+      ok(eq(p2.map((x) => x.id), ['aaaa000004', 'aaaa000005']) && eq(F.countByGenre(p2), { tech: 2 }) && F.summaryLine(p1, f) === '研究 2・技術 1', 'pick: ジャンルで絞る・印の付いたものは出ない・足りなければあるだけ / countByGenre / summaryLine');
+      ok(F.hostOf('https://www.example.com/a?b') === 'example.com' && F.hostOf('nope') === '', 'hostOf');
+      const p3 = F.pick(f, {}, { enabled: true, genres: [], keywords: ['tech', 'paper', 'runtime'], n: 3 }, { today });
+      ok(F.hitCap(3) === 2 && F.hitCap(5) === 3 && F.hitCap(8) === 5 && eq(p3.map((x) => x.id), ['aaaa000003', 'aaaa000004', 'aaaa000002']) && p3[2].hit === true, 'pick: 気になる語に当たる記事が先頭を占めるのは n の 6 割まで(3 件なら 2)・残りは まだ出ていないジャンルから回す(当たりが技術に 3 つあっても 3 件目は研究)');
+      const mg = S.migrate({ schema: 1, settings: {}, feed: { k1: { id: 'aaaa000001', at: '2026-10-30T07:00:00+09:00', state: 'skip' }, aaaa000002: { id: 'aaaa000002', at: '2026-10-29T07:00:00+09:00', state: 'weird' }, bad: { id: 'ZZ', at: '1' } } });
+      ok(eq(Object.keys(mg.feed).sort(), ['aaaa000001', 'aaaa000002']) && mg.feed.aaaa000001.state === 'skip' && mg.feed.aaaa000002.state === 'open' && mg.feed.aaaa000002.date === '2026-10-29' && eq(S.defaultData().feed, {}), 'migrate: data.feed はキーを記事 id にそろえ、state は open / skip・壊れたものを捨てる・既定は空');
+      const ma = S.migrate({ schema: 1, settings: {}, feed: { aaaa000001: { id: 'aaaa000001', at: '2026-10-30T07:00:00+09:00', state: 'open', updatedAt: '2026-10-30T07:00:00+09:00' } } });
+      const mb = S.migrate({ schema: 1, settings: {}, feed: { aaaa000001: { id: 'aaaa000001', at: '2026-10-30T07:00:00+09:00', state: 'skip', updatedAt: '2026-10-30T09:00:00+09:00' }, aaaa000003: { id: 'aaaa000003', at: '2026-10-30T10:00:00+09:00', state: 'open', updatedAt: '2026-10-30T10:00:00+09:00' } } });
+      const mm3 = M.sync.merge(ma, mb);
+      ok(mm3.feed.aaaa000001.state === 'skip' && mm3.feed.aaaa000003 && Object.keys(mm3.feed).length === 2 && Object.keys(M.sync.pruneTombstones({ ...S.defaultData(), feed: { aaaa000001: { id: 'aaaa000001', at: '1', updatedAt: '1', deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-30T00:00:00+09:00').feed).length === 0, 'sync.merge: 記事の印は id ごとに updatedAt の新しい方・古い tombstone は pruneTombstones で消える');
+      ok(F.recentMarks({ a1: { id: 'a1', state: 'open', at: '2026-10-29T00:00:00Z' }, a2: { id: 'a2', state: 'open', at: '2026-10-30T00:00:00Z' }, a3: { id: 'a3', state: 'skip', at: '2026-10-31T00:00:00Z' } }).map((m) => m.id).join() === 'a2,a1' && eq(F.stats(marks, f), { opened: 1, skipped: 0, total: 5, updated: '2026-10-30T06:00:00Z' }), 'recentMarks(開いた記事を新しい順)/ stats(消した印は数えない)');
+      ok(sw.includes(`'./js/feed.js'`) && sw.includes(`'./js/ui-feed.js'`) && /const DATA = \['\.\/data\/bgm\.json', '\.\/data\/feed\.json'\]/.test(sw) && !/ASSETS = \[[^\]]*feed\.json/.test(sw), 'sw.js: feed.js / ui-feed.js は ASSETS・data/feed.json は DATA(先読み+裏で更新・版と一緒に固定しない)');
+      const real = await F.loadFeed();
+      ok(real && real.genres.length >= 1 && real.items.length >= 1 && real.items.every((x) => /^[a-f0-9]{8,16}$/.test(x.id) && /^https?:\/\//.test(x.u) && real.genres.some((g) => g.id === x.g)), `同梱の記事の一覧: ${real && real.items.length} 件・${real && real.genres.length} ジャンル・id と URL の形`);
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
