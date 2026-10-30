@@ -1,5 +1,5 @@
 # merihari ─ キャッチアップ(F17・v0.34)の記事一覧(data/feed.json)を data/feeds.json の取得元(RSS / Atom / arXiv API)から毎朝作り直す。
-# 無料: 公開リポジトリの GitHub Actions。毎朝 6:00 JST と、取得元(data/feeds.json)かツールを push したとき、手動(Run workflow)。変わったときだけ commit。
+# 無料: 公開リポジトリの GitHub Actions(private でも月 2,000 分まで無料・v0.41 の自分だけの取得元リポジトリにも同じものを置く)。毎朝 6:00 JST と、取得元(data/feeds.json)かツールを push したとき、手動(Run workflow)。変わったときだけ commit。
 # 版は上げない: data/feed.json は SW の「先読み+裏で更新」(stale-while-revalidate)なので、次に開いたときに新しい一覧になる。
 name: update-feed
 on:
@@ -35,9 +35,9 @@ jobs:
         continue-on-error: true
       - name: 変わっていれば commit
         run: |
-          if git diff --quiet -- data/feed.json; then echo "no change"; exit 0; fi
+          git add data/feed.json
+          if git diff --cached --quiet -- data/feed.json; then echo "no change"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/feed.json
           git commit -m "feed: 記事の一覧を更新($(date -u +%Y-%m-%d))"
           git push
