@@ -54,7 +54,7 @@ const whenOf = (x) => { const ago = feed.daysAgo(x.d, dateKey()); return x.d ? (
 const showImg = () => S().feed.img !== false;
 /** サムネイル(v0.36): og:image を遅延・参照元なしで読む。無い / 読めない / 設定で切っているときはジャンルの色の地に札 */
 export function thumb(x, f, { cls = 'feed-thumb' } = {}) {
-  const box = el('span', { class: cls, 'aria-hidden': 'true', style: { '--fh': feed.genreHue(f, x.g) } });
+  const box = el('span', { class: cls, 'aria-hidden': 'true', style: { '--fh': feed.genreHue(f, x.g, S().feed) } });
   const tag = () => el('span.feed-thumb-tag', feed.genreName(f, x.g));
   if (showImg() && x.i) {
     const img = el('img', { src: x.i, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', onerror: () => { img.remove(); box.classList.add('noimg'); box.append(tag()); } });
@@ -72,7 +72,8 @@ const skipBtn = (x, rerender) => el('button.feed-x', { type: 'button', 'aria-lab
 /** ✓ 既読(v0.40): 開いた / ブックマークした記事は消えずに ✓。タップで 既読 ↔ 未読(ブックマーク中は外せない) */
 const readBtn = (x, rerender) => { const on = feed.isReadMark(MK(), x.id); return el('button.feed-read', { type: 'button', class: `feed-read${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', 'aria-label': on ? '未読に戻す' : '既読にする', title: on ? '未読に戻す' : '既読にする', onclick: () => { if (isSaved(x.id)) { toast('ブックマーク中は既読のままです'); return; } if (on) unmark(x.id); else markItem(x.id, 'open'); if (rerender) rerender(); } }, '✓'); };
 const starBtn = (x, rerender) => { const on = isSaved(x.id); return el('button.feed-star', { type: 'button', class: `feed-star${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', 'aria-label': on ? 'ブックマークを外す' : 'ブックマークする', title: 'ブックマーク', onclick: () => toggleSave(x, rerender) }, on ? '★' : '☆'); };
-const mainOf = (x, f) => el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, feed.leadOf(x) ? el('span.feed-lead.muted', feed.leadOf(x)) : null, el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))].filter(Boolean));
+const gtag = (x, f) => el('span.feed-tag.gc', { class: `feed-tag gc${x.hit ? ' hit' : ''}`, style: { '--fh': feed.genreHue(f, x.g, S().feed) } }, feed.genreName(f, x.g)); // v0.42: ジャンルの色
+const mainOf = (x, f) => el('span.feed-main', [gtag(x, f), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, feed.leadOf(x) ? el('span.feed-lead.muted', feed.leadOf(x)) : null, el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))].filter(Boolean));
 /** 記事 1 行(シート・設定): 小さなサムネイル・ジャンルの札・題名(気になる語に当たれば印)・出どころ・日付。タップでリンクを開く+既読。☆ でブックマーク・× で読まない */
 export function feedRow(x, f, rerender, { opener = null } = {}) {
   const a = el('a.feed-open', openAttrs(x, rerender, opener), [thumb(x, f, { cls: 'feed-thumb sm' }), mainOf(x, f)]);
@@ -86,7 +87,7 @@ export function feedCard(x, f, rerender, { opener = null } = {}) {
 /** ブックマークの行(v0.38): 印に持つ題名と URL で描く(一覧から消えた記事も開ける)。タップで開く(印は変えない)・★ で外す */
 export function savedRow(m, f, rerender) {
   const x = (f?.items || []).find((y) => y.id === m.id) || { id: m.id, t: m.t || '(題名なし)', tj: m.tj || null, u: m.u, s: m.s || '', g: m.g || '', d: m.date || null, i: null };
-  const a = el('a.feed-open', openAttrs(x, null, null, { mark: false }), [thumb(x, f, { cls: 'feed-thumb sm' }), el('span.feed-main', [el('span.feed-tag', feed.genreName(f, x.g)), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, el('span.feed-sub.muted', `${x.s || feed.hostOf(x.u)}・${fmtMD(m.date || m.at.slice(0, 10))} に保存`)].filter(Boolean))]);
+  const a = el('a.feed-open', openAttrs(x, null, null, { mark: false }), [thumb(x, f, { cls: 'feed-thumb sm' }), el('span.feed-main', [gtag(x, f), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, el('span.feed-sub.muted', `${x.s || feed.hostOf(x.u)}・${fmtMD(m.date || m.at.slice(0, 10))} に保存`)].filter(Boolean))]);
   return el('div.feed-row', [a, starBtn(x, rerender)]);
 }
 
@@ -117,6 +118,12 @@ function removeWord(w, rerender, group = null) {
     toast(`「${w}」を消しました`); if (rerender) rerender();
   }, true);
 }
+/** チップの行の横スクロール位置を覚え、描き直したあとに戻す(v0.42)。選んだチップが見えていなければ そこまで寄せる */
+const scrollPos = { g: 0, k: 0 };
+function keepScroll(row, key) {
+  row.addEventListener('scroll', () => { scrollPos[key] = row.scrollLeft; }, { passive: true });
+  setTimeout(() => { if (!row.isConnected) return; row.scrollLeft = scrollPos[key]; const on = row.querySelector('.on'); if (!on) return; const r = row.getBoundingClientRect(), c = on.getBoundingClientRect(); if (c.left < r.left || c.right > r.right) row.scrollLeft += c.left < r.left ? c.left - r.left - 8 : c.right - r.right + 8; }, 0);
+}
 /** ホームの ジャンルのチップ(すべて / 各ジャンル・読んでいない件数つき)と 気になる語のチップ(タップで絞る・× で消す・＋ で足す) */
 function filterBars(f, rerender) {
   const base = feed.unread(f.items, MK(), S().feed.genres, S().feed.off);
@@ -124,8 +131,9 @@ function filterBars(f, rerender) {
   const g0 = boxGenre();
   const gchips = el('div.chips.small.feed-gchips', { role: 'group', 'aria-label': 'ジャンル' }, [
     el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 == null ? ' on' : ''}`, 'aria-pressed': g0 == null ? 'true' : 'false', onclick: () => { setBoxGenre(null); rerender(); } }, `すべて ${base.length}`),
-    ...f.genres.filter((g) => counts[g.id] || g.id === g0).map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 === g.id ? ' on' : ''}`, 'aria-pressed': g0 === g.id ? 'true' : 'false', onclick: () => { setBoxGenre(g0 === g.id ? null : g.id); rerender(); } }, `${g.name} ${counts[g.id] || 0}`)),
+    ...f.genres.filter((g) => counts[g.id] || g.id === g0).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${g0 === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, 'aria-pressed': g0 === g.id ? 'true' : 'false', onclick: () => { setBoxGenre(g0 === g.id ? null : g.id); rerender(); } }, `${g.name} ${counts[g.id] || 0}`)),
   ]);
+  keepScroll(gchips, 'g'); // v0.42(FB「ジャンルを切り替えるとスクロールが左端に戻る」): 横の位置を覚えて描き直し後に戻す
   const words = feed.wordsFor(S().feed, g0); // v0.39: ジャンルを選んでいればそのジャンルの語+共通、すべて なら共通の語
   const sel = boxWords().filter((w) => words.includes(w));
   const kchips = el('div.chips.small.feed-kchips', { role: 'group', 'aria-label': '気になる語' }, [
@@ -135,6 +143,7 @@ function filterBars(f, rerender) {
     ])),
     el('button.chip.sm2.kwadd', { type: 'button', 'aria-label': '気になる語を足す', onclick: () => addWordSheet(rerender, { group: g0 }) }, g0 ? `＋ ${feed.genreName(f, g0)}の語` : '＋ 共通の語'),
   ]);
+  keepScroll(kchips, 'k');
   return { gchips, kchips, base, counts };
 }
 
@@ -182,7 +191,7 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
     const counts = feed.countByGenre(base);
     const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [
       el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${base.length}`),
-      ...f.genres.filter((g) => counts[g.id] || g.id === gsel).map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel === g.id ? ' on' : ''}`, onclick: () => { gsel = gsel === g.id ? null : g.id; draw(); } }, `${g.name} ${counts[g.id] || 0}`)),
+      ...f.genres.filter((g) => counts[g.id] || g.id === gsel).map((g) => el('button.chip.sm2.gc', { type: 'button', class: `chip sm2 gc${gsel === g.id ? ' on' : ''}`, style: { '--fh': feed.genreHue(f, g.id, S().feed) }, onclick: () => { gsel = gsel === g.id ? null : g.id; draw(); } }, `${g.name} ${counts[g.id] || 0}`)),
       el('button.chip.sm2.star', { type: 'button', class: `chip sm2 star${gsel === '★' ? ' on' : ''}`, onclick: () => { gsel = gsel === '★' ? null : '★'; draw(); } }, `★ ${savedList.length}`),
     ]);
     const redraw = () => { draw(); if (rerender) rerender(); };

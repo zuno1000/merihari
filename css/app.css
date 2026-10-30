@@ -1143,3 +1143,14 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 @media (prefers-color-scheme:dark){.feed-read.on{color:#7fd1a3}}
 .mgg h2{font-size:14px;color:var(--fg);margin:0}
 .mgg .list{margin-top:6px}
+/* v0.42: ジャンルの色(チップ・札)と色の選択 */
+.chip.gc{--fh:212;border-color:hsl(var(--fh) 45% 72%);background:hsl(var(--fh) 60% 95%);color:hsl(var(--fh) 45% 30%)}
+.chip.gc.on{background:hsl(var(--fh) 50% 46%);border-color:hsl(var(--fh) 50% 46%);color:#fff;font-weight:600}
+.feed-tag.gc{background:hsl(var(--fh) 60% 92%);color:hsl(var(--fh) 45% 32%)}
+.feed-tag.gc.hit{background:hsl(var(--fh) 50% 46%);color:#fff}
+.huerow{align-items:center;gap:10px;margin:6px 0}
+.huerow .chip{flex:none;min-width:5em;justify-content:center}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatch{width:24px;height:24px;border-radius:50%;border:2px solid transparent;background:hsl(var(--fh) 55% 60%);cursor:pointer;padding:0}
+.swatch.on{border-color:var(--fg);box-shadow:0 0 0 2px var(--card) inset}
+@media (prefers-color-scheme:dark){.chip.gc{border-color:hsl(var(--fh) 35% 40%);background:hsl(var(--fh) 30% 24%);color:hsl(var(--fh) 60% 82%)}.chip.gc.on{background:hsl(var(--fh) 45% 48%);border-color:hsl(var(--fh) 45% 48%);color:#fff}.feed-tag.gc{background:hsl(var(--fh) 30% 26%);color:hsl(var(--fh) 60% 82%)}.feed-tag.gc.hit{background:hsl(var(--fh) 45% 48%);color:#fff}}

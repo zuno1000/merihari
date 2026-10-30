@@ -29,8 +29,10 @@ export function normalizeFeed(raw) {
   if (!isObj(o.kw) && o.keywords != null) { const w = cleanWords(o.keywords); if (w.length) kw['*'] = w; } // v0.38 以前の keywords[] は共通の語へ
   const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
   const off = [...new Set((Array.isArray(o.off) ? o.off : []).filter((k) => typeof k === 'string' && SID_RE.test(k)))].slice(0, MAX_OFF);
-  const repo = typeof o.repo === 'string' && REPO_RE.test(o.repo.trim()) ? o.repo.trim().slice(0, 100) : ''; // v0.41: 自分だけの取得元リポジトリ(owner/repo・空なら公開のカタログ)
-  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false, repo };
+  const repo = typeof o.repo === 'string' && REPO_RE.test(o.repo.trim()) ? o.repo.trim().slice(0, 100) : '';
+  const hue = {}; // v0.42: ジャンルの色(色相 0〜359・無ければ並び順で自動)
+  if (isObj(o.hue)) for (const [g, v] of Object.entries(o.hue).slice(0, MAX_KW_GROUPS)) if (GID_RE.test(g) && Number.isFinite(+v)) hue[g] = ((Math.round(+v) % 360) + 360) % 360; // v0.41: 自分だけの取得元リポジトリ(owner/repo・空なら公開のカタログ)
+  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false, repo, hue };
 }
 /** そのジャンルの記事に効く語 = 共通('*')+ジャンルの語(v0.39)。genre が無ければ共通だけ */
 export function wordsFor(settings, genre = null) { const s = isObj(settings) && isObj(settings.kw) ? settings : normalizeFeed(settings); return [...new Set([...(s.kw['*'] || []), ...(genre && s.kw[genre] ? s.kw[genre] : [])])]; }
@@ -139,7 +141,9 @@ export function countByGenre(list) { const o = {}; for (const x of list || []) o
 export function summaryLine(list, feed, max = Infinity) { const e = Object.entries(countByGenre(list)); return e.slice(0, max).map(([g, n]) => `${genreName(feed, g)} ${n}`).join('・') + (e.length > max ? '…' : ''); }
 /** ジャンルの色相(画像の無いカードの地の色・ジャンルの並び順で回す) */
 export const GENRE_HUES = [212, 150, 28, 282, 348, 96, 190, 60];
-export function genreHue(feed, gid) { const i = (feed?.genres || []).findIndex((g) => g.id === gid); return GENRE_HUES[(i < 0 ? 0 : i) % GENRE_HUES.length]; }
+export function genreHue(feed, gid, settings = null) { const h = settings && isObj(settings.hue) ? settings.hue[gid] : undefined; if (Number.isFinite(h)) return h; const i = (feed?.genres || []).findIndex((g) => g.id === gid); return GENRE_HUES[(i < 0 ? 0 : i) % GENRE_HUES.length]; }
+/** 設定で選べる色(v0.42): 8 色相 */
+export const HUE_CHOICES = Object.freeze([212, 150, 28, 282, 348, 96, 190, 60]);
 /** 表示する題名(日本語の題名があればそれ・v0.37)と、添える 1 文(要旨の 1 文目の日本語・無ければ null) */
 export const titleOf = (x) => (x?.tj || x?.t || '');
 export const leadOf = (x) => (x?.aj || null);
