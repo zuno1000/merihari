@@ -1,0 +1,43 @@
+# merihari ─ キャッチアップ(F17・v0.34)の記事一覧(data/feed.json)を data/feeds.json の取得元(RSS / Atom / arXiv API)から毎朝作り直す。
+# 無料: 公開リポジトリの GitHub Actions。毎朝 6:00 JST と、取得元(data/feeds.json)かツールを push したとき、手動(Run workflow)。変わったときだけ commit。
+# 版は上げない: data/feed.json は SW の「先読み+裏で更新」(stale-while-revalidate)なので、次に開いたときに新しい一覧になる。
+name: update-feed
+on:
+  schedule:
+    - cron: '0 21 * * *'   # 毎朝 6:00 JST(= 前日 21:00 UTC)
+  push:
+    branches: [main]
+    paths: ['data/feeds.json', 'tools/feed_fetch.py', 'tools/feed_images.py', 'tools/feed_translate.py', '.github/workflows/update-feed.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-feed
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: data/feed.json を作り直す
+        run: python -X utf8 -I tools/feed_fetch.py data/feeds.json
+      - name: 記事の代表画像(og:image)の URL を足す(v0.36・1 回 80 ページまで・失敗しても続ける)
+        run: python -X utf8 -I tools/feed_images.py 80
+        continue-on-error: true
+      - name: "英語の題名と要旨の 1 文目を日本語に(v0.37/38 ─ 既定は Google 翻訳の無料経路(登録不要・非公式)。Secrets の DEEPL_API_KEY があれば DeepL。Variables の TRANSLATOR=none で止める)"
+        run: python -X utf8 -I tools/feed_translate.py 12000
+        env:
+          DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
+          TRANSLATOR: ${{ vars.TRANSLATOR }}
+        continue-on-error: true
+      - name: 変わっていれば commit
+        run: |
+          if git diff --quiet -- data/feed.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/feed.json
+          git commit -m "feed: 記事の一覧を更新($(date -u +%Y-%m-%d))"
+          git push

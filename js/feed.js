@@ -19,6 +19,7 @@ const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 /** 設定 settings.feed = { enabled, genres[](空=全部), kw{ '*':[共通の語], <genreId>:[そのジャンルの語] }(v0.39・旧 keywords[] は '*' へ), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35), img(記事の画像を出す・v0.36・既定 true) } */
 export const MAX_KW_GROUPS = 14;
+const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const cleanWords = (v) => [...new Set((Array.isArray(v) ? v : typeof v === 'string' ? splitKeywords(v) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
 export function normalizeFeed(raw) {
   const o = isObj(raw) ? raw : {};
@@ -28,7 +29,8 @@ export function normalizeFeed(raw) {
   if (!isObj(o.kw) && o.keywords != null) { const w = cleanWords(o.keywords); if (w.length) kw['*'] = w; } // v0.38 以前の keywords[] は共通の語へ
   const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
   const off = [...new Set((Array.isArray(o.off) ? o.off : []).filter((k) => typeof k === 'string' && SID_RE.test(k)))].slice(0, MAX_OFF);
-  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false };
+  const repo = typeof o.repo === 'string' && REPO_RE.test(o.repo.trim()) ? o.repo.trim().slice(0, 100) : ''; // v0.41: 自分だけの取得元リポジトリ(owner/repo・空なら公開のカタログ)
+  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false, repo };
 }
 /** そのジャンルの記事に効く語 = 共通('*')+ジャンルの語(v0.39)。genre が無ければ共通だけ */
 export function wordsFor(settings, genre = null) { const s = isObj(settings) && isObj(settings.kw) ? settings : normalizeFeed(settings); return [...new Set([...(s.kw['*'] || []), ...(genre && s.kw[genre] ? s.kw[genre] : [])])]; }
@@ -146,7 +148,20 @@ export function jaStats(feed) { const items = feed?.items || []; const en = item
 // ---- 取得元のカタログ(data/feeds.json)をアプリから足す(v0.39・純関数。GitHub API の呼び出しは ui-feed.js) ----
 export const GITHUB_REPO = 'zuno1000/merihari';
 export const FEEDS_PATH = 'data/feeds.json';
-export const feedsEditUrl = () => `https://github.com/${GITHUB_REPO}/edit/main/${FEEDS_PATH}`;
+export const feedsEditUrl = (repo = GITHUB_REPO) => `https://github.com/${repo}/edit/main/${FEEDS_PATH}`;
+/** 取得元のリポジトリ(v0.41): 設定の repo(private)があればそれ、無ければ公開のカタログ(このアプリのリポジトリ) */
+export const repoOf = (settings) => (isObj(settings) && typeof settings.repo === 'string' && REPO_RE.test(settings.repo) ? settings.repo : GITHUB_REPO);
+export const isPrivate = (settings) => repoOf(settings) !== GITHUB_REPO;
+/** private リポジトリに書き込む一式(v0.41): このサイトから読んで、そのままの中身で置く。feeds.json は公開のカタログの写し(あとで自分のものに) */
+export const SETUP_FILES = Object.freeze([
+  { src: 'tools/feed_fetch.py', dst: 'tools/feed_fetch.py' },
+  { src: 'tools/feed_images.py', dst: 'tools/feed_images.py' },
+  { src: 'tools/feed_translate.py', dst: 'tools/feed_translate.py' },
+  { src: 'tools/update-feed.yml', dst: '.github/workflows/update-feed.yml' },
+  { src: 'data/feeds.json', dst: 'data/feeds.json' },
+]);
+export const GH_API = 'https://api.github.com';
+export const privateFeedUrl = (repo) => `${GH_API}/repos/${repo}/contents/data/feed.json?ref=main`;
 /** 取得元 / ジャンルの id(英数と - だけ・40 字)。日本語などは base36 の時刻で */
 export function slugId(name, now = Date.now()) { const s = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); return s.length >= 2 ? s : `x${now.toString(36)}`; }
 /** arXiv の検索語(読点 / カンマ区切り)→ API の URL(要旨の検索・OR・新しい順・20 件) */
@@ -200,13 +215,38 @@ export function stats(marks, feed) { const m = Object.values(activeMarks(marks))
 
 // ---- 読み込み(副作用): fetch は既定の cache(SW の DATA: 手元から即出し・裏で更新)。失敗は呼び出し側で黙る ----
 let feed = null, feedPromise = null;
+let src = null, srcKey = ''; // v0.41: private の取得元 { repo, token, cacheGet, cacheSet }(無ければ同じサイトの data/feed.json)
+/** 読む先を決める(v0.41)。変わったら手元の一覧を捨てる。cacheGet / cacheSet は端末内の写し(オフライン・起動の速さ) */
+export function configureFeedSource(cfg) {
+  const next = cfg && cfg.repo && cfg.token ? cfg : null;
+  const key = next ? `${next.repo}` : '';
+  if (key !== srcKey) { feed = null; feedPromise = null; }
+  srcKey = key; src = next;
+}
+export const feedSource = () => (src ? src.repo : null);
+function fetchFeedJson() {
+  if (!src) return fetch(FEED_URL).then((r) => { if (!r.ok) throw new Error(`feed ${r.status}`); return r.json(); });
+  const { repo, token } = src;
+  return fetch(privateFeedUrl(repo), { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw+json', 'X-GitHub-Api-Version': '2022-11-28' } })
+    .then((r) => { if (r.status === 404) throw new Error('private の一覧(data/feed.json)はまだありません。最初の更新(数分)を待つか、GitHub の Actions タブで update-feed を実行してください'); if (r.status === 401) throw new Error('トークンが違うか期限切れです'); if (!r.ok) throw new Error(`GitHub ${r.status}`); return r.text(); })
+    .then((t) => { try { src.cacheSet?.(t); } catch { /* 端末内の写しは任意 */ } return JSON.parse(t); });
+}
 export function loadFeed() {
   if (feed) return Promise.resolve(feed);
-  if (!feedPromise) feedPromise = fetch(FEED_URL).then((r) => { if (!r.ok) throw new Error(`feed ${r.status}`); return r.json(); }).then((j) => { feed = parseFeed(j); return feed; }).catch((e) => { feedPromise = null; throw e; });
+  if (!feedPromise) {
+    let cached = null;
+    if (src) { try { const t = src.cacheGet?.(); cached = t ? JSON.parse(t) : null; } catch { cached = null; } }
+    if (cached) { // 手元の写しから即出し、裏で取り直す(SW の stale-while-revalidate と同じ)
+      feed = parseFeed(cached);
+      fetchFeedJson().then((j) => { const f = parseFeed(j); if (f.updated !== feed?.updated) feed = f; }).catch(() => {});
+      return Promise.resolve(feed);
+    }
+    feedPromise = fetchFeedJson().then((j) => { feed = parseFeed(j); return feed; }).catch((e) => { feedPromise = null; throw e; });
+  }
   return feedPromise;
 }
 export const feedNow = () => feed;
 /** 裏で新しい一覧に入れ替える(SW が裏で取り直したあと・updated が変わっていれば true) */
 export function refreshFeed() {
-  return fetch(FEED_URL).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return false; const f = parseFeed(j); const changed = !feed || f.updated !== feed.updated; feed = f; return changed; }).catch(() => false);
+  return fetchFeedJson().then((j) => { if (!j) return false; const f = parseFeed(j); const changed = !feed || f.updated !== feed.updated; feed = f; return changed; }).catch(() => false);
 }

@@ -142,10 +142,13 @@ function filterBars(f, rerender) {
  * ホームの「キャッチアップ」(きょうだけ・有効なときだけ): 折りたたみ(端末内で開閉を覚える)。見出しに「新着 N・研究 3・趣味 2」。
  * 中は ジャンルと気になる語のチップ(v0.38)→ 設定の件数ぶんのカード(気になる語を先頭・ジャンルを回して混ぜる)→「ぜんぶ見る ›」。一覧が無ければ読み込んでから描き直す。
  */
+let feedErr = ''; // 一覧を読めなかった理由(private の初回など)
 export function feedBox(rerender) {
   if (!feedOn()) return null;
+  ensureSource();
+  if (feed.isPrivate(S().feed) && !ghToken()) return el('details.group.feed-box', { open: true }, [el('summary', [el('span.feed-h', 'キャッチアップ')]), el('p.muted.small.pad', `取得元は自分のリポジトリ(${feed.repoOf(S().feed)})ですが、この端末にトークンがありません。設定 › キャッチアップ で貼ってください。`)]);
   const f = feed.feedNow();
-  if (!f) { feed.loadFeed().then(() => rerender && rerender()).catch(() => {}); return null; }
+  if (!f) { feed.loadFeed().then(() => { feedErr = ''; if (rerender) rerender(); }).catch((e) => { const msg = e && e.message || '読めませんでした'; if (msg !== feedErr) { feedErr = msg; if (rerender) rerender(); } }); return feedErr ? el('details.group.feed-box', { open: true }, [el('summary', [el('span.feed-h', 'キャッチアップ')]), el('p.muted.small.pad', feedErr)]) : null; }
   const { gchips, kchips, base } = filterBars(f, rerender);
   const genre = boxGenre(), words = boxWords();
   const list = feed.pick(f, MK(), S().feed, { today: dateKey(), genre, words });
@@ -164,6 +167,7 @@ export function feedBox(rerender) {
 
 /** 全部を見るシート: ジャンルのチップ(★ ブックマークも)で絞る(その場だけ)・新しい順・「ここまで読んだことにする」。ホームの絞り込み(ジャンル・語)を引き継ぐ */
 export function feedSheet(rerender, { genre = null, words = [] } = {}) {
+  ensureSource();
   const f = feed.feedNow();
   if (!f) { toast('記事の一覧を読めませんでした'); return; }
   let gsel = genre; // null=設定どおり(全部 or 選んだジャンル)・'★'=ブックマーク
@@ -198,15 +202,19 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
 // ---- 取得元をアプリから足す(v0.39・F17-1): GitHub の contents API で data/feeds.json を書き換える(トークンを貼った人だけ・端末内 local.ghToken・同期しない)。無ければ JSON をコピーして GitHub の編集ページを開く ----
 export const ghToken = () => (typeof L().ghToken === 'string' ? L().ghToken.trim() : '');
 export function setGhToken(t) { L().ghToken = String(t || '').trim().slice(0, 200); store.saveLocal(); }
-const GH = 'https://api.github.com';
-async function ghGet(path, token) {
-  const r = await fetch(`${GH}/repos/${feed.GITHUB_REPO}/contents/${path}?ref=main`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
-  if (!r.ok) throw new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 404 ? 'リポジトリかファイルが見つかりません(トークンの Repository access を確かめてください)' : `GitHub ${r.status}`);
+const GH = feed.GH_API;
+/** いまの取得元リポジトリ(設定の private があればそれ)を読む先として feed.js に教える(v0.41)。描画のたびに呼んでよい(変わったときだけ一覧を捨てる) */
+export function ensureSource() {
+  feed.configureFeedSource(feed.isPrivate(S().feed) ? { repo: feed.repoOf(S().feed), token: ghToken(), cacheGet: () => (typeof L().feedCache === 'string' ? L().feedCache : null), cacheSet: (t) => { L().feedCache = t; store.saveLocal(); } } : null);
+}
+async function ghGet(path, token, repo = feed.repoOf(S().feed)) {
+  const r = await fetch(`${GH}/repos/${repo}/contents/${path}?ref=main`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+  if (!r.ok) { const e = new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 404 ? 'リポジトリかファイルが見つかりません(トークンの Repository access を確かめてください)' : `GitHub ${r.status}`); e.status = r.status; throw e; }
   const j = await r.json();
   return { sha: j.sha, text: feed.b64dec(j.content) };
 }
-async function ghPut(path, token, text, sha, message) {
-  const r = await fetch(`${GH}/repos/${feed.GITHUB_REPO}/contents/${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify({ message, content: feed.b64enc(text), sha, branch: 'main' }) });
+async function ghPut(path, token, text, sha, message, repo = feed.repoOf(S().feed)) {
+  const r = await fetch(`${GH}/repos/${repo}/contents/${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify({ message, content: feed.b64enc(text), sha, branch: 'main' }) });
   if (!r.ok) throw new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 403 ? '書き込みの権限がありません(Contents: Read and write)' : r.status === 409 ? '同時に変更があったので もう一度' : `GitHub ${r.status}`);
   return r.json();
 }
@@ -251,7 +259,7 @@ export function addSourceSheet(rerender, { fetcher = null, genreId = null, onDon
     const req = build(); if (!req) return;
     const snippet = JSON.stringify({ id: feed.slugId(req.name), name: req.name, url: req.url, max: req.max }, null, 2);
     try { await navigator.clipboard.writeText(snippet); toast('取得元の JSON をコピーしました。開いた GitHub の編集ページで、ジャンルの sources[] に貼って保存してください'); } catch { status.textContent = `コピーできなかったので、これを貼ってください: ${snippet}`; }
-    window.open(feed.feedsEditUrl(), '_blank', 'noopener');
+    window.open(feed.feedsEditUrl(feed.repoOf(S().feed)), '_blank', 'noopener');
   };
   sheet((close) => [
     el('h2', '取得元を足す'),
@@ -306,4 +314,60 @@ export function manageSourcesSheet(rerender) {
   let close0 = null;
   close0 = sheet((close) => { close0 = close; return [el('h2', '取得元とジャンルの管理'), el('p.muted.small', 'リポジトリの data/feeds.json を直接書き換えます(commit)。変更は数分後の更新から記事の一覧に反映されます。'), status, body]; });
   load();
+}
+
+/**
+ * 自分だけの取得元リポジトリ(v0.41・F17-8): ユーザーが作った private リポジトリに、このサイトの tools / workflow / feeds.json(公開のカタログの写し)を contents API で書き込む(セットアップ)。
+ * 以後 取得元の管理も記事の一覧の読み込みもそのリポジトリ(トークンつき)。公開リポジトリには何も出ない。private の Actions も月 2,000 分まで無料(毎朝 1〜2 分)。
+ * fetcher はプローブ用(fetch の差し替えは window.fetch で足りるので通常は使わない)
+ */
+export function setupPrivateSheet(rerender) {
+  const c = S().feed;
+  const repoIn = el('input.text', { type: 'text', value: c.repo || '', placeholder: 'owner/merihari-feeds', maxlength: 100, autocomplete: 'off', spellcheck: false, 'aria-label': 'リポジトリ(owner/repo)' });
+  const tok = el('input.text', { type: 'password', value: ghToken(), placeholder: 'github_pat_…(端末内に保存)', maxlength: 200, autocomplete: 'off', 'aria-label': 'GitHub のトークン' });
+  const status = el('p.muted.small', '');
+  const log = el('ul.help-ul.small');
+  let busy = false;
+  const run = async (close) => {
+    if (busy) return;
+    const repo = repoIn.value.trim(), token = tok.value.trim();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) { toast('リポジトリは owner/repo の形で'); return; }
+    if (!token) { toast('トークンを貼ってください'); return; }
+    busy = true; log.replaceChildren(); status.textContent = '書き込んでいます…';
+    try {
+      for (const f of feed.SETUP_FILES) {
+        const r = await fetch(f.src, { cache: 'no-cache' }); if (!r.ok) throw new Error(`${f.src} を読めません(${r.status})`);
+        const text = await r.text();
+        let sha; try { sha = (await ghGet(f.dst, token, repo)).sha; } catch (e) { if (e.status !== 404) throw e; }
+        await ghPut(f.dst, token, text, sha, `merihari: ${sha ? '更新' : '追加'} ${f.dst}(アプリのセットアップ)`, repo);
+        log.append(el('li', `${f.dst} … ${sha ? '更新' : '追加'}`));
+      }
+      S().feed = feed.normalizeFeed({ ...S().feed, repo }); store.touchSettings(); setGhToken(token);
+      L().feedCache = null; store.saveLocal(); feed.configureFeedSource(null); ensureSource();
+      status.textContent = '完了。feeds.json の push で Actions(update-feed)が走り、数分で最初の一覧(data/feed.json)ができます。できるまでホームには「まだありません」と出ます。';
+      toast('自分のリポジトリに切り替えました'); if (rerender) rerender();
+    } catch (e) { status.textContent = `できませんでした: ${e.message}(トークンの Permissions に Contents と Workflows の Read and write が要ります)`; }
+    busy = false;
+  };
+  const dispatch = async () => {
+    const repo = repoIn.value.trim(), token = tok.value.trim(); if (!repo || !token) { toast('リポジトリとトークンを入れてください'); return; }
+    try {
+      const r = await fetch(`${GH}/repos/${repo}/actions/workflows/update-feed.yml/dispatches`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }) });
+      if (r.status === 204) { toast('更新を始めました(1〜3 分)'); status.textContent = '更新を始めました。数分後にホームを開き直してください。'; }
+      else throw new Error(r.status === 403 || r.status === 404 ? 'トークンに Actions: Read and write が無いか、まだ workflow がありません。GitHub の Actions タブからも実行できます' : `GitHub ${r.status}`);
+    } catch (e) { status.textContent = `実行できませんでした: ${e.message}`; }
+  };
+  sheet((close) => [
+    el('h2', '自分だけの取得元リポジトリ'),
+    el('p.muted.small', '取得元の一覧と記事の一覧を、自分の private リポジトリに置きます(他の人には見えません)。手順: ① GitHub で private リポジトリを作る(例: merihari-feeds・空でよい) ② Fine-grained token を作る(Repository access: そのリポジトリだけ / Permissions: Contents と Workflows を Read and write・任意で Actions も) ③ ここに入れて「書き込む」。'),
+    el('div.row.field', [el('span.label', 'リポジトリ'), repoIn]),
+    el('div.row.field', [el('span.label', 'トークン'), tok]),
+    el('p.muted.small', '書き込むもの: tools/feed_fetch.py・feed_images.py・feed_translate.py・.github/workflows/update-feed.yml・data/feeds.json(いまの公開カタログの写し。あとで「取得元とジャンルの管理」で自分のものに)。トークンはこの端末の中にだけ置き、同期も送信もしません。リポジトリ名は同期するので、ほかの端末ではトークンだけ貼れば同じ一覧になります。'),
+    status, log,
+    el('div.row.wrap', [el('button.btn', { type: 'button', onclick: close }, '閉じる'), el('button.btn.ghost', { type: 'button', onclick: dispatch }, '最初の更新を実行'), el('button.btn.primary.grow', { type: 'button', onclick: () => run(close) }, '書き込む')]),
+  ]);
+}
+/** 公開のカタログに戻す(v0.41): 設定の repo を空に(トークンは残す) */
+export function usePublicCatalog(rerender) {
+  confirmSheet('公開のカタログに戻しますか?', 'このアプリのリポジトリ(zuno1000/merihari)の取得元と記事の一覧を読むようになります。private リポジトリは消えません(また切り替えられます)。', '戻す', () => { S().feed = feed.normalizeFeed({ ...S().feed, repo: '' }); store.touchSettings(); L().feedCache = null; store.saveLocal(); feed.configureFeedSource(null); toast('公開のカタログに戻しました'); if (rerender) rerender(); });
 }
