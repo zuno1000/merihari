@@ -1,6 +1,7 @@
 // merihari ─ ui-money.js: 「お金」画面(v0.19・F10・§4.5)。v0.30(実機 FB「他のタブと同じ UI に・支出は日ごとに登録・管理」・F10-9):
 // 上段はホーム・カレンダー・ふり返りと同じ(左上のカレンダーの印・‹ 日付 ›・「今日」・右上の貯金箱)。
-// 上から: その日の支出(大きく)+ その日の一覧(タップで直す)+ 2 タップ入力(金額 → カテゴリ・その日に登録)→ 月のまとめ(予算・内訳の円・日ごとの合計(タップでその場で内訳)・月ごとの推移)。
+// 上から: 1 行の入力(¥ 金額・いま。触れるとチップが広がる・v0.35)→ その日の支出(大きく)+ その日の一覧(タップで直す)→ 月のまとめ(予算・内訳の円・日ごとの合計(タップでその場で内訳)・月ごとの推移)。
+// v0.35(実機 FB「内訳が増えるほど足しにくくならないか」・案 F): 入力は日付の直下の 1 行(¥ 金額・いま)に縮め、金額欄に触れたときだけ メモとカテゴリのチップが下に広がる(外をタップして空なら畳む)。2 タップはそのまま・場所は常に同じ・内訳は支出のすぐ下。
 // v0.33(実機 FB「日毎の内訳を見ようとするとその日に遷移するが見にくい。支出と内訳の間に入力欄があって視線が誘導されない。下から上への移動が毎回挟まる」):
 //   ①並びを 支出 → 内訳(その日の一覧)→ 入力 に(数字を見てから足す)。②月のまとめの「日ごと」はタップでその場で内訳が開く(アコーディオン・1 日ずつ・遷移しない)。内訳の行のタップで直せ、「◯/◯ を開く ›」で上段をその日に。
 // 支出の時刻はタイムラインの記録に紐づく(その時間に何をしていたか)。タイムラインのブロックに ¥ の印、レポート「今日」に支出の行。
@@ -60,7 +61,6 @@ export function renderMoney(view, ctx, dateArg = null) {
     el('span.myen', { class: `myen${x.type === 'in' ? ' in' : ''}` }, (x.type === 'in' ? '+' : '') + money.fmtYen(x.amount)),
   ]);
   const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
-  const addHead = el('h3.help-h.dl-h.madd-h', isToday ? 'きょうの支出を足す' : `${fmtMD(date)} の支出を足す`); // v0.33: 入力は一覧の下(見出しで視線を誘導)
 
   // 月のまとめ: ‹ 月 › ・支出(大きく)・収入と差し引き・資産・予算のメーター(または 1 日平均)・内訳の円・日ごとの合計(タップでその日へ)・推移
   // v0.30.1(実機 FB「月を前後すると画面が上に飛ぶ」): ctx.go は先頭にスクロールするので、月の見出しが同じ位置に来るように戻す
@@ -116,7 +116,7 @@ export function renderMoney(view, ctx, dateArg = null) {
   const trendBox = trend.some((t) => t.out > 0) ? el('details.rep-details', [el('summary.muted.small', '月ごとの推移'), monthBars(trend, ym), el('p.muted.small.center', `これまでの差し引き ${signed(money.netAll(M()).net)}(収入${money.fmtYen(money.netAll(M()).in)} − 支出${money.fmtYen(money.netAll(M()).out)})`)]) : null;
   const monthSec = el('section.group.mmonth', [monthHead, summary, donut, dayRows ? el('h3.help-h.dl-h', '日ごと(タップで内訳)') : null, dayRows, trendBox].filter(Boolean));
 
-  view.append(...[el('h1', 'お金'), head, dayCard, dayList, addHead, quick, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)。v0.33: 支出 → 一覧 → 入力 → 月
+  view.append(...[el('h1', 'お金'), head, quick, dayCard, dayList, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)。v0.35(案 F): 日付 → 入力の 1 行 → 支出 → 一覧 → 月
 }
 /** v0.33: 月のまとめの「日ごと」で開いている日(描き直しても保つ・1 日ずつ) */
 let expandedDay = null;
@@ -223,11 +223,16 @@ function quickInput(date, today, rerender) {
   };
   const chips = el('div.chips', { role: 'group', 'aria-label': 'カテゴリ' }, mcats().map((c) => el('button.chip.cat', { type: 'button', style: { '--c': mcatOf(c.id).color }, onclick: () => save(c.id) }, [el('span.dot', { style: { background: mcatOf(c.id).color }, 'aria-hidden': 'true' }), c.income ? `+ ${c.name}` : c.name])));
   amount.addEventListener('keydown', (e) => { if (e.key === 'Enter') { note.focus(); } });
-  return el('section.card.quick.mquick', [
-    el('div.row.yenrow', [el('span.yen-mark', '¥'), amount, whenBtn]),
-    el('div.row.mnoterow', [note]),
-    chips,
-  ]);
+  // v0.35(案 F): ふだんは「¥ 金額・いま」の 1 行。金額欄に触れると メモとカテゴリのチップが下に広がり、外をタップして金額もメモも空なら畳む
+  const more = el('div.mquick-more', { hidden: true }, [el('div.row.mnoterow', [note]), chips]);
+  const box = el('section.card.quick.mquick.mquick-line', [el('div.row.yenrow', [el('span.yen-mark', '¥'), amount, whenBtn]), more]);
+  const expand = (v) => { more.hidden = !v; box.classList.toggle('open', v); };
+  amount.addEventListener('focus', () => expand(true));
+  amount.addEventListener('input', () => expand(true));
+  amount.placeholder = isToday ? '0 ─ きょうの支出を足す' : `0 ─ ${fmtMD(date)} に足す`;
+  const outside = (e) => { if (!box.isConnected) { document.removeEventListener('pointerdown', outside); return; } if (!box.contains(e.target) && !amount.value.trim() && !note.value.trim()) expand(false); };
+  document.addEventListener('pointerdown', outside);
+  return box;
 }
 
 /** 時刻のシート(v0.30): いま(きょうだけ)/ なし / 時計。日付は上段の ‹ › とカレンダーで選ぶ */

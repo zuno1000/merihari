@@ -1071,3 +1071,15 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-hrow{flex-wrap:wrap;gap:6px 10px}
 .feed-hrow .feed-open{flex-direction:column;gap:2px;padding:4px 0;flex:1 1 180px}
 .feed-hrow .feed-title{font-size:13px}
+/* v0.35(案 F): お金の入力は日付の下の 1 行。金額欄に触れると広がる */
+.mquick-line{padding:10px 14px;margin-bottom:12px}
+.mquick-line .yenrow{margin-bottom:0}
+.mquick-line.open .yenrow{margin-bottom:12px}
+.mquick-more[hidden]{display:none}
+.mquick-line .yenin::placeholder{font-size:15px;font-weight:400;color:var(--muted)}
+.madd-h{display:none}
+/* v0.35: キャッチアップ ─ 気になる語のチップ・取得元の ON / OFF */
+.kwchips{margin-bottom:6px}
+.srcbox{margin:4px 0 10px}
+.srcbox .srcgroup{margin:2px 0 4px}
+.srcbox h4.help-h{margin:8px 0 2px;font-size:12px}

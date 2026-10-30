@@ -57,7 +57,7 @@ const summary = {
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
   bgm() { const b = bgm.normalizeBgm(S().bgm); if (!b.enabled) return '使わない'; const n = Object.values(store.state.data.bgm || {}).filter((p) => !p.deletedAt).length; return `ホームに ♪・${b.genres.length ? b.genres.slice(0, 3).map((g) => bgm.GENRE_LABELS[g]).join(' / ') + (b.genres.length > 3 ? ' …' : '') : 'ジャンルはおまかせ'}${n ? `・聞いた ${n} 曲` : ''}`; },
-  feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${c.keywords.length ? `・気になる語 ${c.keywords.length}` : ''}`; },
+  feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${c.keywords.length ? `・気になる語 ${c.keywords.length}` : ''}${c.off.length ? `・取得元 ${c.off.length} つ OFF` : ''}`; },
   weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
 };
@@ -495,6 +495,7 @@ function sectionBgm(rerender) {
  * キャッチアップ(v0.34・F17・任意): 研究・趣味など複数のジャンルの新しい記事(RSS / Atom / arXiv API)を、GitHub Actions が毎朝 data/feed.json に作り直し(無料・通信は同じサイトの 1 ファイルだけ)、
  * ホームの折りたたみ「キャッチアップ」に数件ずつ出す。ジャンル・気になる語・件数は設定(同期する・SCALAR_FIELDS の feed)。開いた / 読まない の印は data.feed(同期する)。取得元は data/feeds.json(リポジトリで編集)。
  */
+let feedSrcOpen = false; // 取得元の折りたたみの開閉(描き直しても保つ)
 function sectionFeed(rerender) {
   const s = S();
   s.feed = feed.normalizeFeed(s.feed);
@@ -504,9 +505,22 @@ function sectionFeed(rerender) {
   const f = feed.feedNow();
   if (!f) feed.loadFeed().then(() => rerender()).catch(() => {});
   const st = feed.stats(marks, f);
-  const unreadN = f ? feed.unread(f.items, marks, c.genres).length : 0;
+  const unreadN = f ? feed.unread(f.items, marks, c.genres, c.off).length : 0;
   const gchips = f ? el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, f.genres.map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.genres.includes(g.id) ? ' on' : ''}`, 'aria-pressed': c.genres.includes(g.id) ? 'true' : 'false', onclick: () => { c.genres = c.genres.includes(g.id) ? c.genres.filter((x) => x !== g.id) : [...c.genres, g.id]; save(); rerender(); } }, `${g.name}(${f.items.filter((x) => x.g === g.id).length})`))) : el('p.muted.small', '記事の一覧を読み込んでいます…(オフラインなら次に開いたとき)');
-  const kw = el('input.text', { type: 'text', value: c.keywords.join(', '), placeholder: '例: 6G, LoRa, 低遅延', maxlength: 400, autocomplete: 'off', 'aria-label': '気になる語', onchange: (e) => { c.keywords = feed.splitKeywords(e.target.value); save(); rerender(); } });
+  // v0.35(FB「検索用語がパッチのようになっていない」): 語はチップ(タップで外す)+「追加」の欄(Enter でも)
+  const kwChips = el('div.chips.small.kwchips', { role: 'group', 'aria-label': '気になる語' }, c.keywords.length ? c.keywords.map((k) => el('button.chip.sm2.on', { type: 'button', 'aria-label': `${k} を外す`, title: '外す', onclick: () => { c.keywords = c.keywords.filter((x) => x !== k); save(); rerender(); } }, `${k} ×`)) : [el('span.muted.small', 'まだありません。')]);
+  const kwIn = el('input.text', { type: 'text', placeholder: '語を足す(例: VLA, BIM)', maxlength: 60, autocomplete: 'off', 'aria-label': '気になる語を足す' });
+  const addKw = () => { const ks = feed.splitKeywords(kwIn.value); if (!ks.length) { kwIn.focus(); return; } c.keywords = [...c.keywords, ...ks]; save(); rerender(); };
+  kwIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addKw(); } });
+  const kwAdd = el('button.btn.sm', { type: 'button', onclick: addKw }, '追加');
+  // v0.35: 取得元のカタログ(data/feeds.json にあるもの)をジャンルごとに ON / OFF(OFF の id を settings.feed.off に)
+  const srcs = f ? feed.sourcesOf(f) : [];
+  const srcBox = f ? el('details.rep-details.srcbox', { open: feedSrcOpen }, [
+    el('summary.muted.small', `取得元の ON / OFF(${srcs.length}・${c.off.length ? `${c.off.length} つ OFF` : 'すべて ON'})`),
+    ...f.genres.map((g) => { const ss = srcs.filter((x) => x.g === g.id); return ss.length ? el('div.srcgroup', [el('h4.help-h', g.name), el('div.chips.small', { role: 'group', 'aria-label': `${g.name} の取得元` }, ss.map((x) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.off.includes(x.id) ? '' : ' on'}`, 'aria-pressed': c.off.includes(x.id) ? 'false' : 'true', onclick: () => { c.off = c.off.includes(x.id) ? c.off.filter((y) => y !== x.id) : [...c.off, x.id]; save(); rerender(); } }, `${x.name}(${x.n})`)))]) : null; }).filter(Boolean),
+    el('p.muted.small', '取得元を増やす・自分の URL(RSS / Atom / arXiv の検索)を足すには、リポジトリの data/feeds.json を編集します(GitHub の Web エディタで OK・保存すると数分で反映)。'),
+  ]) : null;
+  if (srcBox) srcBox.addEventListener('toggle', () => { feedSrcOpen = srcBox.open; });
   const nchips = el('div.chips.small', { role: 'group', 'aria-label': '1 回に出す件数' }, feed.N_CHOICES.map((n) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.n === n ? ' on' : ''}`, 'aria-pressed': c.n === n ? 'true' : 'false', onclick: () => { c.n = n; save(); rerender(); } }, `${n} 件`)));
   const recent = feed.recentMarks(marks, 10);
   const rows = recent.length ? el('div.list', recent.map((m) => { const x = f ? f.items.find((y) => y.id === m.id) : null; return el('div.srow.plain.feed-hrow', [
@@ -517,9 +531,11 @@ function sectionFeed(rerender) {
     el('h3.help-h', 'ジャンル'),
     gchips,
     el('p.muted.small', '選んだジャンルだけ出します。何も選ばなければ全部から、ジャンルを順に回して混ぜます(1 つのジャンルに偏りません)。'),
+    srcBox,
     el('h3.help-h', '気になる語'),
-    el('div.row.field', kw),
-    el('p.muted.small', '題名にこの語が入る記事を先頭に出します(読点・カンマ・空白で区切る・大文字小文字は区別しない)。'),
+    kwChips,
+    el('div.row.field', [kwIn, kwAdd]),
+    el('p.muted.small', '題名にこの語が入る記事を先頭に出します(大文字小文字は区別しない)。語のチップをタップで外す。いちどに「VLA, BIM」のように読点・カンマで複数も足せます。'),
     el('h3.help-h', '1 回に出す件数'),
     nchips,
     c.enabled && f ? el('div.row', { style: { marginTop: '10px' } }, [el('button.btn', { type: 'button', onclick: () => feedSheet(rerender) }, `ぜんぶ見る(${unreadN})`)]) : null,
@@ -581,7 +597,7 @@ function sectionHelp() {
     h('予定(朝に自分で置く)'),
     li(['タイムラインの未来の空き時間(「ここに予定」)をタップして、カテゴリ(かタスク)と時間を決めると、同じレーンに枠線だけの予定が置かれます。長押しで動かせ、タップで直せます。明日以降はカレンダーの升目か › で先の日へ(v0.28: ホームの「きょうの予定」は無くなりました)。', '自動では作りません。前の日や先週の同じ曜日の予定を「写す」ことはできます。', '予定の時間に同じカテゴリ(タスクを決めていればそのタスク)を記録すると ✓。過ぎた予定で未記録のところは「◯◯ だった?」の1タップで記録できます。レポート「今日」に「予定と実際」(カテゴリごとに予定 / 実際の2本と、その時間にできた件数)が出ます。', '予定は同期します(記録と同じく1件ごとに新しい方)。']),
     h('お金'),
-    li(['v0.33: 並びは 支出 → その日の一覧 → 「◯◯の支出を足す」(入力)→ 月のまとめ。月のまとめの「日ごと」は、タップするとその場に内訳が開きます(1 日ずつ・画面は動きません)。行をタップで直せ、「◯/◯ を開く ›」で上の段をその日にできます。', 'v0.30: 上段はホームやふり返りと同じです。左上のカレンダーの印(か ‹ ›)で日を選び、その日の支出を登録・修正します(「今日」で戻る)。', '入力は2タップ: 金額を入れて、カテゴリをタップした時点で 見ている日に記録します。時刻はきょうなら「いま」、過去の日なら「時刻なし」が既定で、ボタンをタップすると いま / 時刻なし / 時計 で変えられます。「+ 収入」は収入。', '支出の時刻は、タイムラインのその時間の記録に自動で紐づきます(一覧に「研究の最中」、タイムラインのブロックに ¥ の印、レポート「今日」の表に支出の行)。', '月の予算(設定 › お金)を決めると、「予算 ◯ / 残り ◯・1日 ◯ まで(あと ◯ 日)」のメーターが出ます。決めなければ1日平均と件数だけです。', '収入があれば「収入 ◯・差し引き ±◯」。設定 › お金 の開始残高(記録を始めた時点の手持ち)を入れると「資産 = 開始残高 + これまでの収入 − 支出」が出ます。入れなければ資産は出しません。', '右上の貯金箱は「ほしいもの」: 名前・値段・目標日(任意)・メモ。目標日があれば「月 ◯円ずつ」、今月の差し引きが黒字なら「今のペースで ◯か月」。「買った」で支出として記録できます(カテゴリは編集で選ぶ)。買ったものは折りたたみに残ります。', 'カテゴリは少ないほど続きます。設定 › お金 で名前・色・並び・非表示・追加。お金のカテゴリは時間のカテゴリとは別です。', 'その日の一覧の行をタップすると 金額 / カテゴリ / 日付・時刻 / メモ の修正と削除。下の「月のまとめ」に 支出・予算・内訳の円・日ごとの合計(タップでその日へ)・「月ごとの推移」(折りたたみ)。見出しの ‹ › で前後の月。']),
+    li(['v0.35: 足すのは日付の下の 1 行(¥ 金額・いま)。金額欄に触れるとメモとカテゴリのチップが広がります(外をタップすると畳む)。その下に 支出 → その日の一覧 → 月のまとめ。月のまとめの「日ごと」は、タップするとその場に内訳が開きます(1 日ずつ・画面は動きません)。行をタップで直せ、「◯/◯ を開く ›」で上の段をその日にできます。', 'v0.30: 上段はホームやふり返りと同じです。左上のカレンダーの印(か ‹ ›)で日を選び、その日の支出を登録・修正します(「今日」で戻る)。', '入力は2タップ: 金額を入れて、カテゴリをタップした時点で 見ている日に記録します。時刻はきょうなら「いま」、過去の日なら「時刻なし」が既定で、ボタンをタップすると いま / 時刻なし / 時計 で変えられます。「+ 収入」は収入。', '支出の時刻は、タイムラインのその時間の記録に自動で紐づきます(一覧に「研究の最中」、タイムラインのブロックに ¥ の印、レポート「今日」の表に支出の行)。', '月の予算(設定 › お金)を決めると、「予算 ◯ / 残り ◯・1日 ◯ まで(あと ◯ 日)」のメーターが出ます。決めなければ1日平均と件数だけです。', '収入があれば「収入 ◯・差し引き ±◯」。設定 › お金 の開始残高(記録を始めた時点の手持ち)を入れると「資産 = 開始残高 + これまでの収入 − 支出」が出ます。入れなければ資産は出しません。', '右上の貯金箱は「ほしいもの」: 名前・値段・目標日(任意)・メモ。目標日があれば「月 ◯円ずつ」、今月の差し引きが黒字なら「今のペースで ◯か月」。「買った」で支出として記録できます(カテゴリは編集で選ぶ)。買ったものは折りたたみに残ります。', 'カテゴリは少ないほど続きます。設定 › お金 で名前・色・並び・非表示・追加。お金のカテゴリは時間のカテゴリとは別です。', 'その日の一覧の行をタップすると 金額 / カテゴリ / 日付・時刻 / メモ の修正と削除。下の「月のまとめ」に 支出・予算・内訳の円・日ごとの合計(タップでその日へ)・「月ごとの推移」(折りたたみ)。見出しの ‹ › で前後の月。']),
     h('ふり返り(日記)'),
     li(['v0.30: タブ「ふり返り」は 上から ①きょうはどうだった(レポートの見出しとタイル・「レポートをすべて見る ›」)→ ②気持ちを残す(気分 / 元気・よかったこと・ひっかかったこと・明日は・メモ)→ AI の節(有効なら)→ 期限が近いタスク(7 日以内・2 行)の順。夜に上から下りるだけで終わります。「材料」と「明日の予定」の札は v0.30 で無くしました(予定はカレンダータブで置きます)。', 'タブ「カレンダー」(旧 タイムライン): その日のタイムラインの上に手帳の升目。既定は週の帯、右上の「月」で月の升目。升目は 日付・棒(作業の合計)・色(気分)・点(予定)・▲(期限)。タップでその日へ。未来の日は予定と期限だけが見え、「ここに予定」で置けます。']),
     li(['気分(つらい〜最高)と元気(くたくた〜とても元気)の 2 つを 5 段階でタップ(もう一度で外す・右ほど良い)、3行(よかったこと / ひっかかったこと / 明日は)、メモ(「＋ メモ」で開く)。書くたびに自動で保存します。1つでも「書いた日」です。', '左上のカレンダー(ホーム・カレンダータブと同じ升目: 棒=作業・色=気分・点=予定・▲=期限)で過去の日へ。‹ › で前の日。レポート「今日」にも抜粋が出ます。']),
@@ -599,7 +615,7 @@ function sectionHelp() {
     h('作業用 BGM(任意・v0.32)'),
     li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム左上(カレンダーの右・きょうだけ)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう・×)。題名をタップで もう一度開きます。× でその日だけ消え、設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出しません。流していない日は何も出ません。', 'ふり返り(期限が近いタスク と 最近 の間)に「きょうの BGM」: その日に流した曲を順に(サムネイル・題名・流した時刻・ジャンル・♡ / ⊖ で 好き / ちがう)。タップでもう一度開きます(v0.32.1〜v0.32.2)。', '曲の一覧は毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直し、アプリは次に開いたときから新しい一覧を使います(版の更新は要りません・v0.32.1)。']),
     h('キャッチアップ(任意・v0.34)'),
-    li(['設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
+    li(['v0.35: 取得元はカタログ(研究: arXiv の Physical AI / VLA・デジタルツイン・BIM / Scan-to-BIM・インフラ管理・cs.RO、建築DX、技術、ガジェット、趣味、料理)になり、設定 › キャッチアップ の「取得元の ON / OFF」でジャンルごとに選べます。気になる語はチップ(タップで外す・「追加」で足す)。', '設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),

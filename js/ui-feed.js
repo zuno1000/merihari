@@ -55,7 +55,7 @@ export function feedBox(rerender) {
   const f = feed.feedNow();
   if (!f) { feed.loadFeed().then(() => rerender && rerender()).catch(() => {}); return null; }
   const list = feed.pick(f, MK(), S().feed, { today: dateKey() });
-  const all = feed.unread(f.items, MK(), S().feed.genres).length;
+  const all = feed.unread(f.items, MK(), S().feed.genres, S().feed.off).length;
   const box = el('details.group.feed-box', { open: boxOpen() }, [
     el('summary', [el('span.feed-h', 'キャッチアップ'), el('span.feed-n.muted', all ? `新着 ${all}${list.length ? '・' + feed.summaryLine(list, f) : ''}` : '新しい記事はありません')]),
     list.length ? el('div.list.feed-list', list.map((x) => feedRow(x, f, rerender))) : el('p.muted.small.pad', '新しい記事はありません。毎朝 6 時ごろに増えます(設定 › キャッチアップ で取得元を確かめられます)。'),
@@ -72,7 +72,7 @@ export function feedSheet(rerender) {
   let gsel = null; // null=設定どおり(全部 or 選んだジャンル)
   const body = el('div');
   const draw = () => {
-    const base = feed.unread(f.items, MK(), S().feed.genres);
+    const base = feed.unread(f.items, MK(), S().feed.genres, S().feed.off);
     const list = (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.keywordHits(x.t, S().feed.keywords) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
     const counts = feed.countByGenre(base);
     const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [

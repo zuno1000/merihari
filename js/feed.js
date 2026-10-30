@@ -6,6 +6,8 @@ export const N_CHOICES = [3, 5, 8];
 export const DEFAULT_N = 5;
 export const MAX_KEYWORDS = 20;
 export const MAX_GENRES = 12;
+export const MAX_OFF = 60;      // OFF にする取得元の数の上限
+const SID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 export const FRESH_DAYS = 14;   // 新しさの点はこの日数で 0 に
 export const W = Object.freeze({ hit: 3.0, fresh: 2.0 });
 export const HIT_SHARE = 0.6; // 気になる語に当たる記事が先頭を占めるのは n の 6 割まで(残りはジャンルを回す: 語が広すぎても 1 つのジャンルに埋まらない)
@@ -15,35 +17,46 @@ const GID_RE = /^[A-Za-z0-9_-]{1,20}$/;
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8) } */
+/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35) } */
 export function normalizeFeed(raw) {
   const o = isObj(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GID_RE.test(g)))].slice(0, MAX_GENRES);
   const keywords = [...new Set((Array.isArray(o.keywords) ? o.keywords : typeof o.keywords === 'string' ? splitKeywords(o.keywords) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
   const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
-  return { enabled: o.enabled === true, genres, keywords, n };
+  const off = [...new Set((Array.isArray(o.off) ? o.off : []).filter((k) => typeof k === 'string' && SID_RE.test(k)))].slice(0, MAX_OFF);
+  return { enabled: o.enabled === true, genres, keywords, n, off };
 }
 /** 「lora, 6G、低遅延」のような 1 行 → 語の配列(読点・カンマ・空白で区切る) */
 export function splitKeywords(s) { return String(s || '').split(/[,、\s]+/).map((x) => x.trim()).filter(Boolean); }
 
-/** data/feed.json の形を検証: { updated, genres:[{id,name}], items:[{ id, g, t, u, s, d }] }。壊れた記事は捨てる(u は http(s) だけ) */
+/** data/feed.json の形を検証: { updated, genres:[{id,name}], sources:[{id,name,g}](v0.35), items:[{ id, g, k, t, u, s, d, a?, i?, tj?, aj? }] }。壊れた記事は捨てる(u は http(s) だけ) */
 export function parseFeed(j) {
   const genres = (Array.isArray(j?.genres) ? j.genres : []).filter((g) => isObj(g) && typeof g.id === 'string' && GID_RE.test(g.id)).map((g) => ({ id: g.id, name: typeof g.name === 'string' && g.name.trim() ? g.name.trim().slice(0, 20) : g.id }));
   const gids = new Set(genres.map((g) => g.id));
+  const sources = (Array.isArray(j?.sources) ? j.sources : []).filter((x) => isObj(x) && typeof x.id === 'string' && SID_RE.test(x.id) && typeof x.g === 'string' && gids.has(x.g)).map((x) => ({ id: x.id, name: typeof x.name === 'string' && x.name.trim() ? x.name.trim().slice(0, 40) : x.id, g: x.g }));
   const seen = new Set();
   const items = (Array.isArray(j?.items) ? j.items : []).filter((x) => isObj(x) && typeof x.id === 'string' && ID_RE.test(x.id) && typeof x.g === 'string' && gids.has(x.g) && typeof x.t === 'string' && x.t.trim() && typeof x.u === 'string' && /^https?:\/\/\S+$/.test(x.u) && !seen.has(x.id) && seen.add(x.id))
-    .map((x) => ({ id: x.id, g: x.g, t: x.t.trim().slice(0, 200), u: x.u.slice(0, 500), s: typeof x.s === 'string' ? x.s.slice(0, 40) : '', d: isDate(x.d) ? x.d : null }));
-  return { updated: typeof j?.updated === 'string' ? j.updated.slice(0, 40) : null, genres, items };
+    .map((x) => ({ id: x.id, g: x.g, k: typeof x.k === 'string' && SID_RE.test(x.k) ? x.k : '', t: x.t.trim().slice(0, 200), u: x.u.slice(0, 500), s: typeof x.s === 'string' ? x.s.slice(0, 40) : '', d: isDate(x.d) ? x.d : null,
+      a: typeof x.a === 'string' && x.a.trim() ? x.a.trim().slice(0, 300) : null, i: typeof x.i === 'string' && /^https:\/\/\S+$/.test(x.i) ? x.i.slice(0, 500) : null, tj: typeof x.tj === 'string' && x.tj.trim() ? x.tj.trim().slice(0, 200) : null, aj: typeof x.aj === 'string' && x.aj.trim() ? x.aj.trim().slice(0, 300) : null }));
+  return { updated: typeof j?.updated === 'string' ? j.updated.slice(0, 40) : null, genres, sources, items };
 }
 export const genreName = (feed, gid) => feed?.genres?.find((g) => g.id === gid)?.name || gid;
+/** 取得元の一覧(件数つき・v0.35): feed.sources の順。sources の無い古い一覧なら記事から拾う */
+export function sourcesOf(feed) {
+  const n = {}; for (const x of feed?.items || []) if (x.k) n[x.k] = (n[x.k] || 0) + 1;
+  const list = (feed?.sources || []).map((s) => ({ ...s, n: n[s.id] || 0 }));
+  if (!list.length) for (const x of feed?.items || []) if (x.k && !list.some((s) => s.id === x.k)) list.push({ id: x.k, name: x.s || x.k, g: x.g, n: n[x.k] });
+  return list;
+}
 
 /** 既読 / 読まない の印(data.feed・消したものは除く) */
 export function activeMarks(marks) { const o = {}; for (const [k, v] of Object.entries(marks || {})) if (v && !v.deletedAt) o[k] = v; return o; }
-/** まだ印の無い記事(設定のジャンルで絞る・空なら全部) */
-export function unread(items, marks, genres = []) {
+/** まだ印の無い記事(設定のジャンルで絞る・空なら全部。v0.35: OFF の取得元は出さない) */
+export function unread(items, marks, genres = [], off = []) {
   const m = activeMarks(marks);
   const gs = new Set(genres || []);
-  return (items || []).filter((x) => !m[x.id] && (!gs.size || gs.has(x.g)));
+  const os = new Set(off || []);
+  return (items || []).filter((x) => !m[x.id] && (!gs.size || gs.has(x.g)) && !(x.k && os.has(x.k)));
 }
 /** 題名に含まれる気になる語の数(大文字小文字は区別しない) */
 export function keywordHits(title, keywords) {
@@ -68,7 +81,7 @@ export function score(x, { today, keywords = [] } = {}) {
 export function pick(feed, marks, settings, { today, n = null } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
-  const list = unread(feed?.items, marks, s.genres).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: keywordHits(x.t, s.keywords) > 0 }));
+  const list = unread(feed?.items, marks, s.genres, s.off).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: keywordHits(x.t, s.keywords) > 0 }));
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
   const hits = list.filter((x) => x.hit).sort(byDate);
   const out = hits.slice(0, hitCap(want));

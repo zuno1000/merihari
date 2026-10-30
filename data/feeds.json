@@ -1,34 +1,77 @@
 {
   "_help": [
-    "merihari ─ キャッチアップ(F17)の取得元。このファイルを編集して push すると(GitHub の Web エディタで OK)、GitHub Actions(update-feed)が data/feed.json を作り直す(毎朝 6:00 JST にも)。",
-    "genres[]: id(英数・変えない: 既読の印と設定のジャンル選択はこの id で持つ)・name(画面に出す名前)・sources[]。",
-    "sources[]: name(画面に出す出どころ・40 字まで)・url(RSS 2.0 / Atom / arXiv API の URL・https)・max(その取得元から取る最大の件数・既定 20)。",
-    "arXiv の分野は cat:cs.NI のところを変える(例: cs.CR 暗号とセキュリティ / cs.DC 分散・並列 / cs.LG 機械学習 / cs.AI / cs.SE / cs.HC / eess.SP)。複数は cat:cs.NI+OR+cat:cs.DC。",
+    "merihari ─ キャッチアップ(F17)の取得元のカタログ。このファイルを編集して push すると(GitHub の Web エディタで OK)、GitHub Actions(update-feed)が data/feed.json を作り直す(毎朝 6:00 JST にも)。",
+    "アプリの設定 › キャッチアップ で、ここにあるジャンルと取得元を ON / OFF できる(全部 ON が既定)。ここを編集するのは、新しい取得元や自分だけの URL を足したいとき。",
+    "genres[]: id(英数・変えない: 既読の印と設定はこの id で持つ)・name(画面に出す名前)・sources[]。",
+    "sources[]: id(英数・変えない: 設定の ON / OFF はこの id で持つ)・name(画面に出す出どころ・40 字まで)・url(RSS 2.0 / RSS 1.0 / Atom / arXiv API の URL・https)・max(その取得元から取る最大の件数・既定 20)。",
+    "arXiv は abs:(要旨)や ti:(題名)の検索か cat:(分野)で指定する。例: abs:%22digital+twin%22 / cat:cs.RO / 複数は +OR+。空白は +、引用符は %22。分野の一覧: https://arxiv.org/category_taxonomy",
     "days: この日数より古い記事は入れない。perGenre: ジャンルごとに残す最大の件数(新しい順)。"
   ],
   "days": 14,
-  "perGenre": 40,
+  "perGenre": 60,
   "genres": [
     {
       "id": "research",
       "name": "研究",
       "sources": [
-        { "name": "arXiv cs.NI", "url": "https://export.arxiv.org/api/query?search_query=cat:cs.NI&sortBy=submittedDate&sortOrder=descending&max_results=30", "max": 30 }
+        { "id": "arxiv-physai", "name": "arXiv Physical AI / VLA", "url": "https://export.arxiv.org/api/query?search_query=abs:%22vision-language-action%22+OR+abs:%22physical+AI%22+OR+abs:%22embodied+AI%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
+        { "id": "arxiv-dtwin", "name": "arXiv デジタルツイン", "url": "https://export.arxiv.org/api/query?search_query=abs:%22digital+twin%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
+        { "id": "arxiv-bim", "name": "arXiv BIM / Scan-to-BIM", "url": "https://export.arxiv.org/api/query?search_query=abs:BIM+OR+abs:%22scan-to-BIM%22+OR+abs:%22building+information+modeling%22+OR+abs:%22building+information+model%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
+        { "id": "arxiv-infra", "name": "arXiv インフラ管理・点検", "url": "https://export.arxiv.org/api/query?search_query=abs:%22structural+health+monitoring%22+OR+abs:%22infrastructure+inspection%22+OR+abs:%22infrastructure+maintenance%22+OR+abs:%22bridge+inspection%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
+        { "id": "arxiv-cs-ro", "name": "arXiv cs.RO(ロボティクス)", "url": "https://export.arxiv.org/api/query?search_query=cat:cs.RO&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 }
+      ]
+    },
+    {
+      "id": "aec",
+      "name": "建築DX",
+      "sources": [
+        { "id": "kensetsunews", "name": "建設通信新聞", "url": "https://www.kensetsunews.com/feed", "max": 20 },
+        { "id": "aecmag", "name": "AEC Magazine", "url": "https://www.aecmag.com/feed/", "max": 20 },
+        { "id": "xtech-it", "name": "日経クロステック IT", "url": "https://xtech.nikkei.com/rss/xtech-it.rdf", "max": 20 }
       ]
     },
     {
       "id": "tech",
       "name": "技術",
       "sources": [
-        { "name": "Publickey", "url": "https://www.publickey1.jp/atom.xml", "max": 20 },
-        { "name": "Hacker News", "url": "https://hnrss.org/frontpage", "max": 20 }
+        { "id": "publickey", "name": "Publickey", "url": "https://www.publickey1.jp/atom.xml", "max": 20 },
+        { "id": "hn", "name": "Hacker News", "url": "https://hnrss.org/frontpage", "max": 20 },
+        { "id": "hatena-it", "name": "はてブ テクノロジー", "url": "https://b.hatena.ne.jp/hotentry/it.rss", "max": 20 },
+        { "id": "qiita", "name": "Qiita トレンド", "url": "https://qiita.com/popular-items/feed", "max": 20 },
+        { "id": "itmedia", "name": "ITmedia NEWS", "url": "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml", "max": 20 },
+        { "id": "arstechnica", "name": "Ars Technica", "url": "https://feeds.arstechnica.com/arstechnica/index", "max": 20 },
+        { "id": "theverge", "name": "The Verge", "url": "https://www.theverge.com/rss/index.xml", "max": 20 }
+      ]
+    },
+    {
+      "id": "gadget",
+      "name": "ガジェット",
+      "sources": [
+        { "id": "gizmodo-jp", "name": "ギズモード・ジャパン", "url": "https://www.gizmodo.jp/index.xml", "max": 20 },
+        { "id": "gizmodo", "name": "Gizmodo", "url": "https://gizmodo.com/feed", "max": 20 },
+        { "id": "engadget", "name": "Engadget", "url": "https://www.engadget.com/rss.xml", "max": 20 },
+        { "id": "gigazine", "name": "GIGAZINE", "url": "https://gigazine.net/news/rss_2.0/", "max": 20 },
+        { "id": "wired-jp", "name": "WIRED.jp", "url": "https://wired.jp/feed/rss", "max": 20 },
+        { "id": "lifehacker-jp", "name": "ライフハッカー", "url": "https://www.lifehacker.jp/feed/index.xml", "max": 20 }
       ]
     },
     {
       "id": "hobby",
       "name": "趣味",
       "sources": [
-        { "name": "GIGAZINE", "url": "https://gigazine.net/news/rss_2.0/", "max": 20 }
+        { "id": "4gamer", "name": "4Gamer", "url": "https://www.4gamer.net/rss/index.xml", "max": 20 },
+        { "id": "natalie-music", "name": "音楽ナタリー", "url": "https://natalie.mu/music/feed/news", "max": 20 },
+        { "id": "natalie-eiga", "name": "映画ナタリー", "url": "https://natalie.mu/eiga/feed/news", "max": 20 },
+        { "id": "hatena-fun", "name": "はてブ おもしろ", "url": "https://b.hatena.ne.jp/hotentry/fun.rss", "max": 20 }
+      ]
+    },
+    {
+      "id": "food",
+      "name": "料理",
+      "sources": [
+        { "id": "orangepage", "name": "オレンジページ", "url": "https://www.orangepage.net/rss", "max": 20 },
+        { "id": "cookien", "name": "つくおき", "url": "https://cookien.com/feed/", "max": 20 },
+        { "id": "hatena-life", "name": "はてブ 暮らし", "url": "https://b.hatena.ne.jp/hotentry/life.rss", "max": 20 }
       ]
     }
   ]

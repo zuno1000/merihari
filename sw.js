@@ -7,7 +7,7 @@
 // v0.25: ①ネットワークを待つのは最長 2 秒(超えたら手元のキャッシュから出す・取れたものは裏で入れ替える)。
 //        気合(F13)の「開いてすぐ押す」のため、電波の弱いところで起動が数秒止まらないように。
 //        ②index.html へのフォールバックは画面の遷移(navigate)だけ(レビュー A-3: JS/CSS に HTML が返って構文エラーになっていた)。
-const CACHE = 'merihari-v0.34.0';
+const CACHE = 'merihari-v0.35.0';
 const NET_TIMEOUT_MS = 2000;
 const ASSETS = [
   './', './index.html', './css/app.css', './manifest.webmanifest', './icon.svg', './icon-512.png', './news.json',
