@@ -17,14 +17,27 @@ const GID_RE = /^[A-Za-z0-9_-]{1,20}$/;
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35), img(記事の画像を出す・v0.36・既定 true) } */
+/** 設定 settings.feed = { enabled, genres[](空=全部), kw{ '*':[共通の語], <genreId>:[そのジャンルの語] }(v0.39・旧 keywords[] は '*' へ), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35), img(記事の画像を出す・v0.36・既定 true) } */
+export const MAX_KW_GROUPS = 14;
+const cleanWords = (v) => [...new Set((Array.isArray(v) ? v : typeof v === 'string' ? splitKeywords(v) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
 export function normalizeFeed(raw) {
   const o = isObj(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GID_RE.test(g)))].slice(0, MAX_GENRES);
-  const keywords = [...new Set((Array.isArray(o.keywords) ? o.keywords : typeof o.keywords === 'string' ? splitKeywords(o.keywords) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
+  const kw = {};
+  if (isObj(o.kw)) for (const [g, v] of Object.entries(o.kw).slice(0, MAX_KW_GROUPS)) { if (g === '*' || GID_RE.test(g)) { const w = cleanWords(v); if (w.length) kw[g] = w; } }
+  if (!isObj(o.kw) && o.keywords != null) { const w = cleanWords(o.keywords); if (w.length) kw['*'] = w; } // v0.38 以前の keywords[] は共通の語へ
   const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
   const off = [...new Set((Array.isArray(o.off) ? o.off : []).filter((k) => typeof k === 'string' && SID_RE.test(k)))].slice(0, MAX_OFF);
-  return { enabled: o.enabled === true, genres, keywords, n, off, img: o.img !== false };
+  return { enabled: o.enabled === true, genres, kw, n, off, img: o.img !== false };
+}
+/** そのジャンルの記事に効く語 = 共通('*')+ジャンルの語(v0.39)。genre が無ければ共通だけ */
+export function wordsFor(settings, genre = null) { const s = isObj(settings) && isObj(settings.kw) ? settings : normalizeFeed(settings); return [...new Set([...(s.kw['*'] || []), ...(genre && s.kw[genre] ? s.kw[genre] : [])])]; }
+/** 全部の語(重複なし) */
+export function allWords(settings) { const s = isObj(settings) && isObj(settings.kw) ? settings : normalizeFeed(settings); return [...new Set(Object.values(s.kw).flat())]; }
+/** 語を足す / 消す(純関数・group は '*' か genre id)。戻り値は新しい kw */
+export function addWords(kw, group, words) { const o = { ...(isObj(kw) ? kw : {}) }; const w = cleanWords([...(o[group] || []), ...(Array.isArray(words) ? words : splitKeywords(words))]); if (w.length) o[group] = w; else delete o[group]; return o; }
+export function removeWord(kw, word, group = null) { const o = { ...(isObj(kw) ? kw : {}) }; for (const g of Object.keys(o)) { if (group && g !== group) continue; const w = o[g].filter((x) => x !== word); if (w.length) o[g] = w; else delete o[g]; } return o; }
+export function groupOfWord(kw, word, prefer = null) { if (prefer && kw?.[prefer]?.includes(word)) return prefer; for (const g of Object.keys(kw || {})) if (g !== '*' && kw[g].includes(word)) return g; return kw?.['*']?.includes(word) ? '*' : null;
 }
 /** 「lora, 6G、低遅延」のような 1 行 → 語の配列(読点・カンマ・空白で区切る) */
 export function splitKeywords(s) { return String(s || '').split(/[,、\s]+/).map((x) => x.trim()).filter(Boolean); }
@@ -83,7 +96,7 @@ export function score(x, { today, keywords = [] } = {}) {
 export function pick(feed, marks, settings, { today, n = null, genre = null, words = [] } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
-  const list = filterItems(unread(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: hitsOf(x, s.keywords) > 0 }));
+  const list = filterItems(unread(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => { const ks = wordsFor(s, x.g); return { ...x, pt: score(x, { today, keywords: ks }), hit: hitsOf(x, ks) > 0 }; }); // v0.39: 語はそのジャンルのもの+共通
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
   const hits = list.filter((x) => x.hit).sort(byDate);
   const out = hits.slice(0, hitCap(want));
@@ -119,6 +132,32 @@ export const titleOf = (x) => (x?.tj || x?.t || '');
 export const leadOf = (x) => (x?.aj || null);
 /** 日本語化の進み具合(v0.37): 英語の題名のうち日本語になった数 */
 export function jaStats(feed) { const items = feed?.items || []; const en = items.filter((x) => x.tj !== '' && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(x.t)); return { en: en.length, ja: en.filter((x) => x.tj).length }; }
+// ---- 取得元のカタログ(data/feeds.json)をアプリから足す(v0.39・純関数。GitHub API の呼び出しは ui-feed.js) ----
+export const GITHUB_REPO = 'zuno1000/merihari';
+export const FEEDS_PATH = 'data/feeds.json';
+export const feedsEditUrl = () => `https://github.com/${GITHUB_REPO}/edit/main/${FEEDS_PATH}`;
+/** 取得元 / ジャンルの id(英数と - だけ・40 字)。日本語などは base36 の時刻で */
+export function slugId(name, now = Date.now()) { const s = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); return s.length >= 2 ? s : `x${now.toString(36)}`; }
+/** arXiv の検索語(読点 / カンマ区切り)→ API の URL(要旨の検索・OR・新しい順・20 件) */
+export function arxivUrl(terms, max = 20) { const ts = String(terms || '').split(/[,、]+/).map((t) => t.trim()).filter(Boolean).map((t) => (/\s/.test(t) ? `abs:%22${encodeURIComponent(t).replace(/%20/g, '+')}%22` : `abs:${encodeURIComponent(t)}`)); return ts.length ? `https://export.arxiv.org/api/query?search_query=${ts.join('+OR+')}&sortBy=submittedDate&sortOrder=descending&max_results=${max}` : ''; }
+/** feeds.json に取得元を足す(純関数): { genreId, genreName, name, url, max, days }。ジャンルが無ければ作る。同じ URL は足さない。戻り値 { cfg, added, sourceId, genreId } */
+export function addSourceToCatalog(cfg, { genreId = null, genreName = '', name, url, max = 20, days = null }, now = Date.now()) {
+  const c = isObj(cfg) ? JSON.parse(JSON.stringify(cfg)) : {};
+  if (!Array.isArray(c.genres)) c.genres = [];
+  if (typeof url !== 'string' || !/^https:\/\/\S+$/.test(url) || !String(name || '').trim()) return { cfg: c, added: false, reason: 'URL は https で、名前も要ります' };
+  if (c.genres.some((g) => (g.sources || []).some((s) => s.url === url))) return { cfg: c, added: false, reason: 'その URL はもうあります' };
+  let g = genreId ? c.genres.find((x) => x.id === genreId) : null;
+  if (!g) { const id = genreId && GID_RE.test(genreId) ? genreId : slugId(genreName, now).slice(0, 20); g = { id, name: String(genreName || id).slice(0, 20), sources: [] }; c.genres.push(g); }
+  if (!Array.isArray(g.sources)) g.sources = [];
+  let sid = slugId(name, now); if (g.sources.some((s) => s.id === sid) || c.genres.some((x) => (x.sources || []).some((s) => s.id === sid))) sid = `${sid.slice(0, 30)}-${now.toString(36)}`;
+  const src = { id: sid, name: String(name).trim().slice(0, 40), url: url.slice(0, 500), max: Math.max(1, Math.min(50, +max || 20)) };
+  if (days) src.days = Math.max(1, Math.min(365, +days));
+  g.sources.push(src);
+  return { cfg: c, added: true, sourceId: sid, genreId: g.id };
+}
+/** UTF-8 ↔ base64(GitHub の contents API 用) */
+export function b64enc(s) { const b = new TextEncoder().encode(s); let o = ''; for (const x of b) o += String.fromCharCode(x); return btoa(o); }
+export function b64dec(b64) { const s = atob(String(b64 || '').replace(/\s/g, '')); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return new TextDecoder().decode(b); }
 export function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 /** 開いた記事(新しい順・n 件) */
 export function recentMarks(marks, n = 20, state = 'open') { return Object.values(activeMarks(marks)).filter((m) => m.state === state).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, n); }

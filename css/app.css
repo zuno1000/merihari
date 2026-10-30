@@ -1126,3 +1126,9 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-main{min-width:0;max-width:100%}
 .feed-main > *{min-width:0;max-width:100%}
 .feed-card-open,.feed-card .feed-main{width:100%}
+/* v0.39: チップの横スクロールは横だけ(日付のスワイプと混ざらない)・ジャンルごとの語 */
+.feed-gchips,.feed-kchips{touch-action:pan-x}
+.feed-box{touch-action:pan-y}
+.kwgroup{margin:4px 0 8px}
+.kwgroup .row.field{margin-top:6px}
+.kwbox{margin:6px 0 10px}

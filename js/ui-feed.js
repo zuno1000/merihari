@@ -47,7 +47,7 @@ export const boxOpen = () => L().feedOpen === true;
 export function setBoxOpen(v) { L().feedOpen = !!v; store.saveLocal(); }
 export const boxGenre = () => (typeof L().feedGenre === 'string' && L().feedGenre ? L().feedGenre : null);
 export function setBoxGenre(g) { L().feedGenre = g || null; store.saveLocal(); }
-export const boxWords = () => (Array.isArray(L().feedWords) ? L().feedWords.filter((w) => (S().feed.keywords || []).includes(w)) : []);
+export const boxWords = () => (Array.isArray(L().feedWords) ? L().feedWords.filter((w) => feed.allWords(S().feed).includes(w)) : []);
 export function setBoxWords(ws) { L().feedWords = ws; store.saveLocal(); }
 
 const whenOf = (x) => { const ago = feed.daysAgo(x.d, dateKey()); return x.d ? (ago === 0 ? 'きょう' : ago === 1 ? 'きのう' : fmtMD(x.d)) : ''; };
@@ -88,22 +88,29 @@ export function savedRow(m, f, rerender) {
   return el('div.feed-row', [a, starBtn(x, rerender)]);
 }
 
-/** 気になる語を足すシート(ホームの ＋・v0.38) */
-export function addWordSheet(rerender) {
+/** 気になる語を足すシート(ホームの ＋・v0.38)。v0.39: 宛先(共通 / ジャンル)を選べる。既定はホームで選んでいるジャンル(すべて なら共通) */
+export function addWordSheet(rerender, { group = null } = {}) {
+  const f = feed.feedNow();
   const inp = el('input.text', { type: 'text', placeholder: '例: VLA, BIM', maxlength: 60, autocomplete: 'off', 'aria-label': '気になる語' });
-  const add = (close) => { const ks = feed.splitKeywords(inp.value); if (!ks.length) { inp.focus(); return; } S().feed = feed.normalizeFeed({ ...S().feed, keywords: [...S().feed.keywords, ...ks] }); store.touchSettings(); close(); toast(`「${ks.join('・')}」を気になる語に`); if (rerender) rerender(); };
+  let target = group && group !== '*' ? group : '*';
+  const sel = el('select', { 'aria-label': 'どのジャンルの語にするか' }, [el('option', { value: '*', selected: target === '*' }, '共通(どのジャンルにも)'), ...(f?.genres || []).map((g) => el('option', { value: g.id, selected: target === g.id }, `${g.name} の語`))]);
+  sel.addEventListener('change', () => { target = sel.value || '*'; });
+  const add = (close) => { const ks = feed.splitKeywords(inp.value); if (!ks.length) { inp.focus(); return; } S().feed = feed.normalizeFeed({ ...S().feed, kw: feed.addWords(S().feed.kw, target, ks) }); store.touchSettings(); close(); toast(`「${ks.join('・')}」を${target === '*' ? '共通' : feed.genreName(f, target)}の語に`); if (rerender) rerender(); };
   sheet((close) => [
     el('h2', '気になる語を足す'),
-    el('p.muted.small', '題名や要旨にこの語が入る記事を先頭に出します。読点・カンマで複数も。'),
+    el('p.muted.small', '題名や要旨にこの語が入る記事を先頭に出します。読点・カンマで複数も。ジャンルの語はそのジャンルの記事にだけ効きます(趣味に VLA は効かない)。'),
+    el('div.row.field', [el('span.label', '宛先'), sel]),
     el('div.row', inp),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => add(close) }, '追加')]),
   ]);
   setTimeout(() => inp.focus(), 50);
 }
-/** 気になる語を消す(設定からも・確認つき) */
-function removeWord(w, rerender) {
-  confirmSheet(`「${w}」を気になる語から消しますか?`, '設定 › キャッチアップ の一覧からも消えます(また足せます)。', '消す', () => {
-    S().feed = feed.normalizeFeed({ ...S().feed, keywords: S().feed.keywords.filter((x) => x !== w) }); store.touchSettings();
+/** 気になる語を消す(設定からも・確認つき)。v0.39: いま見ているジャンルの語なら そのジャンルから、共通の語なら共通から */
+function removeWord(w, rerender, group = null) {
+  const f = feed.feedNow();
+  const g = feed.groupOfWord(S().feed.kw, w, group);
+  confirmSheet(`「${w}」を${g === '*' || !g ? '共通' : feed.genreName(f, g)}の気になる語から消しますか?`, '設定 › キャッチアップ の一覧からも消えます(また足せます)。', '消す', () => {
+    S().feed = feed.normalizeFeed({ ...S().feed, kw: feed.removeWord(S().feed.kw, w, g) }); store.touchSettings();
     setBoxWords(boxWords().filter((x) => x !== w));
     toast(`「${w}」を消しました`); if (rerender) rerender();
   }, true);
@@ -117,14 +124,14 @@ function filterBars(f, rerender) {
     el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 == null ? ' on' : ''}`, 'aria-pressed': g0 == null ? 'true' : 'false', onclick: () => { setBoxGenre(null); rerender(); } }, `すべて ${base.length}`),
     ...f.genres.filter((g) => counts[g.id] || g.id === g0).map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${g0 === g.id ? ' on' : ''}`, 'aria-pressed': g0 === g.id ? 'true' : 'false', onclick: () => { setBoxGenre(g0 === g.id ? null : g.id); rerender(); } }, `${g.name} ${counts[g.id] || 0}`)),
   ]);
-  const words = S().feed.keywords || [];
-  const sel = boxWords();
+  const words = feed.wordsFor(S().feed, g0); // v0.39: ジャンルを選んでいればそのジャンルの語+共通、すべて なら共通の語
+  const sel = boxWords().filter((w) => words.includes(w));
   const kchips = el('div.chips.small.feed-kchips', { role: 'group', 'aria-label': '気になる語' }, [
     ...words.map((w) => el('span.kwchip', { class: `kwchip${sel.includes(w) ? ' on' : ''}` }, [
       el('button.kwtap', { type: 'button', 'aria-pressed': sel.includes(w) ? 'true' : 'false', 'aria-label': `${w} で絞る`, onclick: () => { setBoxWords(sel.includes(w) ? sel.filter((x) => x !== w) : [...sel, w]); rerender(); } }, w),
-      el('button.kwdel', { type: 'button', 'aria-label': `${w} を消す`, title: '消す', onclick: () => removeWord(w, rerender) }, '×'),
+      el('button.kwdel', { type: 'button', 'aria-label': `${w} を消す`, title: '消す', onclick: () => removeWord(w, rerender, g0) }, '×'),
     ])),
-    el('button.chip.sm2.kwadd', { type: 'button', 'aria-label': '気になる語を足す', onclick: () => addWordSheet(rerender) }, '＋ 語'),
+    el('button.chip.sm2.kwadd', { type: 'button', 'aria-label': '気になる語を足す', onclick: () => addWordSheet(rerender, { group: g0 }) }, g0 ? `＋ ${feed.genreName(f, g0)}の語` : '＋ 共通の語'),
   ]);
   return { gchips, kchips, base, counts };
 }
@@ -162,7 +169,7 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
   const draw = () => {
     const base = feed.filterItems(feed.unread(f.items, MK(), S().feed.genres, S().feed.off), { words });
     const savedList = feed.saved(MK());
-    const list = gsel === '★' ? [] : (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.hitsOf(x, S().feed.keywords) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
+    const list = gsel === '★' ? [] : (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
     const counts = feed.countByGenre(base);
     const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [
       el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${base.length}`),
@@ -181,4 +188,78 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
   };
   draw();
   sheet(() => [el('h2', 'キャッチアップ'), el('p.muted.small', `${f.updated ? `一覧は ${f.updated.slice(0, 10)} 時点。` : ''}タップで開きます(開いた記事は次から出ません)。☆ でブックマーク・× は読まない。`), body]);
+}
+
+// ---- 取得元をアプリから足す(v0.39・F17-1): GitHub の contents API で data/feeds.json を書き換える(トークンを貼った人だけ・端末内 local.ghToken・同期しない)。無ければ JSON をコピーして GitHub の編集ページを開く ----
+export const ghToken = () => (typeof L().ghToken === 'string' ? L().ghToken.trim() : '');
+export function setGhToken(t) { L().ghToken = String(t || '').trim().slice(0, 200); store.saveLocal(); }
+const GH = 'https://api.github.com';
+async function ghGet(path, token) {
+  const r = await fetch(`${GH}/repos/${feed.GITHUB_REPO}/contents/${path}?ref=main`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+  if (!r.ok) throw new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 404 ? 'リポジトリかファイルが見つかりません(トークンの Repository access を確かめてください)' : `GitHub ${r.status}`);
+  const j = await r.json();
+  return { sha: j.sha, text: feed.b64dec(j.content) };
+}
+async function ghPut(path, token, text, sha, message) {
+  const r = await fetch(`${GH}/repos/${feed.GITHUB_REPO}/contents/${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify({ message, content: feed.b64enc(text), sha, branch: 'main' }) });
+  if (!r.ok) throw new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 403 ? '書き込みの権限がありません(Contents: Read and write)' : r.status === 409 ? '同時に変更があったので もう一度' : `GitHub ${r.status}`);
+  return r.json();
+}
+/** 取得元を足す: 名前・URL(か arXiv の検索語)・ジャンル(既存か新しく)・件数 → トークンがあれば GitHub に commit(数分で一覧が作り直される)、無ければ JSON をコピーして GitHub の編集ページを開く */
+export function addSourceSheet(rerender, { fetcher = null } = {}) {
+  const f = feed.feedNow();
+  const name = el('input.text', { type: 'text', placeholder: '出どころの名前(例: 日経クロステック 建築)', maxlength: 40, autocomplete: 'off', 'aria-label': '名前' });
+  const url = el('input.text', { type: 'text', placeholder: 'RSS / Atom の URL(https://…)か arXiv の検索語(例: scan-to-BIM, point cloud)', maxlength: 500, autocomplete: 'off', inputmode: 'url', 'aria-label': 'URL か検索語' });
+  let gid = f?.genres?.[0]?.id || '';
+  const gsel = el('select', { 'aria-label': 'ジャンル' }, [...(f?.genres || []).map((g) => el('option', { value: g.id }, g.name)), el('option', { value: '' }, '新しいジャンル…')]);
+  const gname = el('input.text', { type: 'text', placeholder: '新しいジャンルの名前(例: 料理)', maxlength: 20, autocomplete: 'off', 'aria-label': '新しいジャンルの名前', hidden: true });
+  gsel.addEventListener('change', () => { gid = gsel.value; gname.hidden = !!gid; });
+  let max = 20;
+  const nsel = el('select', { 'aria-label': '件数' }, [10, 20, 30].map((n) => el('option', { value: String(n), selected: n === 20 }, `${n} 件まで`)));
+  nsel.addEventListener('change', () => { max = +nsel.value || 20; });
+  const tok = el('input.text', { type: 'password', value: ghToken(), placeholder: 'github_pat_…(任意・端末内に保存)', maxlength: 200, autocomplete: 'off', 'aria-label': 'GitHub のトークン' });
+  const status = el('p.muted.small', '');
+  const build = () => {
+    const u0 = url.value.trim();
+    const u = /^https?:\/\//i.test(u0) ? u0 : feed.arxivUrl(u0, max);
+    if (!name.value.trim() || !u) { toast('名前と URL(か検索語)を入れてください'); return null; }
+    if (!/^https:\/\//.test(u)) { toast('URL は https で始めてください'); return null; }
+    return { genreId: gid || null, genreName: gid ? '' : gname.value.trim() || '新しいジャンル', name: name.value.trim(), url: u, max };
+  };
+  const viaGithub = async (close) => {
+    const req = build(); if (!req) return;
+    const token = tok.value.trim(); setGhToken(token);
+    if (!token) { toast('トークンが無いときは「JSON をコピー」から'); return; }
+    status.textContent = 'GitHub から feeds.json を読んでいます…';
+    try {
+      const doFetch = fetcher || ((fn) => fn());
+      const got = await doFetch(() => ghGet(feed.FEEDS_PATH, token));
+      const cfg = JSON.parse(got.text);
+      const r = feed.addSourceToCatalog(cfg, req);
+      if (!r.added) { status.textContent = r.reason || '足せませんでした'; return; }
+      status.textContent = '保存しています…';
+      await doFetch(() => ghPut(feed.FEEDS_PATH, token, JSON.stringify(r.cfg, null, 2) + '\n', got.sha, `feeds: 取得元を追加「${req.name}」(アプリから)`));
+      close(); toast('GitHub に保存しました。数分で記事の一覧が作り直され、次に開いたときから出ます'); if (rerender) rerender();
+    } catch (e) { status.textContent = `できませんでした: ${e.message}`; }
+  };
+  const viaCopy = async () => {
+    const req = build(); if (!req) return;
+    const snippet = JSON.stringify({ id: feed.slugId(req.name), name: req.name, url: req.url, max: req.max }, null, 2);
+    try { await navigator.clipboard.writeText(snippet); toast('取得元の JSON をコピーしました。開いた GitHub の編集ページで、ジャンルの sources[] に貼って保存してください'); } catch { status.textContent = `コピーできなかったので、これを貼ってください: ${snippet}`; }
+    window.open(feed.feedsEditUrl(), '_blank', 'noopener');
+  };
+  sheet((close) => [
+    el('h2', '取得元を足す'),
+    el('p.muted.small', 'RSS / Atom の URL か、arXiv の検索語(読点 / カンマで複数・要旨の検索・OR)を足します。GitHub のトークンを貼れば アプリから直接 data/feeds.json に保存でき(数分で反映)、無ければ JSON をコピーして GitHub の編集ページで貼ります。'),
+    el('div.row.field', [el('span.label', '名前'), name]),
+    el('div.row.field', [el('span.label', 'URL'), url]),
+    el('div.row.field', [el('span.label', 'ジャンル'), gsel]),
+    el('div.row.field', gname),
+    el('div.row.field', [el('span.label', '件数'), nsel]),
+    el('h3.help-h', 'GitHub のトークン(任意)'),
+    el('div.row.field', tok),
+    el('p.muted.small', 'GitHub › Settings › Developer settings › Fine-grained tokens で、Repository access をこのリポジトリだけ、Permissions を Contents: Read and write にして作ります(有効期限つきがおすすめ)。トークンはこの端末の中にだけ置き、同期も送信もしません(使うのは api.github.com への保存だけ)。'),
+    status,
+    el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.ghost', { type: 'button', onclick: viaCopy }, 'JSON をコピー'), el('button.btn.primary.grow', { type: 'button', onclick: () => viaGithub(close) }, 'GitHub に保存')]),
+  ]);
 }

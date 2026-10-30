@@ -409,7 +409,7 @@ export function renderNow(view, ctx, dateArg = null) {
     right: [weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左
   });
   let swipe = null;
-  const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => {
+  const home = el('section.home', { ontouchstart: (ev) => { if (ev.target.closest && ev.target.closest('.feed-box')) { swipe = null; return; } const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => { // v0.39(実機 FB「チップをスクロールすると昨日に移る」): キャッチアップの中から始まった触りは日付を動かさない
     if (!swipe) return;
     const t = ev.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     swipe = null;

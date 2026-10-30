@@ -12,7 +12,7 @@ import * as weather from './weather.js';
 import * as bgm from './bgm.js';
 import { playBgm, rateChips, reopen } from './ui-bgm.js';
 import * as feed from './feed.js';
-import { feedSheet, unmark } from './ui-feed.js';
+import { feedSheet, unmark, addSourceSheet } from './ui-feed.js';
 
 const S = () => store.state.data.settings;
 const DAYS7 = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -57,7 +57,7 @@ const summary = {
   money() { const b = S().budget?.monthMax; const n = (S().moneyCategories || []).filter((c) => !c.archived).length; return `${b ? `予算 ¥${String(b).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/月` : '予算なし'}・カテゴリ${n}件`; },
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
   bgm() { const b = bgm.normalizeBgm(S().bgm); if (!b.enabled) return '使わない'; const n = Object.values(store.state.data.bgm || {}).filter((p) => !p.deletedAt).length; return `ホームに ♪・${b.genres.length ? b.genres.slice(0, 3).map((g) => bgm.GENRE_LABELS[g]).join(' / ') + (b.genres.length > 3 ? ' …' : '') : 'ジャンルはおまかせ'}${n ? `・聞いた ${n} 曲` : ''}`; },
-  feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${c.keywords.length ? `・気になる語 ${c.keywords.length}` : ''}${c.off.length ? `・取得元 ${c.off.length} つ OFF` : ''}`; },
+  feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); const nk = feed.allWords(c).length; return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${nk ? `・気になる語 ${nk}` : ''}${c.off.length ? `・取得元 ${c.off.length} つ OFF` : ''}`; },
   weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
 };
@@ -496,6 +496,7 @@ function sectionBgm(rerender) {
  * ホームの折りたたみ「キャッチアップ」に数件ずつ出す。ジャンル・気になる語・件数は設定(同期する・SCALAR_FIELDS の feed)。開いた / 読まない の印は data.feed(同期する)。取得元は data/feeds.json(リポジトリで編集)。
  */
 let feedSrcOpen = false; // 取得元の折りたたみの開閉(描き直しても保つ)
+let feedKwOpen = false; // ジャンルごとの語の折りたたみ(v0.39)
 function sectionFeed(rerender) {
   const s = S();
   s.feed = feed.normalizeFeed(s.feed);
@@ -508,18 +509,25 @@ function sectionFeed(rerender) {
   const js = feed.jaStats(f);
   const unreadN = f ? feed.unread(f.items, marks, c.genres, c.off).length : 0;
   const gchips = f ? el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, f.genres.map((g) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.genres.includes(g.id) ? ' on' : ''}`, 'aria-pressed': c.genres.includes(g.id) ? 'true' : 'false', onclick: () => { c.genres = c.genres.includes(g.id) ? c.genres.filter((x) => x !== g.id) : [...c.genres, g.id]; save(); rerender(); } }, `${g.name}(${f.items.filter((x) => x.g === g.id).length})`))) : el('p.muted.small', '記事の一覧を読み込んでいます…(オフラインなら次に開いたとき)');
-  // v0.35(FB「検索用語がパッチのようになっていない」): 語はチップ(タップで外す)+「追加」の欄(Enter でも)
-  const kwChips = el('div.chips.small.kwchips', { role: 'group', 'aria-label': '気になる語' }, c.keywords.length ? c.keywords.map((k) => el('button.chip.sm2.on', { type: 'button', 'aria-label': `${k} を外す`, title: '外す', onclick: () => { c.keywords = c.keywords.filter((x) => x !== k); save(); rerender(); } }, `${k} ×`)) : [el('span.muted.small', 'まだありません。')]);
-  const kwIn = el('input.text', { type: 'text', placeholder: '語を足す(例: VLA, BIM)', maxlength: 60, autocomplete: 'off', 'aria-label': '気になる語を足す' });
-  const addKw = () => { const ks = feed.splitKeywords(kwIn.value); if (!ks.length) { kwIn.focus(); return; } c.keywords = [...c.keywords, ...ks]; save(); rerender(); };
-  kwIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addKw(); } });
-  const kwAdd = el('button.btn.sm', { type: 'button', onclick: addKw }, '追加');
+  // v0.35(FB「検索用語がパッチのようになっていない」): 語はチップ(タップで外す)+「追加」の欄(Enter でも)。v0.39(FB「ジャンルごとにセットとして登録したい」): 共通の語と ジャンルごとの語
+  const kwGroup = (gid, label, { main = false } = {}) => {
+    const words = c.kw[gid] || [];
+    const chips = el('div.chips.small', { class: `chips small${main ? ' kwchips' : ' kwchips-g'}`, role: 'group', 'aria-label': `${label}の気になる語` }, words.length ? words.map((k) => el('button.chip.sm2.on', { type: 'button', 'aria-label': `${k} を外す`, title: '外す', onclick: () => { c.kw = feed.removeWord(c.kw, k, gid); save(); rerender(); } }, `${k} ×`)) : [el('span.muted.small', 'まだありません。')]);
+    const inp = el('input.text', { type: 'text', placeholder: main ? '語を足す(例: AI, 6G)' : `${label}の語(例: VLA, BIM)`, maxlength: 60, autocomplete: 'off', 'aria-label': main ? '気になる語を足す' : `${label}の語を足す` });
+    const add = () => { const ks = feed.splitKeywords(inp.value); if (!ks.length) { inp.focus(); return; } c.kw = feed.addWords(c.kw, gid, ks); save(); rerender(); };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    return el('div.kwgroup', [main ? null : el('h4.help-h', `${label}(${words.length})`), chips, el('div.row.field', [inp, el('button.btn.sm', { type: 'button', onclick: add }, '追加')])].filter(Boolean));
+  };
+  const kwCommon = kwGroup('*', '共通', { main: true });
+  const kwGenres = f ? el('details.rep-details.kwbox', { open: feedKwOpen || Object.keys(c.kw).some((g) => g !== '*') }, [el('summary.muted.small', `ジャンルごとの語(${Object.entries(c.kw).filter(([g]) => g !== '*').reduce((a, [, w]) => a + w.length, 0)})`), ...f.genres.map((g) => kwGroup(g.id, g.name))]) : null;
+  if (kwGenres) kwGenres.addEventListener('toggle', () => { feedKwOpen = kwGenres.open; });
   // v0.35: 取得元のカタログ(data/feeds.json にあるもの)をジャンルごとに ON / OFF(OFF の id を settings.feed.off に)
   const srcs = f ? feed.sourcesOf(f) : [];
   const srcBox = f ? el('details.rep-details.srcbox', { open: feedSrcOpen }, [
     el('summary.muted.small', `取得元の ON / OFF(${srcs.length}・${c.off.length ? `${c.off.length} つ OFF` : 'すべて ON'})`),
     ...f.genres.map((g) => { const ss = srcs.filter((x) => x.g === g.id); return ss.length ? el('div.srcgroup', [el('h4.help-h', g.name), el('div.chips.small', { role: 'group', 'aria-label': `${g.name} の取得元` }, ss.map((x) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.off.includes(x.id) ? '' : ' on'}`, 'aria-pressed': c.off.includes(x.id) ? 'false' : 'true', onclick: () => { c.off = c.off.includes(x.id) ? c.off.filter((y) => y !== x.id) : [...c.off, x.id]; save(); rerender(); } }, `${x.name}(${x.n})`)))]) : null; }).filter(Boolean),
-    el('p.muted.small', '取得元を増やす・自分の URL(RSS / Atom / arXiv の検索)を足すには、リポジトリの data/feeds.json を編集します(GitHub の Web エディタで OK・保存すると数分で反映)。'),
+    el('div.row', { style: { marginTop: '6px' } }, [el('button.btn.sm', { type: 'button', onclick: () => addSourceSheet(rerender) }, '＋ 取得元を足す')]),
+    el('p.muted.small', 'v0.39: 「＋ 取得元を足す」で RSS / Atom の URL か arXiv の検索語を足せます(GitHub のトークンを貼ればアプリから直接保存・無ければ JSON をコピーして GitHub の編集ページで貼る)。消すのは data/feeds.json の編集で(OFF にすれば出なくなります)。'),
   ]) : null;
   if (srcBox) srcBox.addEventListener('toggle', () => { feedSrcOpen = srcBox.open; });
   const nchips = el('div.chips.small', { role: 'group', 'aria-label': '1 回に出す件数' }, feed.N_CHOICES.map((n) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.n === n ? ' on' : ''}`, 'aria-pressed': c.n === n ? 'true' : 'false', onclick: () => { c.n = n; save(); rerender(); } }, `${n} 件`)));
@@ -533,10 +541,10 @@ function sectionFeed(rerender) {
     gchips,
     el('p.muted.small', '選んだジャンルだけ出します。何も選ばなければ全部から、ジャンルを順に回して混ぜます(1 つのジャンルに偏りません)。'),
     srcBox,
-    el('h3.help-h', '気になる語'),
-    kwChips,
-    el('div.row.field', [kwIn, kwAdd]),
-    el('p.muted.small', '題名にこの語が入る記事を先頭に出します(大文字小文字は区別しない)。語のチップをタップで外す。いちどに「VLA, BIM」のように読点・カンマで複数も足せます。'),
+    el('h3.help-h', '気になる語(共通)'),
+    kwCommon,
+    el('p.muted.small', '題名や要旨にこの語が入る記事を先頭に出します(大文字小文字は区別しない)。共通の語はどのジャンルにも効き、ジャンルごとの語はそのジャンルの記事にだけ効きます(趣味に VLA は効かない)。語のチップをタップで外す。「VLA, BIM」のように読点・カンマで複数も。ホームのチップからも足せます。'),
+    kwGenres,
     el('h3.help-h', '1 回に出す件数'),
     nchips,
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.img !== false, onchange: (e) => { c.img = e.target.checked; save(); } }), el('span', '記事の画像を出す')]),
@@ -622,7 +630,7 @@ function sectionHelp() {
     h('作業用 BGM(任意・v0.32)'),
     li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム左上(カレンダーの右・きょうだけ)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう・×)。題名をタップで もう一度開きます。× でその日だけ消え、設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出しません。流していない日は何も出ません。', 'ふり返り(期限が近いタスク と 最近 の間)に「きょうの BGM」: その日に流した曲を順に(サムネイル・題名・流した時刻・ジャンル・♡ / ⊖ で 好き / ちがう)。タップでもう一度開きます(v0.32.1〜v0.32.2)。', '曲の一覧は毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直し、アプリは次に開いたときから新しい一覧を使います(版の更新は要りません・v0.32.1)。']),
     h('キャッチアップ(任意・v0.34)'),
-    li(['v0.38: ホームの「キャッチアップ」に ジャンルのチップ(すべて / 各ジャンル・読んでいない件数)と 気になる語のチップ(タップで絞る(複数は OR)・× で消す・＋ 語 で足す)。絞り込みは端末ごとに覚えます。カードと行の ☆ でブックマーク(「ぜんぶ見る ›」の ★ に・一覧から消えても開ける・同期する)。', 'v0.37/38: 英語の題名(論文は要旨の 1 文目も)を日本語で出します(無料・登録不要)。既定は Google 翻訳の無料経路(非公式・止まることがある)で、DeepL API Free の鍵を GitHub の Secrets に DEEPL_API_KEY として登録すればそちら。日本語の題名のときは「ぜんぶ見る」の行に原題も小さく。気になる語は原題・日本語の題名・要旨のどれに当たっても効きます。', 'v0.36: ホームの「キャッチアップ」は 2 列のカード(記事の代表画像・ジャンルの札・題名・出どころ)。画像が無い記事はジャンルの色の札。設定「記事の画像を出す」で切れます。', 'v0.35: 取得元はカタログ(研究: arXiv の Physical AI / VLA・デジタルツイン・BIM / Scan-to-BIM・インフラ管理・cs.RO、建築DX、技術、ガジェット、趣味、料理)になり、設定 › キャッチアップ の「取得元の ON / OFF」でジャンルごとに選べます。気になる語はチップ(タップで外す・「追加」で足す)。', '設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
+    li(['v0.39: 気になる語は 共通 と ジャンルごと(研究の語は研究の記事にだけ効く)。ホームの「＋ ◯◯の語」は選んでいるジャンルの語に、「＋ 共通の語」は共通に。設定 › キャッチアップ の「ジャンルごとの語」でも。取得元は 設定 › キャッチアップ › 取得元の ON / OFF の「＋ 取得元を足す」から(RSS / Atom の URL か arXiv の検索語。GitHub のトークン(このリポジトリの Contents: Read and write だけ・端末内)を貼ればアプリから保存、無ければ JSON をコピーして GitHub で貼る)。キャッチアップの中のチップを横にスクロールしても日付は動きません。', 'v0.38: ホームの「キャッチアップ」に ジャンルのチップ(すべて / 各ジャンル・読んでいない件数)と 気になる語のチップ(タップで絞る(複数は OR)・× で消す・＋ 語 で足す)。絞り込みは端末ごとに覚えます。カードと行の ☆ でブックマーク(「ぜんぶ見る ›」の ★ に・一覧から消えても開ける・同期する)。', 'v0.37/38: 英語の題名(論文は要旨の 1 文目も)を日本語で出します(無料・登録不要)。既定は Google 翻訳の無料経路(非公式・止まることがある)で、DeepL API Free の鍵を GitHub の Secrets に DEEPL_API_KEY として登録すればそちら。日本語の題名のときは「ぜんぶ見る」の行に原題も小さく。気になる語は原題・日本語の題名・要旨のどれに当たっても効きます。', 'v0.36: ホームの「キャッチアップ」は 2 列のカード(記事の代表画像・ジャンルの札・題名・出どころ)。画像が無い記事はジャンルの色の札。設定「記事の画像を出す」で切れます。', 'v0.35: 取得元はカタログ(研究: arXiv の Physical AI / VLA・デジタルツイン・BIM / Scan-to-BIM・インフラ管理・cs.RO、建築DX、技術、ガジェット、趣味、料理)になり、設定 › キャッチアップ の「取得元の ON / OFF」でジャンルごとに選べます。気になる語はチップ(タップで外す・「追加」で足す)。', '設定 › キャッチアップ で「ホームに出す」にすると、ホームの内訳の下に折りたたみ「キャッチアップ」が出ます(新着の件数とジャンルの内訳)。開くと、気になる語に当たる記事を先頭に、ジャンルを順に回した新しい記事が数件(3 / 5 / 8 件)。タップでそのサイトを開き(新しいタブ)、開いた記事は次から出ません。× は「読まない」。「ぜんぶ見る ›」で読んでいない記事をジャンルで絞って見られ、「ここまで読んだことにする」でまとめて片づけられます。', '記事の一覧は GitHub Actions が毎朝 6 時ごろに、リポジトリの data/feeds.json に書いた取得元(研究: arXiv の分野・技術・趣味など、RSS / Atom / arXiv API の URL)から作り直します(無料・版の更新なし)。ジャンルや取得元を変えるには data/feeds.json を GitHub で編集します(保存すると数分で反映)。', '通信は同じサイトの一覧 1 ファイルだけ。記事を開くのはリンクで、その先はアプリの外です。開いた / 読まない の印は同期します。']),
     h('気合(v0.28 で廃止)'),
     li(['ホームの「気合を入れる」のカードと ?kiai=1 は v0.28 で廃止しました(使われなかったため)。戻すときは js/features.js の KIAI を true に。これまでに押した気合はレポートの「気合」にそのまま残ります。']),
     h('ショートカット(記録)'),
