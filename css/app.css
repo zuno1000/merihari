@@ -1101,3 +1101,7 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-row .feed-open{align-items:center}
 .feed-main > .feed-tag{align-self:flex-start}
 @media (prefers-color-scheme:dark){.feed-thumb{background:hsl(var(--fh) 30% 26%)}.feed-thumb.noimg{background:linear-gradient(135deg,hsl(var(--fh) 30% 28%),hsl(var(--fh) 28% 20%))}.feed-thumb-tag{color:hsl(var(--fh) 60% 80%);border-color:hsl(var(--fh) 50% 60% / .6)}}
+/* v0.37: 日本語の題名のときの原題・要旨の 1 文 */
+.feed-orig{font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-lead{font-size:11.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.feed-card .feed-lead{font-size:11px}

@@ -1,6 +1,7 @@
 // merihari ─ ui-feed.js: キャッチアップ(v0.34・F17・任意)の画面部品。ホームの折りたたみ「キャッチアップ」(feedBox)・記事の行(feedRow)・全部を見るシート(feedSheet)・既読 / 読まない の印(markItem)。
 // ui-today と ui-settings の両方から使う(循環 import を避けるため別ファイル)。純関数は js/feed.js。
 // 記事は <a target=_blank rel=noopener>(タップの中でそのまま開く・iOS の PWA では Safari)。開いた瞬間に既読の印(data.feed・同期)。× で「読まない」(同じく印・次から出ない)。
+// v0.37(FB「論文の題名が英語のままでとっつきにくい」): 題名は日本語(tj・Actions が DeepL API Free で付ける・鍵は Secrets)があればそれ、行には原題を小さく。arXiv は要旨の 1 文目の日本語(aj)を 2 行まで添える。
 // v0.36(FB「Discover のようにサムネイルで視覚的に」): ホームは 2 列のカード(feedCard: 画像(og:image・遅延・参照元なし・読めなければジャンル色の札)→ ジャンルの札 → 題名 2 行 → 出どころ)。シートと設定の行は左に小さなサムネイル(thumb)。設定「記事の画像を出す」で切れる。
 import { el, toast, sheet, confirmSheet } from './ui.js';
 import * as store from './store.js';
@@ -52,7 +53,7 @@ const skipBtn = (x, rerender) => el('button.feed-x', { type: 'button', 'aria-lab
 export function feedRow(x, f, rerender, { opener = null } = {}) {
   const a = el('a.feed-open', openAttrs(x, rerender, opener), [
     thumb(x, f, { cls: 'feed-thumb sm' }),
-    el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', x.tj || x.t), el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))]),
+    el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, feed.leadOf(x) ? el('span.feed-lead.muted', feed.leadOf(x)) : null, el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))].filter(Boolean)),
   ]);
   return el('div.feed-row', [a, skipBtn(x, rerender)]);
 }
@@ -60,7 +61,7 @@ export function feedRow(x, f, rerender, { opener = null } = {}) {
 export function feedCard(x, f, rerender, { opener = null } = {}) {
   const a = el('a.feed-open.feed-card-open', openAttrs(x, rerender, opener), [
     thumb(x, f),
-    el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', x.tj || x.t), el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))]),
+    el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', feed.titleOf(x)), feed.leadOf(x) ? el('span.feed-lead.muted', feed.leadOf(x)) : null, el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))].filter(Boolean)),
   ]);
   return el('div.feed-card', [a, skipBtn(x, rerender)]);
 }
@@ -92,7 +93,7 @@ export function feedSheet(rerender) {
   const body = el('div');
   const draw = () => {
     const base = feed.unread(f.items, MK(), S().feed.genres, S().feed.off);
-    const list = (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.keywordHits(x.t, S().feed.keywords) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
+    const list = (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.hitsOf(x, S().feed.keywords) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
     const counts = feed.countByGenre(base);
     const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [
       el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${base.length}`),

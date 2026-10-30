@@ -63,6 +63,8 @@ export function keywordHits(title, keywords) {
   const t = String(title || '').toLowerCase();
   return (keywords || []).filter((k) => k && t.includes(String(k).toLowerCase())).length;
 }
+/** 記事に対する当たり(v0.37): 原題・日本語の題名・要旨の 1 文(英 / 日)のどれかに語があれば */
+export const hitsOf = (x, keywords) => keywordHits([x?.t, x?.tj, x?.a, x?.aj].filter(Boolean).join(' \n '), keywords);
 export function daysAgo(d, today) {
   if (!isDate(d) || !isDate(today)) return null;
   const a = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)), b = Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
@@ -72,7 +74,7 @@ export function daysAgo(d, today) {
 export function score(x, { today, keywords = [] } = {}) {
   const ago = daysAgo(x.d, today);
   const fresh = ago == null ? 0.5 : Math.max(0, 1 - Math.max(0, ago) / FRESH_DAYS);
-  return W.hit * keywordHits(x.t, keywords) + W.fresh * fresh;
+  return W.hit * hitsOf(x, keywords) + W.fresh * fresh;
 }
 /**
  * 出す記事を選ぶ(純関数): まだ読んでいない記事から n 件。気になる語に当たるものを先頭(点の高い順・n の 6 割まで)、残りは ジャンルを順に回して(round-robin・先頭の記事の点が高いジャンルから)新しい順に混ぜる(1 つのジャンルに偏らない)。当たった記事の残りは各ジャンルの列の先頭に来る(点が高い)。
@@ -81,7 +83,7 @@ export function score(x, { today, keywords = [] } = {}) {
 export function pick(feed, marks, settings, { today, n = null } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
-  const list = unread(feed?.items, marks, s.genres, s.off).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: keywordHits(x.t, s.keywords) > 0 }));
+  const list = unread(feed?.items, marks, s.genres, s.off).map((x) => ({ ...x, pt: score(x, { today, keywords: s.keywords }), hit: hitsOf(x, s.keywords) > 0 }));
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
   const hits = list.filter((x) => x.hit).sort(byDate);
   const out = hits.slice(0, hitCap(want));
@@ -106,6 +108,11 @@ export function summaryLine(list, feed, max = Infinity) { const e = Object.entri
 /** ジャンルの色相(画像の無いカードの地の色・ジャンルの並び順で回す) */
 export const GENRE_HUES = [212, 150, 28, 282, 348, 96, 190, 60];
 export function genreHue(feed, gid) { const i = (feed?.genres || []).findIndex((g) => g.id === gid); return GENRE_HUES[(i < 0 ? 0 : i) % GENRE_HUES.length]; }
+/** 表示する題名(日本語の題名があればそれ・v0.37)と、添える 1 文(要旨の 1 文目の日本語・無ければ null) */
+export const titleOf = (x) => (x?.tj || x?.t || '');
+export const leadOf = (x) => (x?.aj || null);
+/** 日本語化の進み具合(v0.37): 英語の題名のうち日本語になった数 */
+export function jaStats(feed) { const items = feed?.items || []; const en = items.filter((x) => x.tj !== '' && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(x.t)); return { en: en.length, ja: en.filter((x) => x.tj).length }; }
 export function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 /** 開いた記事(新しい順・n 件) */
 export function recentMarks(marks, n = 20, state = 'open') { return Object.values(activeMarks(marks)).filter((m) => m.state === state).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, n); }
