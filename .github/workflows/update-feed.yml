@@ -7,7 +7,7 @@ on:
     - cron: '0 21 * * *'   # 毎朝 6:00 JST(= 前日 21:00 UTC)
   push:
     branches: [main]
-    paths: ['data/feeds.json', 'tools/feed_fetch.py']
+    paths: ['data/feeds.json', 'tools/feed_fetch.py', 'tools/feed_images.py', 'tools/feed_translate.py', '.github/workflows/update-feed.yml']
   workflow_dispatch:
 permissions:
   contents: write
