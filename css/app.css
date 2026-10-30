@@ -1054,7 +1054,7 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-box summary::-webkit-details-marker{display:none}
 .feed-box summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transition:transform .15s;flex:none;width:12px;text-align:center}
 .feed-box[open] summary::before{transform:rotate(90deg)}
-.feed-h{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.feed-h{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em;white-space:nowrap;flex:none}
 .feed-n{font-size:12px;margin-left:auto;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .feed-row{display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);padding:0 4px 0 0}
 .feed-row:first-child{border-top:0}
@@ -1083,3 +1083,21 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .srcbox{margin:4px 0 10px}
 .srcbox .srcgroup{margin:2px 0 4px}
 .srcbox h4.help-h{margin:8px 0 2px;font-size:12px}
+/* v0.36: キャッチアップ ─ 2 列のカード(Discover 風)とサムネイル */
+.feed-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:2px 0 4px}
+.feed-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.feed-card-open{display:flex;flex-direction:column;gap:0;flex:1;min-width:0;padding:0 0 10px;color:var(--fg);text-decoration:none;font:inherit}
+.feed-card .feed-main{padding:8px 10px 0;gap:3px}
+.feed-card .feed-title{font-size:13px;line-height:1.35;-webkit-line-clamp:3}
+.feed-card .feed-sub{font-size:10.5px}
+.feed-card .feed-tag{align-self:flex-start;margin-top:0}
+.feed-card .feed-x{position:absolute;top:4px;right:4px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);color:var(--fg);font-size:16px;backdrop-filter:blur(4px)}
+.feed-thumb{display:grid;place-items:center;aspect-ratio:16/9;width:100%;background:hsl(var(--fh) 55% 88%);overflow:hidden}
+.feed-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.feed-thumb.noimg{background:linear-gradient(135deg,hsl(var(--fh) 60% 90%),hsl(var(--fh) 50% 78%))}
+.feed-thumb-tag{font-size:12px;font-weight:700;color:hsl(var(--fh) 45% 30%);letter-spacing:.04em;padding:2px 10px;border:1.5px solid hsl(var(--fh) 45% 45% / .6);border-radius:999px}
+.feed-thumb.sm{flex:none;width:64px;height:44px;aspect-ratio:auto;border-radius:8px;margin-top:2px}
+.feed-thumb.sm .feed-thumb-tag{font-size:9px;padding:1px 6px}
+.feed-row .feed-open{align-items:center}
+.feed-main > .feed-tag{align-self:flex-start}
+@media (prefers-color-scheme:dark){.feed-thumb{background:hsl(var(--fh) 30% 26%)}.feed-thumb.noimg{background:linear-gradient(135deg,hsl(var(--fh) 30% 28%),hsl(var(--fh) 28% 20%))}.feed-thumb-tag{color:hsl(var(--fh) 60% 80%);border-color:hsl(var(--fh) 50% 60% / .6)}}

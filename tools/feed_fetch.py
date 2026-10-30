@@ -148,6 +148,7 @@ for g in cfg.get('genres', []):
         if not url.startswith('https://') or not name or not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', sid):
             continue
         sources_out.append({'id': sid, 'name': name, 'g': gid})
+        src_oldest = (TODAY - datetime.timedelta(days=int(s.get('days', days)))).isoformat()  # 取得元ごとの days(論文の検索など、滅多に出ないものは長く)
         try:
             rows = parse(fetch(url), want_abstract='arxiv.org' in url)[:mx]
             n = 0
@@ -155,13 +156,13 @@ for g in cfg.get('genres', []):
                 u = r['u']
                 if not (u.startswith('https://') or u.startswith('http://')) or not r['t']:
                     continue
-                x = {'id': item_id(u), 'g': gid, 'k': sid, 't': r['t'][:200], 'u': u[:500], 's': name, 'd': r['d'] or TODAY.isoformat()}
+                x = {'id': item_id(u), 'g': gid, 'k': sid, 't': r['t'][:200], 'u': u[:500], 's': name, 'd': r['d'] or TODAY.isoformat(), '_o': src_oldest}
                 if r.get('a'):
                     x['a'] = r['a']
                 p = prev_by_id.get(x['id'])
                 if p:
                     for key in CARRY:
-                        if p.get(key):
+                        if key in p:  # '' も引き継ぐ(画像が無いと分かった印・二度と探さない)
                             x[key] = p[key]
                 got.append(x); n += 1
             print(f'{gid}/{name}: {n} 件', file=sys.stderr)
@@ -172,12 +173,18 @@ for g in cfg.get('genres', []):
                 x['k'] = sid
             got.extend(kept)
             print(f'{gid}/{name}: 取れず({e})→ 前回の {len(kept)} 件を残す', file=sys.stderr)
-    seen = set(); uniq = []
+    seen = set(); by_src = {}
     for x in sorted(got, key=lambda x: (x['d'], x['t']), reverse=True):
-        if x['id'] in seen or x['d'] < oldest:
+        if x['id'] in seen or x['d'] < x.pop('_o', oldest):
             continue
-        seen.add(x['id']); uniq.append(x)
-    items_out.extend(uniq[:per_genre])
+        seen.add(x['id']); by_src.setdefault(x['k'], []).append(x)
+    # ジャンルの上限(perGenre)は取得元を順に回して詰める(新しい順に切ると、日付の古い取得元(論文の検索など)が丸ごと落ちる)
+    fair = []
+    while len(fair) < per_genre and any(by_src.values()):
+        for k in list(by_src):
+            if by_src[k] and len(fair) < per_genre:
+                fair.append(by_src[k].pop(0))
+    items_out.extend(fair)
 
 items_out.sort(key=lambda x: (x['d'], x['g'], x['t']), reverse=True)
 now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')

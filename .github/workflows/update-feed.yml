@@ -24,6 +24,9 @@ jobs:
           python-version: '3.12'
       - name: data/feed.json を作り直す
         run: python -X utf8 -I tools/feed_fetch.py data/feeds.json
+      - name: 記事の代表画像(og:image)の URL を足す(v0.36・1 回 80 ページまで・失敗しても続ける)
+        run: python -X utf8 -I tools/feed_images.py 80
+        continue-on-error: true
       - name: 変わっていれば commit
         run: |
           if git diff --quiet -- data/feed.json; then echo "no change"; exit 0; fi

@@ -17,14 +17,14 @@ const GID_RE = /^[A-Za-z0-9_-]{1,20}$/;
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35) } */
+/** 設定 settings.feed = { enabled, genres[](空=全部), keywords[](気になる語), n(1 回に出す件数 3/5/8), off[](OFF にした取得元 id・v0.35), img(記事の画像を出す・v0.36・既定 true) } */
 export function normalizeFeed(raw) {
   const o = isObj(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GID_RE.test(g)))].slice(0, MAX_GENRES);
   const keywords = [...new Set((Array.isArray(o.keywords) ? o.keywords : typeof o.keywords === 'string' ? splitKeywords(o.keywords) : []).map((k) => (typeof k === 'string' ? k.trim().slice(0, 30) : '')).filter(Boolean))].slice(0, MAX_KEYWORDS);
   const n = N_CHOICES.includes(o.n) ? o.n : DEFAULT_N;
   const off = [...new Set((Array.isArray(o.off) ? o.off : []).filter((k) => typeof k === 'string' && SID_RE.test(k)))].slice(0, MAX_OFF);
-  return { enabled: o.enabled === true, genres, keywords, n, off };
+  return { enabled: o.enabled === true, genres, keywords, n, off, img: o.img !== false };
 }
 /** 「lora, 6G、低遅延」のような 1 行 → 語の配列(読点・カンマ・空白で区切る) */
 export function splitKeywords(s) { return String(s || '').split(/[,、\s]+/).map((x) => x.trim()).filter(Boolean); }
@@ -102,7 +102,10 @@ export function pick(feed, marks, settings, { today, n = null } = {}) {
 }
 export function countByGenre(list) { const o = {}; for (const x of list || []) o[x.g] = (o[x.g] || 0) + 1; return o; }
 /** 「研究 3・技術 2」 */
-export function summaryLine(list, feed) { return Object.entries(countByGenre(list)).map(([g, n]) => `${genreName(feed, g)} ${n}`).join('・'); }
+export function summaryLine(list, feed, max = Infinity) { const e = Object.entries(countByGenre(list)); return e.slice(0, max).map(([g, n]) => `${genreName(feed, g)} ${n}`).join('・') + (e.length > max ? '…' : ''); }
+/** ジャンルの色相(画像の無いカードの地の色・ジャンルの並び順で回す) */
+export const GENRE_HUES = [212, 150, 28, 282, 348, 96, 190, 60];
+export function genreHue(feed, gid) { const i = (feed?.genres || []).findIndex((g) => g.id === gid); return GENRE_HUES[(i < 0 ? 0 : i) % GENRE_HUES.length]; }
 export function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 /** 開いた記事(新しい順・n 件) */
 export function recentMarks(marks, n = 20, state = 'open') { return Object.values(activeMarks(marks)).filter((m) => m.state === state).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, n); }

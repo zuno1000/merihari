@@ -5,7 +5,7 @@
     "genres[]: id(英数・変えない: 既読の印と設定はこの id で持つ)・name(画面に出す名前)・sources[]。",
     "sources[]: id(英数・変えない: 設定の ON / OFF はこの id で持つ)・name(画面に出す出どころ・40 字まで)・url(RSS 2.0 / RSS 1.0 / Atom / arXiv API の URL・https)・max(その取得元から取る最大の件数・既定 20)。",
     "arXiv は abs:(要旨)や ti:(題名)の検索か cat:(分野)で指定する。例: abs:%22digital+twin%22 / cat:cs.RO / 複数は +OR+。空白は +、引用符は %22。分野の一覧: https://arxiv.org/category_taxonomy",
-    "days: この日数より古い記事は入れない。perGenre: ジャンルごとに残す最大の件数(新しい順)。"
+    "days: この日数より古い記事は入れない(取得元ごとに days を書けば上書き。論文の検索のように滅多に出ないものは 180 など長く)。perGenre: ジャンルごとに残す最大の件数(取得元を順に回して詰めるので、1 つの取得元に偏らない)。"
   ],
   "days": 14,
   "perGenre": 60,
@@ -16,8 +16,8 @@
       "sources": [
         { "id": "arxiv-physai", "name": "arXiv Physical AI / VLA", "url": "https://export.arxiv.org/api/query?search_query=abs:%22vision-language-action%22+OR+abs:%22physical+AI%22+OR+abs:%22embodied+AI%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
         { "id": "arxiv-dtwin", "name": "arXiv デジタルツイン", "url": "https://export.arxiv.org/api/query?search_query=abs:%22digital+twin%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
-        { "id": "arxiv-bim", "name": "arXiv BIM / Scan-to-BIM", "url": "https://export.arxiv.org/api/query?search_query=abs:BIM+OR+abs:%22scan-to-BIM%22+OR+abs:%22building+information+modeling%22+OR+abs:%22building+information+model%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
-        { "id": "arxiv-infra", "name": "arXiv インフラ管理・点検", "url": "https://export.arxiv.org/api/query?search_query=abs:%22structural+health+monitoring%22+OR+abs:%22infrastructure+inspection%22+OR+abs:%22infrastructure+maintenance%22+OR+abs:%22bridge+inspection%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 },
+        { "id": "arxiv-bim", "name": "arXiv BIM / Scan-to-BIM", "url": "https://export.arxiv.org/api/query?search_query=abs:BIM+OR+abs:%22scan-to-BIM%22+OR+abs:%22building+information+modeling%22+OR+abs:%22building+information+model%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20, "days": 180 },
+        { "id": "arxiv-infra", "name": "arXiv インフラ管理・点検", "url": "https://export.arxiv.org/api/query?search_query=abs:%22structural+health+monitoring%22+OR+abs:%22infrastructure+inspection%22+OR+abs:%22infrastructure+maintenance%22+OR+abs:%22bridge+inspection%22&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20, "days": 180 },
         { "id": "arxiv-cs-ro", "name": "arXiv cs.RO(ロボティクス)", "url": "https://export.arxiv.org/api/query?search_query=cat:cs.RO&sortBy=submittedDate&sortOrder=descending&max_results=20", "max": 20 }
       ]
     },
