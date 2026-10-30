@@ -69,17 +69,19 @@ const openAttrs = (x, rerender, opener, { mark = true } = {}) => ({ href: x.u, t
   if (rerender) setTimeout(rerender, 400); // 開く動作のあとに描き直す(行を消す)
 } });
 const skipBtn = (x, rerender) => el('button.feed-x', { type: 'button', 'aria-label': 'この記事は読まない(次から出しません)', title: '読まない', onclick: () => { markItem(x.id, 'skip'); toast('この記事は出しません'); if (rerender) rerender(); } }, '×');
+/** ✓ 既読(v0.40): 開いた / ブックマークした記事は消えずに ✓。タップで 既読 ↔ 未読(ブックマーク中は外せない) */
+const readBtn = (x, rerender) => { const on = feed.isReadMark(MK(), x.id); return el('button.feed-read', { type: 'button', class: `feed-read${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', 'aria-label': on ? '未読に戻す' : '既読にする', title: on ? '未読に戻す' : '既読にする', onclick: () => { if (isSaved(x.id)) { toast('ブックマーク中は既読のままです'); return; } if (on) unmark(x.id); else markItem(x.id, 'open'); if (rerender) rerender(); } }, '✓'); };
 const starBtn = (x, rerender) => { const on = isSaved(x.id); return el('button.feed-star', { type: 'button', class: `feed-star${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', 'aria-label': on ? 'ブックマークを外す' : 'ブックマークする', title: 'ブックマーク', onclick: () => toggleSave(x, rerender) }, on ? '★' : '☆'); };
 const mainOf = (x, f) => el('span.feed-main', [el('span.feed-tag', { class: `feed-tag${x.hit ? ' hit' : ''}` }, feed.genreName(f, x.g)), el('span.feed-title', feed.titleOf(x)), x.tj ? el('span.feed-orig.muted', x.t) : null, feed.leadOf(x) ? el('span.feed-lead.muted', feed.leadOf(x)) : null, el('span.feed-sub.muted', [x.s || feed.hostOf(x.u), whenOf(x) ? `・${whenOf(x)}` : ''].join(''))].filter(Boolean));
 /** 記事 1 行(シート・設定): 小さなサムネイル・ジャンルの札・題名(気になる語に当たれば印)・出どころ・日付。タップでリンクを開く+既読。☆ でブックマーク・× で読まない */
 export function feedRow(x, f, rerender, { opener = null } = {}) {
   const a = el('a.feed-open', openAttrs(x, rerender, opener), [thumb(x, f, { cls: 'feed-thumb sm' }), mainOf(x, f)]);
-  return el('div.feed-row', [a, starBtn(x, rerender), skipBtn(x, rerender)]);
+  return el('div.feed-row', { class: `feed-row${feed.isReadMark(MK(), x.id) ? ' read' : ''}` }, [a, starBtn(x, rerender), readBtn(x, rerender), skipBtn(x, rerender)]);
 }
 /** カード(ホームの 2 列・v0.36): 画像(16:9)→ ジャンルの札 → 題名(3 行まで)→ 出どころ・日付。☆ と × は画像の角 */
 export function feedCard(x, f, rerender, { opener = null } = {}) {
   const a = el('a.feed-open.feed-card-open', openAttrs(x, rerender, opener), [thumb(x, f), mainOf(x, f)]);
-  return el('div.feed-card', [a, starBtn(x, rerender), skipBtn(x, rerender)]);
+  return el('div.feed-card', { class: `feed-card${feed.isReadMark(MK(), x.id) ? ' read' : ''}` }, [a, starBtn(x, rerender), readBtn(x, rerender), skipBtn(x, rerender)]);
 }
 /** ブックマークの行(v0.38): 印に持つ題名と URL で描く(一覧から消えた記事も開ける)。タップで開く(印は変えない)・★ で外す */
 export function savedRow(m, f, rerender) {
@@ -167,9 +169,12 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
   let gsel = genre; // null=設定どおり(全部 or 選んだジャンル)・'★'=ブックマーク
   const body = el('div');
   const draw = () => {
-    const base = feed.filterItems(feed.unread(f.items, MK(), S().feed.genres, S().feed.off), { words });
+    const shown = feed.filterItems(feed.visible(f.items, MK(), S().feed.genres, S().feed.off), { words }); // v0.40: 既読も残す(✓)。件数と「新着」は未読だけ
+    const base = shown.filter((x) => !feed.isReadMark(MK(), x.id));
     const savedList = feed.saved(MK());
-    const list = gsel === '★' ? [] : (gsel ? base.filter((x) => x.g === gsel) : base).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0 })).sort((a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0)).slice(0, 80);
+    const byD = (a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0);
+    const pool = (gsel ? shown.filter((x) => x.g === gsel) : shown).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0, read: feed.isReadMark(MK(), x.id) }));
+    const list = gsel === '★' ? [] : [...pool.filter((x) => !x.read).sort(byD), ...pool.filter((x) => x.read).sort(byD)].slice(0, 100);
     const counts = feed.countByGenre(base);
     const chips = el('div.chips.small', { role: 'group', 'aria-label': 'ジャンル' }, [
       el('button.chip.sm2', { type: 'button', class: `chip sm2${gsel == null ? ' on' : ''}`, onclick: () => { gsel = null; draw(); } }, `すべて ${base.length}`),
@@ -183,11 +188,11 @@ export function feedSheet(rerender, { genre = null, words = [] } = {}) {
       gsel === '★'
         ? (savedList.length ? el('div.list.feed-list', savedList.map((m) => savedRow(m, f, redraw))) : el('p.muted.small.pad', 'ブックマークはまだありません。記事の ☆ で残せます(一覧から消えても開けます)。'))
         : (list.length ? el('div.list.feed-list', list.map((x) => feedRow(x, f, redraw))) : el('p.muted.small.pad', '読んでいない記事はありません。')),
-      gsel !== '★' && list.length ? el('div.row', { style: { marginTop: '10px' } }, el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('ここまで読んだことにしますか?', `${gsel ? feed.genreName(f, gsel) : 'すべて'}の ${gsel ? counts[gsel] : base.length} 件を「読まない」にして、次から出しません。`, 'そうする', () => { const now = store.nowISO(); const m = { ...MK() }; for (const x of (gsel ? base.filter((y) => y.g === gsel) : base)) m[x.id] = { id: x.id, state: 'skip', at: now, date: dateKey(), updatedAt: now, deletedAt: null }; store.state.data.feed = m; store.save(); sync.autoSync(); redraw(); }) }, 'ここまで読んだことにする')) : null,
+      gsel !== '★' && list.length ? el('div.row', { style: { marginTop: '10px' } }, el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('ここまでの未読を非表示にしますか?', `${gsel ? feed.genreName(f, gsel) : 'すべて'}の未読 ${gsel ? counts[gsel] : base.length} 件を「読まない」にして、次から出しません(既読・ブックマークはそのまま)。`, 'そうする', () => { const now = store.nowISO(); const m = { ...MK() }; for (const x of (gsel ? base.filter((y) => y.g === gsel) : base)) m[x.id] = { id: x.id, state: 'skip', at: now, date: dateKey(), updatedAt: now, deletedAt: null }; store.state.data.feed = m; store.save(); sync.autoSync(); redraw(); }) }, 'ここまで非表示にする')) : null,
     ].filter(Boolean));
   };
   draw();
-  sheet(() => [el('h2', 'キャッチアップ'), el('p.muted.small', `${f.updated ? `一覧は ${f.updated.slice(0, 10)} 時点。` : ''}タップで開きます(開いた記事は次から出ません)。☆ でブックマーク・× は読まない。`), body]);
+  sheet(() => [el('h2', 'キャッチアップ'), el('p.muted.small', `${f.updated ? `一覧は ${f.updated.slice(0, 10)} 時点。` : ''}タップで開きます(開いた記事は ✓ の既読になり、残ります)。☆ でブックマーク・✓ で既読 / 未読・× は読まない(消える)。`), body]);
 }
 
 // ---- 取得元をアプリから足す(v0.39・F17-1): GitHub の contents API で data/feeds.json を書き換える(トークンを貼った人だけ・端末内 local.ghToken・同期しない)。無ければ JSON をコピーして GitHub の編集ページを開く ----
@@ -206,12 +211,12 @@ async function ghPut(path, token, text, sha, message) {
   return r.json();
 }
 /** 取得元を足す: 名前・URL(か arXiv の検索語)・ジャンル(既存か新しく)・件数 → トークンがあれば GitHub に commit(数分で一覧が作り直される)、無ければ JSON をコピーして GitHub の編集ページを開く */
-export function addSourceSheet(rerender, { fetcher = null } = {}) {
+export function addSourceSheet(rerender, { fetcher = null, genreId = null, onDone = null } = {}) {
   const f = feed.feedNow();
   const name = el('input.text', { type: 'text', placeholder: '出どころの名前(例: 日経クロステック 建築)', maxlength: 40, autocomplete: 'off', 'aria-label': '名前' });
   const url = el('input.text', { type: 'text', placeholder: 'RSS / Atom の URL(https://…)か arXiv の検索語(例: scan-to-BIM, point cloud)', maxlength: 500, autocomplete: 'off', inputmode: 'url', 'aria-label': 'URL か検索語' });
-  let gid = f?.genres?.[0]?.id || '';
-  const gsel = el('select', { 'aria-label': 'ジャンル' }, [...(f?.genres || []).map((g) => el('option', { value: g.id }, g.name)), el('option', { value: '' }, '新しいジャンル…')]);
+  let gid = genreId || f?.genres?.[0]?.id || '';
+  const gsel = el('select', { 'aria-label': 'ジャンル' }, [...(f?.genres || []).map((g) => el('option', { value: g.id, selected: g.id === gid }, g.name)), el('option', { value: '' }, '新しいジャンル…')]);
   const gname = el('input.text', { type: 'text', placeholder: '新しいジャンルの名前(例: 料理)', maxlength: 20, autocomplete: 'off', 'aria-label': '新しいジャンルの名前', hidden: true });
   gsel.addEventListener('change', () => { gid = gsel.value; gname.hidden = !!gid; });
   let max = 20;
@@ -239,7 +244,7 @@ export function addSourceSheet(rerender, { fetcher = null } = {}) {
       if (!r.added) { status.textContent = r.reason || '足せませんでした'; return; }
       status.textContent = '保存しています…';
       await doFetch(() => ghPut(feed.FEEDS_PATH, token, JSON.stringify(r.cfg, null, 2) + '\n', got.sha, `feeds: 取得元を追加「${req.name}」(アプリから)`));
-      close(); toast('GitHub に保存しました。数分で記事の一覧が作り直され、次に開いたときから出ます'); if (rerender) rerender();
+      close(); toast('GitHub に保存しました。数分で記事の一覧が作り直され、次に開いたときから出ます'); if (onDone) onDone(); if (rerender) rerender();
     } catch (e) { status.textContent = `できませんでした: ${e.message}`; }
   };
   const viaCopy = async () => {
@@ -262,4 +267,43 @@ export function addSourceSheet(rerender, { fetcher = null } = {}) {
     status,
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.ghost', { type: 'button', onclick: viaCopy }, 'JSON をコピー'), el('button.btn.primary.grow', { type: 'button', onclick: () => viaGithub(close) }, 'GitHub に保存')]),
   ]);
+}
+
+/**
+ * 取得元とジャンルの管理(v0.40・F17-1): GitHub のトークンがあるときだけ。feeds.json(いまの取得元のカタログ)を API で読み、ジャンルごとに 取得元の一覧(消す)・「＋ 取得元」・「ジャンルを消す」、下に「＋ ジャンル」。
+ * 変更は毎回 GET → 純関数で書き換え → PUT(commit)。push で Actions が走り、数分で記事の一覧(feed.json)が作り直される(それまでは設定の ON / OFF の一覧は前のまま)。
+ */
+export function manageSourcesSheet(rerender) {
+  const token = ghToken();
+  if (!token) { toast('先に 設定 › キャッチアップ の「GitHub のトークン」を貼ってください'); return; }
+  const body = el('div');
+  const status = el('p.muted.small', '読んでいます…');
+  let cur = null; // { sha, cfg }
+  const load = async () => {
+    status.textContent = '読んでいます…';
+    try { const got = await ghGet(feed.FEEDS_PATH, token); cur = { sha: got.sha, cfg: JSON.parse(got.text) }; status.textContent = ''; draw(); }
+    catch (e) { status.textContent = `読めませんでした: ${e.message}`; }
+  };
+  const commit = async (mut, message) => {
+    if (!cur) return;
+    const r = mut(cur.cfg);
+    if (r.added === false || r.removed === false) { toast(r.reason || '変えるものがありません'); return; }
+    status.textContent = '保存しています…';
+    try { await ghPut(feed.FEEDS_PATH, token, JSON.stringify(r.cfg, null, 2) + '\n', cur.sha, message); toast('保存しました。数分で記事の一覧に反映されます'); await load(); if (rerender) rerender(); }
+    catch (e) { status.textContent = `保存できませんでした: ${e.message}`; if (/もう一度/.test(e.message)) load(); }
+  };
+  const draw = () => {
+    const gs = cur?.cfg?.genres || [];
+    body.replaceChildren(...gs.map((g) => el('section.group.mgg', [
+      el('div.row', [el('h2', { style: { flex: '1' } }, `${g.name}(${(g.sources || []).length})`), el('button.btn.sm.ghost', { type: 'button', onclick: () => { close0(); addSourceSheet(rerender, { genreId: g.id, onDone: () => manageSourcesSheet(rerender) }); } }, '＋ 取得元'), el('button.btn.sm.ghost.danger', { type: 'button', onclick: () => confirmSheet(`ジャンル「${g.name}」を消しますか?`, `取得元 ${(g.sources || []).length} 件も一緒に消えます。既読やブックマークの印は残ります。`, '消す', () => commit((c) => feed.removeGenreFromCatalog(c, g.id), `feeds: ジャンルを削除「${g.name}」(アプリから)`), true) }, 'ジャンルを消す')]),
+      (g.sources || []).length ? el('div.list', (g.sources || []).map((x) => el('div.srow.plain', [el('span.lbl', { style: { flex: '1', maxWidth: 'none' } }, [x.name, el('span.muted.small', ` ${feed.hostOf(x.url)}${x.days ? `・${x.days} 日` : ''}`)]), el('button.btn.sm.ghost.danger', { type: 'button', onclick: () => confirmSheet(`取得元「${x.name}」を消しますか?`, '記事の一覧から次の更新で消えます(既読やブックマークの印は残ります)。', '消す', () => commit((c) => feed.removeSourceFromCatalog(c, x.id), `feeds: 取得元を削除「${x.name}」(アプリから)`), true) }, '消す')]))) : el('p.muted.small.pad', '取得元はまだありません。'),
+    ])), el('div.row', { style: { marginTop: '6px' } }, [el('button.btn.sm', { type: 'button', onclick: () => {
+      const inp = el('input.text', { type: 'text', placeholder: 'ジャンルの名前(例: 料理)', maxlength: 20, autocomplete: 'off', 'aria-label': 'ジャンルの名前' });
+      sheet((close) => [el('h2', 'ジャンルを足す'), el('div.row', inp), el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => { const nm = inp.value.trim(); if (!nm) { inp.focus(); return; } close(); commit((c) => feed.addGenreToCatalog(c, nm), `feeds: ジャンルを追加「${nm}」(アプリから)`); } }, '足す')])]);
+      setTimeout(() => inp.focus(), 50);
+    } }, '＋ ジャンル')]));
+  };
+  let close0 = null;
+  close0 = sheet((close) => { close0 = close; return [el('h2', '取得元とジャンルの管理'), el('p.muted.small', 'リポジトリの data/feeds.json を直接書き換えます(commit)。変更は数分後の更新から記事の一覧に反映されます。'), status, body]; });
+  load();
 }

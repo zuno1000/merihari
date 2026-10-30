@@ -1132,3 +1132,14 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .kwgroup{margin:4px 0 8px}
 .kwgroup .row.field{margin-top:6px}
 .kwbox{margin:6px 0 10px}
+/* v0.40: ✓ 既読(消さない)・管理のシート */
+.feed-read{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;font-family:inherit;opacity:.6}
+.feed-read.on{color:#2f8f5b;opacity:1;font-weight:700}
+.feed-read:active{background:var(--accent-bg)}
+.feed-card .feed-read{position:absolute;top:4px;right:36px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);backdrop-filter:blur(4px);font-size:14px;opacity:1}
+.feed-card .feed-star{right:68px}
+.feed-card.read .feed-title,.feed-row.read .feed-title{opacity:.55;font-weight:500}
+.feed-card.read .feed-thumb img,.feed-row.read .feed-thumb img{opacity:.6}
+@media (prefers-color-scheme:dark){.feed-read.on{color:#7fd1a3}}
+.mgg h2{font-size:14px;color:var(--fg);margin:0}
+.mgg .list{margin-top:6px}

@@ -64,6 +64,14 @@ export function sourcesOf(feed) {
 
 /** 既読 / 読まない の印(data.feed・消したものは除く) */
 export function activeMarks(marks) { const o = {}; for (const [k, v] of Object.entries(marks || {})) if (v && !v.deletedAt) o[k] = v; return o; }
+/** 見える記事(v0.40): 「読まない」(skip)以外。既読(open / save)も残る(✓ で示す) */
+export function visible(items, marks, genres = [], off = []) {
+  const m = activeMarks(marks);
+  const gs = new Set(genres || []);
+  const os = new Set(off || []);
+  return (items || []).filter((x) => !(m[x.id] && m[x.id].state === 'skip') && (!gs.size || gs.has(x.g)) && !(x.k && os.has(x.k)));
+}
+export const isReadMark = (marks, id) => { const m = activeMarks(marks)[id]; return !!(m && (m.state === 'open' || m.state === 'save')); };
 /** まだ印の無い記事(設定のジャンルで絞る・空なら全部。v0.35: OFF の取得元は出さない) */
 export function unread(items, marks, genres = [], off = []) {
   const m = activeMarks(marks);
@@ -96,8 +104,10 @@ export function score(x, { today, keywords = [] } = {}) {
 export function pick(feed, marks, settings, { today, n = null, genre = null, words = [] } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
-  const list = filterItems(unread(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => { const ks = wordsFor(s, x.g); return { ...x, pt: score(x, { today, keywords: ks }), hit: hitsOf(x, ks) > 0 }; }); // v0.39: 語はそのジャンルのもの+共通
+  const m = activeMarks(marks);
+  const all = filterItems(visible(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => { const ks = wordsFor(s, x.g); return { ...x, pt: score(x, { today, keywords: ks }), hit: hitsOf(x, ks) > 0, read: !!m[x.id] }; }); // v0.39: 語はそのジャンルのもの+共通。v0.40: 既読(open / save)は消さず read の印・未読のあとに
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
+  const list = all.filter((x) => !x.read);
   const hits = list.filter((x) => x.hit).sort(byDate);
   const out = hits.slice(0, hitCap(want));
   const taken = new Set(out.map((x) => x.id));
@@ -113,6 +123,7 @@ export function pick(feed, marks, settings, { today, n = null, genre = null, wor
       for (const g of order) { const q = queues.get(g); if (q && q.length && out.length < want) { out.push(q.shift()); added = true; } }
     }
   }
+  if (out.length < want) for (const x of all.filter((x) => x.read).sort(byDate)) { if (out.length >= want) break; out.push(x); } // 未読が足りなければ既読を新しい順に(✓ つき)
   return out.map(({ pt, ...x }) => x);
 }
 /** ジャンルと選んだ語で絞る(v0.38・ホームのチップ): genre は 1 つ(null=全部)・words は OR(空=絞らない) */
@@ -154,6 +165,30 @@ export function addSourceToCatalog(cfg, { genreId = null, genreName = '', name, 
   if (days) src.days = Math.max(1, Math.min(365, +days));
   g.sources.push(src);
   return { cfg: c, added: true, sourceId: sid, genreId: g.id };
+}
+/** 取得元を消す(純関数・v0.40) */
+export function removeSourceFromCatalog(cfg, sourceId) {
+  const c = isObj(cfg) ? JSON.parse(JSON.stringify(cfg)) : { genres: [] };
+  let removed = false;
+  for (const g of c.genres || []) { const n = (g.sources || []).length; g.sources = (g.sources || []).filter((x) => x.id !== sourceId); if (g.sources.length !== n) removed = true; }
+  return { cfg: c, removed };
+}
+/** ジャンルを足す(純関数・v0.40): 名前だけ(取得元は空)。同じ名前があれば足さない */
+export function addGenreToCatalog(cfg, name, now = Date.now()) {
+  const c = isObj(cfg) ? JSON.parse(JSON.stringify(cfg)) : {};
+  if (!Array.isArray(c.genres)) c.genres = [];
+  const nm = String(name || '').trim().slice(0, 20);
+  if (!nm) return { cfg: c, added: false, reason: '名前が要ります' };
+  if (c.genres.some((g) => g.name === nm)) return { cfg: c, added: false, reason: '同じ名前のジャンルがあります' };
+  let id = slugId(nm, now).slice(0, 20); if (c.genres.some((g) => g.id === id)) id = `x${now.toString(36)}`;
+  c.genres.push({ id, name: nm, sources: [] });
+  return { cfg: c, added: true, genreId: id };
+}
+/** ジャンルを消す(純関数・v0.40): 取得元ごと消える */
+export function removeGenreFromCatalog(cfg, genreId) {
+  const c = isObj(cfg) ? JSON.parse(JSON.stringify(cfg)) : { genres: [] };
+  const n = (c.genres || []).length; c.genres = (c.genres || []).filter((g) => g.id !== genreId);
+  return { cfg: c, removed: c.genres.length !== n };
 }
 /** UTF-8 ↔ base64(GitHub の contents API 用) */
 export function b64enc(s) { const b = new TextEncoder().encode(s); let o = ''; for (const x of b) o += String.fromCharCode(x); return btoa(o); }
