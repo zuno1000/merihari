@@ -6,6 +6,7 @@ import { el, clear, toast, svg, sheet } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
 import * as plan from './plan.js';
+import { FEATURES } from './features.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
 import * as ai from './ai.js';
@@ -189,7 +190,7 @@ export function renderDiary(view, ctx, dateArg = null) {
     taskSec = el('section.group', [
       el('h2', '期限が近いタスク'),
       el('div.list', near.length ? near.map((t) => { const c = catOf(t.categoryId); return el('button.srow.goal.dlrow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
-        el('span.gmain', [el('span.gname', [c ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, t.name]), el('span.gmeta', `${dlText(t)}${t.noTime ? '・用事' : `・残り ${fmtMin(plan.remainingMin(t, E()))}`}`)]),
+        el('span.gmain', [el('span.gname', [c ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, t.name]), el('span.gmeta', `${dlText(t)}${!FEATURES.TASK_ESTIMATE ? (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '') : t.noTime ? '・用事' : `・残り ${fmtMin(plan.remainingMin(t, E()))}`}`)]),
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }

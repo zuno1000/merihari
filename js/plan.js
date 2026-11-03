@@ -1,8 +1,12 @@
 // merihari ─ plan.js: 「目安」(v0.15)。理想スケジュール(時間割)の生成は v0.15で廃止し、タスクの量だけを扱う。すべて純関数。
+// v0.44: 期限つきタスクの残り見積と目安(todayShare)は FEATURES.TASK_ESTIMATE=false で止める(期限だけ・用事と同じ扱い)。習慣(毎日 / 毎週)とやりたいことはそのまま。
 // - 期限つき: 残り ÷ 期限までの日数 = 今日の目安(todayShare)
 // - 毎日 ◯分 / 毎週 ◯時間(repeat.daily / repeat.weekly): 今日 / 今週の記録と目安(goals)
 // - やりたいこと(kind:'wish'): 目安は持たず、今週の記録と最後にふれた日だけ
 import { addDays, hm, parseDateKey } from './time.js';
+import { FEATURES } from './features.js';
+/** 期限つきタスクの残り見積と目安を使うか(v0.44・F5-2 廃止): opts.estimate があればそれ、無ければ FEATURES.TASK_ESTIMATE。純関数のテストは { estimate: true } で従来の計算を検証する */
+const estimating = (opts) => (opts && typeof opts.estimate === 'boolean' ? opts.estimate : FEATURES.TASK_ESTIMATE);
 
 const alive = (t) => t && !t.deletedAt;
 const r5 = (m) => Math.round(m / 5) * 5;
@@ -74,8 +78,9 @@ export function chunkOf(settings) { const v = +(settings?.goals?.chunkMin); retu
  * 戻り値 [{ taskId, todayMin, rawMin, deferred, remainingMin, deadline, daysLeft }]
  */
 export function todayShare(tasks, date, entries = {}, opts = {}) {
-  const chunk = opts.chunk == null ? CHUNK_MIN : Math.max(0, +opts.chunk || 0);
   const out = [];
+  if (!estimating(opts)) return out; // v0.44: 目安は出さない(期限だけ)
+  const chunk = opts.chunk == null ? CHUNK_MIN : Math.max(0, +opts.chunk || 0);
   const loggedToday = new Set();
   for (const e of Object.values(entries || {})) if (alive(e) && e.date === date && e.taskId) loggedToday.add(e.taskId);
   for (const t of Object.values(tasks || {})) {
@@ -171,8 +176,9 @@ export function goals(tasks, entries, date, nowMin = 1440, opts = {}) {
     const t = tasks[s.taskId];
     out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'deadline', targetMin: s.todayMin, doneMin: logged[t.id] || 0, deadline: s.deadline, daysLeft: s.daysLeft });
   }
-  // 用事(v0.17・時間を計らない期限つき): 期限が明日まで(過ぎたものも)なら出す。その日に済ませたものも ✓ で残す
-  const todos = Object.values(tasks || {}).filter((t) => alive(t) && t.noTime && t.kind !== 'wish' && !t.repeat && deadlineKey(t, date) && deadlineKey(t, date) <= addDays(date, 1) && (!t.doneAt || t.doneAt.slice(0, 10) === date))
+  // 用事(v0.17・時間を計らない期限つき): 期限が明日まで(過ぎたものも)なら出す。その日に済ませたものも ✓ で残す。v0.44: 目安を使わないなら期限つきはすべてここ(チェックで済ませる)
+  const noEst = !estimating(opts);
+  const todos = Object.values(tasks || {}).filter((t) => alive(t) && (t.noTime || noEst) && t.kind !== 'wish' && !t.repeat && deadlineKey(t, date) && deadlineKey(t, date) <= addDays(date, 1) && (!t.doneAt || t.doneAt.slice(0, 10) === date))
     .sort((a, b) => (deadlineKey(a, date) < deadlineKey(b, date) ? -1 : deadlineKey(a, date) > deadlineKey(b, date) ? 1 : (a.name || '').localeCompare(b.name || '')));
   for (const t of todos) { const dl = deadlineKey(t, date); out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'todo', targetMin: null, doneMin: logged[t.id] || 0, deadline: dl, daysLeft: daysBetween(date, dl) + 1, doneAt: t.doneAt || null }); }
   const rest = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -325,7 +331,8 @@ export function rollWeekly(tasks, entries, today, ctx) {
 }
 
 /** 期限超過かつ残りがある義務タスク(F5-5)。期限順。残りは記録を自動で引いたもの(v0.12) */
-export function overdueTasks(tasks, today, entries = {}) {
-  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && (t.noTime || remainingMin(t, entries) > 0)) // 用事(v0.17)は済んでいなければ期限切れ
+export function overdueTasks(tasks, today, entries = {}, opts = {}) {
+  const noEst = !estimating(opts); // v0.44: 目安を使わないなら残りに関係なく、済んでいなければ期限切れ
+  return Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) < today && (t.noTime || noEst || remainingMin(t, entries) > 0)) // 用事(v0.17)は済んでいなければ期限切れ
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
 }

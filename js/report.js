@@ -236,11 +236,11 @@ export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDon
  * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる1件だけ。「明日は」は目安から計算した量1件。
  * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null, lookBack:[string](v0.31.3・2 つまで) }
  */
-export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440, planBlocks = null } = {}) {
+export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = null, nowMin = 1440, planBlocks = null, estimate = undefined } = {}) { // estimate: v0.44(テスト用・省略時は FEATURES.TASK_ESTIMATE)
   const day = date || agg.date;
   const by = agg.byCategory;
   const lines = reportLines(agg, { tasks, entries, date: day, settings });
-  const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin, { chunk: chunkOf(settings) });
+  const gs = goals(tasks, entries, day, agg.dayDone ? 1440 : nowMin, { chunk: chunkOf(settings), estimate });
   const dailyGs = gs.filter((g) => g.kind === 'daily');
   const pc = planBlocks ? planCompare(planBlocks, entries, day, agg.dayDone ? 1800 : nowMin) : null; // v0.23・F12-4: 予定を置いた日だけ
   const hasBase = agg.baselineWorkMin != null && agg.baselineDays >= 3;
@@ -309,10 +309,12 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     if (g) next = `きょうはあと ${g.name} を${fmtMinJa(g.targetMin - g.doneMin)}。`;
   } else {
     const tomorrow = addDays(day, 1);
-    const sh = todayShare(tasks, tomorrow, entries, { chunk: chunkOf(settings) }).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
+    const sh = todayShare(tasks, tomorrow, entries, { chunk: chunkOf(settings), estimate }).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
     const dl = dailyGs.find((g) => !g.done);
     const wk = gs.find((g) => g.kind === 'weekly' && !g.done && g.to > day);
+    const dueTmr = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) === tomorrow).sort((a, b) => (a.deadline < b.deadline ? -1 : 1)); // v0.44: 目安が無いので「明日が期限」を言う
     if (sh) next = `明日は ${tasks[sh.taskId].name} を${fmtMinJa(sh.todayMin)}(残り${fmtMinJa(sh.remainingMin)}を${sh.daysLeft}日で)。`;
+    else if (dueTmr.length) next = `明日は ${dueTmr.map((t) => t.name).slice(0, 2).join('・')} が期限です${dueTmr.length > 2 ? `(ほか${dueTmr.length - 2}件)` : ''}。`;
     else if (dl) next = `明日は ${dl.name}(毎日${fmtMinJa(dl.targetMin)})を。きょうは${fmtMinJa(dl.doneMin)}でした。`;
     else if (wk) { const left = daysBetween(day, wk.to); next = `${wk.name}は今週あと${fmtMinJa(wk.targetMin - wk.doneMin)}(残り${left}日・1日${fmtMinJa(r5((wk.targetMin - wk.doneMin) / left))})。`; }
     else if (lines.tomorrow) next = lines.tomorrow;

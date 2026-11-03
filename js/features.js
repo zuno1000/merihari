@@ -6,4 +6,10 @@ export const FEATURES = Object.freeze({
   TASK_START: false,
   /** v0.28(実機 FB ①): 気合(F13)のカードと ?kiai=1 を廃止。true で復活(データ・レポートの表示・同期はそのまま残っている) */
   KIAI: false,
+  /**
+   * v0.44(ユーザー要望「予想時間の設定と提案をなくしたい。細分化のせいでやり忘れに気づかなかった」): 期限つきタスクの「どれくらい」(残り見積)と
+   * 「きょうの目安」(残り ÷ 期限までの日数・F5-2)を廃止。タスクは 期限(日付+時刻)だけを持ち、タスク画面は きょうが期限 / 今週が期限 の一覧。
+   * true に戻すと 残り見積・目安・塊(chunkMin)・用事(時間なし)の区別が復活する(plan.todayShare / goals / overdueTasks は opts.estimate でも切り替えられる)。
+   */
+  TASK_ESTIMATE: false,
 });

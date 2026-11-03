@@ -34,6 +34,10 @@ document.getElementById('app').addEventListener('load', async () => {
   try {
     ok(M && typeof M === 'object', 'window.M が公開されている');
     const { time: T, store: S } = M;
+    // v0.44: 期限つきタスクの目安(todayShare / goals の deadline / overdueTasks の残り判定)は FEATURES.TASK_ESTIMATE=false で止めた。純関数の従来の計算は { estimate: true } で検証する
+    const TSe = (t, d, e = {}, o = {}) => M.plan.todayShare(t, d, e, { estimate: true, ...o });
+    const GSe = (t, e, d, n = 1440, o = {}) => M.plan.goals(t, e, d, n, { estimate: true, ...o });
+    const ODe = (t, d, e = {}, o = {}) => M.plan.overdueTasks(t, d, e, { estimate: true, ...o });
 
     // ---- time.js ----
     log('\n# time');
@@ -190,26 +194,26 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(Pn.daysBetween('2026-10-12', '2026-10-20') === 8 && Pn.daysBetween('2026-10-12', '2026-10-12') === 0 && Pn.daysBetween('2026-10-12', '2026-10-11') === -1, 'daysBetween: 日付の差');
     ok(Pn.deadlineMin({ deadline: '2026-10-13T15:00' }) === 900 && Pn.deadlineMin({ deadline: '2026-10-13' }) === null && Pn.deadlineKey({ deadline: '2026-10-13T15:00' }, '2026-10-12') === '2026-10-13', 'deadlineMin / deadlineKey: 時刻つきの期限');
     ok(Pn.minUnitFor(1 / 6) === 10 && Pn.minUnitFor(0.5) === 15 && Pn.minUnitFor(3) === 30 && Pn.minUnitFor(0.05) === 5, 'minUnitFor: 10分のタスクは10・15分未満は5以上・3時間以上は30');
-    const sh = Pn.todayShare(tasksA, MON);
+    const sh = TSe(tasksA, MON);
     ok(sh.length === 2 && sh[0].taskId === 't2' && sh[1].taskId === 't1', 'todayShare: 期限つきの義務だけを期限順(やりたい・完了は除く)');
     ok(sh[0].todayMin === 30 && sh[0].daysLeft === 2 && sh[1].todayMin === 80 && sh[1].daysLeft === 9, 'todayShare: 残り ÷ 期限までの日数(今日を含む): 面談60/2=30・修論720/9=80');
-    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10 } }, MON).length === 0, 'todayShare: 期限を過ぎたタスクは入れない(期限超過の出口で期限を変えるか完了にする)');
-    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1日あたりが15分未満なら今日は0');
-    ok(Pn.todayShare({ x: { id: 'x', name: 'x', kind: 'duty', deadline: null, remainingH: 20 } }, MON).length === 0 && Pn.todayShare({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5 }, remainingH: 5 } }, MON).length === 0, 'todayShare: 期限なし・繰り返しは含めない(目安は goals で)');
-    ok(Pn.todayShare({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ0.5時間=30分)');
+    ok(TSe({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-10-11', remainingH: 10 } }, MON).length === 0, 'todayShare: 期限を過ぎたタスクは入れない(期限超過の出口で期限を変えるか完了にする)');
+    ok(TSe({ x: { id: 'x', name: 'x', kind: 'duty', deadline: '2026-12-31', remainingH: 0.5 } }, MON)[0].todayMin === 0, 'todayShare: 1日あたりが15分未満なら今日は0');
+    ok(TSe({ x: { id: 'x', name: 'x', kind: 'duty', deadline: null, remainingH: 20 } }, MON).length === 0 && TSe({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5 }, remainingH: 5 } }, MON).length === 0, 'todayShare: 期限なし・繰り返しは含めない(目安は goals で)');
+    ok(TSe({ h: { id: 'h', name: 'h', kind: 'duty', deadline: MON, remainingH: 0.5 } }, MON)[0].todayMin === 30, 'todayShare: 期限当日は残り全部(大きさ0.5時間=30分)');
     // v0.31.3(F5-2 改): 均等割の合計は変えず 30 分の塊にまとめる(実機 FB「15 分 × 4 より 30 分 × 2」)
     const q4 = Object.fromEntries(['a', 'b', 'c', 'd'].map((n) => [n, { id: n, name: n, kind: 'duty', deadline: '2026-10-15', remainingH: 1, deletedAt: null, doneAt: null }])); // 60 分 / 4 日 = 15 × 4
-    const sh4 = Pn.todayShare(q4, MON);
+    const sh4 = TSe(q4, MON);
     ok(sh4.map((s) => s.todayMin).join() === '30,30,0,0' && sh4.map((s) => s.rawMin).join() === '15,15,15,15' && sh4[2].deferred && !sh4[0].deferred && sh4.reduce((a, s) => a + s.todayMin, 0) === 60 && Pn.CHUNK_MIN === 30, 'todayShare(v0.31.3): 15 分 × 4 は 30 分 × 2 に(合計は同じ・残りの 2 つは別の日へ deferred)');
-    ok(Pn.todayShare(q4, MON, {}, { chunk: 0 }).map((s) => s.todayMin).join() === '15,15,15,15' && Pn.todayShare(q4, MON, {}, { chunk: 60 }).map((s) => s.todayMin).join() === '60,0,0,0', 'todayShare: chunk 0 なら均等割のまま・60 なら 1 時間 × 1');
+    ok(TSe(q4, MON, {}, { chunk: 0 }).map((s) => s.todayMin).join() === '15,15,15,15' && TSe(q4, MON, {}, { chunk: 60 }).map((s) => s.todayMin).join() === '60,0,0,0', 'todayShare: chunk 0 なら均等割のまま・60 なら 1 時間 × 1');
     const q3 = { a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-13', remainingH: 1.5, deletedAt: null, doneAt: null }, b: q4.b, c: q4.c }; // 90/2=45・15・15
-    ok(Pn.todayShare(q3, MON).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:45,b:30,c:0', 'todayShare: 期限順に 均等割か 30 分の大きい方・合計(75)に届いたら残りは別の日へ');
-    ok(Pn.todayShare(q4, MON, { e: { id: 'e', date: MON, start: '09:00', end: '09:20', taskId: 'd', categoryId: 'research' } }).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:30,b:0,c:0,d:30', 'todayShare: きょう記録したタスクは必ず入れる(d が先に 30・合計 60 は同じ)');
-    ok(Pn.goals(q4, {}, MON, 600).length === 2 && Pn.goals(q4, {}, MON, 600).every((g) => g.targetMin === 30), 'goals(期限): 別の日へ回したタスク(todayMin 0)は きょうの目安に出ない');
+    ok(TSe(q3, MON).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:45,b:30,c:0', 'todayShare: 期限順に 均等割か 30 分の大きい方・合計(75)に届いたら残りは別の日へ');
+    ok(TSe(q4, MON, { e: { id: 'e', date: MON, start: '09:00', end: '09:20', taskId: 'd', categoryId: 'research' } }).map((s) => `${s.taskId}:${s.todayMin}`).join() === 'a:30,b:0,c:0,d:30', 'todayShare: きょう記録したタスクは必ず入れる(d が先に 30・合計 60 は同じ)');
+    ok(GSe(q4, {}, MON, 600).length === 2 && GSe(q4, {}, MON, 600).every((g) => g.targetMin === 30), 'goals(期限): 別の日へ回したタスク(todayMin 0)は きょうの目安に出ない');
     // v0.31.4: 塊の大きさは 設定 › 1日の目標(goals.chunkMin)
     ok(Pn.chunkOf({ goals: { chunkMin: 60 } }) === 60 && Pn.chunkOf({ goals: { chunkMin: 5 } }) === 30 && Pn.chunkOf(null) === 30 && Pn.chunkOf(S.defaultSettings()) === 30, 'chunkOf: settings.goals.chunkMin(15 分以上)・無ければ 30');
     ok(S.migrate({ schema: 1, settings: { goals: { chunkMin: 90 } } }).settings.goals.chunkMin === 90 && S.migrate({ schema: 1, settings: { goals: { chunkMin: 5 } } }).settings.goals.chunkMin === 30 && S.migrate({ schema: 1, settings: { goals: { chunkMin: 999 } } }).settings.goals.chunkMin === 30, 'migrate: goals.chunkMin は 15〜180 分・外れたら 30');
-    ok(Pn.goals(q4, {}, MON, 600, { chunk: 60 }).map((g) => g.targetMin).join() === '60' && Pn.goals(q4, {}, MON, 600, { chunk: 15 }).length === 4, 'goals: opts.chunk で 1 時間 × 1 / 15 分 × 4');
+    ok(GSe(q4, {}, MON, 600, { chunk: 60 }).map((g) => g.targetMin).join() === '60' && GSe(q4, {}, MON, 600, { chunk: 15 }).length === 4, 'goals: opts.chunk で 1 時間 × 1 / 15 分 × 4');
     ok(eq(Pn.loggedByTask({ a: { date: MON, start: '09:00', end: '10:00', taskId: 't1' }, b: { date: MON, start: '10:00', end: null, taskId: 't1' }, c: { date: MON, start: '11:00', end: '11:30', taskId: null } }, MON, 630), { t1: 90 }), 'loggedByTask: 記録中は now まで・紐づき無しは数えない');
     const lbE = { a: { date: '2026-10-12', start: '09:00', end: '10:00', taskId: 'w' }, b: { date: '2026-10-15', start: '09:00', end: '09:30', taskId: 'w' }, c: { date: '2026-10-19', start: '09:00', end: '10:00', taskId: 'w' }, d: { date: '2026-10-13', start: '09:00', end: null, taskId: 'w' }, e: { date: '2026-10-14', start: '12:00', end: '13:00', taskId: 'x' } };
     ok(Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18') === 90 && Pn.loggedBetween(lbE, 'w', '2026-10-12', '2026-10-18', '2026-10-13', 600) === 90 + 60, 'loggedBetween: 期間内の紐づく記録。記録中は今日なら now まで');
@@ -223,21 +227,21 @@ document.getElementById('app').addEventListener('load', async () => {
       gone: { id: 'gone', name: '消した', kind: 'duty', deadline: null, categoryId: 'other', repeat: { type: 'daily', min: 30 }, deletedAt: 'x', doneAt: null },
     };
     const gE = { a: { date: MON, start: '09:00', end: '09:20', taskId: 'd', categoryId: 'english' }, b: { date: MON, start: '10:00', end: '11:30', taskId: 'w', categoryId: 'research' }, c: { date: '2026-10-15', start: '10:00', end: '10:30', taskId: 'w', categoryId: 'research' }, d: { date: '2026-10-01', start: '10:00', end: '11:00', taskId: 'x', categoryId: 'other' } };
-    const gs = Pn.goals(gTasks, gE, MON, 720);
+    const gs = GSe(gTasks, gE, MON, 720);
     ok(gs.map((g) => `${g.kind}:${g.taskId}`).join() === 'deadline:t2,daily:d,weekly:w,wish:x', 'goals: 期限 → 毎日 → 毎週 → やりたい の順・消したものは出さない');
     ok(gs[0].targetMin === 30 && gs[0].doneMin === 0 && gs[0].deadline === '2026-10-13' && !gs[0].done, 'goals(期限): きょうの目安と今日の記録');
     ok(gs[1].targetMin === 30 && gs[1].doneMin === 20 && !gs[1].done, 'goals(毎日): 毎日30分のうち20分');
     ok(gs[2].targetMin === 300 && gs[2].doneMin === 120 && gs[2].from === '2026-10-12' && gs[2].to === '2026-10-18', 'goals(毎週): 今週の記録(今日90 + 15日30)');
     ok(gs[3].targetMin === null && gs[3].doneMin === 0 && gs[3].lastDate === '2026-10-01' && !gs[3].done, 'goals(やりたい): 目安なし・直近7日0・最後にふれた日');
-    ok(Pn.goals(gTasks, { ...gE, e: { date: MON, start: '12:00', end: '12:15', taskId: 'd' } }, MON, 800)[1].done === true, 'goals: 目安に届けば done');
-    ok(Pn.goals({}, {}, MON, 600).length === 0, 'goals: タスクが無ければ空');
+    ok(GSe(gTasks, { ...gE, e: { date: MON, start: '12:00', end: '12:15', taskId: 'd' } }, MON, 800)[1].done === true, 'goals: 目安に届けば done');
+    ok(GSe({}, {}, MON, 600).length === 0, 'goals: タスクが無ければ空');
     // v0.16: 習慣の「済んだ」の印(F5-8)
     const chkD = { ...gTasks.d, checks: [MON] }, chkW = { ...gTasks.w, checks: ['2026-10-18'] };
     ok(Pn.checkKey(chkD, MON) === MON && Pn.checkKey(chkW, MON) === '2026-10-18' && Pn.isChecked(chkD, MON) && !Pn.isChecked(chkD, '2026-10-13') && Pn.isChecked(chkW, '2026-10-15') && !Pn.isChecked(gTasks.d, MON), 'checkKey / isChecked: 毎日はその日・毎週は週の終わりの日付');
     ok(eq(Pn.toggleCheck(gTasks.d, MON), [MON]) && eq(Pn.toggleCheck(chkD, MON), []) && eq(Pn.toggleCheck({ checks: ['2026-10-13', 5] }, MON), [MON, '2026-10-13']), 'toggleCheck: 付ける/外す・壊れた値は捨てる・日付順');
-    const gsChk = Pn.goals({ d: chkD, w: chkW }, {}, MON, 600);
+    const gsChk = GSe({ d: chkD, w: chkW }, {}, MON, 600);
     ok(gsChk[0].checked && gsChk[0].done && gsChk[0].doneMin === 0 && gsChk[1].checked && gsChk[1].done, 'goals: 印があれば記録が無くても done(明日はまた出る)');
-    ok(!Pn.goals({ d: chkD }, {}, '2026-10-13', 600)[0].done, 'goals: 印は翌日には効かない');
+    ok(!GSe({ d: chkD }, {}, '2026-10-13', 600)[0].done, 'goals: 印は翌日には効かない');
     ok(eq(Pn.freeSlots([{ start: 600, end: 660 }], 540, 720), [{ start: 540, end: 600 }, { start: 660, end: 720 }]) && eq(Pn.freeSlots([{ start: 500, end: 560 }, { start: 550, end: 580 }], 540, 600), [{ start: 580, end: 600 }]), 'freeSlots: 空き区間(重なる区間も扱う)');
     ok(Pn.isEligible(tasksA.t1, MON) && !Pn.isEligible(tasksA.w1, MON) && !Pn.isEligible(tasksA.d1, MON) && !Pn.isEligible({ ...tasksA.t1, deadline: '2026-10-11' }, MON) && Pn.isEligible({ ...tasksA.t1, deadline: null }, MON), 'isEligible: 期限がその日以降(期限なしは可)・完了/削除/やりたいは不可');
 
@@ -318,8 +322,8 @@ document.getElementById('app').addEventListener('load', async () => {
     const fb4 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: fbSlow, date: RD, settings: ds });
     ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より1時間少なめ・ダラダラは1時間多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
     ok(fb4.better === 'ダラダラ2時間のうち30分を 英語 に回せば、目安に届いていました。' && fb4.next === '明日は 英語(毎日30分)を。きょうは0分でした。', 'dayFeedback: 良くするには=数字で裏づけられる1件(ダラダラの一部を届かなかった目安へ)・明日は=届かなかった毎日');
-    const fb5 = Rp.dayFeedback(fbAggGood, { tasks: tasksR, entries: fbGood, date: RD, settings: ds });
-    ok(fb5.next === '明日は 面談資料 を30分(残り1時間を2日で)。', 'dayFeedback: 明日は=期限つきの明日の分(残り ÷ 期限までの日数)が最優先');
+    const fb5 = Rp.dayFeedback(fbAggGood, { tasks: tasksR, entries: fbGood, date: RD, settings: ds, estimate: true }); // v0.44: 目安は estimate: true のときだけ
+    ok(fb5.next === '明日は 面談資料 を30分(残り1時間を2日で)。', 'dayFeedback: 明日は=期限つきの明日の分(残り ÷ 期限までの日数)が最優先({ estimate: true })');
     const fbChk = Rp.dayFeedback(Rp.aggregate({ entries: fbGood, date: RD, nowMin: 1440, settings: ds }), { tasks: { d: { ...dailyT.d, checks: [RD] } }, entries: fbGood, date: RD, settings: ds });
     ok(fbChk.reasons.includes('毎日の目安に届いた') && fbChk.good.includes('英語は済みました(印)。') && fbChk.next === null, 'dayFeedback: 「済んだ」の印は目安に届いた扱い');
     const bre = Rp.buildReport({ entries: fbGood, date: RD, nowMin: 1440, settings: ds, tasks: {} });
@@ -431,7 +435,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(eq(Pn.rollWeekly(wk, {}, '2026-10-12', PC).tasks.w, Pn.rollWeekly(wk, {}, '2026-10-12', PC).tasks.w) && eq(wk.w.periodEnd, undefined), 'rollWeekly: 入力を変更しない');
     const rw = Pn.rollWeekly({ w: { id: 'w', name: 'w', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, remainingH: 1, periodEnd: '2026-10-11', deletedAt: null, doneAt: null } }, {}, '2026-10-12', PC);
     ok(rw.tasks.w.remainingSetAt === '2026-10-12T00:00:00' && rw.tasks.w.remainingH === 5, 'rollWeekly: 新しい週の始まりを remainingSetAt にする');
-    const od = Pn.overdueTasks({ a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-10', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: 'b', kind: 'duty', deadline: '2026-10-10', remainingH: 0, deletedAt: null, doneAt: null }, c: { id: 'c', name: 'c', kind: 'wish', deadline: '2026-10-01', remainingH: 1, deletedAt: null, doneAt: null }, d: { id: 'd', name: 'd', kind: 'duty', deadline: '2026-10-12', remainingH: 1, deletedAt: null, doneAt: null } }, '2026-10-12');
+    const od = ODe({ a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-10', remainingH: 1, deletedAt: null, doneAt: null }, b: { id: 'b', name: 'b', kind: 'duty', deadline: '2026-10-10', remainingH: 0, deletedAt: null, doneAt: null }, c: { id: 'c', name: 'c', kind: 'wish', deadline: '2026-10-01', remainingH: 1, deletedAt: null, doneAt: null }, d: { id: 'd', name: 'd', kind: 'duty', deadline: '2026-10-12', remainingH: 1, deletedAt: null, doneAt: null } }, '2026-10-12');
     ok(od.length === 1 && od[0].id === 'a', 'overdueTasks: 期限超過かつ残りがある義務だけ(やりたい・残り0・今日が期限は除く)');
     const wsum = Rp.weekSummary({ a: { date: '2026-10-12', start: '09:00', end: '11:00', categoryId: 'research', deletedAt: null }, b: { date: '2026-10-03', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, c: { date: '2026-10-12', start: '12:00', end: '12:30', categoryId: 'sns', deletedAt: null } }, ds, '2026-10-12');
     ok(wsum.week.workMin === 120 && wsum.week.driftMin === 30 && wsum.week.days === 1 && wsum.prev.workMin === 60, 'weekSummary: 直近7日と前の7日の作業・ダラダラ・記録日数');
@@ -467,9 +471,9 @@ document.getElementById('app').addEventListener('load', async () => {
     const rE = { a: { id: 'a', date: '2026-10-10', start: '09:00', end: '10:00', taskId: 'r', deletedAt: null }, b: { id: 'b', date: '2026-10-11', start: '09:00', end: '10:30', taskId: 'r', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '09:00', end: '09:30', taskId: 'r', deletedAt: null }, d: { id: 'd', date: '2026-10-12', start: '10:00', end: null, taskId: 'r', deletedAt: null }, e: { id: 'e', date: '2026-10-11', start: '12:00', end: '13:00', taskId: 'x', deletedAt: null } };
     ok(Pn.remainingMin(rt, rE) === 300 - 90 - 30 && Pn.remainingMin(rt, rE, '2026-10-12') === 300 - 90 && Pn.remainingMin(rt, {}) === 300, 'remainingMin: remainingSetAt より後の閉じた記録を引く(beforeDate で今日の分は引かない・記録中は引かない)');
     ok(Pn.remainingMin({ ...rt, remainingSetAt: null }, rE) === 300 - 60 - 90 - 30 && Pn.remainingMin({ ...rt, remainingH: 1 }, rE) === 0, 'remainingMin: remainingSetAt が無ければ全部引く・0で止まる');
-    const ts0 = Pn.todayShare({ r: rt }, '2026-10-12', rE)[0];
+    const ts0 = TSe({ r: rt }, '2026-10-12', rE)[0];
     ok(ts0 && ts0.remainingMin === 210 && ts0.rawMin === 25 && ts0.todayMin === 30, 'todayShare: entries を渡すと前日までの記録を引いた残りで配分する(210/9日 → 均等割 25分・v0.31.3 の塊で 30分)');
-    ok(Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && Pn.overdueTasks({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが0なら出さない');
+    ok(ODe({ r: { ...rt, deadline: '2026-10-11', remainingH: 2 } }, '2026-10-12', rE).length === 0 && ODe({ r: { ...rt, deadline: '2026-10-11', remainingH: 3 } }, '2026-10-12', rE).length === 1, 'overdueTasks: 記録を引いて残りが0なら出さない');
     const gE2 = { a: { id: 'a', date: '2026-10-12', start: '09:00', end: '10:00', categoryId: 'research', deletedAt: null }, b: { id: 'b', date: '2026-10-12', start: '10:07', end: '11:00', categoryId: 'class', deletedAt: null }, c: { id: 'c', date: '2026-10-12', start: '11:20', end: '12:00', categoryId: 'sns', deletedAt: null }, d: { id: 'd', date: '2026-10-13', start: '09:05', end: '10:00', categoryId: 'sns', deletedAt: null } };
     const gR = L.closeSmallGaps(gE2, '2026-10-12', 10, PC);
     ok(gR.b.start === '10:00' && gR.c.start === '11:20' && gR.d.start === '09:05' && gE2.b.start === '10:07', 'closeSmallGaps: 10分以内のすき間だけ次の記録の開始を前に合わせる(別の日は触らない・入力は変えない)');
@@ -510,7 +514,7 @@ document.getElementById('app').addEventListener('load', async () => {
     log('\n# v0.13.3');
     const ovr = { id: 'o', name: 'o', kind: 'duty', deadline: '2026-10-11', remainingH: 3, minUnit: 30, categoryId: 'research', deletedAt: null, doneAt: null };
     ok(!Pn.isEligible(ovr, '2026-10-12') && Pn.isEligible(ovr, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null }, '2026-10-12') && !Pn.isEligible({ ...ovr, doneAt: 'x' }, '2026-10-11') && Pn.isEligible({ ...ovr, deadline: null, repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' } }, '2026-10-12'), 'isEligible: 期限がその日以降(期限なし・毎週型は可)・完了/削除/やりたいは不可');
-    ok(Pn.todayShare({ o: ovr }, '2026-10-12').length === 0 && Pn.todayShare({ o: ovr }, '2026-10-11')[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
+    ok(TSe({ o: ovr }, '2026-10-12').length === 0 && TSe({ o: ovr }, '2026-10-11')[0].todayMin === 180, 'todayShare: 期限切れは今日の分に出ない(期限当日は残り全部)');
     ok(Rp.untouchedNear({ o: ovr, n: { ...ovr, id: 'n', deadline: '2026-10-13' } }, {}, '2026-10-12').map((t) => t.id).join() === 'n', 'untouchedNear: 期限切れは出さない(F5-5で扱う)');
 
     // ---- v0.13.4: 記録は実効の日に属する(切れ目があれば24:xx の1つの記録) ----
@@ -560,13 +564,13 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(v17.settings.goals.workMin === 360 && v17.settings.goals.driftMax === 60 && eq(S.migrate({ schema: 1, settings: { goals: { workMin: 5, driftMax: 'x' } } }).settings.goals, { workMin: null, driftMax: null, chunkMin: 30 }) && eq(S.defaultSettings().goals, { workMin: null, driftMax: null, chunkMin: 30 }) && S.migrate({ schema: 1, settings: { goals: { driftMax: 0 } } }).settings.goals.driftMax === 0, 'settings.goals(v0.17): 作業は15分以上・上限は0以上・他は null(0は「ダラダラなし」の上限として通す)');
     ok(eq(v17.settings.fieldStamps, { dayStart: '2026-10-16T10:00:00+09:00' }) && eq(S.migrate(null).settings.fieldStamps, {}), 'settings.fieldStamps(v0.17): 知っている項目の文字列だけ');
     const todoT = { u: { id: 'u', name: '銀行', kind: 'duty', deadline: MON, remainingH: 0, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, v: { id: 'v', name: '明日の用事', kind: 'duty', deadline: '2026-10-13', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, w: { id: 'w', name: '先の用事', kind: 'duty', deadline: '2026-10-14', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, x: { id: 'x', name: '過ぎた用事', kind: 'duty', deadline: '2026-10-10', noTime: true, categoryId: 'life', deletedAt: null, doneAt: null }, y: { id: 'y', name: '済んだ用事', kind: 'duty', deadline: MON, noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-12T09:00:00+09:00' }, z: { id: 'z', name: '昨日済んだ', kind: 'duty', deadline: '2026-10-11', noTime: true, categoryId: 'life', deletedAt: null, doneAt: '2026-10-11T09:00:00+09:00' } };
-    ok(Pn.todayShare({ ...todoT, t: { id: 't', name: 't', kind: 'duty', deadline: MON, remainingH: 2, noTime: true } }, MON).length === 0, 'todayShare: 用事(noTime)は量を持たない');
-    const gTodo = Pn.goals(todoT, {}, MON, 600);
+    ok(TSe({ ...todoT, t: { id: 't', name: 't', kind: 'duty', deadline: MON, remainingH: 2, noTime: true } }, MON).length === 0, 'todayShare: 用事(noTime)は量を持たない');
+    const gTodo = GSe(todoT, {}, MON, 600);
     ok(gTodo.map((g) => `${g.kind}:${g.taskId}${g.done ? '✓' : ''}`).join() === 'todo:x,todo:u,todo:y✓,todo:v', 'goals(用事): 期限が明日までのもの(過ぎたものも・その日に済ませたものは ✓)を期限順に。先の用事・前に済んだものは出さない');
     ok(gTodo[0].daysLeft === -1 && gTodo[1].daysLeft === 1 && gTodo[1].targetMin === null && gTodo[1].deadline === MON, 'goals(用事): 目安は持たない・期限と残り日数');
-    const ntHabit = Pn.goals({ h: { id: 'h', name: '薬', kind: 'duty', repeat: { type: 'daily', min: 30 }, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null, checks: [MON] } }, {}, MON, 600)[0];
+    const ntHabit = GSe({ h: { id: 'h', name: '薬', kind: 'duty', repeat: { type: 'daily', min: 30 }, noTime: true, categoryId: 'life', deletedAt: null, doneAt: null, checks: [MON] } }, {}, MON, 600)[0];
     ok(ntHabit.kind === 'daily' && ntHabit.targetMin === null && ntHabit.noTime && ntHabit.done && ntHabit.checked, 'goals(時間なしの習慣): 目安は無く、印で done');
-    ok(Pn.overdueTasks(todoT, MON).map((t) => t.id).join() === 'x' && Pn.overdueTasks({ ...todoT, z: { ...todoT.z, doneAt: null } }, MON).map((t) => t.id).join() === 'x,z', 'overdueTasks: 用事は残りが無くても、済んでいなければ期限切れ');
+    ok(ODe(todoT, MON).map((t) => t.id).join() === 'x' && ODe({ ...todoT, z: { ...todoT.z, doneAt: null } }, MON).map((t) => t.id).join() === 'x,z', 'overdueTasks: 用事は残りが無くても、済んでいなければ期限切れ');
     const recT = { r: { id: 'r', name: '課題', kind: 'duty', deadline: '2026-10-09T15:00', remainingH: 2, remainingSetAt: '2026-10-01T00:00:00+09:00', recur: 'weekly', categoryId: 'class', deletedAt: null, doneAt: '2026-10-08T20:00:00+09:00', checks: [] }, s: { id: 's', name: '未完', kind: 'duty', deadline: '2026-10-09', recur: 'weekly', deletedAt: null, doneAt: null }, t: { id: 't', name: '先', kind: 'duty', deadline: '2026-10-16', recur: 'weekly', deletedAt: null, doneAt: 'x' }, u: { id: 'u', name: '繰り返さない', kind: 'duty', deadline: '2026-10-09', deletedAt: null, doneAt: 'x' } };
     const rr = Pn.rollRecurring(recT, MON, PC);
     ok(rr.rolled.join() === 'r' && rr.tasks.r.deadline === '2026-10-16T15:00' && rr.tasks.r.doneAt === null && rr.tasks.r.remainingH === 2 && rr.tasks.r.remainingSetAt === PC.nowISO() && eq(rr.tasks.r.checks, ['2026-10-09']) && recT.r.doneAt !== null, 'rollRecurring: 済んで期限を過ぎた繰り返しタスクは翌週の同じ曜日(時刻つき)に送って未完了へ・済んだ期限は checks に・入力は変えない');
@@ -697,7 +701,7 @@ document.getElementById('app').addEventListener('load', async () => {
     const P22 = M.plan;
     const memoD = S.migrate({ schema: 1, tasks: { m: { id: 'm', name: 'メモ', kind: 'memo', categoryId: 'research' }, x: { id: 'x', name: 'x', kind: 'bogus' } } });
     ok(memoD.tasks.m.kind === 'memo' && memoD.tasks.x.kind === 'duty', 'validateTask(v0.22): kind memo を通す・知らない kind は duty');
-    ok(P22.goals(memoD.tasks, {}, '2026-10-27', 600).length === 0 && P22.overdueTasks(memoD.tasks, '2026-10-27', {}).length === 0 && P22.todayShare(memoD.tasks, '2026-10-27', {}).length === 0, 'goals/overdue/todayShare: メモは目安に入らない');
+    ok(GSe(memoD.tasks, {}, '2026-10-27', 600).length === 0 && ODe(memoD.tasks, '2026-10-27', {}).length === 0 && TSe(memoD.tasks, '2026-10-27', {}).length === 0, 'goals/overdue/todayShare: メモは目安に入らない');
     ok(P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 10 }) === 20 && P22.startSpan({ kind: 'daily', targetMin: 30, doneMin: 30 }) === null && P22.startSpan({ kind: 'daily', targetMin: 3, doneMin: 0 }) === 5, 'startSpan: 毎日=目安の残り(5分以上・届いていれば null)');
     ok(P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 0 }) === 60 && P22.startSpan({ kind: 'weekly', targetMin: 300, doneMin: 290 }) === 15 && P22.startSpan({ kind: 'wish', targetMin: null, doneMin: 0 }) === 15, 'startSpan: 毎週=残りと60分の小さい方(15分以上)・やりたいこと=15分');
     ok(P22.startSpan({ kind: 'deadline', targetMin: 60, doneMin: 0 }) === null && P22.startSpan({ kind: 'daily', targetMin: null, doneMin: 0, noTime: true }) === null && P22.startSpan(null) === null, 'startSpan: 期限つき・用事・無しは null');
@@ -1140,6 +1144,21 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(sw.includes(`'./js/feed.js'`) && sw.includes(`'./js/ui-feed.js'`) && /const DATA = \['\.\/data\/bgm\.json', '\.\/data\/feed\.json'\]/.test(sw) && !/ASSETS = \[[^\]]*feed\.json/.test(sw), 'sw.js: feed.js / ui-feed.js は ASSETS・data/feed.json は DATA(先読み+裏で更新・版と一緒に固定しない)');
       const real = await F.loadFeed();
       ok(real && real.genres.length >= 1 && real.items.length >= 1 && real.items.every((x) => /^[a-f0-9]{8,16}$/.test(x.id) && /^https?:\/\//.test(x.u) && real.genres.some((g) => g.id === x.g)), `同梱の記事の一覧: ${real && real.items.length} 件・${real && real.genres.length} ジャンル・id と URL の形`);
+    }
+
+    // ---- v0.44: 期限つきタスクの目安の廃止(FEATURES.TASK_ESTIMATE=false) ----
+    log('\n# v0.44 目安の廃止');
+    {
+      const Pn = M.plan, MON = '2026-10-12';
+      const tk = { a: { id: 'a', name: 'a', kind: 'duty', deadline: '2026-10-13T15:00', remainingH: 10 }, b: { id: 'b', name: 'b', kind: 'duty', deadline: '2026-10-20', remainingH: 10 }, c: { id: 'c', name: 'c', kind: 'duty', deadline: '2026-10-11', remainingH: 0 }, h: { id: 'h', name: 'h', kind: 'duty', repeat: { type: 'daily', min: 30 } } };
+      ok(M.features.FEATURES.TASK_ESTIMATE === false, 'FEATURES.TASK_ESTIMATE は false(目安を使わない)');
+      ok(Pn.todayShare(tk, MON).length === 0 && Pn.todayShare(tk, MON, {}, { estimate: true }).length === 2, 'todayShare: 既定では空・{ estimate: true } で従来の計算');
+      const g0 = Pn.goals(tk, {}, MON, 600);
+      ok(g0.map((g) => `${g.kind}:${g.taskId}`).join() === 'todo:c,todo:a,daily:h' && g0[1].targetMin === null && g0[1].deadline === '2026-10-13' && !g0[1].done, 'goals: 期限が明日まで(過ぎたものも)の期限つきは残り見積に関係なく todo(チェックで済ませる)・習慣はそのまま・遠い期限は出ない');
+      ok(Pn.goals(tk, {}, MON, 600, { estimate: true }).map((g) => g.kind).join() === 'deadline,deadline,daily', 'goals: { estimate: true } なら deadline の目安に戻る');
+      ok(Pn.overdueTasks(tk, MON).map((t) => t.id).join() === 'c' && Pn.overdueTasks(tk, MON, {}, { estimate: true }).length === 0, 'overdueTasks: 残り 0 でも期限を過ぎて済んでいなければ期限切れ({ estimate: true } なら従来どおり残りがあるものだけ)');
+      const rpT = M.report.dayFeedback(M.report.aggregate({ entries: {}, date: MON, nowMin: 1440, settings: S.defaultSettings() }), { tasks: tk, entries: {}, date: MON, settings: S.defaultSettings(), nowMin: 1440 });
+      ok(typeof rpT.next === 'string' && rpT.next.includes('明日は a が期限です'), 'dayFeedback: 目安が無いので「明日は ◯ が期限です」');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
