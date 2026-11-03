@@ -85,14 +85,13 @@ export function uiBusy() { return dragActive || !!document.querySelector('.overl
 /** タブバーの ＋(v0.15.3): ホーム/タスク/設定では記録のシート、過去の日のタイムラインではその日に記録を足すシート */
 export function openAdd(current, rerender) {
   const n = effNow();
-  if ((current === 'timeline' || current === 'now') && timelineDate && timelineDate !== n.date) { const s = pastDefault(timelineDate); entrySheet({ date: timelineDate, start: s, end: s + 60 }, rerender); return; }
+  if ((current === 'timeline' || current === 'now') && timelineDate && timelineDate !== n.date) { const de = dayEndOf(timelineDate); let s = pastDefault(timelineDate); if (s >= de - 5) s = de - 60; entrySheet({ date: timelineDate, start: s, end: Math.min(s + 60, de) }, rerender); return; } // v0.45: 深夜の最後の記録(25:47)の続きから足せる
   chipsSheet(n, rerender);
 }
-/** 過去の日に足すときの既定の開始(分): その日の最後の記録の終わり(24:00まで)。無ければ9:00 */
+/** 過去の日に足すときの既定の開始(分): その日の最後の記録の終わり(深夜 24:xx も・v0.45)。無ければ9:00 */
 function pastDefault(date) {
   const last = log.entriesOf(E(), date).filter((x) => x.end != null).pop();
-  const m = last ? hm(last.end) : 540;
-  return m >= 1380 ? 1380 : m;
+  return last ? hm(last.end) : 540;
 }
 /** 記録の ＋ ボタン(v0.19: ホームの左上・タイムラインの右上)。記録中は ●。見た目は refreshAddButton が揃える */
 export function addButton(ctx) {
@@ -150,6 +149,34 @@ function kindChips(c, cur, onPick) {
  * もとの値が1440以上(その日の深夜)なら、選んだ6:00より前の時刻も +1440して同じ日の深夜として扱う(そのまま0:10にすると、その日の朝0:10の別の記録になって画面に出なかった)。
  */
 const lateFix = (v, base) => (v != null && base != null && base >= 1440 && v < 360 ? v + 1440 : v);
+/**
+ * v0.45(実機 FB「25〜26 時の睡眠を数日遅れで記入できない(1 日の区切りが 2 時)」): 時計で選んだ時刻 v(分)が その日の切れ目 ds より前(例 区切り 2:00 で 01:47)なら、
+ * その日のタイムラインには無い時刻なので「その日の深夜」(25:47)と読む。ただし もとの値 base が切れ目より前(翌日の早朝の記録を直すとき)はそのまま。lateFix(24:xx の近く)も続けて効かせる
+ */
+function fixTime(v, base, date) {
+  v = lateFix(v, base);
+  const ds = dayCut(S(), date);
+  if (v != null && ds > 0 && v < ds && (base == null || base >= ds)) v += 1440;
+  return v;
+}
+const SLEEP_ID = 'sleep';
+/**
+ * 睡眠の記録を足した・始めたあと: 切れ目から始まる睡眠なら前日の未記入の尾を睡眠で埋める(v0.45・F1-21・log.fillSleepBack)。
+ * entries を返す(変わらなければそのまま)。埋めたときは lastSleepFill に「(前日の 01:47 から)」を入れるので、呼び元はトーストに添える
+ */
+let lastSleepFill = '';
+function sleepBackfill(entries, ids) {
+  let out = entries;
+  lastSleepFill = '';
+  for (const id of ids) {
+    const e = out[id];
+    if (!e || e.deletedAt || e.categoryId !== SLEEP_ID) continue;
+    const ds = dayCut(S(), addDays(e.date, -1)); // 前の日との切れ目
+    const r = log.fillSleepBack(out, id, ds, LCTX, { maxGap: 360, slack: gapMin() });
+    if (r.filledMin > 0) { out = r.entries; lastSleepFill = `(前日の ${mm((r.from + 1440) % 1440)} から埋めました)`; }
+  }
+  return out;
+}
 
 // ---- 記録操作(UI・URL から呼ぶ) ----
 export function startCategory(categoryId, startMin = null, extra = {}) {
@@ -161,10 +188,11 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   }
   const r = log.start(E(), { date: n.date, nowMin: n.min, startMin, categoryId, windowEndOf, taskId: extra.taskId ?? null, plannedMin: extra.plannedMin ?? null, note: extra.note || '', asKind: extra.asKind || null }, LCTX); // note: v0.23.1・asKind: v0.30
   if (r.ignored) { toast(`${catOf(categoryId).name} を記録中です`); return r; }
-  commit(extra.tidy === false ? r.entries : log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX), `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める(v0.24: 時計で決めた開始はそのまま)
+  const started = sleepBackfill(extra.tidy === false ? r.entries : log.closeSmallGaps(r.entries, n.date, gapMin(), LCTX), [r.entry.id]); // v0.45: 切れ目から寝るなら前日の尾を埋める
+  commit(started, `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める(v0.24: 時計で決めた開始はそのまま)
   refreshAddButton();
   const nm = taskName(extra.taskId, categoryId);
-  toast(startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`);
+  toast((startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`) + lastSleepFill);
   sync.autoSync();
   return r;
 }
@@ -183,11 +211,13 @@ export function stopRecording(at = null) {
 function addClosed({ date, startMin, endMin, categoryId, taskId = null, busyKey: bk = null, note = '', tidy = true, asKind = null }) {
   if (endMin > dayEndOf(date) && startMin < 1440) endMin -= 1440; // 切れ目より後まで伸びた深夜の終了は、従来どおり24:00で分けて翌日へ(v0.17)
   const label = `${taskName(taskId, categoryId)}${mm(startMin % 1440)}〜${mm(endMin % 1440)}の追加`;
-  const added = log.addEntry(E(), { date, startMin, endMin, categoryId, taskId, note, asKind }, LCTX, dayEndOf(date));
+  const before = E();
+  let added = log.addEntry(before, { date, startMin, endMin, categoryId, taskId, note, asKind }, LCTX, dayEndOf(date));
+  added = sleepBackfill(added, Object.keys(added).filter((k) => !before[k])); // v0.45: 睡眠なら前日の未記入の尾を埋める(翌日に移った記録も)
   if (tidy) commitTidy(added, date, label); else commit(added, label); // v0.24: 時計で決めた時刻はそのまま(すき間の吸収で開始がずれない)
   if (bk) { S().busyMemory = { ...(S().busyMemory || {}), [bk]: categoryId }; store.touchSettings(); } // 予定の時間に何をしたかを覚える(次からその候補)
   sync.autoSync();
-  toast(`${taskName(taskId, categoryId)}${mm(startMin % 1440)}〜${mm(endMin % 1440)}を記録`);
+  toast(`${taskName(taskId, categoryId)}${mm(startMin % 1440)}〜${mm(endMin % 1440)}を記録${lastSleepFill}`);
 }
 
 /** 前日までのレポートを確定(F3-5)。起動時・復帰時に呼ぶ */
@@ -645,12 +675,12 @@ function chipsSheet(n0, rerender, mode0 = null, opts = {}) {
       if (store.kindRole(S(), asKind || c.kind).drift && !(o && o.categoryId === cid) && !taskId) { driftSheet(c, n, rerender, note, asKind); return; } // ダラダラとして数えるなら「あと何分?」
       startCategory(cid, null, { taskId, note, asKind }); rerender(); return;
     }
-    const s0 = lateFix(hm(st.value), n.min); // 深夜(切れ目の前)は実効の日の24:xx(v0.17)
+    const s0 = fixTime(hm(st.value), n.min, n.date); // 深夜(切れ目の前)は実効の日の24:xx(v0.17・v0.45: 切れ目より前の時刻も)
     if (s0 == null) { toast('開始を選んでください'); return; }
     try {
       const tidy = st.value === st0 && en.value === en0; // 既定の時刻のままなら すき間を吸収、時計で変えたらそのまま(v0.24)
       if (!en.value) { if (s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); startCategory(cid, s0, { taskId, note, tidy, asKind }); rerender(); return; }
-      close(); addClosed({ date: n.date, startMin: s0, endMin: lateFix(hm(en.value), n.min), categoryId: cid, taskId, note, tidy, asKind }); rerender();
+      close(); addClosed({ date: n.date, startMin: s0, endMin: fixTime(hm(en.value), n.min, n.date), categoryId: cid, taskId, note, tidy, asKind }); rerender();
     } catch (err) { toast(err.message); }
   };
   const chip = (c, label, onpick, on) => {
@@ -797,10 +827,10 @@ export function entrySheet(o, rerender) {
     el('div.row.field', [el('span.label', o.busyAt ? '予定のメモ' : 'メモ'), bn]),
     el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'),
       el('button.btn.primary.grow', { type: 'button', onclick: () => {
-        const s0 = lateFix(hm(st.value), o.start); // 深夜(切れ目の前)の区間は24:xx のまま(v0.17・F1-18)
+        const s0 = fixTime(hm(st.value), o.start, o.date); // 深夜(切れ目の前)の区間は24:xx のまま(v0.17・F1-18・v0.45: 切れ目より前の時刻はその日の深夜)
         if (s0 == null) { toast('開始を選んでください'); return; }
         try {
-          const e1 = en.value ? lateFix(hm(en.value), o.end ?? o.start) : null;
+          const e1 = en.value ? fixTime(hm(en.value), o.end ?? o.start, o.date) : null;
           const tidy = s0 === o.start && (e1 == null || e1 === o.end); // 時計で変えた時刻はそのまま保存(v0.24)
           if (!en.value) { if (!isToday || s0 > n.min) { toast('未来の時刻は選べません'); return; } close(); const note = keepBusyNote(); startCategory(cid, s0, { taskId, note, tidy, asKind: asKindFor() }); rerender(); return; }
           close(); const note = keepBusyNote(); addClosed({ date: o.date, startMin: s0, endMin: e1, categoryId: cid, taskId, busyKey: o.busyKey || null, note, tidy, asKind: asKindFor() }); rerender();
@@ -1174,9 +1204,9 @@ function editEntrySheet(id, n0, rerender) {
   let close;
   const save = (fn) => { try { fn(); close(); rerender(); sync.autoSync(); } catch (err) { toast(err.message); } };
   // 深夜の記録(24:10〜25:00など)は時計で選んだ0:xx を同じ日の24:xx に戻す(v0.17・F1-18)
-  const fixed = (v, base) => (v ? mm(lateFix(hm(v), hm(base))) : v);
-  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: fixed(v, e.start), end: e.end }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の開始時刻の変更`)) });
-  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(log.setTimes(E(), e.id, { start: e.start, end: fixed(v, e.end) || null }, n.min, LCTX, dayEndOf(e.date)), e.date, `${c.name} の終了時刻の変更`)) });
+  const fixed = (v, base) => (v ? mm(fixTime(hm(v), hm(base), e.date)) : v); // v0.45: 切れ目より前の時刻はその日の深夜(翌日の早朝の記録はそのまま)
+  const st = timeField(e.start, { label: '開始', onchange: (v) => save(() => commitTidy(sleepBackfill(log.setTimes(E(), e.id, { start: fixed(v, e.start), end: e.end }, n.min, LCTX, dayEndOf(e.date)), [e.id]), e.date, `${c.name} の開始時刻の変更`)) });
+  const en = timeField(e.end ?? '', { label: '終了', emptyLabel: '記録中', allowEmpty: e.end == null, onchange: (v) => save(() => commitTidy(sleepBackfill(log.setTimes(E(), e.id, { start: e.start, end: fixed(v, e.end) || null }, n.min, LCTX, dayEndOf(e.date)), [e.id]), e.date, `${c.name} の終了時刻の変更`)) });
   const switchChips = groupedChips(cats().filter((x) => x.id !== e.categoryId), (x) => el('button.chip.sm2.cat', { type: 'button', style: { '--c': x.color }, onclick: () => { close(); kindAskSheet(x, (ak) => switchSheet(e, x, n, rerender, ak)); } }, [el('span.dot', { style: { background: x.color } }), x.name]), { small: true, current: e.categoryId });
   const kc = kindChips(c, e.asKind || null, (v) => { commit(log.update(E(), e.id, { asKind: v }, LCTX), '種別の変更'); sync.autoSync(); rerender(); }); // v0.31: ほかの種別があるときだけ
   close = sheet((cl) => { close = cl; return [

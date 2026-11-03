@@ -93,14 +93,25 @@ export function start(entries, opts, ctx) {
   return { entries: out, entry: out[e.id] };
 }
 
-/** 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める */
+/** 日付をまたぐ入力の上限(分): 終了 ≦ 開始 を「翌日の終了」と読むのは 18 時間までにする(14:00〜13:00 のような打ち間違いを 23 時間の記録にしない)(v0.45) */
+export const CROSS_MAX_MIN = 1080;
+/**
+ * 別の日などに閉じた記録を追加(開始〜終了)。隣は詰める。
+ * 日付をまたぐ(v0.13.2/0.13.4・v0.45 で一般化): 終了 ≦ 開始 なら翌日の終了(+1440・18 時間まで)。切れ目(dayEnd)までは同じ日の記録(end '24:10')。
+ * 切れ目を越えるとき、開始が 24:00 以降(切れ目の前の深夜・例 25:47〜翌 9:00 の睡眠)なら<b>翌日の記録</b>(01:47〜09:00・前の日のタイムラインの下にも映る)、
+ * 開始が 24:00 より前なら従来どおり 24:00 で分けて翌日へ。
+ */
 export function addEntry(entries, { date, startMin, endMin, categoryId, taskId = null, note = '', asKind = null }, ctx, dayEnd = 1440) {
   if (startMin == null || endMin == null) throw new Error('終了は開始より後にしてください');
-  if (endMin <= startMin) { // 日付をまたぐ(v0.13.2/0.13.4): 終了が翌日の深夜なら、切れ目(dayEnd)までは同じ日の記録(end '24:10')、無ければ 24:00 で分ける
-    if (!(endMin <= 360 && startMin > 360)) throw new Error('終了は開始より後にしてください');
-    if (endMin + 1440 <= dayEnd) return addEntry(entries, { date, startMin, endMin: endMin + 1440, categoryId, taskId, note, asKind }, ctx, dayEnd);
+  if (endMin <= startMin) {
+    const en2 = endMin + 1440;
+    if (en2 - startMin > CROSS_MAX_MIN) throw new Error('終了は開始より後にしてください');
+    return addEntry(entries, { date, startMin, endMin: en2, categoryId, taskId, note, asKind }, ctx, dayEnd);
+  }
+  if (endMin > dayEnd) { // 切れ目を越える
+    if (startMin >= 1440) return addEntry(entries, { date: addDays(date, 1), startMin: startMin - 1440, endMin: endMin - 1440, categoryId, taskId, note, asKind }, ctx, dayEnd); // v0.45: 深夜に始まる記録は翌日のもの
     let out = addEntry(entries, { date, startMin, endMin: 1440, categoryId, taskId, note, asKind }, ctx, dayEnd);
-    if (endMin > 0) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin, categoryId, taskId, note, asKind }, ctx, dayEnd);
+    if (endMin > 1440) out = addEntry(out, { date: addDays(date, 1), startMin: 0, endMin: endMin - 1440, categoryId, taskId, note, asKind }, ctx, dayEnd);
     return out;
   }
   const out = clone(entries);
@@ -122,12 +133,17 @@ export function setTimes(entries, id, { start, end }, nowMin, ctx, dayEnd = 1440
   const s = hm(start);
   const en = end == null ? null : hm(end);
   if (s == null) throw new Error('終了は開始より後にしてください');
-  if (en != null && en <= s) { // 日付をまたぐ(v0.13.2/0.13.4): 切れ目(dayEnd)までは同じ日の記録(23:40〜24:10)、無ければ 24:00 で分ける
-    if (!(en <= 360 && s > 360)) throw new Error('終了は開始より後にしてください');
-    if (en + 1440 <= dayEnd) { e.start = mm(s); e.end = mm(en + 1440); e.updatedAt = ctx.nowISO(); return resolveOverlap(out, id, nowMin, ctx); }
+  if (en != null && en <= s) { // 日付をまたぐ(v0.13.2/0.13.4・v0.45 で addEntry と同じ規則に): 翌日の終了(18 時間まで)。切れ目(dayEnd)までは同じ日の記録(23:40〜24:10)
+    const en2 = en + 1440;
+    if (en2 - s > CROSS_MAX_MIN) throw new Error('終了は開始より後にしてください');
+    if (en2 <= dayEnd) { e.start = mm(s); e.end = mm(en2); e.updatedAt = ctx.nowISO(); return resolveOverlap(out, id, nowMin, ctx); }
+    if (s >= 1440) { // v0.45: 深夜(切れ目の前)に始まり切れ目を越える → 翌日の記録に移す(例 25:47〜翌 9:00 の睡眠 → 翌日 01:47〜09:00)
+      e.date = addDays(e.date, 1); e.start = mm(s - 1440); e.end = mm(en); e.updatedAt = ctx.nowISO();
+      return resolveOverlap(out, id, nowMin, ctx);
+    }
     e.start = mm(s); e.end = '24:00'; e.updatedAt = ctx.nowISO();
     let res = resolveOverlap(out, id, nowMin, ctx);
-    if (en > 0) res = addEntry(res, { date: addDays(e.date, 1), startMin: 0, endMin: en, categoryId: e.categoryId, taskId: e.taskId, note: e.note }, ctx);
+    if (en > 0) res = addEntry(res, { date: addDays(e.date, 1), startMin: 0, endMin: en, categoryId: e.categoryId, taskId: e.taskId, note: e.note, asKind: e.asKind || null }, ctx, dayEnd);
     return res;
   }
   e.start = mm(s); e.end = en == null ? null : mm(en); e.updatedAt = ctx.nowISO();
@@ -248,6 +264,38 @@ export function normalizeAfterMerge(entries, ctx) {
     }
   }
   return out;
+}
+
+/**
+ * 翌日の睡眠を記入したら、前日の未記入の尾を睡眠で埋める(v0.45・F1-21・ユーザー要望「翌日の睡眠が記入されたタイミングで、前日の未記入枠は睡眠で自動で埋める」)。
+ * out[id] が date の記録で、開始が切れ目 ds(前の日の dayCut)から slack 分以内なら、「最後の記録の終わり」まで開始を早める。
+ * 最後の記録 = 前の日の閉じた記録(24:xx も・date の分に直すと負)と、date の ds より前に終わる閉じた記録 のうち最も遅い終わり。
+ * 空きが 0 < gap ≦ maxGap のときだけ。前の日にも date の早朝にも記録が無ければ何もしない(どこから寝ていたか分からない)。
+ * 最後の記録が前の日の 24:00 より前に終わるなら、24:00 で分ける(前の日 23:30〜24:00 の新しい記録+date 00:00〜)。
+ * 戻り値 { entries, filledMin, from }(from は date の分・負なら前の日)。純関数
+ */
+export function fillSleepBack(entries, id, ds, ctx, { maxGap = 360, slack = 10 } = {}) {
+  const out = clone(entries);
+  const e = out[id];
+  const none = { entries: out, filledMin: 0, from: null };
+  if (!alive(e)) return none;
+  const s = hm(e.start);
+  if (s == null || s > ds + slack) return none;
+  const prev = addDays(e.date, -1);
+  let last = null;
+  for (const x of entriesOf(out, prev)) if (x.end != null) last = Math.max(last ?? -Infinity, hm(x.end) - 1440);
+  for (const x of entriesOf(out, e.date)) if (x.id !== id && x.end != null && hm(x.end) <= s) last = Math.max(last ?? -Infinity, hm(x.end));
+  if (last == null) return none;
+  const gap = s - last;
+  if (gap <= 0 || gap > maxGap) return none;
+  const now = ctx.nowISO();
+  if (last >= 0) { e.start = mm(last); e.updatedAt = now; }
+  else {
+    e.start = '00:00'; e.updatedAt = now;
+    const head = { id: ctx.uid(), date: prev, start: mm(last + 1440), end: '24:00', categoryId: e.categoryId, taskId: null, note: '', plannedMin: null, asKind: e.asKind || null, updatedAt: now, deletedAt: null };
+    out[head.id] = head;
+  }
+  return { entries: resolveOverlap(out, id, 1440, ctx), filledMin: gap, from: last };
 }
 
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */

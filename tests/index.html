@@ -505,7 +505,9 @@ document.getElementById('app').addEventListener('load', async () => {
     const xR = L.setTimes(xE, 'a', { start: '23:30', end: '00:10' }, 1440, PC);
     const xT = Object.values(xR).find((e) => e.id !== 'a');
     ok(xR.a.end === '24:00' && xT && xT.date === '2026-10-13' && xT.start === '00:00' && xT.end === '00:10' && xT.categoryId === 'research' && xT.taskId === 't', 'setTimes: 終了が翌日の深夜なら24:00で分けて翌日の記録を作る');
-    ok(throws(() => L.setTimes(xE, 'a', { start: '23:30', end: '12:00' }, 1440, PC)), 'setTimes: 6:00より後の「前の時刻」は従来どおり拒否');
+    { const x12 = L.setTimes(xE, 'a', { start: '23:30', end: '12:00' }, 1440, PC); const t12 = Object.values(x12).find((e) => e.id !== 'a');
+      ok(x12.a.end === '24:00' && t12 && t12.date === '2026-10-13' && t12.end === '12:00', 'setTimes(v0.45): 翌日 12:00 までの「前の時刻」も翌日の終了として受ける(18 時間まで・睡眠)'); }
+    ok(throws(() => L.setTimes(xE, 'a', { start: '14:00', end: '13:00' }, 1440, PC)) && throws(() => L.addEntry({}, { date: '2026-10-12', startMin: 840, endMin: 780, categoryId: 'a' }, PC)), 'setTimes / addEntry(v0.45): 18 時間を超える「前の時刻」(14:00〜13:00 の打ち間違い)は拒否(CROSS_MAX_MIN)');
     const xA = L.addEntry({}, { date: '2026-10-12', startMin: 1410, endMin: 20, categoryId: 'sns' }, PC);
     ok(Object.values(xA).length === 2 && Object.values(xA).some((e) => e.date === '2026-10-13' && e.end === '00:20') && Object.values(xA).some((e) => e.date === '2026-10-12' && e.end === '24:00'), 'addEntry: 日付をまたぐ追加も2つに分ける');
     ok(L.elapsedMin(xR.a, '2026-10-12', 1440) === 30 && L.totalsByCategory(xR, '2026-10-12', 1440).research === 30 && L.totalsByCategory(xR, '2026-10-13', 1440).research === 10, '24:00終了の記録は30分・翌日分は10分と数える');
@@ -1159,6 +1161,37 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(Pn.overdueTasks(tk, MON).map((t) => t.id).join() === 'c' && Pn.overdueTasks(tk, MON, {}, { estimate: true }).length === 0, 'overdueTasks: 残り 0 でも期限を過ぎて済んでいなければ期限切れ({ estimate: true } なら従来どおり残りがあるものだけ)');
       const rpT = M.report.dayFeedback(M.report.aggregate({ entries: {}, date: MON, nowMin: 1440, settings: S.defaultSettings() }), { tasks: tk, entries: {}, date: MON, settings: S.defaultSettings(), nowMin: 1440 });
       ok(typeof rpT.next === 'string' && rpT.next.includes('明日は a が期限です'), 'dayFeedback: 目安が無いので「明日は ◯ が期限です」');
+    }
+
+    // ---- v0.45: 切れ目をまたぐ深夜の記録と、睡眠の自動埋め(F1-21) ----
+    log('\n# v0.45 深夜の記録と睡眠の自動埋め');
+    {
+      let zq = 0; const ZC = { uid: () => 'z' + (++zq), nowISO: () => '2026-11-03T12:00:00+09:00' };
+      const D = '2026-11-01', D1 = '2026-11-02', DE = 1560; // 区切り 2:00
+      // addEntry: 25:47〜翌 9:00 の睡眠 → 翌日の記録 01:47〜09:00(前の日のタイムラインの下にも映る)
+      const zA = L.addEntry({}, { date: D, startMin: 1547, endMin: 540, categoryId: 'sleep' }, ZC, DE);
+      const zAe = Object.values(zA);
+      ok(zAe.length === 1 && zAe[0].date === D1 && zAe[0].start === '01:47' && zAe[0].end === '09:00', 'addEntry(v0.45): 切れ目の前(25:47)に始まり切れ目を越える記録は翌日の 01:47〜09:00 として 1 つ');
+      ok(eq(Object.values(L.addEntry({}, { date: D, startMin: 1547, endMin: 1980, categoryId: 'sleep' }, ZC, DE)).map((e) => `${e.date} ${e.start}-${e.end}`), [`${D1} 01:47-09:00`]), 'addEntry(v0.45): 終了を 1440 超(33:00)で渡しても同じ');
+      const zB = Object.values(L.addEntry({}, { date: D, startMin: 1380, endMin: 540, categoryId: 'sleep' }, ZC, DE)).map((e) => `${e.date} ${e.start}-${e.end}`).sort();
+      ok(eq(zB, [`${D} 23:00-24:00`, `${D1} 00:00-09:00`]), 'addEntry(v0.45): 24:00 より前に始まる記録は従来どおり 24:00 で分けて翌日へ');
+      ok(Object.values(L.addEntry({}, { date: D, startMin: 1500, endMin: 90, categoryId: 'sleep' }, ZC, DE))[0].end === '25:30', 'addEntry: 切れ目までなら同じ日の 24:xx(従来どおり)');
+      // setTimes: 既存の 25:47〜26:00 を 翌 9:00 までに → 翌日の記録に移る
+      const zE = { a: { id: 'a', date: D, start: '25:47', end: '26:00', categoryId: 'sleep', taskId: null, note: '', plannedMin: null, deletedAt: null } };
+      const zS = L.setTimes(zE, 'a', { start: '25:47', end: '09:00' }, 1440, ZC, DE);
+      ok(Object.keys(zS).length === 1 && zS.a.date === D1 && zS.a.start === '01:47' && zS.a.end === '09:00', 'setTimes(v0.45): 深夜に始まる記録の終了を翌朝にすると翌日の記録に移る(id は同じ)');
+      // fillSleepBack: 翌日 02:00〜09:00 の睡眠 → 前日の最後(25:47)まで早める
+      const zP = { p: { id: 'p', date: D, start: '22:00', end: '25:47', categoryId: 'research', deletedAt: null }, s: { id: 's', date: D1, start: '02:00', end: '09:00', categoryId: 'sleep', deletedAt: null } };
+      const zF = L.fillSleepBack(zP, 's', 120, ZC);
+      ok(zF.filledMin === 13 && zF.from === 107 && zF.entries.s.start === '01:47' && zF.entries.s.date === D1 && Object.keys(zF.entries).length === 2 && zF.entries.p.end === '25:47', 'fillSleepBack: 前日の最後の記録(25:47)から切れ目(2:00)までの 13 分を睡眠の開始を早めて埋める');
+      const zF2 = L.fillSleepBack({ ...zP, p: { ...zP.p, end: '23:30' } }, 's', 120, ZC);
+      const zHead = Object.values(zF2.entries).find((e) => e.id !== 's' && e.id !== 'p');
+      ok(zF2.filledMin === 150 && zF2.from === -30 && zF2.entries.s.start === '00:00' && zHead && zHead.date === D && zHead.start === '23:30' && zHead.end === '24:00' && zHead.categoryId === 'sleep', 'fillSleepBack: 最後の記録が 24:00 より前なら 24:00 で分ける(前日 23:30〜24:00 の睡眠+翌日 00:00〜)');
+      ok(L.fillSleepBack({ ...zP, p: { ...zP.p, end: '18:00' } }, 's', 120, ZC).filledMin === 0, 'fillSleepBack: 空きが maxGap(6 時間)を超えれば何もしない');
+      ok(L.fillSleepBack({ s: zP.s }, 's', 120, ZC).filledMin === 0 && L.fillSleepBack({ ...zP, s: { ...zP.s, start: '02:30' } }, 's', 120, ZC).filledMin === 0, 'fillSleepBack: 前日に記録が無い・切れ目から slack(10 分)より遅く始まる睡眠は何もしない');
+      const zF3 = L.fillSleepBack({ ...zP, q: { id: 'q', date: D1, start: '01:00', end: '01:50', categoryId: 'sns', deletedAt: null } }, 's', 120, ZC);
+      ok(zF3.filledMin === 10 && zF3.entries.s.start === '01:50' && zF3.entries.q.end === '01:50', 'fillSleepBack: 翌日の早朝(切れ目の前)の記録があればその終わりまで');
+      ok(L.fillSleepBack({ ...zP, p: { ...zP.p, end: '26:00' } }, 's', 120, ZC).filledMin === 0, 'fillSleepBack: 前日が切れ目まで埋まっていれば何もしない');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
