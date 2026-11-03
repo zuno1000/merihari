@@ -4,6 +4,8 @@
 export const FEED_URL = 'data/feed.json';
 export const N_CHOICES = [3, 5, 8];
 export const DEFAULT_N = 5;
+/** 読んだ(開いた / ★)あと、ホームと一覧の未読でその場に ✓ のまま残す時間(分)(v0.46・実機 FB「読んだら最下部に行って ★ しにくい・でも既読が上に残り続けるのも嫌」) */
+export const RECENT_READ_MIN = 30;
 export const MAX_KEYWORDS = 20;
 export const MAX_GENRES = 12;
 export const MAX_OFF = 60;      // OFF にする取得元の数の上限
@@ -77,6 +79,14 @@ export function visible(items, marks, genres = [], off = []) {
   return (items || []).filter((x) => !(m[x.id] && m[x.id].state === 'skip') && (!gs.size || gs.has(x.g)) && !(x.k && os.has(x.k)));
 }
 export const isReadMark = (marks, id) => { const m = activeMarks(marks)[id]; return !!(m && (m.state === 'open' || m.state === 'save')); };
+/** 最近読んだ記事の id(v0.46): 開いた / ★ の印の at が now から min 分以内。now は ms か ISO。純関数 */
+export function recentlyRead(marks, now, min = RECENT_READ_MIN) {
+  const t0 = typeof now === 'number' ? now : Date.parse(now || '');
+  const out = new Set();
+  if (!Number.isFinite(t0)) return out;
+  for (const m of Object.values(activeMarks(marks))) { if (m.state !== 'open' && m.state !== 'save') continue; const t = Date.parse(m.at || ''); if (Number.isFinite(t) && t0 - t >= 0 && t0 - t <= min * 60000) out.add(m.id); }
+  return out;
+}
 /** まだ印の無い記事(設定のジャンルで絞る・空なら全部。v0.35: OFF の取得元は出さない) */
 export function unread(items, marks, genres = [], off = []) {
   const m = activeMarks(marks);
@@ -106,11 +116,12 @@ export function score(x, { today, keywords = [] } = {}) {
  * 出す記事を選ぶ(純関数): まだ読んでいない記事から n 件。気になる語に当たるものを先頭(点の高い順・n の 6 割まで)、残りは ジャンルを順に回して(round-robin・先頭の記事の点が高いジャンルから)新しい順に混ぜる(1 つのジャンルに偏らない)。当たった記事の残りは各ジャンルの列の先頭に来る(点が高い)。
  * 戻り値の各記事に hit(気になる語に当たったか)を付ける
  */
-export function pick(feed, marks, settings, { today, n = null, genre = null, words = [] } = {}) {
+export function pick(feed, marks, settings, { today, n = null, genre = null, words = [], now = null, recentMin = RECENT_READ_MIN } = {}) {
   const s = normalizeFeed(settings);
   const want = n || s.n;
   const m = activeMarks(marks);
-  const all = filterItems(visible(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => { const ks = wordsFor(s, x.g); return { ...x, pt: score(x, { today, keywords: ks }), hit: hitsOf(x, ks) > 0, read: !!m[x.id] }; }); // v0.39: 語はそのジャンルのもの+共通。v0.40: 既読(open / save)は消さず read の印・未読のあとに
+  const recent = now == null ? new Set() : recentlyRead(marks, now, recentMin); // v0.46: 読んで 30 分以内の記事は未読と同じ位置に(✓ のまま)。★ を付けやすく、あとで自然に下がる
+  const all = filterItems(visible(feed?.items, marks, s.genres, s.off), { genre, words }).map((x) => { const ks = wordsFor(s, x.g); return { ...x, pt: score(x, { today, keywords: ks }), hit: hitsOf(x, ks) > 0, read: !!m[x.id] && !recent.has(x.id), recent: recent.has(x.id) }; }); // v0.39: 語はそのジャンルのもの+共通。v0.40: 既読(open / save)は消さず read の印・未読のあとに
   const byDate = (a, b) => (b.pt - a.pt) || ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : a.t < b.t ? -1 : 1);
   const list = all.filter((x) => !x.read);
   const hits = list.filter((x) => x.hit).sort(byDate);
@@ -129,7 +140,7 @@ export function pick(feed, marks, settings, { today, n = null, genre = null, wor
     }
   }
   if (out.length < want) for (const x of all.filter((x) => x.read).sort(byDate)) { if (out.length >= want) break; out.push(x); } // 未読が足りなければ既読を新しい順に(✓ つき)
-  return out.map(({ pt, ...x }) => x);
+  return out.map(({ pt, ...x }) => ({ ...x, read: !!m[x.id] }));
 }
 /** ジャンルと選んだ語で絞る(v0.38・ホームのチップ): genre は 1 つ(null=全部)・words は OR(空=絞らない) */
 export function filterItems(items, { genre = null, words = [] } = {}) {

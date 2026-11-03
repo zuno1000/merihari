@@ -1023,6 +1023,9 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .chip.aswork.on .aw-mark{background:var(--accent);color:#fff}
 .countas .chip.on{font-weight:600}
 .blk-tag{font-size:10px;color:var(--accent);background:var(--accent-bg);padding:0 5px;border-radius:999px;white-space:nowrap;flex:none;line-height:1.5;align-self:flex-start}
+.blk>*{flex:none} /* v0.46: 縦 flex で名前・時間が縮んで札と重ならないように(はみ出す分は overflow:hidden で切る) */
+.blk-head{display:flex;align-items:center;gap:6px;min-width:0}
+.blk-head .blk-name{flex:1 1 auto;min-width:0}
 .ktab.fav{color:#b8860b}
 .ktab.fav[aria-selected="true"]{background:#fff1c7;color:#7a5600}
 @media (prefers-color-scheme:dark){.ktab.fav{color:#e6c062}.ktab.fav[aria-selected="true"]{background:#3a2f12;color:#f3d57a}}

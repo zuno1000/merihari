@@ -66,7 +66,7 @@ const openAttrs = (x, rerender, opener, { mark = true } = {}) => ({ href: x.u, t
   if (opener) { ev.preventDefault(); opener(x.u); }
   if (!mark) return;
   markItem(x.id, 'open');
-  if (rerender) setTimeout(rerender, 400); // 開く動作のあとに描き直す(行を消す)
+  if (rerender) setTimeout(rerender, 400); // 開く動作のあとに描き直す(✓ を付ける。v0.46: 30 分はその場に残る)
 } });
 const skipBtn = (x, rerender) => el('button.feed-x', { type: 'button', 'aria-label': 'この記事は読まない(次から出しません)', title: '読まない', onclick: () => { markItem(x.id, 'skip'); toast('この記事は出しません'); if (rerender) rerender(); } }, '×');
 /** ✓ 既読(v0.40): 開いた / ブックマークした記事は消えずに ✓。タップで 既読 ↔ 未読(ブックマーク中は外せない) */
@@ -160,7 +160,7 @@ export function feedBox(rerender) {
   if (!f) { feed.loadFeed().then(() => { feedErr = ''; if (rerender) rerender(); }).catch((e) => { const msg = e && e.message || '読めませんでした'; if (msg !== feedErr) { feedErr = msg; if (rerender) rerender(); } }); return feedErr ? el('details.group.feed-box', { open: true }, [el('summary', [el('span.feed-h', 'キャッチアップ')]), el('p.muted.small.pad', feedErr)]) : null; }
   const { gchips, kchips, base } = filterBars(f, rerender);
   const genre = boxGenre(), words = boxWords();
-  const list = feed.pick(f, MK(), S().feed, { today: dateKey(), genre, words });
+  const list = feed.pick(f, MK(), S().feed, { today: dateKey(), genre, words, now: Date.now() }); // now: v0.46 読んで 30 分以内はその場に
   const inScope = feed.filterItems(base, { genre, words }).length;
   const filtered = !!(genre || words.length);
   const box = el('details.group.feed-box', { open: boxOpen() }, [
@@ -188,9 +188,10 @@ export function feedSheet(rerender, { genre = null, words = [], mode = 'unread' 
   const body = el('div');
   const byD = (a, b) => ((b.d || '') < (a.d || '') ? -1 : (b.d || '') > (a.d || '') ? 1 : 0);
   const draw = () => {
-    const shown = feed.filterItems(feed.visible(f.items, MK(), S().feed.genres, S().feed.off), { words }).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0, read: feed.isReadMark(MK(), x.id) }));
+    const recent = feed.recentlyRead(MK(), Date.now()); // v0.46: 読んで 30 分以内は「未読」の並びにも ✓ のまま残す(★ を付けやすく)
+    const shown = feed.filterItems(feed.visible(f.items, MK(), S().feed.genres, S().feed.off), { words }).map((x) => ({ ...x, hit: feed.hitsOf(x, feed.wordsFor(S().feed, x.g)) > 0, read: feed.isReadMark(MK(), x.id) && !recent.has(x.id) }));
     const savedAll = feed.savedOf(MK(), null, f).map((m) => ({ ...m, g: m.g || f.items.find((x) => x.id === m.id)?.g || '' }));
-    const poolOf = (m) => (m === 'unread' ? shown.filter((x) => !x.read).sort(byD) : m === 'read' ? shown.filter((x) => x.read).sort(byD) : m === 'all' ? [...shown.filter((x) => !x.read).sort(byD), ...shown.filter((x) => x.read).sort(byD)] : savedAll);
+    const poolOf = (m) => (m === 'unread' ? shown.filter((x) => !x.read).sort(byD) : m === 'read' ? shown.filter((x) => feed.isReadMark(MK(), x.id)).sort(byD) : m === 'all' ? [...shown.filter((x) => !x.read).sort(byD), ...shown.filter((x) => x.read).sort(byD)] : savedAll); // 既読: 最近読んだものも入る
     const pool = poolOf(msel);
     const counts = feed.countByGenre(pool);
     const list = (gsel ? pool.filter((x) => x.g === gsel) : pool).slice(0, 120);

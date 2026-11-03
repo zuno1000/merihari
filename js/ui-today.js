@@ -1086,9 +1086,10 @@ function buildTimeline({ date, ds = 0, nowRel = null, busy = [], plans = [], ent
     const hgt = Math.max(4, y(end) - y(start));
     const b = el(o.onclick ? 'button.blk' : 'div.blk', { type: o.onclick ? 'button' : null, class: `blk${o.open ? ' open' : ''}${o.busy ? ' busy' : ''}${o.planb ? ` planb ${o.status || ''}` : ''}${o.rec ? ' rec' : ''}`, style: { top: `${y(start)}px`, height: `${hgt}px`, borderLeftColor: o.busy ? (o.color || '') : o.color, borderColor: o.planb ? o.color : null, background: o.busy || o.planb ? '' : o.color + '55' }, onclick: o.onclick,
       title: `${mm(start % 1440)}〜${o.open ? '' : mm(end % 1440)} ${o.planb ? '予定: ' : ''}${o.name}` });
-    if (hgt >= 26) b.append(el('span.blk-name', `${o.name}${o.open ? ' ▶' : ''}`), el('span.blk-dur', fmtMin(end - start)));
-    else if (hgt >= 14) b.append(el('span.blk-name', o.name));
-    if (o.tag && hgt >= 26) b.append(el('span.blk-tag', { title: `${o.tag}として数える` }, o.tag)); // v0.30: 数え方の札
+    // v0.46(実機 FB「数十分の記録で種別の札がカテゴリと時間に重なる」): 札は名前と同じ行(.blk-head)。3 行目に置くと縦 flex が名前と時間を縮めて重なっていた
+    const tag = o.tag ? el('span.blk-tag', { title: `${o.tag}として数える` }, o.tag) : null; // v0.30: 数え方の札
+    if (hgt >= 26) b.append(el('span.blk-head', [el('span.blk-name', `${o.name}${o.open ? ' ▶' : ''}`), tag]), el('span.blk-dur', fmtMin(end - start)));
+    else if (hgt >= 14) b.append(el('span.blk-head', [el('span.blk-name', o.name), tag]));
     if (o.note && hgt >= 44) b.append(el('span.blk-note', o.note));
     if (o.yen) b.append(el('span.blk-yen', { title: `支出${money.fmtYen(o.yen)}` }, hgt >= 26 ? money.fmtYen(o.yen) : '¥'));
     return b;

@@ -1194,6 +1194,20 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(L.fillSleepBack({ ...zP, p: { ...zP.p, end: '26:00' } }, 's', 120, ZC).filledMin === 0, 'fillSleepBack: 前日が切れ目まで埋まっていれば何もしない');
     }
 
+    // ---- v0.46: 読んだ直後の記事はその場に(recentlyRead / pick の now) ----
+    log('\n# v0.46 読んだ直後の記事');
+    {
+      const F = M.feed;
+      const fr = F.parseFeed({ updated: '2026-11-03T00:00:00Z', genres: [{ id: 'tech', name: '技術' }], items: [
+        { id: 'bbbb000001', g: 'tech', t: 'one', u: 'https://e.com/1', s: 's', d: '2026-11-03' }, { id: 'bbbb000002', g: 'tech', t: 'two', u: 'https://e.com/2', s: 's', d: '2026-11-02' }, { id: 'bbbb000003', g: 'tech', t: 'three', u: 'https://e.com/3', s: 's', d: '2026-11-01' }] });
+      const nowMs = Date.parse('2026-11-03T10:00:00+09:00');
+      const mk = { bbbb000001: { id: 'bbbb000001', state: 'open', at: '2026-11-03T09:50:00+09:00', updatedAt: 'x' }, bbbb000002: { id: 'bbbb000002', state: 'save', at: '2026-11-03T08:00:00+09:00', updatedAt: 'x' } };
+      ok(eq([...F.recentlyRead(mk, nowMs)], ['bbbb000001']) && F.recentlyRead(mk, nowMs, 180).size === 2 && F.recentlyRead(mk, '2026-11-03T10:00:00+09:00').size === 1 && F.recentlyRead(mk, 'x').size === 0 && F.RECENT_READ_MIN === 30, 'recentlyRead: 開いた / ★ の at が now から 30 分以内(ISO でも・壊れた now は空)');
+      const pr = F.pick(fr, mk, { enabled: true, n: 3 }, { today: '2026-11-03', now: nowMs });
+      ok(eq(pr.map((x) => `${x.id.slice(-1)}:${x.read ? 1 : 0}${x.recent ? 'r' : ''}`), ['1:1r', '3:0', '2:1']), 'pick(now): 10 分前に読んだ記事は未読と同じ位置(先頭)に ✓ のまま・2 時間前の ★ は既読として最後');
+      ok(eq(F.pick(fr, mk, { enabled: true, n: 3 }, { today: '2026-11-03' }).map((x) => x.id.slice(-1)), ['3', '1', '2']), 'pick(now 無し): 従来どおり既読は未読のあと');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
