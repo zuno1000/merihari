@@ -331,7 +331,15 @@ document.getElementById('app').addEventListener('load', async () => {
     const aggOnly = Rp.aggregate({ entries: toMap([mkE(RD, '10:00', '10:40', 'other')]), date: RD, nowMin: 1440, settings: ds });
     ok(Rp.reportLines(aggOnly, {}).positive[0] === '作業は合計40分でした。', 'reportLines: 肯定文が作れない日も作業の合計を言う');
     const snap = Rp.buildReport({ entries: entR, date: RD, nowMin: 1440, settings: ds, tasks: tasksR, finalizedAt: 'now' });
-    ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット');
+    ok(snap.finalizedAt === 'now' && snap.lines.length === snap.positive.length + snap.improve.length + 1 && snap.byCategory.research.actual === 205, 'buildReport: 確定スナップショット')
+    { // v0.43.2(実機 FB「ほかの種別で 作業 として記録したのに きょうはどうだった の 作業 に入らない」): 確定スナップショットにも byKind(asKind を反映)。validateReport が落とさない
+      const dsK = { ...ds, categories: ds.categories.map((c) => (c.id === 'rest' ? { ...c, alsoKinds: ['work'] } : c)) };
+      const eK = { k1: { id: 'k1', date: RD, start: '10:00', end: '11:00', categoryId: 'rest', asKind: 'work', updatedAt: 'x', deletedAt: null } };
+      const sk = Rp.buildReport({ entries: eK, date: RD, nowMin: 1440, settings: dsK, tasks: {}, finalizedAt: 'now' });
+      ok(sk.byKind && sk.byKind.work === 60 && sk.workMin === 60, 'buildReport(v0.43.2): byKind に asKind を反映した種別ごとの合計を持つ');
+      const vk = (r) => S.migrate({ schema: 1, settings: {}, reports: { [RD]: r } }).reports[RD];
+      ok(vk(sk).byKind && vk(sk).byKind.work === 60 && vk({ ...sk, byKind: undefined }).byKind === null && vk({ ...sk, byKind: { work: 'x' } }).byKind.work === 0, 'validateReport(v0.43.2): byKind を数値で保つ(無ければ null・壊れた値は 0)');
+    };
     ok(S.migrate({ schema: 1, reports: { [RD]: snap } }).reports[RD].workMin === 205, 'migrate: 新しいレポート(planned 0)も通る');
 
     // ---- sync.js(F7-4マージ・暗号化)/ google.js(busy の切り出し) ----

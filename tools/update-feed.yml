@@ -4,7 +4,7 @@
 name: update-feed
 on:
   schedule:
-    - cron: '0 21 * * *'   # 毎朝 6:00 JST(= 前日 21:00 UTC)
+    - cron: '0 17 * * *'   # 毎朝 2:00 JST(= 前日 17:00 UTC)。GitHub の cron は 3〜6 時間遅れることがあるので、6 時に間に合うよう前倒し(v0.43.2)
   push:
     branches: [main]
     paths: ['data/feeds.json', 'tools/feed_fetch.py', 'tools/feed_images.py', 'tools/feed_translate.py', '.github/workflows/update-feed.yml']

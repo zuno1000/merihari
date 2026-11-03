@@ -344,7 +344,8 @@ function glanceRows(r) {
     const i = key.indexOf(':'); const type = key.slice(0, i), id = key.slice(i + 1);
     if (type === 'kind') {
       let min = 0;
-      if (r.byKind) min = r.byKind[id] || 0; // v0.30: 記録ごとの「数え方」を反映した種別の合計(aggregate.byKind)。古い確定レポートには無いのでカテゴリから
+      if (r.byKind) min = r.byKind[id] || 0; // v0.30: 記録ごとの「数え方」を反映した種別の合計(aggregate.byKind)
+      else if (r.date && store.state.data.entries) min = report.aggregate({ entries: store.state.data.entries, date: r.date, nowMin: 1800, settings: s }).byKind[id] || 0; // v0.43.2: byKind の無い古い確定レポートは記録から数え直す(asKind を落とさない)
       else for (const [cid, v] of Object.entries(r.byCategory || {})) if (kindOfCat(cid) === id) min += v.actual || 0;
       const role = kindRole(s, id);
       rows.push({ key, name: role.name, min, warn: role.drift && min >= 120 });
