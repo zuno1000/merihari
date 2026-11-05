@@ -1178,6 +1178,11 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .trow.due-today .tmeta{color:var(--accent);font-weight:600}
 .trow.due-tmr{background:color-mix(in srgb,var(--accent) 5%,transparent);box-shadow:inset 3px 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
 .trow.due-tmr .tmeta{color:var(--accent)}
+/* v0.47.1(実機 FB「青の枠が白の枠より小さく、外に白い縁」): 一覧の 1px の枠線(--line)と行の区切りが青の地より明るく、縁に見えていた → 青の行を含む一覧は枠線と区切りを同じ青の薄い色に */
+.list:has(> .trow.due-today){border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.list:has(> .trow.due-tmr){border-color:color-mix(in srgb,var(--accent) 22%,var(--line))}
+.trow.due-today+.trow,.trow+.trow.due-today{border-top-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.trow.due-tmr+.trow,.trow+.trow.due-tmr{border-top-color:color-mix(in srgb,var(--accent) 18%,var(--line))}
 /* v0.47: お金の定期(F10-10) */
 .today-head .recur svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .rrow{gap:10px;padding:10px 12px 10px 14px}

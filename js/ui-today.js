@@ -353,7 +353,7 @@ export function weatherIcon(key, cls = 'wx-ico') {
     snow: [P('M7 15.5h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 7.6 4 4 0 0 0 7 15.5z'), P('M9 19.5v2M8 20.5h2M13 19.5v2M12 20.5h2M17 19.5v2M16 20.5h2')],
     thunder: [P('M7 15h9.5a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.3 7.1 4 4 0 0 0 7 15z'), P('M12.5 15.5L10 20h3l-1.5 3.5')],
     none: [P(cloud), P('M11 9.5a1.8 1.8 0 0 1 3.5.6c0 1.2-1.7 1.4-1.7 2.6M12.8 15.2h.01')],
-    umbrella: [P('M3.5 12.5a8.5 8.5 0 0 1 17 0z'), P('M12 4v1.5M12 12.5v6a2 2 0 0 1-4 0'), P('M15.5 18.5l-1 2.5M19 17l-1 2.5')], // v0.47: 傘(雨粒つき)
+    umbrella: [P('M3.5 12.5a8.5 8.5 0 0 1 17 0z'), P('M12 2.5v1.5M12 12.5v6a2 2 0 0 1-4 0'), P('M15.5 18.5l-1 2.5M19 17l-1 2.5')], // v0.47: 傘(雨粒つき)。v0.47.1(実機 FB): 頂点の線は上に突き出す
   };
   return svg('svg', { class: `${cls} ${cls}-${key}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, kids[key] || kids.none);
 }
@@ -402,7 +402,7 @@ export function weatherSheet(ctx) {
           d ? el('span.wx-label', d.label || '') : null,
         ]),
         chips.length ? el('div.wxchips', chips) : null,
-        d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.iconKey(d.tomorrow.code), 'wx-sm'), el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
+        d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.umbrella(d.tomorrow) ? 'umbrella' : weather.iconKey(d.tomorrow.code), 'wx-sm'), /* v0.47.1: あすも傘が要れば傘の絵 */ el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
       ]);
     };
     const draw = (r, d, state) => { const n = cardOf(r, d, state); const old = cards.querySelector(`.wxcard[data-id="${CSS.escape(r.id)}"]`); if (old) old.replaceWith(n); else cards.append(n); refoot(); };

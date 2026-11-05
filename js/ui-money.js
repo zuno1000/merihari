@@ -5,7 +5,8 @@
 // v0.33(実機 FB「日毎の内訳を見ようとするとその日に遷移するが見にくい。支出と内訳の間に入力欄があって視線が誘導されない。下から上への移動が毎回挟まる」):
 //   ①並びを 支出 → 内訳(その日の一覧)→ 入力 に(数字を見てから足す)。②月のまとめの「日ごと」はタップでその場で内訳が開く(アコーディオン・1 日ずつ・遷移しない)。内訳の行のタップで直せ、「◯/◯ を開く ›」で上段をその日に。
 // v0.47(ユーザー要望・F10-10 定期): サブスクの支払日・支払いサービス・金額と、給料日・振込先を「定期」として持つ(data.recurring・同期)。右上の ⟳ で管理。
-//   自動では記録しない(二重・金額のずれ)。支払日 / 給料日の当日は、その日の一覧の上に「◯◯ ¥… を記録」のチップが出て 1 タップで記録(recurringId で紐づく・記録済みは消える)。月のまとめに「今月の定期」(日付順・済 ✓・過ぎた日は薄く)と 1 か月の合計。
+//   自動では記録しない(二重・金額のずれ)。支払日 / 給料日の当日は、その日の一覧の上に「◯◯ ¥… を記録」のチップが出て 1 タップで記録(recurringId で紐づく・記録済みは消える)。
+//   v0.47.1(ユーザー質問「給料は毎回金額を直してから記録できる?」): チップの長押し(PC は右クリック)で金額を直してから記録(給料・変動する支払い)。タップは登録した金額のまま。記録したあとは一覧の行から直せる。月のまとめに「今月の定期」(日付順・済 ✓・過ぎた日は薄く)と 1 か月の合計。
 // 支出の時刻はタイムラインの記録に紐づく(その時間に何をしていたか)。タイムラインのブロックに ¥ の印、レポート「今日」に支出の行。
 import { el, clear, toast, sheet, confirmSheet, timeField, svg } from './ui.js';
 import * as store from './store.js';
@@ -68,13 +69,34 @@ export function renderMoney(view, ctx, dateArg = null) {
   const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
   // v0.47(F10-10): その日が支払日 / 給料日の定期で、まだ記録していないもの → 1 タップで記録(時刻は きょうなら いま・過去の日は なし)
   const due = money.recurringDue(R(), M(), date);
+  const recordDue = (r, yen) => {
+    const t = isToday ? mm(minuteOfDay()) : null;
+    saveItem({ id: store.uid(), date, time: t, amount: yen, type: r.type === 'in' ? 'in' : 'out', categoryId: r.categoryId, note: r.name, entryId: money.linkEntry(E(), date, t, minuteOfDay()), recurringId: r.id, updatedAt: null, deletedAt: null });
+    toast(`${r.name}${r.type === 'in' ? ' +' : ' '}${money.fmtYen(yen)}を記録しました(行をタップで直せます)`); rerender();
+  };
+  // v0.47.1: 長押し(PC は右クリック)で金額を直してから記録(給料など)。タップは登録した金額のまま
+  const adjustSheet = (r) => {
+    const amount = el('input.yenin', { type: 'text', inputmode: 'numeric', value: String(r.amount), 'aria-label': '金額(円)' });
+    sheet((close) => [
+      el('h2', `${r.name} を記録`),
+      el('p.muted.small', `登録している金額は ${money.fmtYen(r.amount)}。今回の金額に直して記録できます(登録した金額は変わりません)。`),
+      el('div.row.yenrow', [el('span.yen-mark', '¥'), amount]),
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => { const yen = money.parseYen(amount.value); if (yen == null) { toast('金額を入れてください'); amount.focus(); return; } close(); recordDue(r, yen); } }, '記録する')]),
+    ]);
+    setTimeout(() => { try { amount.focus(); amount.select(); } catch {} }, 50);
+  };
+  const dueChip = (r) => {
+    let timer = null, pressed = false;
+    return el('button.chip.cat.rchip', { type: 'button', style: { '--c': mcatOf(r.categoryId).color }, 'aria-label': `${r.name} ${money.fmtYen(r.amount)} を記録(長押しで金額を直す)`, title: '長押しで金額を直してから記録',
+      onclick: () => { if (pressed) { pressed = false; return; } recordDue(r, r.amount); },
+      oncontextmenu: (e) => { e.preventDefault(); adjustSheet(r); },
+      onpointerdown: (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; clearTimeout(timer); timer = setTimeout(() => { pressed = true; adjustSheet(r); }, 500); },
+      onpointerup: () => clearTimeout(timer), onpointercancel: () => clearTimeout(timer), onpointerleave: () => clearTimeout(timer),
+    }, [el('span.dot', { style: { background: mcatOf(r.categoryId).color }, 'aria-hidden': 'true' }), `${r.name} ${r.type === 'in' ? '+' : ''}${money.fmtYen(r.amount)} を記録`]);
+  };
   const dueBox = due.length ? el('section.card.mcard.rdue', [
-    el('p.muted.small.rdue-h', isToday ? 'きょうが支払日 / 給料日' : 'この日が支払日 / 給料日'),
-    el('div.chips', due.map((r) => el('button.chip.cat.rchip', { type: 'button', style: { '--c': mcatOf(r.categoryId).color }, 'aria-label': `${r.name} ${money.fmtYen(r.amount)} を記録`, onclick: () => {
-      const t = isToday ? mm(minuteOfDay()) : null;
-      saveItem({ id: store.uid(), date, time: t, amount: r.amount, type: r.type === 'in' ? 'in' : 'out', categoryId: r.categoryId, note: r.name, entryId: money.linkEntry(E(), date, t, minuteOfDay()), recurringId: r.id, updatedAt: null, deletedAt: null });
-      toast(`${r.name}${r.type === 'in' ? ' +' : ' '}${money.fmtYen(r.amount)}を記録しました`); rerender();
-    } }, [el('span.dot', { style: { background: mcatOf(r.categoryId).color }, 'aria-hidden': 'true' }), `${r.name} ${r.type === 'in' ? '+' : ''}${money.fmtYen(r.amount)} を記録`]))),
+    el('p.muted.small.rdue-h', `${isToday ? 'きょう' : 'この日'}が支払日 / 給料日・長押しで金額を直して記録`),
+    el('div.chips', due.map(dueChip)),
   ]) : null;
 
   // 月のまとめ: ‹ 月 › ・支出(大きく)・収入と差し引き・資産・予算のメーター(または 1 日平均)・内訳の円・日ごとの合計(タップでその日へ)・推移
