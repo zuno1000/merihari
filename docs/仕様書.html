@@ -820,6 +820,7 @@ workable(day) = usable(day) × ratio               // 作業に回せる割合(�
 <ul>
 <li><b>SNS/動画の自動計測</b>: Web アプリからスクリーンタイムは取れない。自己申告(チップ)+ギャップ回収で代替。iOS ショートカット「YouTube を開いたら <code>?log=sns</code> を開く」を README に案内(MAY)。</li>
 <li><b>YouTube の 1 日の再生時間をレポートに出す</b>(2026-10-28・ユーザー FB): YouTube Data API v3 には視聴履歴・再生時間を返す API が無い(watchHistory は 2016 年に廃止。Google Takeout の書き出しは手動で、日次には使えない)。iOS のスクリーンタイムも Web から読めない。これまでどおり自己申告(「SNS・動画」のチップ・<code>?log=sns</code> のショートカット)で、レポートの「ダラダラ」に数える。</li>
+<li><b>作業用 BGM に J-POP など他のジャンルを足す</b>(2026-11-05・ユーザー決定): カタログは todaybgm の作業用 BGM(長い動画)だけ。足すには 自分で動画 ID の一覧を持つ か YouTube Data API で集める かが要り、公式 MV(4〜5 分)は「1 タップで 1 本」と合わない(メドレーかミックスが必要)。検討が多いので見送り。</li>
 <li><b>定時プッシュ通知</b>: サーバー無しの iOS PWA では不可。ショートカット/時計で代替。</li>
 <li><b>カレンダーのタイトル取得・書き込み</b>: プライバシー方針。</li>
 <li><b>LLM/ML による提案</b>: ルールベースで足りる・説明可能性・コスト。将来 nokorijikan のコピペ方式を足す余地だけ残す(<code>parseLLM</code> を流用可能)。</li>
