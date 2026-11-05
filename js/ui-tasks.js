@@ -3,6 +3,8 @@
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
 // v0.26: 画面は 期限切れ / きょう だけ。メモ / 期限までに / 習慣 / やりたいこと / 完了 は「リスト」のタイルから 1 画面はさんで開く(F5-13)。▶ は FEATURES.TASK_START(features.js)で非表示。
 // v0.44(F5-2 廃止・FEATURES.TASK_ESTIMATE=false): タスクは「どれくらい」を持たず、期限(日付+時刻・いつまで のどれでも時刻を付けられる)だけ。画面は 期限切れ / きょうが期限 / 今週が期限 → リスト。
+// v0.47(ユーザー要望): かんたん追加の種類の並びは タスク / 習慣 / やりたいこと / メモ で、既定は「タスク」(メモは最後・区分の画面はその種類のまま)。見出しは「今日が期限」。
+//   今週が期限のうち 明日が期限 の行は薄い色で目立たせ(.trow.due-tmr)、今日が期限 の行はそれより強く(.trow.due-today)。今日 > 明日 > それ以外 の順に目立つ。
 // v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
 import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
@@ -44,7 +46,7 @@ function whenOptions(today) {
   ];
 }
 const SIZES = [{ label: '時間なし', min: 0 }, { label: '10分', min: 10 }, { label: '30分', min: 30 }, { label: '1時間', min: 60 }, { label: '2時間', min: 120 }, { label: '4時間', min: 240 }, { label: '8時間', min: 480 }];
-const TYPES = [['memo', 'メモ'], ['task', 'タスク'], ['habit', '習慣'], ['wish', 'やりたいこと']];
+const TYPES = [['task', 'タスク'], ['habit', '習慣'], ['wish', 'やりたいこと'], ['memo', 'メモ']]; // v0.47: メモは最後
 
 function chipRow(options, value, onpick, keyOf = (o) => o.key) {
   const row = el('div.chips.small');
@@ -60,15 +62,15 @@ function segRow(options, value, onpick) {
 
 /**
  * かんたん追加(v0.17・v0.22・v0.28.1): 名前の1行だけが見え、触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、種類ごとの「札」が出る。Enter か「追加」で保存。
- * 既定は「メモ」(v0.22・F5-11): 名前だけで書き残せる(期限・量・カテゴリは持たない)。タスク画面の先頭「メモ」に並び、タップして種類を決めるとタスクや習慣になる。
+ * 既定は「タスク」(v0.47・ユーザー要望。v0.22〜v0.46 は「メモ」・F5-11): 名前だけで Enter なら 今週が期限のタスク。メモは種類の最後で、名前だけで書き残せる(期限・量・カテゴリは持たない)。
  * v0.28.1(実機 FB ⑥「どれくらい以下がキーボードと被る」): いつまで / 繰り返す / どれくらい / カテゴリ は 1 行の札(いまの値)にし、札をタップしたときだけその選択肢の 1 行が下に出る(他は畳む)。
  * 名前 → 種類 → 札 → 選択肢 の 4 段で、キーボードが出ていても画面の上半分に収まる。札と選択肢を押してもキーボードは閉じない(keepFocus)。
  * タスク: いつまで(今日/明日/今週/来週/日付…/なし)・繰り返す(なし/毎週)・どれくらい(時間なし〜8時間)。習慣: 毎日/毎週・1日に(1週間に)。やりたいこと: カテゴリだけ。
  * 「時間なし」=用事(F5-10): 量を持たず、チェックで済ませる(銀行・メール)。既定: タスク・今週・1時間・最初のカテゴリ。
  */
 function quickAdd(today, rerender, preset = null) {
-  const name = el('input.text', { type: 'text', placeholder: '思いついたことを書く', autocomplete: 'off', maxlength: 200 });
-  let type = preset || 'memo', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily';
+  const name = el('input.text', { type: 'text', placeholder: '何をする?', autocomplete: 'off', maxlength: 200 });
+  let type = preset || 'task', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily'; // v0.47: 既定はタスク
   const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today, onchange: () => refresh() });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true, onchange: () => refresh() });
   const dateLabel = el('span.label', '期限');
@@ -254,7 +256,9 @@ export function renderTasks(view, ctx, listKey = null) {
     const onCheck = habit
       ? () => { t.checks = plan.toggleCheck(t, today); saveTask(t); toast(plan.isChecked(t, today) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); }
       : () => toggleDone(t, rerender);
-    return el('div.trow', [
+    const dueKey = !t.doneAt && !t.repeat && t.kind !== 'wish' && t.kind !== 'memo' && t.deadline ? plan.deadlineKey(t, today) : null;
+    const dueCls = dueKey === today ? ' due-today' : dueKey === addDays(today, 1) ? ' due-tmr' : ''; // v0.47: 今日 > 明日 の順に目立つ(期限切れは .over の赤のまま)
+    return el('div.trow', { class: `trow${over ? '' : dueCls}` }, [
       el('button.check', { type: 'button', 'aria-label': habit ? `${t.name} を${checked ? `${span}の済みから外す` : `${span}は済んだことにする`}` : `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${checked ? ' on' : ''}`, onclick: onCheck }, checked ? '✓' : ''),
       el('button.tmain', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, [
         el('span.tname', { class: `tname${t.doneAt ? ' done' : ''}` }, [t.kind === 'memo' ? null : el('i.dot', { style: { background: catOf(t.categoryId).color }, 'aria-hidden': 'true' }), t.name, recording ? el('span.rec-mark', '● 記録中') : null, g?.done && !t.doneAt ? el('span.gok', '✓') : null]),
@@ -263,7 +267,7 @@ export function renderTasks(view, ctx, listKey = null) {
       !FEATURES.TASK_START ? null : t.doneAt || t.noTime || t.kind === 'memo' ? el('span.tplay.blank') : el('button.tplay', { type: 'button', class: `tplay${recording ? ' on' : ''}`, 'aria-label': recording ? `${t.name} を記録中(ホームへ)` : `${t.name} をいまから記録`, title: 'いまから記録', onclick: () => begin(t) }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, recording ? [svg('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2 })] : [svg('path', { d: 'M8 5.5v13l10-6.5z' })])),
     ]);
   };
-  const section = (title, list, empty) => el('section.group', [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
+  const section = (title, list, empty, cls = null) => el('section.group', { class: `group${cls ? ' ' + cls : ''}` }, [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
   const groups = { memo: memos, duties, habits: repeats, wishes, done };
 
   // v0.26・F5-13: 区分の画面(1 画面はさむ)。‹ でタスクへ。先頭の追加欄はその区分の種類が選ばれている(完了には無い)
@@ -292,9 +296,9 @@ export function renderTasks(view, ctx, listKey = null) {
     el('h1', 'タスク'),
     quickAdd(today, rerender),
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
-    FEATURES.TASK_ESTIMATE ? section('きょう', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、きょうやる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(メモ / タスク / 習慣 / やりたいこと)はあとからでも変えられます。')
-      : section('きょうが期限', todayList, tasks.some((t) => !t.doneAt) ? 'きょうが期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(メモ / タスク / 習慣 / やりたいこと)はあとからでも変えられます。'),
-    FEATURES.TASK_ESTIMATE ? null : section('今週が期限', weekList, `今週(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`),
+    FEATURES.TASK_ESTIMATE ? section('きょう', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、きょうやる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
+      : section('今日が期限', todayList, tasks.some((t) => !t.doneAt) ? '今日が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
+    FEATURES.TASK_ESTIMATE ? null : section('今週が期限', weekList, `今週(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
     el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),
   ].filter(Boolean));
 }
@@ -329,7 +333,7 @@ function editSheet(t, today, rerender, ctx) {
   };
   const showKind = () => { for (const k of Object.keys(rows)) rows[k].hidden = k !== kind; noTimeRow.hidden = kind === 'wish' || kind === 'memo' || (kind === 'deadline' && !FEATURES.TASK_ESTIMATE); catRow.hidden = kind === 'memo'; const nt = noTimeIn.checked && kind !== 'wish' && kind !== 'memo'; remRow.hidden = nt || !FEATURES.TASK_ESTIMATE; dailyRow.hidden = kind !== 'daily' || nt; weeklyRow.hidden = kind !== 'weekly' || nt; }; // v0.44: 期限のタスクに 残り見積 と 時間を計らない は出さない
   noTimeIn.addEventListener('change', showKind);
-  const kindSeg = el('div.seg', [['memo', 'メモ'], ['deadline', '期限'], ['daily', '毎日'], ['weekly', '毎週'], ['wish', 'やりたい']].map(([k, label]) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); showKind(); } }, label)));
+  const kindSeg = el('div.seg', [['deadline', '期限'], ['daily', '毎日'], ['weekly', '毎週'], ['wish', 'やりたい'], ['memo', 'メモ']].map(([k, label]) => el('button', { type: 'button', class: k === kind ? 'active' : '', onclick: (e) => { kind = k; kindSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); showKind(); } }, label)));
   showKind();
   sheet((close) => [
     el('h2', t.kind === 'memo' ? 'メモ' : 'タスクを編集'),

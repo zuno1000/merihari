@@ -1164,3 +1164,34 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-schips{margin-bottom:6px}
 .gorder .catrow{padding:4px 8px 4px 0}
 .gorder .chip{pointer-events:none}
+/* v0.47: 傘(ホーム右上の天気の印・シートのチップ)。傘が要る日は印が傘の絵+点になる */
+.today-head .wxbtn.need-umbrella,.today-head .wxbtn.need-folding{color:var(--accent)}
+.gear .wx-badge{background:var(--accent)}
+.gear .wx-badge.folding{background:color-mix(in srgb,var(--accent) 55%,var(--bg))}
+.wxchip.umb{background:var(--accent);color:#fff;font-weight:600;font-size:13px;padding:5px 12px}
+.wxchip.umb.folding{background:color-mix(in srgb,var(--accent) 70%,var(--bg))}
+.wx-chip-ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wxcard .wx-big.wx-big-umbrella{stroke:var(--accent)}
+/* v0.47: タスクの行 ─ 今日が期限(強く)> 明日が期限(薄く)> それ以外 */
+.trow.due-today{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+.trow.due-today .tname{font-weight:600}
+.trow.due-today .tmeta{color:var(--accent);font-weight:600}
+.trow.due-tmr{background:color-mix(in srgb,var(--accent) 5%,transparent);box-shadow:inset 3px 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
+.trow.due-tmr .tmeta{color:var(--accent)}
+/* v0.47: お金の定期(F10-10) */
+.today-head .recur svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.rrow{gap:10px;padding:10px 12px 10px 14px}
+.rrow .rday{width:3.2em;flex:none;font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted)}
+.rrow .dot{width:10px;height:10px}
+.rrow .mname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.rrow .myen{flex:none;font-variant-numeric:tabular-nums;font-weight:600}
+.rrow .myen.in{color:#2f8f5b}
+@media (prefers-color-scheme:dark){.rrow .myen.in{color:#7fd1a3}}
+.rrow.past{opacity:.55}
+.rrow.done .mname{color:var(--muted)}
+.rrow.cur .rday{color:var(--accent);font-weight:600}
+.rdue .rdue-h{margin:0 0 6px}
+.rdayin{flex:none;width:4.4em;text-align:center}
+.rday-l{flex:none}
+.rform .seg{margin-bottom:2px}
+.mrecur .list{margin:4px 0 0}

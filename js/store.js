@@ -173,6 +173,7 @@ export function defaultData() {
     diary: {},   // v0.18: 日記(日付キー → { date, mood, good, hard, tomorrow, note, updatedAt, deletedAt })
     money: {},   // v0.19: お金(id → { id, date, time, amount, type, categoryId, note, entryId, updatedAt, deletedAt })
     wants: {},   // v0.20: ほしいもの(id → { id, name, price, targetDate, categoryId, note, doneAt, updatedAt, deletedAt })
+    recurring: {}, // v0.47: 定期(F10-10・id → { id, name, amount, type:'out'|'in', day(1〜31), via(支払いサービス / 振込先), categoryId, note, updatedAt, deletedAt })。サブスクの支払日と給料日。自動では記録しない
     planBlocks: {}, // v0.23: 自分で置く予定(id → { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt })。自動生成はしない(F12)
     busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
     kiai: {},    // v0.25: 気合(F13・id → { id, date, time:'HH:MM', categoryId|null, entryId|null, updatedAt, deletedAt })。「気合を入れた」瞬間の印。ワンタップ・中身は持たない
@@ -330,7 +331,12 @@ export function validateLedger(r) { return isObj(r) ? { usableMin: num(r.usableM
 /** お金(v0.19・F10): 金額は 1〜1 億の整数(円)。type は out/in。time は 'HH:MM' か null */
 export function validateMoney(r, id) {
   if (!isObj(r) || !isDate(r.date) || !(Number.isFinite(+r.amount) && +r.amount > 0 && +r.amount <= 100000000)) return null;
-  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: isHM(r.time) ? r.time : null, amount: Math.round(+r.amount), type: r.type === 'in' ? 'in' : 'out', categoryId: str(r.categoryId, 40, 'misc'), note: str(r.note, 200), entryId: optStr(r.entryId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
+  return { ...stripUnsafe(r), id: String(r.id || id), date: r.date, time: isHM(r.time) ? r.time : null, amount: Math.round(+r.amount), type: r.type === 'in' ? 'in' : 'out', categoryId: str(r.categoryId, 40, 'misc'), note: str(r.note, 200), entryId: optStr(r.entryId, 80), recurringId: optStr(r.recurringId, 80), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) }; // v0.47: recurringId=定期から記録した印
+}
+/** 定期(v0.47・F10-10): 名前は必須、金額は 1〜1 億の整数、type は out/in、day は 1〜31(月末は 31)。via は 支払いサービス / 振込先(自由記述・60 字) */
+export function validateRecurring(r, id) {
+  if (!isObj(r) || typeof r.name !== 'string' || !r.name.trim() || !(Number.isFinite(+r.amount) && +r.amount > 0 && +r.amount <= 100000000)) return null;
+  return { ...stripUnsafe(r), id: String(r.id || id), name: r.name.slice(0, 100), amount: Math.round(+r.amount), type: r.type === 'in' ? 'in' : 'out', day: Math.round(num(r.day, 1, 31, 1)), via: str(r.via, 60), categoryId: str(r.categoryId, 40, r.type === 'in' ? 'income' : 'fixed'), note: str(r.note, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 /** ほしいもの(v0.20・F10-8): 名前は必須、値段は 0〜1 億の整数、目標日は任意 */
 export function validateWant(r, id) {
@@ -409,6 +415,7 @@ export function migrate(raw) {
   out.ledger = cleanMap(raw.ledger, validateLedger);
   out.money = cleanMap(raw.money, validateMoney);
   out.wants = cleanMap(raw.wants, validateWant);
+  out.recurring = cleanMap(raw.recurring, validateRecurring); // v0.47
   out.diary = cleanMap(raw.diary, validateDiary);
   out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
   out.kiai = cleanMap(raw.kiai, validateKiai); // v0.25

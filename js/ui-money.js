@@ -4,6 +4,8 @@
 // v0.35(実機 FB「内訳が増えるほど足しにくくならないか」・案 F): 入力は日付の直下の 1 行(¥ 金額・いま)に縮め、金額欄に触れたときだけ メモとカテゴリのチップが下に広がる(外をタップして空なら畳む)。2 タップはそのまま・場所は常に同じ・内訳は支出のすぐ下。
 // v0.33(実機 FB「日毎の内訳を見ようとするとその日に遷移するが見にくい。支出と内訳の間に入力欄があって視線が誘導されない。下から上への移動が毎回挟まる」):
 //   ①並びを 支出 → 内訳(その日の一覧)→ 入力 に(数字を見てから足す)。②月のまとめの「日ごと」はタップでその場で内訳が開く(アコーディオン・1 日ずつ・遷移しない)。内訳の行のタップで直せ、「◯/◯ を開く ›」で上段をその日に。
+// v0.47(ユーザー要望・F10-10 定期): サブスクの支払日・支払いサービス・金額と、給料日・振込先を「定期」として持つ(data.recurring・同期)。右上の ⟳ で管理。
+//   自動では記録しない(二重・金額のずれ)。支払日 / 給料日の当日は、その日の一覧の上に「◯◯ ¥… を記録」のチップが出て 1 タップで記録(recurringId で紐づく・記録済みは消える)。月のまとめに「今月の定期」(日付順・済 ✓・過ぎた日は薄く)と 1 か月の合計。
 // 支出の時刻はタイムラインの記録に紐づく(その時間に何をしていたか)。タイムラインのブロックに ¥ の印、レポート「今日」に支出の行。
 import { el, clear, toast, sheet, confirmSheet, timeField, svg } from './ui.js';
 import * as store from './store.js';
@@ -21,6 +23,9 @@ export function mcatOf(id) { const c = (S().moneyCategories || []).find((x) => x
 const entryName = (entryId) => { const e = entryId ? E()[entryId] : null; if (!e || e.deletedAt) return null; const c = S().categories.find((x) => x.id === e.categoryId); const t = e.taskId ? store.state.data.tasks[e.taskId] : null; return t ? t.name : c ? c.name : null; };
 function saveItem(x) { x.updatedAt = store.nowISO(); M()[x.id] = x; store.save(); sync.autoSync(); }
 const signed = (n) => (n >= 0 ? '+' : '') + money.fmtYen(n).replace('−', '-');
+const R = () => (store.state.data.recurring = store.state.data.recurring || {}); // v0.47: 定期
+function saveRecurring(r) { r.updatedAt = store.nowISO(); R()[r.id] = r; store.save(); sync.autoSync(); }
+const RECUR_ICON = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 12a8 8 0 0 1 13.7-5.6L20 8.5' }), svg('path', { d: 'M20 4v4.5h-4.5' }), svg('path', { d: 'M20 12a8 8 0 0 1-13.7 5.6L4 15.5' }), svg('path', { d: 'M4 20v-4.5h4.5' })]);
 
 export function renderMoney(view, ctx, dateArg = null) {
   clear(view);
@@ -43,7 +48,7 @@ export function renderMoney(view, ctx, dateArg = null) {
   const head = headBar({
     left: [calButton(() => calendarSheet(date, today, (k) => goDate(k))), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(today) }, '今日')],
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [piggy],
+    right: [el('button.btn.sm.ghost.gear.recur', { type: 'button', 'aria-label': '定期(サブスク・給料日)', title: '定期', onclick: () => recurringSheet(today, rerender) }, RECUR_ICON()), piggy], // v0.47: 定期は貯金箱の左
   });
 
   // その日(F10-9): 支出(大きく)・収入(あれば)・予算の残り(きょうだけ)。下に 2 タップ入力と、その日の一覧
@@ -61,6 +66,16 @@ export function renderMoney(view, ctx, dateArg = null) {
     el('span.myen', { class: `myen${x.type === 'in' ? ' in' : ''}` }, (x.type === 'in' ? '+' : '') + money.fmtYen(x.amount)),
   ]);
   const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
+  // v0.47(F10-10): その日が支払日 / 給料日の定期で、まだ記録していないもの → 1 タップで記録(時刻は きょうなら いま・過去の日は なし)
+  const due = money.recurringDue(R(), M(), date);
+  const dueBox = due.length ? el('section.card.mcard.rdue', [
+    el('p.muted.small.rdue-h', isToday ? 'きょうが支払日 / 給料日' : 'この日が支払日 / 給料日'),
+    el('div.chips', due.map((r) => el('button.chip.cat.rchip', { type: 'button', style: { '--c': mcatOf(r.categoryId).color }, 'aria-label': `${r.name} ${money.fmtYen(r.amount)} を記録`, onclick: () => {
+      const t = isToday ? mm(minuteOfDay()) : null;
+      saveItem({ id: store.uid(), date, time: t, amount: r.amount, type: r.type === 'in' ? 'in' : 'out', categoryId: r.categoryId, note: r.name, entryId: money.linkEntry(E(), date, t, minuteOfDay()), recurringId: r.id, updatedAt: null, deletedAt: null });
+      toast(`${r.name}${r.type === 'in' ? ' +' : ' '}${money.fmtYen(r.amount)}を記録しました`); rerender();
+    } }, [el('span.dot', { style: { background: mcatOf(r.categoryId).color }, 'aria-hidden': 'true' }), `${r.name} ${r.type === 'in' ? '+' : ''}${money.fmtYen(r.amount)} を記録`]))),
+  ]) : null;
 
   // 月のまとめ: ‹ 月 › ・支出(大きく)・収入と差し引き・資産・予算のメーター(または 1 日平均)・内訳の円・日ごとの合計(タップでその日へ)・推移
   // v0.30.1(実機 FB「月を前後すると画面が上に飛ぶ」): ctx.go は先頭にスクロールするので、月の見出しが同じ位置に来るように戻す
@@ -112,11 +127,28 @@ export function renderMoney(view, ctx, dateArg = null) {
     panels.set(g.date, { btn, panel });
     return [btn, panel];
   })) : null;
+  // v0.47(F10-10): 今月の定期(日付順)。記録済み(recurringId がその日にある)は ✓、過ぎた日は薄く。無ければ登録への 1 行
+  const recurList = money.recurringInMonth(R(), ym);
+  const recMonthly = money.recurringMonthly(R());
+  const recordedOn = new Set(Object.values(M()).filter((x) => x && !x.deletedAt && x.recurringId && x.date >= sum.from && x.date <= sum.to).map((x) => `${x.recurringId}:${x.date}`));
+  const recurCard = el('section.card.mcard.mrecur', [
+    el('div.row', [el('span.kpi-label', '今月の定期'), el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: () => recurringSheet(today, rerender) }, recurList.length ? '管理 ›' : '登録 ›')]),
+    recurList.length ? el('div.list', recurList.map(({ r, date: d }) => {
+      const done = recordedOn.has(`${r.id}:${d}`), past = d < today;
+      return el('button.srow.rrow', { type: 'button', class: `srow rrow${done ? ' done' : past ? ' past' : ''}${d === today ? ' cur' : ''}`, onclick: () => editRecurringSheet(r, today, rerender) }, [
+        el('span.rday', `${+d.slice(8, 10)}日`),
+        el('i.dot', { style: { background: mcatOf(r.categoryId).color } }),
+        el('span.mname', [r.name, r.via ? el('span.muted.small', ` ${r.via}`) : null, done ? el('span.gok', ' ✓') : null]),
+        el('span.myen', { class: `myen${r.type === 'in' ? ' in' : ''}` }, (r.type === 'in' ? '+' : '') + money.fmtYen(r.amount)),
+      ]);
+    })) : el('p.muted.small.pad', 'サブスクの支払日や給料日を登録すると、ここに毎月の予定が並び、当日に 1 タップで記録できます。'),
+    recurList.length ? el('p.muted.small.mnet', `1 か月の定期: 支払い ${money.fmtYen(recMonthly.out)}${recMonthly.in ? `・収入 ${money.fmtYen(recMonthly.in)}` : ''}`) : null,
+  ]);
   const trend = money.monthlyTrend(M(), ym, 6);
   const trendBox = trend.some((t) => t.out > 0) ? el('details.rep-details', [el('summary.muted.small', '月ごとの推移'), monthBars(trend, ym), el('p.muted.small.center', `これまでの差し引き ${signed(money.netAll(M()).net)}(収入${money.fmtYen(money.netAll(M()).in)} − 支出${money.fmtYen(money.netAll(M()).out)})`)]) : null;
-  const monthSec = el('section.group.mmonth', [monthHead, summary, donut, dayRows ? el('h3.help-h.dl-h', '日ごと(タップで内訳)') : null, dayRows, trendBox].filter(Boolean));
+  const monthSec = el('section.group.mmonth', [monthHead, summary, recurCard, donut, dayRows ? el('h3.help-h.dl-h', '日ごと(タップで内訳)') : null, dayRows, trendBox].filter(Boolean));
 
-  view.append(...[el('h1', 'お金'), head, quick, dayCard, dayList, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)。v0.35(案 F): 日付 → 入力の 1 行 → 支出 → 一覧 → 月
+  view.append(...[el('h1', 'お金'), head, quick, dayCard, dueBox, dayList, monthSec].filter(Boolean)); // null を渡すと "null" の文字が出る(v0.20修正)。v0.35(案 F): 日付 → 入力の 1 行 → 支出 → 一覧 → 月
 }
 /** v0.33: 月のまとめの「日ごと」で開いている日(描き直しても保つ・1 日ずつ) */
 let expandedDay = null;
@@ -194,6 +226,89 @@ function editWantSheet(w, today, rerender) {
       el('button.btn.primary', { type: 'button', onclick: () => { if (!apply()) return; saveWant(w); close(); rerender(); toast('保存しました'); } }, '保存'),
     ]),
   ]);
+}
+
+/**
+ * 定期(v0.47・F10-10): サブスクの支払い(支払日・支払いサービス・金額)と給料(給料日・振込先・金額)。一覧(支払い → 収入)+追加の欄。行のタップで編集。
+ * 自動で記録はしない(二重や金額のずれを避ける)。当日の 1 タップ記録は renderMoney の dueBox。
+ */
+function recurringSheet(today, rerender) {
+  let close;
+  const body = el('div');
+  const draw = () => {
+    clear(body);
+    const list = Object.values(R()).filter((r) => r && !r.deletedAt).sort((a, b) => a.day - b.day || String(a.name).localeCompare(String(b.name)));
+    const outs = list.filter((r) => r.type !== 'in'), ins = list.filter((r) => r.type === 'in');
+    const tot = money.recurringMonthly(R());
+    const row = (r) => el('button.srow.rrow', { type: 'button', onclick: () => editRecurringSheet(r, today, () => { draw(); rerender(); }) }, [
+      el('span.rday', `${r.day}日`),
+      el('i.dot', { style: { background: mcatOf(r.categoryId).color } }),
+      el('span.mname', [r.name, r.via ? el('span.muted.small', ` ${r.via}`) : null]),
+      el('span.myen', { class: `myen${r.type === 'in' ? ' in' : ''}` }, (r.type === 'in' ? '+' : '') + money.fmtYen(r.amount)),
+    ]);
+    body.append(...[
+      el('section.group', [el('h2', outs.length ? `毎月の支払い ${money.fmtYen(tot.out)}` : '毎月の支払い'), outs.length ? el('div.list', outs.map(row)) : el('p.muted.small.pad', 'サブスクや家賃など、毎月決まった日の支払い。')]),
+      el('section.group', [el('h2', ins.length ? `毎月の収入 ${money.fmtYen(tot.in)}` : '毎月の収入'), ins.length ? el('div.list', ins.map(row)) : el('p.muted.small.pad', '給料日と振込先。')]),
+    ]);
+  };
+  const form = recurringForm(null, (r) => { saveRecurring(r); draw(); rerender(); toast('登録しました'); });
+  draw();
+  close = sheet((c) => { close = c; return [
+    el('h2', '定期(サブスク・給料日)'),
+    el('p.muted.small', '月末が支払日なら 31 日。自動では記録せず、当日に お金 の上に「記録」のチップが出ます。'),
+    body,
+    el('section.card.quick', form.node),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ]; });
+}
+/** 定期の入力欄(追加と編集で共通): 名前・¥ 金額・毎月 ◯ 日・支払い / 収入・支払いサービス(振込先)・カテゴリ。onSave(r) に揃えた 1 件を渡す */
+function recurringForm(r, onSave) {
+  let type = r?.type === 'in' ? 'in' : 'out', cid = r?.categoryId || null;
+  const name = el('input.text', { type: 'text', value: r?.name || '', placeholder: type === 'in' ? '給料' : 'Netflix・家賃 など', maxlength: 100, autocomplete: 'off' });
+  const amount = el('input.yenin.sm', { type: 'text', inputmode: 'numeric', value: r ? String(r.amount) : '', placeholder: '0', 'aria-label': '金額(円)' });
+  const dayIn = el('input.text.rdayin', { type: 'number', inputmode: 'numeric', min: 1, max: 31, value: String(r?.day || 25), 'aria-label': '毎月の日' });
+  const via = el('input.text', { type: 'text', value: r?.via || '', maxlength: 60, autocomplete: 'off' });
+  const chips = el('div.chips.small');
+  const drawChips = () => {
+    clear(chips);
+    const cats = mcats().filter((c) => (type === 'in') === !!c.income);
+    if (!cid || !cats.some((c) => c.id === cid)) cid = (cats.find((c) => c.id === (type === 'in' ? 'income' : 'fixed')) || cats[0])?.id || (type === 'in' ? 'income' : 'fixed');
+    chips.append(...cats.map((c) => el('button.chip.sm2.cat', { type: 'button', class: `chip sm2 cat${c.id === cid ? ' on' : ''}`, style: { '--c': mcatOf(c.id).color }, onclick: (e) => { cid = c.id; chips.querySelectorAll('.chip').forEach((k) => k.classList.toggle('on', k === e.currentTarget)); } }, [el('span.dot', { style: { background: mcatOf(c.id).color } }), c.name])));
+  };
+  const applyType = () => { via.placeholder = type === 'in' ? '振込先(◯◯銀行 など)' : '支払いサービス(クレカ・PayPay など)'; if (!r) name.placeholder = type === 'in' ? '給料' : 'Netflix・家賃 など'; drawChips(); };
+  const seg = el('div.seg', [['out', '支払い'], ['in', '収入(給料)']].map(([k, label]) => el('button', { type: 'button', class: k === type ? 'active' : '', onclick: (e) => { type = k; seg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget)); applyType(); } }, label)));
+  applyType();
+  const submit = () => {
+    const nm = name.value.trim(); if (!nm) { toast('名前を入れてください'); name.focus(); return false; }
+    const yen = money.parseYen(amount.value); if (yen == null) { toast('金額を入れてください'); amount.focus(); return false; }
+    const day = Math.max(1, Math.min(31, Math.round(+dayIn.value) || 1));
+    onSave({ ...(r || { id: store.uid(), note: '', updatedAt: null, deletedAt: null }), name: nm, amount: yen, type, day, via: via.value.trim(), categoryId: cid });
+    if (!r) { name.value = ''; amount.value = ''; via.value = ''; }
+    return true;
+  };
+  const node = el('div.col.rform', [
+    seg,
+    el('div.row', [name]),
+    el('div.row.yenrow', [el('span.yen-mark.sm', '¥'), amount, el('span.muted.small.rday-l', '毎月'), dayIn, el('span.muted.small', '日')]),
+    el('div.row', [via]),
+    chips,
+    r ? null : el('div.row', [el('span.grow'), el('button.btn.primary', { type: 'button', onclick: submit }, '登録')]),
+  ].filter(Boolean));
+  return { node, submit };
+}
+/** 定期の編集: 入力欄+消す / 保存 */
+function editRecurringSheet(r, today, rerender) {
+  sheet((close) => {
+    const form = recurringForm(r, (v) => { Object.assign(r, v); saveRecurring(r); close(); rerender(); toast('保存しました'); });
+    return [
+      el('h2', r.name),
+      form.node,
+      el('div.row', [
+        el('button.btn.danger', { type: 'button', onclick: () => confirmSheet('消しますか?', `${r.name}${money.fmtYen(r.amount)}(記録した分は残ります)`, '消す', () => { r.deletedAt = store.nowISO(); saveRecurring(r); close(); rerender(); }, true) }, '消す'),
+        el('button.btn.primary.grow', { type: 'button', onclick: () => form.submit() }, '保存'),
+      ]),
+    ];
+  });
 }
 
 /**

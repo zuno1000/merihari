@@ -1,4 +1,4 @@
-// merihari ─ money.js: お金(v0.19・F10)の純関数。支出/収入1件 = { id, date, time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }。
+// merihari ─ money.js: お金(v0.19・F10)の純関数。v0.47(F10-10): 定期(サブスクの支払い・給料日)の純関数 recurringOn / recurringInMonth / recurringDue / recurringMonthly も。支出/収入1件 = { id, date, time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }。
 // 設計(参考: おカネレコの「金額 → カテゴリをタップで完了」、Zaim の月予算と「あといくら / 1日あたり」、家計簿が続かない理由の1位「カテゴリ分類」→ カテゴリは少なく・自由に増減):
 // - 入力は2タップ(金額 → カテゴリ)。日付と時刻は「きょう・いま」が既定で、タイムラインの記録に自動で紐づく(その時間に何をしていたか)。
 // - 月の予算は任意。あれば「残り ◯円 / 1日 ◯円」。無ければ1日平均だけ。責めない。
@@ -149,4 +149,37 @@ export function parseYen(s) {
   if (!/^\d+$/.test(v)) return null;
   const n = +v;
   return n > 0 && n <= 100000000 ? n : null;
+}
+
+// ---- 定期(v0.47・F10-10): サブスクの支払日と給料日 ----
+// 1 件 = { id, name, amount(円・正の整数), type:'out'|'in', day(1〜31・月末は 31 で月の末日に丸める), via(支払いサービス / 振込先・自由記述), categoryId, note, updatedAt, deletedAt }
+// 自動では支出に記録しない(二重になる・金額が変わる)。その日に 1 タップで記録でき(recurringId で紐づく)、記録済みかは money の recurringId と date で見る。
+/** 定期 1 件の その月の日付 'YYYY-MM-DD'(day が月の日数を超えれば末日)。純関数 */
+export function recurringOn(r, ym) {
+  const d = Math.max(1, Math.min(31, Math.round(+r?.day || 1)));
+  const last = monthRange(ym).days;
+  return `${ym}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+/** その月の定期の一覧(日付順・同じ日は 支払い → 収入 → 名前)。[{ r, date }]。消したものは見ない */
+export function recurringInMonth(recurring, ym) {
+  return Object.values(recurring || {}).filter(alive).map((r) => ({ r, date: recurringOn(r, ym) }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.r.type === b.r.type ? String(a.r.name).localeCompare(String(b.r.name)) : a.r.type === 'out' ? -1 : 1));
+}
+/** 定期の 1 か月の合計 { out, in, count }(消したものは見ない) */
+export function recurringMonthly(recurring) {
+  let out = 0, inc = 0, count = 0;
+  for (const r of Object.values(recurring || {})) { if (!alive(r)) continue; count++; if (r.type === 'in') inc += r.amount; else out += r.amount; }
+  return { out, in: inc, count };
+}
+/** その日に支払日 / 給料日が来る定期のうち、その日にまだ記録していないもの(money の recurringId と date で見る)。[r] */
+export function recurringDue(recurring, money, date) {
+  const ym = monthOf(date);
+  const done = new Set(Object.values(money || {}).filter((x) => alive(x) && x.date === date && x.recurringId).map((x) => x.recurringId));
+  return recurringInMonth(recurring, ym).filter((x) => x.date === date && !done.has(x.r.id)).map((x) => x.r);
+}
+/** 次に来る定期(today 以降・今月に無ければ来月の分)。[{ r, date }] を日付順に n 件 */
+export function recurringNext(recurring, today, n = 3) {
+  const ym = monthOf(today);
+  const list = [...recurringInMonth(recurring, ym).filter((x) => x.date >= today), ...recurringInMonth(recurring, addMonths(ym, 1))];
+  return list.slice(0, n);
 }

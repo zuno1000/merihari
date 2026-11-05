@@ -103,7 +103,7 @@ export function merge(a, b) {
   const fresh = (rec) => rec != null && (!resetAt || cmpStamp(rec.updatedAt || rec.finalizedAt || '', resetAt) >= 0);
   const out = {};
   // 未知のトップレベルキーも決定的に残す
-  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed', 'meta']);
+  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'recurring', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed', 'meta']);
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) if (!known.has(k)) out[k] = pick(a[k], b[k], () => '');
   out.schema = Math.max(+a.schema || 1, +b.schema || 1);
   const sa = fresh({ updatedAt: a.settings.settingsUpdatedAt }) || !resetAt ? a.settings : null;
@@ -117,6 +117,7 @@ export function merge(a, b) {
   out.diary = mergeById(a.diary, b.diary, (r) => r.updatedAt, fresh); // v0.18: 日記は日付ごとに updatedAt の LWW
   out.money = mergeById(a.money, b.money, (r) => r.updatedAt, fresh); // v0.19: お金は id ごとに updatedAt の LWW
   out.wants = mergeById(a.wants, b.wants, (r) => r.updatedAt, fresh); // v0.20: ほしいもの
+  out.recurring = mergeById(a.recurring, b.recurring, (r) => r.updatedAt, fresh); // v0.47: 定期(F10-10・id ごとの LWW)
   out.busyNotes = mergeById(a.busyNotes, b.busyNotes, (r) => r.updatedAt, fresh); // v0.22: 予定のメモ(日付:開始分 ごとの LWW)
   out.planBlocks = mergeById(a.planBlocks, b.planBlocks, (r) => r.updatedAt, fresh); // v0.23: 予定(id ごとの LWW・記録と同じ)
   out.kiai = mergeById(a.kiai, b.kiai, (r) => r.updatedAt, fresh); // v0.25: 気合(F13・id ごとの LWW)
@@ -189,7 +190,7 @@ export function mergeSettings(sa, sb) {
 export function pruneTombstones(data, nowISO, days = TOMBSTONE_DAYS) {
   const limit = new Date(nowISO).getTime() - days * 86400000; // v0.25: 数値で比べる(deletedAt はオフセット付き・limit は UTC だった)
   const out = { ...data };
-  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed']) {
+  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'recurring', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed']) {
     out[k] = {};
     for (const [id, r] of Object.entries(data[k] || {})) if (!(r.deletedAt && ts(r.deletedAt) < limit)) out[k][id] = r;
   }

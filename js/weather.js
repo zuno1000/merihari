@@ -65,6 +65,12 @@ export function clothing({ tmax = null, tmin = null, pop = null } = {}) {
   if (pop != null) { if (pop >= 50) parts.push('傘'); else if (pop >= 30) parts.push('折りたたみ傘'); }
   return parts.join('・');
 }
+/** 傘(v0.47・実機要望「傘が必要なことを分かりやすく」): 降水確率 ≥50 は 'umbrella'(傘)・≥30 は 'folding'(折りたたみ傘)・それ未満や不明は null。clothing と同じしきい値。純関数 */
+export function umbrella(d) {
+  const pop = d && typeof d.pop === 'number' && Number.isFinite(d.pop) ? d.pop : null;
+  if (pop == null) return null;
+  return pop >= 50 ? 'umbrella' : pop >= 30 ? 'folding' : null;
+}
 /** ホームの 1 行の本文(純関数): 「晴れ 18° / 9°・降水 20%」。無い材料は省く */
 export function lineText(d) {
   if (!d) return '';
