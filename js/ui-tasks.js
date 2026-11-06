@@ -2,9 +2,9 @@
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
 // v0.26: 画面は 期限切れ / きょう だけ。メモ / 期限までに / 習慣 / やりたいこと / 完了 は「リスト」のタイルから 1 画面はさんで開く(F5-13)。▶ は FEATURES.TASK_START(features.js)で非表示。
-// v0.44(F5-2 廃止・FEATURES.TASK_ESTIMATE=false): タスクは「どれくらい」を持たず、期限(日付+時刻・いつまで のどれでも時刻を付けられる)だけ。画面は 期限切れ / きょうが期限 / 今週が期限 → リスト。
+// v0.44(F5-2 廃止・FEATURES.TASK_ESTIMATE=false): タスクは「どれくらい」を持たず、期限(日付+時刻・いつまで のどれでも時刻を付けられる)だけ。画面は 期限切れ / 今日が期限 / 1週間以内が期限(v0.47.2・ユーザー要望。v0.44〜v0.47.1 は「今週」=日曜まで)→ リスト。
 // v0.47(ユーザー要望): かんたん追加の種類の並びは タスク / 習慣 / やりたいこと / メモ で、既定は「タスク」(メモは最後・区分の画面はその種類のまま)。見出しは「今日が期限」。
-//   今週が期限のうち 明日が期限 の行は薄い色で目立たせ(.trow.due-tmr)、今日が期限 の行はそれより強く(.trow.due-today)。今日 > 明日 > それ以外 の順に目立つ。
+//   1週間以内が期限のうち 明日が期限 の行は薄い色で目立たせ(.trow.due-tmr)、今日が期限 の行はそれより強く(.trow.due-today)。今日 > 明日 > それ以外 の順に目立つ。
 // v0.17: 追加のとき 種類(タスク / 習慣 / やりたいこと)を先に選ぶ。タスクは「毎週繰り返す」(課題: 済んで期限を過ぎたら翌週の分が出る・F5-9)と「時間なし」(用事: チェックで済ませる・F5-10)を持てる。
 import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
@@ -192,7 +192,7 @@ export function toggleDone(t, rerender) {
 /** 区分(v0.26・F5-13): タスク画面の「リスト」のタイル。タップで 1 画面はさんで開く(‹ で戻る)。preset は先頭の追加欄の種類 */
 export const LISTS = Object.freeze([
   { key: 'memo', title: 'メモ', preset: 'memo', empty: '上の欄に書くと、ここに新しい順で並びます。' },
-  { key: 'duties', title: '期限までに', preset: 'task', empty: FEATURES.TASK_ESTIMATE ? '期限のあるタスクで、きょうやる分がまだ無いものがここに並びます。' : '期限が来週より先のタスクと、期限の無いタスクがここに並びます。' },
+  { key: 'duties', title: '期限までに', preset: 'task', empty: FEATURES.TASK_ESTIMATE ? '期限のあるタスクで、きょうやる分がまだ無いものがここに並びます。' : '期限が 1 週間より先のタスクと、期限の無いタスクがここに並びます。' },
   { key: 'habits', title: '習慣', preset: 'habit', empty: '毎日・毎週の習慣がここに並びます。' },
   { key: 'wishes', title: 'やりたいこと', preset: 'wish', empty: '時間ができたらやりたいことがここに並びます。' },
   { key: 'done', title: '完了', preset: null, empty: '完了したタスクはまだありません。' },
@@ -208,9 +208,10 @@ export function renderTasks(view, ctx, listKey = null) {
   const goalOf = Object.fromEntries(gs.map((g) => [g.taskId, g]));
   const overdue = plan.overdueTasks(T(), today, E());
   const overdueIds = new Set(overdue.map((t) => t.id));
-  // v0.44(目安の廃止): きょうが期限 / 今週が期限(きょうを除く・週の終わりは「いつまで」の 今週 と同じ日曜まで)。目安を使うなら従来どおり goals の deadline / todo
+  // v0.44(目安の廃止): きょうが期限 / 1週間以内が期限(きょうを除く・きょうから 7 日後まで)。目安を使うなら従来どおり goals の deadline / todo
+  // v0.47.2(ユーザー要望): 「今週が期限」(日曜まで)だと週末に近いほど一覧が短くなり、来週の頭の期限が見えなかった → 常に 7 日先まで。「いつまで」の 今週(日曜)は変えない
   const isDuty = (t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && !overdueIds.has(t.id);
-  const weekEnd = whenOptions(today)[2].value;
+  const weekEnd = addDays(today, 7); // v0.47.2: 1 週間後まで(「いつまで」の 今週 とは別)
   const todayList = (FEATURES.TASK_ESTIMATE ? tasks.filter((t) => !t.doneAt && (goalOf[t.id]?.kind === 'deadline' || goalOf[t.id]?.kind === 'todo') && !overdueIds.has(t.id)) : tasks.filter((t) => isDuty(t) && plan.deadlineKey(t, today) === today)).sort(byDeadline);
   const weekList = FEATURES.TASK_ESTIMATE ? [] : tasks.filter((t) => isDuty(t) && plan.deadlineKey(t, today) > today && plan.deadlineKey(t, today) <= weekEnd).sort(byDeadline);
   const todayIds = new Set([...todayList, ...weekList].map((t) => t.id));
@@ -298,7 +299,7 @@ export function renderTasks(view, ctx, listKey = null) {
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     FEATURES.TASK_ESTIMATE ? section('きょう', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、きょうやる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
       : section('今日が期限', todayList, tasks.some((t) => !t.doneAt) ? '今日が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
-    FEATURES.TASK_ESTIMATE ? null : section('今週が期限', weekList, `今週(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
+    FEATURES.TASK_ESTIMATE ? null : section('1週間以内が期限', weekList, `1週間以内(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
     el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),
   ].filter(Boolean));
 }
