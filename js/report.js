@@ -8,6 +8,10 @@ import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShar
 import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
+/** 作業の合計の「絶対の段」(v0.48・ユーザー要望「10 時間弱やっても 少し良い、6 時間で 控えめ は厳しい。作業時間が十分にあった日はそれをほめて」)。
+ *  先週平均や目標との差だけで見ると、たくさん働く人ほど「多め」が出にくい。6 時間以上は しっかり(+1・作業とダラダラのマイナスを付けない)、8 時間以上は 十分(+2・それだけで「よい一日」)。目標があるときは目標にも届いていれば 十分 */
+export const SOLID_WORK_MIN = 360, PLENTY_WORK_MIN = 480;
+const workTier = (workMin, goalWork = null) => (workMin >= PLENTY_WORK_MIN && (goalWork == null || workMin >= goalWork) ? 'plenty' : workMin >= SOLID_WORK_MIN ? 'solid' : null);
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
 
 /** 記録のある日付の集合 */
@@ -145,9 +149,13 @@ export function reportLines(agg, { tasks = {}, entries = {}, date, settings = nu
   }
   // 自分で決めた1日の目標(v0.17・F3-11): 届いた日はそれを先に言う
   const gl = settings?.goals || {};
-  if (gl.workMin > 0 && agg.workMin >= gl.workMin) pos.push({ pri: 2, d: agg.workMin, text: `作業は${fmtMinJa(agg.workMin)}で、目標の${fmtMinJa(gl.workMin)}に届きました。` });
+  // v0.48: 作業が 6 時間以上の日は、ダラダラの減少より先に作業時間をほめる(pri 0)。目標の文と合計の文はこの 1 文にまとめる
+  const tier = workTier(agg.workMin, gl.workMin > 0 ? gl.workMin : null);
+  const metGoal = gl.workMin > 0 && agg.workMin >= gl.workMin;
+  if (tier) pos.push({ pri: 0, d: agg.workMin, text: `作業は合計${fmtMinJa(agg.workMin)}${metGoal ? `で、目標の${fmtMinJa(gl.workMin)}に届きました` : ''}。${tier === 'plenty' ? '十分な一日です。' : 'しっかり時間が取れています。'}` });
+  else if (metGoal) pos.push({ pri: 2, d: agg.workMin, text: `作業は${fmtMinJa(agg.workMin)}で、目標の${fmtMinJa(gl.workMin)}に届きました。` });
   if (gl.driftMax != null && agg.dayDone && agg.driftMin <= gl.driftMax) pos.push({ pri: 1, d: gl.driftMax - agg.driftMin, text: `${driftLabelOf(settings)}は${fmtMinJa(agg.driftMin)}で、上限の${fmtMinJa(gl.driftMax)}におさまりました。` });
-  if (agg.workMin > 0) pos.push({ pri: 3, d: agg.workMin, text: agg.baselineWorkMin != null ? `作業は合計${fmtMinJa(agg.workMin)}でした。先週の平均は${fmtMinJa(agg.baselineWorkMin)}です。` : `作業は合計${fmtMinJa(agg.workMin)}でした。` });
+  if (agg.workMin > 0 && !tier) pos.push({ pri: 3, d: agg.workMin, text: agg.baselineWorkMin != null ? `作業は合計${fmtMinJa(agg.workMin)}でした。先週の平均は${fmtMinJa(agg.baselineWorkMin)}です。` : `作業は合計${fmtMinJa(agg.workMin)}でした。` });
   if (agg.streak >= 2) pos.push({ pri: 4, d: agg.streak, text: `記録は${agg.streak}日続いています。` });
   pos.sort((a, b) => a.pri - b.pri || b.d - a.d);
   let positive = pos.slice(0, 3).map((p) => p.text);
@@ -232,6 +240,7 @@ export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDon
 /**
  * きょうのふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
  * 判定の材料: 作業の合計 vs 先週平均(±15分かつ ±10%)/ ダラダラ vs 先週平均(−15 / +30分)/ 毎日の目安に届いたか(済んだの印も可)。
+ * v0.48: 作業の合計の絶対の段(6 時間以上 しっかり +1・8 時間以上 十分 +2)。この段に入る日は 作業とダラダラのマイナスを付けない(長い日の息抜きは責めない)。先週平均や目標が無くてもこの段だけで判定する。
  * 材料が無いとき(先週の記録が3日未満で目安も無い・記録が作業時間帯の半分以下・まだ1日の途中)は判定しない(judged=false)。
  * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる1件だけ。「明日は」は目安から計算した量1件。
  * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null, lookBack:[string](v0.31.3・2 つまで) }
@@ -254,20 +263,25 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   const hasGoal = goalWork != null || goalDrift != null;
   const reasons = [];
   let score = 0;
-  if (goalWork != null) {
+  const tier = workTier(agg.workMin, goalWork); // v0.48: 絶対の段
+  const solid = tier != null;
+  if (tier === 'plenty') { score += 2; reasons.push(`作業は${fmtMinJa(agg.workMin)}と十分`); }
+  else if (goalWork != null) {
     if (agg.workMin >= goalWork) { score++; reasons.push(`作業は目標の${fmtMinJa(goalWork)}に届いた`); }
+    else if (solid) reasons.push(`作業は${fmtMinJa(agg.workMin)}で目標まであと${fmtMinJa(goalWork - agg.workMin)}`); // v0.48: 6 時間以上ならマイナスにしない
     else if (agg.workMin < goalWork * 0.8) { score--; reasons.push(`作業は目標${fmtMinJa(goalWork)}のうち${fmtMinJa(agg.workMin)}`); }
     else reasons.push(`作業は目標まであと${fmtMinJa(goalWork - agg.workMin)}`);
-  } else if (hasBase) {
+  } else if (solid) { score++; reasons.push(`作業は${fmtMinJa(agg.workMin)}としっかり`); }
+  else if (hasBase) {
     if (dWork >= 15 && dWork >= agg.baselineWorkMin * 0.1) { score++; reasons.push(`作業は先週の平均より${fmtMinJa(dWork)}多め`); }
     else if (-dWork >= 15 && -dWork >= agg.baselineWorkMin * 0.1) { score--; reasons.push(`作業は先週の平均より${fmtMinJa(-dWork)}少なめ`); }
   }
   if (goalDrift != null) {
     if (agg.driftMin <= goalDrift) { score++; reasons.push(`${drift}は上限${fmtMinJa(goalDrift)}の中`); }
-    else if (agg.driftMin >= goalDrift + 30) { score--; reasons.push(`${drift}は上限より${fmtMinJa(agg.driftMin - goalDrift)}多め`); }
+    else if (agg.driftMin >= goalDrift + 30 && !solid) { score--; reasons.push(`${drift}は上限より${fmtMinJa(agg.driftMin - goalDrift)}多め`); } // v0.48: 作業が 6 時間以上の日はダラダラのマイナスを付けない
   } else if (hasBase) {
     if (dDrift <= -15) { score++; reasons.push(`${drift}は${fmtMinJa(-dDrift)}少なめ`); }
-    else if (dDrift >= 30) { score--; reasons.push(`${drift}は${fmtMinJa(dDrift)}多め`); }
+    else if (dDrift >= 30 && !solid) { score--; reasons.push(`${drift}は${fmtMinJa(dDrift)}多め`); }
   }
   if (dailyGs.length && agg.dayDone) {
     const met = dailyGs.filter((g) => g.done).length;
@@ -281,10 +295,10 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   let judged = false, verdict = null, head = null; // head: 判定の見出しだけ(v0.24: レポートで大きく・理由は小さく)
   if (!agg.dayDone) verdict = null; // 途中は判定しない(いまの時点の文は positive[0])
   else if (agg.coverage < 0.5) verdict = `記録が作業時間帯の${Math.round(agg.coverage * 100)}%なので、この日の判定は控えます。`;
-  else if (!hasBase && !dailyGs.length && !hasGoal) verdict = `比べる材料がまだ少ない日です(先週の記録${agg.baselineDays}日)。設定 › 目標 で1日の目標を決めると、それと比べます。`;
+  else if (!hasBase && !dailyGs.length && !hasGoal && !solid) verdict = `比べる材料がまだ少ない日です(先週の記録${agg.baselineDays}日)。設定 › 目標 で1日の目標を決めると、それと比べます。`;
   else {
     judged = true;
-    head = score >= 2 ? 'よい一日でした。' : score === 1 ? 'いつもより少し良い日でした。' : score === 0 ? 'いつもどおりの一日でした。' : score === -1 ? '少し控えめな一日でした。' : 'ゆっくりめの一日でした。';
+    head = score >= 2 ? 'よい一日でした。' : score === 1 ? '少し良い一日でした。' : score === 0 ? 'いつもどおりの一日でした。' : score === -1 ? '少し控えめな一日でした。' : 'ゆっくりめの一日でした。';
     verdict = head + (reasons.length ? `(${reasons.join('・')})` : '');
   }
   // 良かったこと: 肯定の文(ダラダラの減少 → 作業の増加 → 目安(印も)→ 合計 → 連続)

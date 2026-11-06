@@ -316,8 +316,30 @@ document.getElementById('app').addEventListener('load', async () => {
     const fb2 = Rp.dayFeedback(Rp.aggregate({ entries: fbThin, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbThin, date: RD, settings: ds });
     ok(!fb2.judged && fb2.verdict === '記録が作業時間帯の18%なので、この日の判定は控えます。', 'dayFeedback: 記録が作業時間帯の半分以下なら判定しない(責めない)');
     const fbFew = toMap([mkE('2026-10-11', '09:00', '11:00', 'research'), mkE(RD, '07:00', '20:00', 'research')]);
-    const fb3 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew, date: RD, settings: ds });
+    const fbFew2 = toMap([mkE('2026-10-11', '09:00', '11:00', 'research'), mkE(RD, '09:00', '12:00', 'research'), mkE(RD, '12:00', '22:00', 'life')]); // v0.48: 作業 3 時間(絶対の段に入らない)・記録は十分
+    const fb3 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew2, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew2, date: RD, settings: ds });
     ok(!fb3.judged && fb3.verdict.startsWith('比べる材料がまだ少ない日です(先週の記録1日)。'), 'dayFeedback: 先週の記録が3日未満で目安も無ければ比べない');
+    // v0.48: 作業の絶対の段(ユーザー要望「10 時間弱で 少し良い・6 時間で 控えめ は厳しい」)
+    ok(Rp.SOLID_WORK_MIN === 360 && Rp.PLENTY_WORK_MIN === 480, 'v0.48: 作業の絶対の段は 6 時間(しっかり)と 8 時間(十分)');
+    const fbFewLong = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFew, date: RD, settings: ds });
+    ok(fbFewLong.judged && fbFewLong.verdict === 'よい一日でした。(作業は13時間と十分)' && fbFewLong.good[0] === '作業は合計13時間。十分な一日です。', 'dayFeedback(v0.48): 先週の記録が無くても 8 時間以上なら「十分」で判定する');
+    const fbLong = toMap([...fbBase, mkE(RD, '09:00', '19:00', 'research'), mkE(RD, '19:00', '20:30', 'sns'), mkE(RD, '20:30', '23:00', 'life')]); // 10 時間・ダラダラは先週平均より 30 分多い
+    const fbL = Rp.dayFeedback(Rp.aggregate({ entries: fbLong, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbLong, date: RD, settings: ds });
+    ok(fbL.score === 2 && fbL.verdict === 'よい一日でした。(作業は10時間と十分)' && fbL.good[0] === '作業は合計10時間。十分な一日です。' && !fbL.good.some((t) => t.startsWith('作業は合計10時間でした')), 'dayFeedback(v0.48): 10 時間なら先週平均に関係なく「よい一日」・ダラダラが 30 分多くてもマイナスにしない・よかったことの先頭は作業時間(合計の文は重ねない)');
+    const fbSix = toMap([...fbBase, mkE(RD, '09:00', '15:00', 'research'), mkE(RD, '15:00', '17:00', 'sns'), mkE(RD, '17:00', '23:00', 'life')]); // 6 時間・ダラダラは 1 時間多い
+    const fbS = Rp.dayFeedback(Rp.aggregate({ entries: fbSix, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbSix, date: RD, settings: ds });
+    ok(fbS.score === 1 && fbS.verdict === '少し良い一日でした。(作業は6時間としっかり)' && fbS.good[0] === '作業は合計6時間。しっかり時間が取れています。', 'dayFeedback(v0.48): 6 時間なら「しっかり」で +1・ダラダラが 1 時間多くてもマイナスにしない・見出しは「少し良い一日」');
+    const fbFive = toMap([...fbBase, mkE(RD, '09:00', '14:00', 'research'), mkE(RD, '14:00', '16:00', 'sns'), mkE(RD, '16:00', '23:00', 'life')]); // 5 時間(段に入らない)・ダラダラ 1 時間多い
+    const fbF = Rp.dayFeedback(Rp.aggregate({ entries: fbFive, date: RD, nowMin: 1440, settings: ds }), { tasks: {}, entries: fbFive, date: RD, settings: ds });
+    ok(fbF.score === 0 && fbF.reasons.join() === '作業は先週の平均より3時間多め,ダラダラは1時間多め' && fbF.good[0] === '研究は先週の平均より3時間多くなりました。', 'dayFeedback(v0.48): 6 時間未満は従来どおり先週平均と比べる(ダラダラのマイナスも付く)');
+    const gS8 = { ...ds, goals: { workMin: 480, driftMax: 60 } };
+    const fbS8 = Rp.dayFeedback(Rp.aggregate({ entries: fbSix, date: RD, nowMin: 1440, settings: gS8 }), { tasks: {}, entries: fbSix, date: RD, settings: gS8 });
+    ok(fbS8.score === 0 && fbS8.verdict === 'いつもどおりの一日でした。(作業は6時間で目標まであと2時間)' && fbS8.good[0] === '作業は合計6時間。しっかり時間が取れています。', 'dayFeedback(v0.48・目標 8 時間): 6 時間は 8 割未満でもマイナスにしない・上限を 1 時間超えてもマイナスにしない');
+    const gS4 = { ...ds, goals: { workMin: 240, driftMax: 60 } };
+    const fbL4 = Rp.dayFeedback(Rp.aggregate({ entries: fbLong, date: RD, nowMin: 1440, settings: gS4 }), { tasks: {}, entries: fbLong, date: RD, settings: gS4 });
+    ok(fbL4.score === 2 && fbL4.verdict === 'よい一日でした。(作業は10時間と十分)' && fbL4.good[0] === '作業は合計10時間で、目標の4時間に届きました。十分な一日です。', 'dayFeedback(v0.48・目標 4 時間): 10 時間は「十分」(+2)・上限を超えた分はマイナスにしない・よかったことは目標の文を 1 文にまとめる');
+    const fbL9 = Rp.dayFeedback(Rp.aggregate({ entries: fbFew, date: RD, nowMin: 1440, settings: { ...ds, goals: { workMin: 840, driftMax: null } } }), { tasks: {}, entries: fbFew, date: RD, settings: { ...ds, goals: { workMin: 840, driftMax: null } } });
+    ok(fbL9.score === 0 && fbL9.reasons[0] === '作業は13時間で目標まであと1時間' && fbL9.good[0] === '作業は合計13時間。しっかり時間が取れています。', 'dayFeedback(v0.48・目標 14 時間): 目標に届かなければ 8 時間以上でも「十分」ではなく「しっかり」(マイナスは付けない)');
     const fbSlow = toMap([...fbBase, mkE(RD, '09:00', '10:00', 'research'), mkE(RD, '10:00', '12:00', 'sns'), mkE(RD, '12:00', '20:00', 'life')]);
     const fb4 = Rp.dayFeedback(Rp.aggregate({ entries: fbSlow, date: RD, nowMin: 1440, settings: ds }), { tasks: dailyT, entries: fbSlow, date: RD, settings: ds });
     ok(fb4.judged && fb4.score === -3 && fb4.verdict === 'ゆっくりめの一日でした。(作業は先週の平均より1時間少なめ・ダラダラは1時間多め・毎日の目安には届かなかった)', 'dayFeedback: 少ない日は「ゆっくりめ」と言う(責める語を使わない)');
