@@ -9,8 +9,8 @@ import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './sto
 
 const alive = (x) => x && !x.deletedAt;
 /** 作業の合計の「絶対の段」(v0.48・ユーザー要望「10 時間弱やっても 少し良い、6 時間で 控えめ は厳しい。作業時間が十分にあった日はそれをほめて」)。
- *  先週平均や目標との差だけで見ると、たくさん働く人ほど「多め」が出にくい。6 時間以上は しっかり(+1・作業とダラダラのマイナスを付けない)、8 時間以上は 十分(+2・それだけで「よい一日」)。目標があるときは目標にも届いていれば 十分 */
-export const SOLID_WORK_MIN = 360, PLENTY_WORK_MIN = 480;
+ *  先週平均や目標との差だけで見ると、たくさん働く人ほど「多め」が出にくい。4 時間以上は しっかり(+1・作業とダラダラのマイナスを付けない)、6 時間以上は 十分(+2・それだけで「よい一日」)(v0.48.1。v0.48.0 は 6 / 8 時間)。目標があるときは目標にも届いていれば 十分 */
+export const SOLID_WORK_MIN = 240, PLENTY_WORK_MIN = 360; // v0.48.1(ユーザー要望「作業の目標時間を 6 時間から 4 時間に」): 4 / 6 時間(v0.48.0 は 6 / 8)
 const workTier = (workMin, goalWork = null) => (workMin >= PLENTY_WORK_MIN && (goalWork == null || workMin >= goalWork) ? 'plenty' : workMin >= SOLID_WORK_MIN ? 'solid' : null);
 const nameOf = (categories, id) => (categories || []).find((c) => c.id === id)?.name || id;
 
@@ -149,7 +149,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date, settings = nu
   }
   // 自分で決めた1日の目標(v0.17・F3-11): 届いた日はそれを先に言う
   const gl = settings?.goals || {};
-  // v0.48: 作業が 6 時間以上の日は、ダラダラの減少より先に作業時間をほめる(pri 0)。目標の文と合計の文はこの 1 文にまとめる
+  // v0.48: 作業が SOLID_WORK_MIN(v0.48.1: 4 時間)以上の日は、ダラダラの減少より先に作業時間をほめる(pri 0)。目標の文と合計の文はこの 1 文にまとめる
   const tier = workTier(agg.workMin, gl.workMin > 0 ? gl.workMin : null);
   const metGoal = gl.workMin > 0 && agg.workMin >= gl.workMin;
   if (tier) pos.push({ pri: 0, d: agg.workMin, text: `作業は合計${fmtMinJa(agg.workMin)}${metGoal ? `で、目標の${fmtMinJa(gl.workMin)}に届きました` : ''}。${tier === 'plenty' ? '十分な一日です。' : 'しっかり時間が取れています。'}` });
@@ -240,7 +240,7 @@ export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDon
 /**
  * きょうのふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
  * 判定の材料: 作業の合計 vs 先週平均(±15分かつ ±10%)/ ダラダラ vs 先週平均(−15 / +30分)/ 毎日の目安に届いたか(済んだの印も可)。
- * v0.48: 作業の合計の絶対の段(6 時間以上 しっかり +1・8 時間以上 十分 +2)。この段に入る日は 作業とダラダラのマイナスを付けない(長い日の息抜きは責めない)。先週平均や目標が無くてもこの段だけで判定する。
+ * v0.48: 作業の合計の絶対の段(4 時間以上 しっかり +1・6 時間以上 十分 +2。v0.48.1 で 6 / 8 から下げた)。この段に入る日は 作業とダラダラのマイナスを付けない(長い日の息抜きは責めない)。先週平均や目標が無くてもこの段だけで判定する。
  * 材料が無いとき(先週の記録が3日未満で目安も無い・記録が作業時間帯の半分以下・まだ1日の途中)は判定しない(judged=false)。
  * 文は責めない: 少ない日は「控えめ」「ゆっくりめ」。「良くするには」は数字で裏づけられる1件だけ。「明日は」は目安から計算した量1件。
  * 戻り値 { judged, score, verdict, reasons:[], good:[], better:string|null, next:string|null, lookBack:[string](v0.31.3・2 つまで) }
@@ -268,7 +268,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   if (tier === 'plenty') { score += 2; reasons.push(`作業は${fmtMinJa(agg.workMin)}と十分`); }
   else if (goalWork != null) {
     if (agg.workMin >= goalWork) { score++; reasons.push(`作業は目標の${fmtMinJa(goalWork)}に届いた`); }
-    else if (solid) reasons.push(`作業は${fmtMinJa(agg.workMin)}で目標まであと${fmtMinJa(goalWork - agg.workMin)}`); // v0.48: 6 時間以上ならマイナスにしない
+    else if (solid) reasons.push(`作業は${fmtMinJa(agg.workMin)}で目標まであと${fmtMinJa(goalWork - agg.workMin)}`); // v0.48: 段(4 時間以上)ならマイナスにしない
     else if (agg.workMin < goalWork * 0.8) { score--; reasons.push(`作業は目標${fmtMinJa(goalWork)}のうち${fmtMinJa(agg.workMin)}`); }
     else reasons.push(`作業は目標まであと${fmtMinJa(goalWork - agg.workMin)}`);
   } else if (solid) { score++; reasons.push(`作業は${fmtMinJa(agg.workMin)}としっかり`); }
@@ -278,7 +278,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   }
   if (goalDrift != null) {
     if (agg.driftMin <= goalDrift) { score++; reasons.push(`${drift}は上限${fmtMinJa(goalDrift)}の中`); }
-    else if (agg.driftMin >= goalDrift + 30 && !solid) { score--; reasons.push(`${drift}は上限より${fmtMinJa(agg.driftMin - goalDrift)}多め`); } // v0.48: 作業が 6 時間以上の日はダラダラのマイナスを付けない
+    else if (agg.driftMin >= goalDrift + 30 && !solid) { score--; reasons.push(`${drift}は上限より${fmtMinJa(agg.driftMin - goalDrift)}多め`); } // v0.48: 作業が段(4 時間以上)の日はダラダラのマイナスを付けない
   } else if (hasBase) {
     if (dDrift <= -15) { score++; reasons.push(`${drift}は${fmtMinJa(-dDrift)}少なめ`); }
     else if (dDrift >= 30 && !solid) { score--; reasons.push(`${drift}は${fmtMinJa(dDrift)}多め`); }
