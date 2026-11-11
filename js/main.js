@@ -28,7 +28,8 @@ import * as bgm from './bgm.js';
 import * as feed from './feed.js';
 import * as train from './train.js';
 import * as drinks from './drinks.js';
-export const APP_VERSION = '0.51.0';
+import * as shopping from './shopping.js';
+export const APP_VERSION = '0.52.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -180,6 +181,7 @@ if (ui.DEV) window.M = {
   kiai,
   train, // v0.50・F18
   drinks, // v0.51・F19
+  shopping, // v0.52・F20
   time,
   log,
   plan,

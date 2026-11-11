@@ -62,24 +62,34 @@ const normHM = (h, m) => { h = +h; m = +m; if (!Number.isFinite(h) || !Number.is
 /**
  * 貼った文字から発車時刻の一覧を作る(手入力・F18-4・純関数)。受け付ける形:
  *  ① 7:02 07:12 7時22分 … (区切りは空白・読点・改行・/ など)
- *  ② 行の先頭が時(7 / 07 / 7時)で、続く 2 桁が分: 「7 02 12 22」「7時 02 12 22」(紙の時刻表の 1 行)
+ *  ② 行の先頭が時(7 / 07 / 7時)で、続く 2 桁が分: 「7 02 12 22」「7時 02 12 22」(紙の時刻表の 1 行)。分のあとの 1〜2 文字(大 / 快 など)は種別・行き先の印として残す
  *  ③ 4 桁の 0702
+ *  ④ v0.52: 時刻表のページ(JR東日本 timetables.jreast.co.jp など)を そのままコピーして貼った文 ─ 「7時」だけの行のあとに「04」「09大」のように分が 1 行ずつ続く形。
+ *     「時」の行で時を覚え、続く 1〜2 桁の分の行をその時に足す(時刻の行や他の語が来たら忘れる)
  * 重複を除き、時刻順(深夜 24:xx〜 は後ろ)。最大 400 件
  */
 export function parseTimes(text) {
-  const out = new Set();
+  const out = new Map();
+  const put = (h, m, ty = '') => { const t = normHM(h, m); if (t && !out.has(t)) out.set(t, { t, ty: ty.slice(0, 2) }); };
+  let hour = null; // ④ の「時」の行
   for (const raw of String(text || '').split(/\r?\n/)) {
-    const line = raw.replace(/[／,、。|｜]/g, ' ').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).trim();
+    const line = raw.replace(/[／/,、。|｜\t]/g, ' ').replace(/[０-９：]/g, (c) => (c === '：' ? ':' : String.fromCharCode(c.charCodeAt(0) - 0xfee0))).trim();
     if (!line) continue;
-    const row = line.match(/^(\d{1,2})\s*時?\s*[:：]?\s+((?:\d{1,2}\s*分?\s*)+)$/);
-    if (row && !/[:：]\s*\d/.test(line)) { for (const m of row[2].match(/\d{1,2}/g) || []) { const t = normHM(row[1], m); if (t) out.add(t); } continue; }
-    for (const tok of line.split(/\s+/)) {
-      let mt = tok.match(/^(\d{1,2})[:：時](\d{1,2})分?$/) || tok.match(/^(\d{1,2})(\d{2})$/);
-      if (!mt && /^\d{3,4}$/.test(tok)) mt = [tok, tok.slice(0, -2), tok.slice(-2)];
-      if (mt) { const t = normHM(mt[1], mt[2]); if (t) out.add(t); }
+    const hOnly = line.match(/^(\d{1,2})\s*時$/);
+    if (hOnly) { hour = +hOnly[1]; continue; }
+    if (hour != null) { const mOnly = line.match(/^(\d{1,2})\s*分?\s*([^\d\s:]{0,2})$/); if (mOnly) { put(hour, mOnly[1], mOnly[2]); continue; } }
+    hour = null;
+    const row = line.match(/^(\d{1,2})\s*時?\s*:?\s+((?:\d{1,2}\s*分?\s*[^\d\s:]{0,2}\s*)+)$/);
+    if (row && !/:\s*\d/.test(line)) { for (const m of row[2].matchAll(/(\d{1,2})\s*分?\s*([^\d\s:]{0,2})/g)) put(row[1], m[1], m[2]); hour = +row[1]; continue; }
+    const toks = line.split(/\s+/);
+    const numericLine = toks.every((t) => /^\d{1,2}[:時]\d{1,2}分?$/.test(t) || /^\d{3,4}$/.test(t)); // ③ の 4 桁(0742)は数字だけの行に限る(「2026 年」を 20:26 と読まない)
+    for (const tok of toks) {
+      let mt = tok.match(/^(\d{1,2})[:時](\d{1,2})分?$/);
+      if (!mt && numericLine && /^\d{3,4}$/.test(tok)) mt = [tok, tok.slice(0, -2), tok.slice(-2)];
+      if (mt) put(mt[1], mt[2]);
     }
   }
-  return [...out].map((t) => ({ t, ty: '' })).sort((a, b) => hm(a.t) - hm(b.t)).slice(0, 400);
+  return [...out.values()].sort((a, b) => hm(a.t) - hm(b.t)).slice(0, 400);
 }
 /** 次の発車(純関数): times=[{ t, ty }](時刻順)・nowMin=いまの分(深夜 0〜3 時は 24〜27 時としても探す)。戻り値 [{ t, ty, min, wait }](wait=あと何分・0 以上)。n 本まで */
 export function nextDepartures(times, nowMin, n = 4) {

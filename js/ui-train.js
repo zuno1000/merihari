@@ -149,7 +149,7 @@ function manualSheet(c, rerender, edit = null) {
   const hd = el('textarea.text.trtimes', { rows: 5, placeholder: '土休日(無ければ平日と同じ)', 'aria-label': '土休日の発車時刻' }, edit ? fmt(edit.tables.SaturdayHoliday) : '');
   sheet((close) => [
     el('h2', edit ? '時刻を直す' : '手入力で足す'),
-    el('p.muted.small', '紙や駅の時刻表の 1 行(「7 02 12 22」= 7 時 02 分・12 分・22 分)か、「7:02 7:12」の形で貼ります。深夜は 24:15 のように。'),
+    el('p.muted.small', 'JR東日本などの時刻表ページ(平日 / 土休日のページを別々に)の表をそのままコピーして貼れます(「7時」の行のあとに「04」「09大」が続く形)。紙の時刻表の 1 行(「7 02 12 22」)や「7:02 7:12」でも。深夜は 24:15 のように。'),
     el('div.field.col', [el('span.label', '名前'), name]),
     el('div.field.col', [el('span.label', '平日'), wd]),
     el('div.field.col', [el('span.label', '土休日'), hd]),

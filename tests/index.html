@@ -1283,8 +1283,12 @@ document.getElementById('app').addEventListener('load', async () => {
       const tb = { Weekday: [{ t: '07:00', ty: '' }], SaturdayHoliday: [{ t: '08:00', ty: '' }] };
       ok(Tr.pickTable(tb, 'weekday')[0].t === '07:00' && Tr.pickTable(tb, 'saturday')[0].t === '08:00' && Tr.pickTable(tb, 'holiday')[0].t === '08:00' && Tr.pickTable({ Weekday: [], Holiday: [{ t: '09:00', ty: '' }] }, 'saturday')[0].t === '09:00' && Tr.pickTable({ Weekday: [] }, 'weekday') === null && Tr.pickTable(null, 'weekday') === null, 'pickTable: 土曜は Saturday → SaturdayHoliday → Holiday・無ければ null');
       ok(eq(Tr.parseTimes('7 02 12 22\n8時 05 15').map((x) => x.t), ['07:02', '07:12', '07:22', '08:05', '08:15']), 'parseTimes: 紙の時刻表の行(時 分 分 分・「時」つきも)');
-      ok(eq(Tr.parseTimes('7:02 07:12、7時22分 / 0742 24:15 25:03 9:99 x').map((x) => x.t), ['07:02', '07:12', '07:22', '07:42', '24:15', '25:03']), 'parseTimes: 7:02 / 07:12 / 7時22分 / 0742 / 深夜 24:15〜・壊れた値は捨てる・重複なし・時刻順');
+      ok(eq(Tr.parseTimes('7:02 07:12、7時22分 / 0742 24:15 25:03 9:99\nx 0812').map((x) => x.t), ['07:02', '07:12', '07:22', '07:42', '24:15', '25:03']), 'parseTimes: 7:02 / 07:12 / 7時22分 / 0742 / 深夜 24:15〜・壊れた値は捨てる・重複なし・時刻順・4 桁は数字だけの行に限る');
       ok(eq(Tr.parseTimes('７：０２ ７：１２').map((x) => x.t), ['07:02', '07:12']) && Tr.parseTimes('').length === 0 && Tr.parseTimes(null).length === 0, 'parseTimes: 全角も・空は []');
+      const jr = '高田馬場駅 山手線 池袋・上野方面 (外回り)\n平日の時刻表はこちら\n土曜・休日\n4時\n48\n5時\n03\n18\n7時\n04\n09大\n14\n24時\n05\n凡例\n無印=普通\n2026 年';
+      const pj = Tr.parseTimes(jr);
+      ok(eq(pj.map((x) => x.t + (x.ty ? '(' + x.ty + ')' : '')), ['04:48', '05:03', '05:18', '07:04', '07:09(大)', '07:14', '24:05']), 'parseTimes(v0.52): JR東日本の時刻表ページをコピーした文(「7時」の行+分の行・印つき)を読む・見出しや凡例は無視・深夜 0 時台は 24 時台として入れればそのまま');
+      ok(eq(Tr.parseTimes('7 02 12大 22快\n8時 05').map((x) => x.t + x.ty), ['07:02', '07:12大', '07:22快', '08:05']) && Tr.parseTimes('7時\n2026 年\n04').length === 0, 'parseTimes(v0.52): 行の形でも印を残す・「時」のあとに 4 桁が来たら分の行ではない');
       const tt = [{ t: '07:02', ty: '各停' }, { t: '07:12', ty: '快速' }, { t: '07:22', ty: '' }, { t: '07:32', ty: '' }, { t: '07:42', ty: '' }, { t: '24:15', ty: '' }];
       const nd = Tr.nextDepartures(tt, 7 * 60 + 5);
       ok(nd.length === 4 && nd[0].t === '07:12' && nd[0].wait === 7 && nd[0].ty === '快速' && nd[3].t === '07:42' && Tr.nextDepartures(tt, 7 * 60 + 12)[0].wait === 0, 'nextDepartures: いまから 4 本・あと ◯分(ちょうどは 0)');
@@ -1341,6 +1345,25 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(Sy2.merge(dA, dB).drinks.a.name === '新しい' && Sy2.merge(dB, dA).drinks.a.name === '新しい' && Sy2.merge(dA, dB).drinks.b.name === 'b', 'sync.merge: 飲んだものは id ごとに updatedAt の新しい方');
       const pr = Sy2.pruneTombstones({ ...base, drinks: { x: { ...mk('x', 'coffee', 'x', 3, {}, '2026-01-01'), updatedAt: '2026-01-01T00:00:00+09:00', deletedAt: '2026-01-01T00:00:00+09:00' }, y: { ...mk('y', 'coffee', 'y', 3, {}, '2026-01-01'), updatedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-11-11T00:00:00+09:00');
       ok(!pr.drinks.x && pr.drinks.y, 'pruneTombstones: 古い削除の飲んだものを落とす');
+    }
+
+    // ---- v0.52・F20: 買い物リスト(shopping.js) ----
+    log('\n# v0.52 買い物');
+    {
+      const Sh = M.shopping;
+      ok(eq(Sh.parseQuick('牛乳 2'), { name: '牛乳', qty: '2' }) && eq(Sh.parseQuick('牛乳 ×2'), { name: '牛乳', qty: '2' }) && eq(Sh.parseQuick('牛乳 x 2本'), { name: '牛乳', qty: '2本' }) && eq(Sh.parseQuick('オリーブオイル 1L'), { name: 'オリーブオイル', qty: '1L' }) && eq(Sh.parseQuick('牛乳　２'), { name: '牛乳', qty: '2' }), 'parseQuick: 最後の語が数字で始まれば数量(× / x / 単位 / 全角)');
+      ok(eq(Sh.parseQuick('2026 年の手帳'), { name: '2026 年の手帳', qty: '' }) && eq(Sh.parseQuick('  トイレットペーパー '), { name: 'トイレットペーパー', qty: '' }) && eq(Sh.parseQuick(''), { name: '', qty: '' }) && eq(Sh.parseQuick('iPhone 15'), { name: 'iPhone', qty: '15' }), 'parseQuick: 先頭の数字は数量にしない・空は空(「iPhone 15」は数量になる=仕様)');
+      const it = Sh.normalizeItem({ id: 'a', name: ' 牛乳 ', qty: ' 2 ', note: 'n', doneAt: '', updatedAt: 'u' });
+      ok(it && it.name === '牛乳' && it.qty === '2' && it.doneAt === null && it.updatedAt === 'u' && it.deletedAt === null && Sh.normalizeItem({ name: '' }) === null && Sh.normalizeItem({ name: 'x' }, 'id7').id === 'id7', 'normalizeItem: 名前必須・trim・doneAt の空は null・id が無ければ付ける');
+      const SI = { a: { id: 'a', name: 'a', qty: '', note: '', doneAt: null, updatedAt: '2026-11-11T09:00:00+09:00', deletedAt: null }, b: { id: 'b', name: 'b', qty: '', note: '', doneAt: null, updatedAt: '2026-11-11T08:00:00+09:00', deletedAt: null }, c: { id: 'c', name: 'c', qty: '', note: '', doneAt: '2026-11-10T10:00:00+09:00', updatedAt: 'x', deletedAt: null }, d: { id: 'd', name: 'd', qty: '', note: '', doneAt: '2026-11-11T10:00:00+09:00', updatedAt: 'x', deletedAt: null }, e: { id: 'e', name: 'e', qty: '', note: '', doneAt: null, updatedAt: 'x', deletedAt: 'x' } };
+      ok(eq(Sh.listOpen(SI).map((x) => x.id), ['b', 'a']) && eq(Sh.listDone(SI).map((x) => x.id), ['d', 'c']) && Sh.listDone(SI, 1).length === 1 && Sh.label({ name: '牛乳', qty: '2' }) === '牛乳 × 2' && Sh.label({ name: '牛乳', qty: '' }) === '牛乳', 'listOpen(書いた順)/ listDone(買った新しい順・n 件)/ label');
+      const d4 = S.migrate({ schema: 1, shopping: { a: { id: 'a', name: '卵' }, b: { name: '' } } });
+      ok(Object.keys(d4.shopping).join() === 'a' && d4.shopping.a.doneAt === null && 'shopping' in M.store.defaultData(), 'store.migrate: shopping を検査して持つ');
+      const base2 = S.migrate({ schema: 1 });
+      const sA = { ...base2, shopping: { a: { ...SI.a, name: '古い', updatedAt: '2026-11-01T00:00:00+09:00' } } }, sB = { ...base2, shopping: { a: { ...SI.a, name: '新しい', updatedAt: '2026-11-09T00:00:00+09:00' } } };
+      ok(M.sync.merge(sA, sB).shopping.a.name === '新しい' && M.sync.merge(sB, sA).shopping.a.name === '新しい', 'sync.merge: 買い物は id ごとに updatedAt の新しい方');
+      const pr2 = M.sync.pruneTombstones({ ...base2, shopping: { x: { ...SI.a, id: 'x', updatedAt: '2026-01-01T00:00:00+09:00', deletedAt: '2026-01-01T00:00:00+09:00' }, y: { ...SI.a, id: 'y', updatedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-11-11T00:00:00+09:00');
+      ok(!pr2.shopping.x && pr2.shopping.y, 'pruneTombstones: 古い削除の買い物を落とす');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');

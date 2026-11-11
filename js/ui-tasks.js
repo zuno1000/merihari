@@ -14,6 +14,7 @@ import { startCategory, catOf, entrySheet, groupedChips } from './ui-today.js';
 import * as log from './log.js';
 import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
+import { renderShopping, openCount as shoppingOpen } from './ui-shopping.js'; // v0.52・F20: 買い物リスト(リストのタイル → 1 画面はさむ)
 
 const T = () => store.state.data.tasks;
 const S = () => store.state.data.settings;
@@ -196,9 +197,11 @@ export const LISTS = Object.freeze([
   { key: 'habits', title: '習慣', preset: 'habit', empty: '毎日・毎週の習慣がここに並びます。' },
   { key: 'wishes', title: 'やりたいこと', preset: 'wish', empty: '時間ができたらやりたいことがここに並びます。' },
   { key: 'done', title: '完了', preset: null, empty: '完了したタスクはまだありません。' },
+  { key: 'shopping', title: '買い物', preset: null, empty: '' }, // v0.52・F20: 画面は ui-shopping(件数=まだ買っていないもの)
 ]);
 
 export function renderTasks(view, ctx, listKey = null) {
+  if (listKey === 'shopping') return renderShopping(view, ctx); // v0.52・F20
   clear(view);
   const eff = effectiveDay(S(), dateKey(), minuteOfDay());
   const today = eff.date, nowMin = eff.min;
@@ -269,7 +272,7 @@ export function renderTasks(view, ctx, listKey = null) {
     ]);
   };
   const section = (title, list, empty, cls = null) => el('section.group', { class: `group${cls ? ' ' + cls : ''}` }, [el('h2', title), el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', empty))]);
-  const groups = { memo: memos, duties, habits: repeats, wishes, done };
+  const groups = { memo: memos, duties, habits: repeats, wishes, done, shopping: [] };
 
   // v0.26・F5-13: 区分の画面(1 画面はさむ)。‹ でタスクへ。先頭の追加欄はその区分の種類が選ばれている(完了には無い)
   const list = LISTS.find((l) => l.key === listKey);
@@ -287,7 +290,7 @@ export function renderTasks(view, ctx, listKey = null) {
   const habitsDone = repeats.filter((t) => goalOf[t.id]?.done).length;
   const nextDuty = duties.find((t) => t.deadline);
   const tile = (l) => {
-    const n = groups[l.key].length;
+    const n = l.key === 'shopping' ? shoppingOpen() : groups[l.key].length; // v0.52: 買い物は まだ買っていないものの数
     const sub = l.key === 'habits' && n ? `きょう${habitsDone}/${n}済` : l.key === 'duties' && nextDuty ? `次の期限${fmtMD(nextDuty.deadline.slice(0, 10))}` : null;
     return el('button.ltile', { type: 'button', 'aria-label': `${l.title}(${n}件)を開く`, onclick: () => ctx.go('tasks', l.key) }, [
       el('span.lt-main', [el('span.lt-name', l.title), sub ? el('span.lt-sub', sub) : null]), el('b.lt-n', String(n)), el('span.chev', '›'),

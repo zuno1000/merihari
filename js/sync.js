@@ -103,7 +103,7 @@ export function merge(a, b) {
   const fresh = (rec) => rec != null && (!resetAt || cmpStamp(rec.updatedAt || rec.finalizedAt || '', resetAt) >= 0);
   const out = {};
   // 未知のトップレベルキーも決定的に残す
-  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'recurring', 'drinks', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed', 'meta']);
+  const known = new Set(['schema', 'settings', 'entries', 'tasks', 'plans', 'reports', 'ledger', 'diary', 'money', 'wants', 'recurring', 'drinks', 'shopping', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed', 'meta']);
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) if (!known.has(k)) out[k] = pick(a[k], b[k], () => '');
   out.schema = Math.max(+a.schema || 1, +b.schema || 1);
   const sa = fresh({ updatedAt: a.settings.settingsUpdatedAt }) || !resetAt ? a.settings : null;
@@ -124,6 +124,7 @@ export function merge(a, b) {
   out.bgm = mergeById(a.bgm, b.bgm, (r) => r.updatedAt, fresh); // v0.32: 聞いた BGM(F16・動画 id ごとの LWW)
   out.feed = mergeById(a.feed, b.feed, (r) => r.updatedAt, fresh); // v0.34: 記事の印(F17・記事 id ごとの LWW)
   out.drinks = mergeById(a.drinks, b.drinks, (r) => r.updatedAt, fresh); // v0.51: 飲んだもの(F19・id ごとの LWW。写真は端末内で同期しない)
+  out.shopping = mergeById(a.shopping, b.shopping, (r) => r.updatedAt, fresh); // v0.52: 買い物(F20)
   out.meta = {
     ...pick(a.meta, b.meta, () => ''),
     resetAt,
@@ -191,7 +192,7 @@ export function mergeSettings(sa, sb) {
 export function pruneTombstones(data, nowISO, days = TOMBSTONE_DAYS) {
   const limit = new Date(nowISO).getTime() - days * 86400000; // v0.25: 数値で比べる(deletedAt はオフセット付き・limit は UTC だった)
   const out = { ...data };
-  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'recurring', 'drinks', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed']) {
+  for (const k of ['entries', 'tasks', 'diary', 'money', 'wants', 'recurring', 'drinks', 'shopping', 'busyNotes', 'planBlocks', 'kiai', 'bgm', 'feed']) {
     out[k] = {};
     for (const [id, r] of Object.entries(data[k] || {})) if (!(r.deletedAt && ts(r.deletedAt) < limit)) out[k][id] = r;
   }

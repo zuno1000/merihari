@@ -1269,3 +1269,11 @@ textarea.text.trtimes{width:100%;box-sizing:border-box;font-family:ui-monospace,
 input.text.dk-num{flex:none;width:4.2em;text-align:center;font-variant-numeric:tabular-nums}
 textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-height:1.5}
 .sheet.dk-sheet{max-height:92vh;max-height:92dvh;overflow:auto}
+/* v0.52・F20: 買い物リスト */
+.shop-add{margin:0 0 12px}
+.shrow.done .tname{color:var(--muted);text-decoration:line-through}
+.shop-done{margin-top:4px}
+.shop-done summary{display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;list-style:none}
+.shop-done summary::-webkit-details-marker{display:none}
+.shop-done summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transition:transform .15s;flex:none;width:12px;text-align:center}
+.shop-done[open] summary::before{transform:rotate(90deg)}

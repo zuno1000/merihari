@@ -12,6 +12,7 @@ import { normalizeBgm } from './bgm.js';
 import { normalizeFeed } from './feed.js';
 import { normalizeTrain } from './train.js';
 import { normalizeDrink } from './drinks.js';
+import { normalizeItem as normalizeShopping } from './shopping.js';
 
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
 export function defaultKinds() {
@@ -181,6 +182,7 @@ export function defaultData() {
     busyNotes: {}, // v0.22: 予定(カレンダーの busy)のメモ('日付:開始分' → { id, date, start, text, updatedAt, deletedAt })。本文は自分で書いた短文だけ(予定の中身は取得しない)
     kiai: {},    // v0.25: 気合(F13・id → { id, date, time:'HH:MM', categoryId|null, entryId|null, updatedAt, deletedAt })。「気合を入れた」瞬間の印。ワンタップ・中身は持たない
     bgm: {},     // v0.32: 聞いた BGM(F16・動画 id → { id, at(ISO), date, rating: 1|-1|null, updatedAt, deletedAt })。同じ曲を二度すすめないための印と 👍 / 👎
+    shopping: {}, // v0.52: 買い物リスト(F20・id → { id, name, qty, note, doneAt, updatedAt, deletedAt })
     drinks: {},  // v0.51: 飲んだもの(F19・id → { id, kind:'coffee'|'sake'|'wine'|'beer'|'other', name, maker, place, date, taste:{軸:1〜5}, overall:0.0〜5.0, note, photo:bool(写真は端末の IndexedDB・同期しない), updatedAt, deletedAt })
     feed: {},    // v0.34: 記事の印(F17・記事 id → { id, state:'open'|'skip', at(ISO), date, updatedAt, deletedAt })。開いた / 読まない 記事を次から出さない
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
@@ -345,6 +347,8 @@ export function validateRecurring(r, id) {
 }
 /** ほしいもの(v0.20・F10-8): 名前は必須、値段は 0〜1 億の整数、目標日は任意 */
 /** 飲んだもの(v0.51・F19): drinks.normalizeDrink に任せる(名前必須・種類は既知・味は 1〜5・総評は 0.0〜5.0) */
+/** 買い物(v0.52・F20) */
+export function validateShopping(r, id) { const x = normalizeShopping(r, id); return x ? { ...stripUnsafe(r), ...x } : null; }
 export function validateDrink(r, id) { const d = normalizeDrink(r, id); return d ? { ...stripUnsafe(r), ...d } : null; }
 export function validateWant(r, id) {
   if (!isObj(r) || typeof r.name !== 'string' || !r.name.trim()) return null;
@@ -424,6 +428,7 @@ export function migrate(raw) {
   out.wants = cleanMap(raw.wants, validateWant);
   out.recurring = cleanMap(raw.recurring, validateRecurring); // v0.47
   out.drinks = cleanMap(raw.drinks, validateDrink); // v0.51・F19
+  out.shopping = cleanMap(raw.shopping, validateShopping); // v0.52・F20
   out.diary = cleanMap(raw.diary, validateDiary);
   out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
   out.kiai = cleanMap(raw.kiai, validateKiai); // v0.25
