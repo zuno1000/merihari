@@ -1,4 +1,4 @@
-// merihari ─ ui-drinks.js: 飲んだもの(v0.51・F19)の画面。お金タブの右上(定期の左)のカップの印 → 1 画面はさんで「飲んだもの」(種類のチップで絞る・好みの分析(折りたたみ)・一覧(写真・名前・作り手・日付・総評))。
+// merihari ─ ui-drinks.js: 飲み物(v0.51・F19)の画面。お金タブの右上(定期の左)のカップの印 → 1 画面はさんで「飲み物」(種類のチップで絞る・好みの分析(折りたたみ)・一覧(写真・名前・作り手・日付・総評))。
 // 記録のシート: 種類 → 名前・作り手 / 産地・日付・場所 → 写真(撮る / 選ぶ・端末だけ)→ 味(5 つの軸・1〜5)→ 総評(0.0〜5.0・0.1 刻みのスライダー)→ コメント。保存のたびに同期(写真は除く)。
 import { el, clear, toast, sheet, confirmSheet, svg } from './ui.js';
 import * as store from './store.js';
@@ -24,11 +24,11 @@ export function cupIcon(cls = 'dk-ico') {
 /** お金タブ右上の印(定期の左)。件数があれば小さく */
 export function drinksButton(ctx) {
   const n = drinks.listDrinks(D()).length;
-  return el('button.btn.sm.ghost.gear.dkbtn', { type: 'button', 'aria-label': `飲んだもの(${n}件)`, title: '飲んだもの', onclick: () => ctx.go('money', 'drinks') }, [cupIcon(), n ? el('span.dk-n', String(n)) : null]);
+  return el('button.btn.sm.ghost.gear.dkbtn', { type: 'button', 'aria-label': `飲み物(${n}件)`, title: '飲み物', onclick: () => ctx.go('money', 'drinks') }, [cupIcon(), n ? el('span.dk-n', String(n)) : null]);
 }
 
 let filter = null; // 種類の絞り込み(画面の間だけ)
-/** 「飲んだもの」の画面(F19-1): ‹ お金 / ＋ 記録 / 種類のチップ / 好みの分析(折りたたみ)/ 一覧 */
+/** 「飲み物」の画面(F19-1): ‹ お金 / ＋ 記録 / 種類のチップ / 好みの分析(折りたたみ)/ 一覧 */
 export function renderDrinks(view, ctx) {
   clear(view);
   ctx.setTick(null);
@@ -52,11 +52,11 @@ export function renderDrinks(view, ctx) {
     ]);
   };
   view.append(...[
-    el('div.today-head', [el('span.head-side', el('button.btn.sm.ghost.back', { type: 'button', onclick: () => ctx.go('money') }, '‹ お金')), el('span.grow'), el('b', '飲んだもの'), el('span.grow'), el('span.head-side')]),
-    el('button.btn.primary.block', { type: 'button', onclick: () => drinkSheet(null, rerender) }, '＋ 飲んだものを記録'),
+    el('div.today-head', [el('span.head-side', el('button.btn.sm.ghost.back', { type: 'button', onclick: () => ctx.go('money') }, '‹ お金')), el('span.grow'), el('b', '飲み物'), el('span.grow'), el('span.head-side')]),
+    el('button.btn.primary.block', { type: 'button', onclick: () => drinkSheet(null, rerender) }, '＋ 飲み物を記録'),
     all.length ? chips : null,
     all.length ? prefBox(filter || (Object.values(sum).sort((a, b) => b.n - a.n)[0] || {}).kind) : null,
-    el('section.group', el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', all.length ? 'この種類の記録はありません。' : 'まだありません。コーヒー・日本酒・ワインなど、飲んだものを写真と味の印象で残します。'))),
+    el('section.group', el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', all.length ? 'この種類の記録はありません。' : 'まだありません。コーヒー・日本酒・ワインなど、飲み物を写真と味の印象で残します。'))),
   ].filter(Boolean));
 }
 /** 好みの分析(F19-4・折りたたみ): 種類ごとに 件数・平均・いちばん高い 1 件、軸ごとの「好きなものの平均」の棒と言葉、作り手 / 産地の平均 */
@@ -148,9 +148,14 @@ export function drinkSheet(d0, rerender) {
       saveDrink(nd); close(); rerender(); toast(isNew ? `${nd.name} を記録しました` : '保存しました');
     };
     return [
-      el('h2', isNew ? '飲んだものを記録' : '記録を直す'),
+      el('h2', isNew ? '飲み物を記録' : '記録を直す'),
       seg,
       el('div.field.col', [name, maker]),
+    el('div.row.dk-lookup', [ // v0.53・F19-6: 名前から調べる(自動取得は無料で信頼できる API が無いので、検索を開く / AI に聞く文をコピー)
+      el('button.btn.sm', { type: 'button', onclick: () => { const u = drinks.searchUrl(d.kind, name.value); if (!u) { toast('名前を入れてから'); name.focus(); return; } window.open(u, '_blank', 'noopener'); } }, 'ネットで調べる'),
+      el('button.btn.sm', { type: 'button', onclick: async () => { const p = drinks.aiPrompt(d.kind, name.value, maker.value); if (!p) { toast('名前を入れてから'); name.focus(); return; } try { await navigator.clipboard.writeText(p); toast('質問をコピーしました。ChatGPT などに貼って、返事をコメントに'); } catch { toast('コピーできませんでした'); } } }, 'AI に聞く'),
+      el('span.muted.small', 'ワインは Vivino・ほかは Google'),
+    ]),
       el('div.row.field', [date, place]),
       photoBox, file,
       el('h3.help-h', '味の印象'),

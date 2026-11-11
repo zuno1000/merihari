@@ -868,13 +868,14 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .dtomorrow .dfield{margin-top:4px}
 
 /* ---- v0.28(実機 FB ①②③④⑦⑧): ホームは 円と棒だけ・上の 1 行は 3 列(日付が中心)・歯車の赤い点・設定の先頭「同期」・月のカレンダーのシートを共通に ---- */
-.hgrid{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:6px;min-height:40px;margin:0 0 6px}
-.hgrid .hs{display:flex;align-items:center;gap:4px;min-width:0}
+.hgrid{display:grid;grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr);align-items:center;gap:4px;min-height:40px;margin:0 0 6px} /* v0.53(実機 FB「電車の印が日付に重なる」): 両端は中身の幅を下回らない(余れば等分して日付は中央・足りなければ日付が少し寄る) */
+.hgrid .hs{display:flex;align-items:center;gap:2px;min-width:0}
 .hgrid .hs.l{justify-self:start}
 .hgrid .hs.r{justify-self:stretch;flex-direction:row-reverse;justify-content:flex-start} /* v0.28.2: 逆順+row-reverse。広すぎても右へはみ出す(中央に重ならない) */
 .hgrid .hmid{display:flex;flex-direction:row;align-items:center;gap:4px;justify-content:center}
-.hgrid .hmid b{font-size:17px;white-space:nowrap}
-.hgrid .btn.sm.ghost{padding:4px 8px;min-width:40px;min-height:40px;flex:none;font-size:18px;line-height:1}
+.hgrid .hmid b{font-size:16px;white-space:nowrap}
+.hgrid .btn.sm.ghost{padding:4px 6px;min-width:36px;min-height:40px;flex:none;font-size:18px;line-height:1}
+.hgrid .hmid .btn.sm.ghost{min-width:30px;padding:4px 4px}
 .hgrid .btn.sm:not(.ghost){flex:none;white-space:nowrap}
 .hgrid .btn.hold{visibility:hidden}
 .hgrid .dsave{white-space:nowrap;font-size:11px}
@@ -1208,8 +1209,9 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* v0.50・F18: 次の電車 */
 .tr-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .tr-ico.sm{width:18px;height:18px;flex:none}
-.today-head .trbtn{padding:4px 6px;min-width:36px;display:inline-flex;align-items:center;gap:3px}
-.today-head .trbtn .tr-wait{font-size:11px;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;white-space:nowrap}
+.today-head .trbtn{padding:2px 4px;min-width:36px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:0} /* v0.53: 「◯分」は絵の下(横に並べると日付に重なる) */
+.today-head .trbtn .tr-ico{width:20px;height:20px}
+.today-head .trbtn .tr-wait{font-size:9px;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;white-space:nowrap}
 .trchips{margin:0 0 10px}
 .trcards{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
 .trcard{border-radius:16px;padding:12px 14px;background:var(--bg);display:flex;flex-direction:column;gap:8px}
@@ -1227,7 +1229,7 @@ textarea.text.trtimes{width:100%;box-sizing:border-box;font-family:ui-monospace,
 .dk-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .dk-ico.muted{stroke:var(--muted);width:20px;height:20px}
 .dk-ico.big{width:40px;height:40px;stroke:var(--muted)}
-.today-head .dkbtn{padding:4px 6px;min-width:36px;display:inline-flex;align-items:center;gap:2px}
+.today-head .dkbtn{padding:4px 4px;min-width:36px;display:inline-flex;align-items:center;gap:2px}
 .today-head .dkbtn .dk-n{font-size:11px;font-variant-numeric:tabular-nums;color:var(--muted)}
 .dkrow{gap:12px;padding:10px 12px 10px 12px;text-align:left}
 .dk-th{flex:none;width:48px;height:48px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -1277,3 +1279,6 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .shop-done summary::-webkit-details-marker{display:none}
 .shop-done summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transition:transform .15s;flex:none;width:12px;text-align:center}
 .shop-done[open] summary::before{transform:rotate(90deg)}
+/* v0.53: 飲み物の「ネットで調べる / AI に聞く」 */
+.dk-lookup{gap:6px;flex-wrap:wrap;margin:-2px 0 6px}
+.dk-lookup .btn.sm{padding:6px 10px}

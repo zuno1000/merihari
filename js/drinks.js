@@ -4,13 +4,15 @@
 // 好みの分析(preference): 総評と各軸の相関(ピアソン)と、総評 4 以上の平均の軸 → 「酸味が強いほど好み」「コクは控えめが好み」の言葉と、作り手 / 産地ごとの平均。すべて純関数。
 // 写真は端末の IndexedDB(photos.js・同期しない)。記録(名前・種類・軸・総評・コメント)だけ同期する。
 
+/** v0.53(ユーザー要望「種類が違っても共通の項目は 5 段階の記入箇所がぶれないように」): 共通の 5 軸(香り・甘み・酸味・苦味・コク)は どの種類でも同じ順・同じ位置。種類ごとの軸(渋み / キレ)はその下に足す */
+export const COMMON_AXES = Object.freeze([['aroma', '香り'], ['sweet', '甘み'], ['acid', '酸味'], ['bitter', '苦味'], ['body', 'コク']]);
 export const KINDS = Object.freeze([
-  { id: 'coffee', name: 'コーヒー', axes: [['acid', '酸味'], ['bitter', '苦味'], ['sweet', '甘み'], ['body', 'コク'], ['aroma', '香り']], maker: 'ロースター / 産地', hint: '豆・店・淹れ方' },
-  { id: 'sake', name: '日本酒', axes: [['aroma', '香り'], ['sweet', '甘み'], ['body', 'コク'], ['acid', '酸味'], ['sharp', 'キレ']], maker: '蔵 / 産地', hint: '銘柄・精米歩合・温度' },
-  { id: 'wine', name: 'ワイン', axes: [['sweet', '甘み'], ['acid', '酸味'], ['tannin', '渋み'], ['body', 'ボディ'], ['aroma', '香り']], maker: '生産者 / 産地', hint: '品種・年・色' },
-  { id: 'beer', name: 'ビール', axes: [['bitter', '苦味'], ['body', 'コク'], ['aroma', '香り'], ['sweet', '甘み'], ['sharp', 'キレ']], maker: 'ブルワリー / 産地', hint: 'スタイル' },
-  { id: 'other', name: 'その他', axes: [['sweet', '甘み'], ['acid', '酸味'], ['bitter', '苦味'], ['body', 'コク'], ['aroma', '香り']], maker: '作り手 / 産地', hint: '' },
-]);
+  { id: 'coffee', name: 'コーヒー', extra: [], maker: 'ロースター / 産地', hint: '豆・店・淹れ方' },
+  { id: 'sake', name: '日本酒', extra: [['sharp', 'キレ']], maker: '蔵 / 産地', hint: '銘柄・精米歩合・温度' },
+  { id: 'wine', name: 'ワイン', extra: [['tannin', '渋み']], maker: '生産者 / 産地', hint: '品種・年・色' },
+  { id: 'beer', name: 'ビール', extra: [['sharp', 'キレ']], maker: 'ブルワリー / 産地', hint: 'スタイル' },
+  { id: 'other', name: 'その他', extra: [], maker: '作り手 / 産地', hint: '' },
+].map((k) => Object.freeze({ ...k, axes: [...COMMON_AXES, ...k.extra] })));
 export const KIND_IDS = KINDS.map((k) => k.id);
 export const kindOf = (id) => KINDS.find((k) => k.id === id) || KINDS[KINDS.length - 1];
 export const kindName = (id) => kindOf(id).name;
@@ -86,4 +88,18 @@ export function preference(drinks, kind) {
   const makers = Object.values(byMaker).filter((o) => o.n >= 2).map((o) => ({ name: o.name, n: o.n, avg: Math.round((o.sum / o.n) * 10) / 10 })).sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 5);
   const best = list.slice().sort((a, b) => b.overall - a.overall)[0] || null;
   return { kind, n, enough: n >= MIN_FOR_PREF, axes, makers, best, lines: axes.map((a) => a.text).filter(Boolean) };
+}
+/** ネットで調べる URL(F19-6・v0.53): ワインは Vivino の検索、それ以外は Google(名前+種類)。名前が無ければ null。純関数 */
+export function searchUrl(kind, name) {
+  const q = String(name || '').trim();
+  if (!q) return null;
+  if (kind === 'wine') return `https://www.vivino.com/search/wines?q=${encodeURIComponent(q)}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${q} ${kindName(kind)}`)}`;
+}
+/** AI に聞く文(F19-6・F11 の流儀: コピーして ChatGPT などに貼る)。純関数 */
+export function aiPrompt(kind, name, maker = '') {
+  const q = String(name || '').trim();
+  if (!q) return null;
+  const ax = axesOf(kind).map(([, n]) => n).join('・');
+  return `${kindName(kind)}「${q}」${maker ? `(${maker})` : ''}について、作り手(産地)・特徴・味の印象(${ax} をそれぞれ 1〜5)・合う料理や飲み方を、日本語で短く教えてください。わからない項目は「不明」と書いてください。`;
 }
