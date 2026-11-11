@@ -462,6 +462,7 @@ export function renderNow(view, ctx, dateArg = null) {
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
     hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
+    isToday ? habitsBox(v, rerender, ctx) : null, // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
     isToday ? feedBox(rerender) : null, // v0.34・F17: キャッチアップ(有効なときだけ・折りたたみ・きょうだけ)
   ].filter(Boolean));
   view.append(home);
@@ -475,6 +476,33 @@ export function renderNow(view, ctx, dateArg = null) {
     if (em.date !== e.date || homeKey(em) !== key) { rerender(); return; }
     if (hero?.tick) hero.tick(em);
   });
+}
+/**
+ * きょうの習慣(v0.49・F5-15・ユーザー要望「習慣をよりサポート」): 内訳の下に 毎日 / 毎週 の習慣を 1 行ずつ(✓=済んだの印(タスク画面と同じ・明日はまた出る)・きょう(今週)の分 / 目安・◯日続いてる・今週 m/n 日)。
+ * 上に声かけ 1 行(plan.habitNudge・責めない・昼のうちは出さない)。行のタップでタスク › 習慣。習慣が無ければ何も出さない。きょうだけ(過去の日は出さない)
+ */
+function habitsBox(n, rerender, ctx) {
+  const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && T()[g.taskId]);
+  if (!gs.length) return null;
+  const list = gs.map((g) => ({ g, task: T()[g.taskId], stats: plan.habitStats(T()[g.taskId], E(), n.date) }));
+  const nudge = plan.habitNudge(list, n.min, windowEndOf(n.date));
+  const row = ({ g, task: t, stats: st }) => {
+    const span = g.kind === 'weekly' ? '今週' : 'きょう', unit = g.kind === 'weekly' ? '週' : '日';
+    const meta = [
+      g.targetMin == null ? `${span}は${g.checked ? '済' : 'まだ'}` : `${span}${fmtMinJa(g.doneMin)} / ${fmtMinJa(g.targetMin)}${g.checked ? '・済' : ''}`,
+      st && st.streak >= 2 ? `${st.streak}${unit}続いてる` : null,
+      st && st.week ? `今週${st.week.met}/${st.week.days}日` : null,
+    ].filter(Boolean).join('・');
+    const onCheck = () => { t.checks = plan.toggleCheck(t, n.date); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(plan.isChecked(t, n.date) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); };
+    return el('div.srow.goal.hrow', { class: `srow goal hrow${g.done ? ' done' : ''}` }, [
+      el('button.check', { type: 'button', class: `check${g.checked ? ' on' : ''}`, 'aria-label': `${t.name} を${g.checked ? `${span}の済みから外す` : `${span}は済んだことにする`}`, onclick: onCheck }, g.checked ? '✓' : ''),
+      el('button.gmain', { type: 'button', 'aria-label': `${t.name}(タスクの習慣を開く)`, onclick: () => ctx.go('tasks', 'habits') }, [
+        el('span.gname', [el('i.dot', { style: { background: catOf(g.categoryId).color }, 'aria-hidden': 'true' }), t.name, g.done && !g.checked ? el('span.gok', '✓') : null]),
+        el('span.gmeta', meta),
+      ]),
+    ]);
+  };
+  return el('section.group.habits-box', [el('h2', 'きょうの習慣'), nudge ? el('p.nudge', nudge) : null, el('div.list', list.map(row))]);
 }
 /** 描き直しが要る状態のキー: 記録中の id / 直近の記録の終わり / 分(内訳は分ごとに動く) */
 function homeKey(n) {

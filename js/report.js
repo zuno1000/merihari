@@ -4,7 +4,7 @@
 import { planCompare } from './plan.js';
 import { hm, mm, addDays, windowFor, mergeIntervals, sumMin, fmtMinJa, weekday } from './time.js';
 import { entriesOf, totalsByCategory, totalsByRole } from './log.js';
-import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked, chunkOf } from './plan.js';
+import { goals, lastLoggedDate, daysBetween, loggedBetween, weekRange, todayShare, isChecked, chunkOf, habitStats } from './plan.js';
 import { catRole, kindRole, defaultKinds, entryRole, effectiveKind } from './store.js';
 
 const alive = (x) => x && !x.deletedAt;
@@ -436,6 +436,7 @@ export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin 
       out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0), dayList: dayLogged(t) });
     }
   }
+  for (const g of out) if (g.kind !== 'wish') g.stats = habitStats(tasks[g.taskId], entries, nowDate || to); // v0.49・F5-15: 連続・最長・今週(きょう基準。過去の期間でも「いま」の連続)
   return out.sort((a, b) => ({ daily: 0, weekly: 1, wish: 2 })[a.kind] - ({ daily: 0, weekly: 1, wish: 2 })[b.kind]);
 }
 

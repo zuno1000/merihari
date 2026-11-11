@@ -216,8 +216,9 @@ function catBars(rows, loggedDays) {
 function goalsBox(gsum, days, from, to) {
   const row = (g) => {
     let meta, pct = 0;
-    if (g.kind === 'daily') { meta = `毎日${fmtMinJa(g.targetMin)}・届いた日${g.metDays} / ${g.days}日・合計${fmtMinJa(g.doneMin)}`; pct = g.days ? Math.round((g.metDays / g.days) * 100) : 0; }
-    else if (g.kind === 'weekly') { meta = `毎週${fmtMinJa(g.targetMin)}・${g.weeks.map((w) => `${fmtMin(w.doneMin)}${w.done ? '✓' : ''}`).join(' / ')}`; pct = g.weeks.length ? Math.round((g.metWeeks / g.weeks.length) * 100) : 0; }
+    const st = g.stats; // v0.49・F5-15: 連続・最長・今週の達成率
+    if (g.kind === 'daily') { meta = `毎日${fmtMinJa(g.targetMin)}・届いた日${g.metDays} / ${g.days}日・合計${fmtMinJa(g.doneMin)}${st ? `・連続${st.streak}日(最長${st.best}日)・今週${st.week.met} / ${st.week.days}日` : ''}`; pct = g.days ? Math.round((g.metDays / g.days) * 100) : 0; }
+    else if (g.kind === 'weekly') { meta = `毎週${fmtMinJa(g.targetMin)}・${g.weeks.map((w) => `${fmtMin(w.doneMin)}${w.done ? '✓' : ''}`).join(' / ')}${st ? `・連続${st.streak}週(最長${st.best}週)` : ''}`; pct = g.weeks.length ? Math.round((g.metWeeks / g.weeks.length) * 100) : 0; }
     else { meta = `やりたいこと・ふれた日${g.touchedDays}日・合計${fmtMinJa(g.doneMin)}${g.lastDate ? `・最後${fmtMD(g.lastDate)}` : ''}`; pct = days ? Math.round((g.touchedDays / days) * 100) : 0; }
     return el('button.srow.goal', { type: 'button', 'aria-label': `${g.name} のカレンダーを開く`, onclick: () => habitCalendarSheet(g, from, to) }, [el('span.gmain', [el('span.gname', [el('span.gtag', { daily: '毎日', weekly: '毎週', wish: 'やりたい' }[g.kind]), el('i.dot', { style: { background: colorOf(g.categoryId) } }), g.name]), el('span.gmeta', meta), el('span.meter', el('i', { style: { width: `${pct}%`, background: colorOf(g.categoryId) } }))]), el('span.chev', '›')]);
   };

@@ -572,6 +572,7 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(gsum.map((g) => g.kind).join() === 'daily,weekly,wish' && gsum[0].metDays === 1 && gsum[0].days === 7 && gsum[0].doneMin === 30, 'goalsSummary: 毎日 → 届いた日数 / 日数(期限つきは出さない)');
     ok(gsum[1].weeks.length === 2 && gsum[1].weeks[0].end === '2026-10-11' && gsum[1].weeks[0].doneMin === 0 && gsum[1].weeks[1].doneMin === 60 && gsum[1].weeks[1].done && gsum[1].weeks[1].current && gsum[1].metWeeks === 1, 'goalsSummary: 毎週 → 期間にかかる週ごとの実績と目安(今週は current)');
     ok(gsum[2].touchedDays === 1 && gsum[2].doneMin === 20 && gsum[2].lastDate === '2026-10-12', 'goalsSummary: やりたいこと → ふれた日数・合計・最後の日');
+    ok(gsum[0].stats && typeof gsum[0].stats.streak === 'number' && gsum[0].stats.week && gsum[1].stats && gsum[1].stats.weekly === true && !gsum[2].stats, 'goalsSummary(v0.49): 毎日 / 毎週に stats(連続・最長・今週)・やりたいことには無し');
     ok(gsum[0].dayList.length === 7 && gsum[0].dayList[5].key === '2026-10-12' && gsum[0].dayList[5].min === 30 && gsum[1].dayList.length === 7 && gsum[1].dayList[6].min === 60, 'goalsSummary(v0.15.3): dayList に日ごとの分(カレンダー用)');
     const palS = S.migrate({ schema: 1, settings: { palette: 'vivid', categories: [{ id: 'research', name: '研究', kind: 'work', color: '#2a78d6', order: 1 }] } }).settings;
     ok(palS.palette === 'vivid' && palS.categories[0].color === '#2a78d6' && S.migrate({ schema: 1, settings: { palette: 5 } }).settings.palette === null, 'migrate(v0.15.3): 配色のプリセットを選んだあとは旧既定色を置き換えない・palette は文字列だけ');
@@ -756,6 +757,24 @@ document.getElementById('app').addEventListener('load', async () => {
     ok(P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:30', taskId: 'h' } }, '2026-10-27') === 3 && P22.habitStreak(hab, { e: { id: 'e', date: '2026-10-27', start: '09:00', end: '09:20', taskId: 'h' } }, '2026-10-27') === 2, 'habitStreak: 記録が目安に届いた日も数える(届かない日は数えない)');
     ok(P22.habitStreak({ ...hab, checks: ['2026-10-23', '2026-10-26'] }, {}, '2026-10-27') === 1 && P22.habitStreak({ ...hab, checks: [] }, {}, '2026-10-27') === 0 && P22.habitStreak({ id: 'w', kind: 'wish', repeat: null }, {}, '2026-10-27') === 0, 'habitStreak: 途切れたら数え直し・無ければ0・やりたいことは0');
     const wk22 = { id: 'wk', name: 'wk', kind: 'duty', repeat: { type: 'weekly', hours: 5, weekEnd: 'sun' }, checks: ['2026-10-18', '2026-10-25'] };
+    // v0.49・F5-15: 習慣のまとめと声かけ
+    {
+      const hs = P22.habitStats(hab, {}, '2026-10-27'); // 10/25・10/26 が済・きょう 10/27(火)はまだ
+      ok(hs && hs.streak === 2 && hs.best === 2 && hs.today === false && eq(hs.week, { met: 1, days: 2 }) && hs.broke === false && hs.weekly === false, 'habitStats: 連続 2・最長 2・きょうはまだ・今週(月〜火)1/2・途切れていない');
+      const hsB = P22.habitStats({ ...hab, checks: ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-25', '2026-10-26'] }, {}, '2026-10-27');
+      ok(hsB.streak === 2 && hsB.best === 4, 'habitStats: 最長は過去の 4 日(いまの連続 2 より長い)');
+      const hsK = P22.habitStats({ ...hab, checks: ['2026-10-24', '2026-10-25'] }, {}, '2026-10-27'); // 一昨日まで 2 日・昨日なし・きょうなし
+      ok(hsK.streak === 0 && hsK.broke === true && hsK.best === 2, 'habitStats: 昨日で途切れた(broke)・最長は残る');
+      ok(P22.habitStats({ ...hab, checks: ['2026-10-24', '2026-10-25', '2026-10-27'] }, {}, '2026-10-27').broke === true && P22.habitStats({ ...hab, checks: ['2026-10-25'] }, {}, '2026-10-27').broke === false, 'habitStats: きょう済んでいても昨日が抜けていれば broke・1 日だけなら途切れとは言わない');
+      ok(P22.habitStats({ id: 'w', kind: 'wish', repeat: null }, {}, '2026-10-27') === null && P22.habitStats(wk22, {}, '2026-10-27').weekly === true && P22.habitStats(wk22, {}, '2026-10-27').week === null && P22.habitStats(wk22, {}, '2026-10-27').streak === 2, 'habitStats: やりたいことは null・毎週型は週の単位で week 無し');
+      const nd = (checks, nowMin, extra = []) => P22.habitNudge([{ task: { ...hab, name: '英語', checks }, stats: P22.habitStats({ ...hab, checks }, {}, '2026-10-27') }, ...extra], nowMin, 1410);
+      ok(nd(['2026-10-25', '2026-10-26'], 600) === null, 'habitNudge: 昼のうちは急かさない(null)');
+      ok(nd(['2026-10-25', '2026-10-26'], 1200) === '英語 はまだです。2日続いています。少しだけでも。' && nd([], 1200) === '英語 はまだです。5 分だけでも。', 'habitNudge: 夜(19 時以降)にまだなら「少しだけでも」(続いていれば日数つき)');
+      ok(nd(['2026-10-25', '2026-10-26'], 1300) !== null && nd(['2026-10-25', '2026-10-26'], 1100) === null && P22.habitNudge([{ task: { ...hab, name: '英語' }, stats: P22.habitStats(hab, {}, '2026-10-27') }], 1100, 1200) !== null, 'habitNudge: 作業時間帯の終わりの 2 時間前からも夜');
+      ok(nd(['2026-10-24', '2026-10-25'], 600) === '英語 は昨日ひと休み。きょうからまた 1 日目です。' && nd(['2026-10-24', '2026-10-25', '2026-10-27'], 600) === '英語 はきょうからまた 1 日目です。', 'habitNudge: 昨日で途切れたら昼でも「また 1 日目」(責めない)');
+      ok(nd(['2026-10-25', '2026-10-26', '2026-10-27'], 600) === 'きょうの習慣はぜんぶ済みです(英語 は 3 日目)。' && nd(['2026-10-27'], 600) === 'きょうの習慣はぜんぶ済みです。', 'habitNudge: ぜんぶ済み(2 日以上続くものがあれば日数)');
+      ok(P22.habitNudge([{ task: wk22, stats: P22.habitStats(wk22, {}, '2026-10-27') }], 1300) === null && P22.habitNudge([], 1300) === null, 'habitNudge: 毎週型だけ・空は null');
+    }
     ok(P22.habitStreak(wk22, {}, '2026-10-27') === 2 && P22.habitStreak(wk22, {}, '2026-11-01') === 2 && P22.habitStreak(wk22, {}, '2026-11-09') === 0, 'habitStreak: 毎週は週の終わりごとに数える(今週がまだなら先週から・1週空くと0)');
     ok(S.busyNoteKey('2026-10-27', 540) === '2026-10-27:540' && S.busyNoteKey('2026-10-27', 1470) === '2026-10-28:30' && S.busyNoteKey('2026-10-31', 1500) === '2026-11-01:60', 'busyNoteKey: 日付:開始分・深夜(1440超)は翌日へ正規化');
     const bnD = S.migrate({ schema: 1, busyNotes: { '2026-10-27:540': { text: 'ゼミ', updatedAt: '2026-10-27T08:00:00+09:00' }, bad: { text: 'x' }, '2026-10-27:1500': { text: 'y' }, '2026-10-27:600': { id: '2026-10-27:600', text: 'あ'.repeat(300) } } });

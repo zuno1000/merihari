@@ -1200,3 +1200,8 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .rday-l{flex:none}
 .rform .seg{margin-bottom:2px}
 .mrecur .list{margin:4px 0 0}
+/* v0.49・F5-15: ホームの「きょうの習慣」。声かけは 1 行・責めない・薄く */
+.habits-box{margin-top:2px}
+.habits-box .nudge{margin:0 4px 8px;font-size:13px;color:var(--fg);line-height:1.5}
+.habits-box .srow.goal.hrow{padding-right:12px}
+.habits-box .srow.goal.hrow .gmain{flex:1;min-width:0}

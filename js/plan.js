@@ -3,7 +3,7 @@
 // - 期限つき: 残り ÷ 期限までの日数 = 今日の目安(todayShare)
 // - 毎日 ◯分 / 毎週 ◯時間(repeat.daily / repeat.weekly): 今日 / 今週の記録と目安(goals)
 // - やりたいこと(kind:'wish'): 目安は持たず、今週の記録と最後にふれた日だけ
-import { addDays, hm, parseDateKey } from './time.js';
+import { addDays, hm, parseDateKey, weekday } from './time.js';
 import { FEATURES } from './features.js';
 /** 期限つきタスクの残り見積と目安を使うか(v0.44・F5-2 廃止): opts.estimate があればそれ、無ければ FEATURES.TASK_ESTIMATE。純関数のテストは { estimate: true } で従来の計算を検証する */
 const estimating = (opts) => (opts && typeof opts.estimate === 'boolean' ? opts.estimate : FEATURES.TASK_ESTIMATE);
@@ -238,19 +238,70 @@ export function startSpan(g) {
  */
 export function habitStreak(t, entries, date) {
   if (!t || !t.repeat || t.kind === 'wish') return 0;
-  const target = t.noTime ? null : t.repeat.type === 'daily' ? (+t.repeat.min > 0 ? +t.repeat.min : 30) : Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
   const step = t.repeat.type === 'weekly' ? 7 : 1;
-  const metOn = (d) => {
-    if (isChecked(t, d)) return true;
-    if (target == null) return false;
-    const to = t.repeat.type === 'weekly' ? deadlineKey(t, d) : d;
-    const from = t.repeat.type === 'weekly' ? addDays(to, -6) : d;
-    return loggedBetween(entries, t.id, from, to) >= target;
-  };
+  const metOn = (d) => habitMetOn(t, entries, d);
   let d = date, n = 0;
   if (!metOn(d)) d = addDays(d, -step); // 今日(今週)がまだでも途切れ扱いにしない
   while (n < 400 && metOn(d)) { n++; d = addDays(d, -step); }
   return n;
+}
+/** 習慣がその日(毎週型はその週)に「届いた」か(v0.49・F5-15 で habitStreak から切り出し): 済んだの印か、記録が目安以上。時間なしは印だけ。純関数 */
+export function habitMetOn(t, entries, d) {
+  if (!t || !t.repeat || t.kind === 'wish') return false;
+  if (isChecked(t, d)) return true;
+  const target = t.noTime ? null : t.repeat.type === 'daily' ? (+t.repeat.min > 0 ? +t.repeat.min : 30) : Math.round((+t.repeat.hours > 0 ? +t.repeat.hours : 5) * 60);
+  if (target == null) return false;
+  const to = t.repeat.type === 'weekly' ? deadlineKey(t, d) : d;
+  const from = t.repeat.type === 'weekly' ? addDays(to, -6) : d;
+  return loggedBetween(entries, t.id, from, to) >= target;
+}
+/**
+ * 習慣のまとめ(v0.49・F5-15・ユーザー要望「習慣をよりサポート(何日連続などの表示)」): 1 つの習慣について
+ * streak=続いている日数(habitStreak)・best=これまでの最長(きょうから 400 日 / 週さかのぼった中)・today=きょう(今週)は届いたか・
+ * week=今週(月曜〜きょう)の 届いた日数 / 日数(毎日型だけ・毎週型は null)・broke=昨日で途切れた(一昨日まで 2 日以上続いていて昨日が未達。毎週型は先週)・weekly=毎週型か。
+ * 習慣でなければ null。純関数
+ */
+export function habitStats(t, entries, date) {
+  if (!t || !t.repeat || t.kind === 'wish') return null;
+  const weekly = t.repeat.type === 'weekly';
+  const step = weekly ? 7 : 1;
+  const met = (d) => habitMetOn(t, entries, d);
+  const streak = habitStreak(t, entries, date);
+  let best = 0, run = 0;
+  for (let i = 0, d = date; i < 400; i++, d = addDays(d, -step)) { if (met(d)) { run++; if (run > best) best = run; } else run = 0; }
+  best = Math.max(best, streak);
+  const today = met(date);
+  let week = null;
+  if (!weekly) {
+    let mon = date;
+    while (weekday(mon) !== 1) mon = addDays(mon, -1);
+    let m = 0, days = 0;
+    for (let d = mon; d <= date; d = addDays(d, 1)) { days++; if (met(d)) m++; }
+    week = { met: m, days };
+  }
+  const y = addDays(date, -step);
+  const broke = !met(y) && met(addDays(y, -step)) && habitStreak(t, entries, addDays(y, -step)) >= 2;
+  return { streak, best, today, week, broke, weekly };
+}
+/**
+ * 続けやすい声かけ(v0.49・F5-15): ホームの「きょうの習慣」の上に 1 行だけ。責めない語だけ。毎日型だけを見る(毎週型は週の途中で急かさない)。
+ * 優先: ①昨日で途切れた → 「◯ は昨日ひと休み。きょうからまた 1 日目です。」(きょう済んでいれば「きょうからまた 1 日目です。」)
+ *       ②ぜんぶ済み → 「きょうの習慣はぜんぶ済みです。」(2 日以上続くものがあれば「(◯ は ◯ 日目)」)
+ *       ③夜(19 時以降か、作業時間帯の終わりの 2 時間前から)で まだの習慣がある → 続いていれば「◯ はまだです。◯日続いています。少しだけでも。」、無ければ「◯ はまだです。5 分だけでも。」(いちばん長く続いているもの 1 つ)
+ * それ以外(昼のうち・まだがある)は null(急かさない)。list=[{ task, stats }]。純関数
+ */
+export function habitNudge(list, nowMin, windowEnd = null) {
+  const daily = (list || []).filter((x) => x && x.task && x.stats && !x.stats.weekly);
+  if (!daily.length) return null;
+  const byStreak = (a, b) => b.stats.streak - a.stats.streak || (a.task.name || '').localeCompare(b.task.name || '');
+  const broke = daily.filter((x) => x.stats.broke).sort(byStreak)[0];
+  if (broke) return broke.stats.today ? `${broke.task.name} はきょうからまた 1 日目です。` : `${broke.task.name} は昨日ひと休み。きょうからまた 1 日目です。`;
+  const left = daily.filter((x) => !x.stats.today).sort(byStreak);
+  if (!left.length) { const top = daily.slice().sort(byStreak)[0]; return `きょうの習慣はぜんぶ済みです${top.stats.streak >= 2 ? `(${top.task.name} は ${top.stats.streak} 日目)` : ''}。`; }
+  const evening = nowMin >= 1140 || (windowEnd != null && nowMin >= windowEnd - 120);
+  if (!evening) return null;
+  const s = left[0];
+  return s.stats.streak >= 2 ? `${s.task.name} はまだです。${s.stats.streak}日続いています。少しだけでも。` : `${s.task.name} はまだです。5 分だけでも。`;
 }
 
 // ---- 予定(v0.23・F12): 朝に自分で置く予定ブロック。自動生成はしない。planBlocks[id] = { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt } ----
