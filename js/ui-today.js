@@ -16,6 +16,7 @@ import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import { bgmButton, bgmStrip } from './ui-bgm.js';
 import { feedBox } from './ui-feed.js'; // v0.34・F17: キャッチアップ(ホームの折りたたみ・きょうだけ)
+import { trainButton } from './ui-train.js'; // v0.50・F18: 次の電車(ホーム右上の印)
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -450,7 +451,7 @@ export function renderNow(view, ctx, dateArg = null) {
   const head = headBar({
     left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? bgmButton(rerender) : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)。v0.32.3(実機 FB「› と ♪ が重なる」): ♪ は左上(カレンダーの右・きょうだけ)。右は 天気・歯車 の 2 つまでにして日付の › と重ならない
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左
+    right: [trainButton(ctx), weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左。v0.50: 電車の印はその左(DOM は逆順・CSS で row-reverse)
   });
   let swipe = null;
   const home = el('section.home', { ontouchstart: (ev) => { if (ev.target.closest && ev.target.closest('.feed-box')) { swipe = null; return; } const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => { // v0.39(実機 FB「チップをスクロールすると昨日に移る」): キャッチアップの中から始まった触りは日付を動かさない

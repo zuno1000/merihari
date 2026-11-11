@@ -1205,3 +1205,21 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .habits-box .nudge{margin:0 4px 8px;font-size:13px;color:var(--fg);line-height:1.5}
 .habits-box .srow.goal.hrow{padding-right:12px}
 .habits-box .srow.goal.hrow .gmain{flex:1;min-width:0}
+/* v0.50・F18: 次の電車 */
+.tr-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.tr-ico.sm{width:18px;height:18px;flex:none}
+.today-head .trbtn{padding:4px 6px;min-width:36px;display:inline-flex;align-items:center;gap:3px}
+.today-head .trbtn .tr-wait{font-size:11px;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;white-space:nowrap}
+.trchips{margin:0 0 10px}
+.trcards{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
+.trcard{border-radius:16px;padding:12px 14px;background:var(--bg);display:flex;flex-direction:column;gap:8px}
+.trcard .tr-head{display:flex;flex-direction:column;gap:2px;min-width:0}
+.trcard .tr-name{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trdeps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.trdep{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:12px;background:var(--card);border:1px solid var(--line);min-width:0}
+.trdep b{font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.trdep small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.trdep.first{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card))}
+.trdep.first b{color:var(--accent)}
+.tr-none{align-items:center}
+textarea.text.trtimes{width:100%;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:1.5}

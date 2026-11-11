@@ -10,6 +10,7 @@ import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 import { normalizeRegion, MAX_REGIONS } from './weather.js';
 import { normalizeBgm } from './bgm.js';
 import { normalizeFeed } from './feed.js';
+import { normalizeTrain } from './train.js';
 
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
 export function defaultKinds() {
@@ -108,6 +109,7 @@ export function defaultSettings() {
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
     bgm: { enabled: false, genres: [], app: true, strip: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
     feed: { enabled: false, genres: [], kw: {}, n: 5, off: [], img: true, repo: '', hue: {}, order: [] }, // v0.34・F17(v0.35: off=OFF にした取得元 id・v0.36: img=記事の画像・v0.39: kw={ '*':[共通の語], genre:[語] }・v0.41: repo=自分だけの取得元リポジトリ owner/repo・空なら公開のカタログ): キャッチアップ(任意)。ホームの折りたたみ・ジャンル(空=全部)・気になる語・1 回の件数。開いた / 読まない の印は data.feed
+    train: { enabled: false, lines: [] }, // v0.50・F18: 次の電車(任意)。路線 [{ id, name, src:'odpt'|'manual', station, direction, railway, operator, tables?(手入力) }](5 つまで・同期する)。ODPT の時刻表の控えは local.trainCache(端末内・30 日)・トークンは local.odptKey(端末内)
     weather: { enabled: false, regions: [] }, // v0.29・F15: 天気(任意)。地域 [{ id, name, lat, lon }](5 つまで・同期する)。取得した天気は local.weatherCache(端末内・1 時間)
     tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
     goals: { workMin: null, driftMax: null, chunkMin: 30 }, // v0.17: 1 日の目標。v0.31.4: chunkMin=期限つきの目安の 1 回の大きさ(分・既定 30・plan.CHUNK_MIN)(作業の合計の目標・ダラダラの上限。分。null=決めない)。ふり返りはこれと比べる(無ければ先週平均)
@@ -117,7 +119,7 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed', 'train'];
 /** 天気の設定を正規化(v0.29・F15): enabled は true のときだけ true、地域は 5 つまで・id 必須(無ければ付ける)・name 40 字・緯度経度の範囲。純関数 */
 export function normalizeWeather(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -244,6 +246,7 @@ function normalizeSettings(raw) {
   s.weather = normalizeWeather(raw.weather); // v0.29・F15
   s.bgm = normalizeBgm(raw.bgm); // v0.32・F16
   s.feed = normalizeFeed(raw.feed); // v0.34・F17
+  s.train = normalizeTrain(raw.train); // v0.50・F18
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
   // v0.19: お金のカテゴリ(無ければ既定)と月の予算

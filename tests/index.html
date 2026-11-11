@@ -1272,6 +1272,46 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(eq(F.pick(fr, mk, { enabled: true, n: 3 }, { today: '2026-11-03' }).map((x) => x.id.slice(-1)), ['3', '1', '2']), 'pick(now 無し): 従来どおり既読は未読のあと');
     }
 
+    // ---- v0.50・F18: 次の電車(train.js) ----
+    log('\n# v0.50 電車');
+    {
+      const Tr = M.train;
+      const H26 = Tr.holidaysOf(2026);
+      ok(['2026-01-01', '2026-01-12', '2026-02-11', '2026-02-23', '2026-03-20', '2026-04-29', '2026-05-03', '2026-05-04', '2026-05-05', '2026-05-06', '2026-07-20', '2026-08-11', '2026-09-21', '2026-09-22', '2026-09-23', '2026-10-12', '2026-11-03', '2026-11-23'].every((d) => H26.has(d)) && H26.size === 18, 'holidaysOf(2026): 固定日・ハッピーマンデー・春分 3/20・秋分 9/23・振替休日 5/6・国民の休日 9/22 の 18 日');
+      ok(Tr.holidaysOf(2025).has('2025-02-24') && Tr.holidaysOf(2025).has('2025-05-06') && Tr.holidaysOf(2025).has('2025-11-24') && !Tr.holidaysOf(2025).has('2025-09-22') && Tr.holidaysOf(2027).has('2027-03-21') && Tr.holidaysOf(2027).has('2027-03-22'), 'holidaysOf: 2025 の振替(2/24・5/6・11/24)・2025 は国民の休日なし・2027 の春分 3/21(日)→ 3/22 振替');
+      ok(Tr.dayType('2026-11-11') === 'weekday' && Tr.dayType('2026-11-14') === 'saturday' && Tr.dayType('2026-11-15') === 'holiday' && Tr.dayType('2026-11-23') === 'holiday' && Tr.dayType('2026-12-31') === 'holiday' && Tr.dayType('2027-01-03') === 'holiday' && Tr.dayType('2027-01-04') === 'weekday', 'dayType: 平日 / 土曜 / 日祝 / 年末年始(12/29〜1/3)は日祝');
+      const tb = { Weekday: [{ t: '07:00', ty: '' }], SaturdayHoliday: [{ t: '08:00', ty: '' }] };
+      ok(Tr.pickTable(tb, 'weekday')[0].t === '07:00' && Tr.pickTable(tb, 'saturday')[0].t === '08:00' && Tr.pickTable(tb, 'holiday')[0].t === '08:00' && Tr.pickTable({ Weekday: [], Holiday: [{ t: '09:00', ty: '' }] }, 'saturday')[0].t === '09:00' && Tr.pickTable({ Weekday: [] }, 'weekday') === null && Tr.pickTable(null, 'weekday') === null, 'pickTable: 土曜は Saturday → SaturdayHoliday → Holiday・無ければ null');
+      ok(eq(Tr.parseTimes('7 02 12 22\n8時 05 15').map((x) => x.t), ['07:02', '07:12', '07:22', '08:05', '08:15']), 'parseTimes: 紙の時刻表の行(時 分 分 分・「時」つきも)');
+      ok(eq(Tr.parseTimes('7:02 07:12、7時22分 / 0742 24:15 25:03 9:99 x').map((x) => x.t), ['07:02', '07:12', '07:22', '07:42', '24:15', '25:03']), 'parseTimes: 7:02 / 07:12 / 7時22分 / 0742 / 深夜 24:15〜・壊れた値は捨てる・重複なし・時刻順');
+      ok(eq(Tr.parseTimes('７：０２ ７：１２').map((x) => x.t), ['07:02', '07:12']) && Tr.parseTimes('').length === 0 && Tr.parseTimes(null).length === 0, 'parseTimes: 全角も・空は []');
+      const tt = [{ t: '07:02', ty: '各停' }, { t: '07:12', ty: '快速' }, { t: '07:22', ty: '' }, { t: '07:32', ty: '' }, { t: '07:42', ty: '' }, { t: '24:15', ty: '' }];
+      const nd = Tr.nextDepartures(tt, 7 * 60 + 5);
+      ok(nd.length === 4 && nd[0].t === '07:12' && nd[0].wait === 7 && nd[0].ty === '快速' && nd[3].t === '07:42' && Tr.nextDepartures(tt, 7 * 60 + 12)[0].wait === 0, 'nextDepartures: いまから 4 本・あと ◯分(ちょうどは 0)');
+      ok(Tr.nextDepartures(tt, 23 * 60 + 50).length === 1 && Tr.nextDepartures(tt, 23 * 60 + 50)[0].t === '24:15' && Tr.nextDepartures(tt, 23 * 60 + 50)[0].wait === 25 && Tr.nextDepartures(tt, 0)[0].t === '24:15' && Tr.nextDepartures(tt, 0)[0].wait === 15 && Tr.nextDepartures(tt, 60)[0].t === '07:02' && Tr.nextDepartures(tt, 2 * 60 + 59)[0].t === '07:02', 'nextDepartures: 深夜 24:15 は 23:50 から あと 25 分・0:00 から あと 15 分・終電のあと(1:00・2:59)はきょうの始発');
+      ok(Tr.waitLabel(nd[0]) === '7分' && Tr.waitLabel({ wait: 0 }) === 'いま' && Tr.waitLabel(null) === null && Tr.nextDepartures([], 600).length === 0 && Tr.nextDepartures(null, 600).length === 0, 'waitLabel / nextDepartures: 空');
+      const odpt = [
+        { '@type': 'odpt:StationTimetable', 'odpt:railway': 'odpt.Railway:TokyoMetro.Tozai', 'odpt:station': 'odpt.Station:TokyoMetro.Tozai.Waseda', 'odpt:operator': 'odpt.Operator:TokyoMetro', 'odpt:railDirection': 'odpt.RailDirection:TokyoMetro.Nakano', 'odpt:calendar': 'odpt.Calendar:Weekday', 'odpt:stationTimetableObject': [{ 'odpt:departureTime': '5:02', 'odpt:trainType': 'odpt.TrainType:TokyoMetro.Local' }, { 'odpt:departureTime': '05:01', 'odpt:trainType': 'odpt.TrainType:TokyoMetro.Rapid' }, { 'odpt:departureTime': 'bad' }, null] },
+        { '@type': 'odpt:StationTimetable', 'odpt:railDirection': 'odpt.RailDirection:TokyoMetro.Nakano', 'odpt:calendar': 'odpt.Calendar:SaturdayHoliday', 'odpt:stationTimetableObject': [{ 'odpt:departureTime': '06:00' }] },
+        { '@type': 'odpt:StationTimetable', 'odpt:railDirection': 'odpt.RailDirection:TokyoMetro.Nishifunabashi', 'odpt:calendar': 'odpt.Calendar:Holiday', 'odpt:stationTimetableObject': [{ 'odpt:departureTime': '06:30' }] },
+        { '@type': 'odpt:StationTimetable', 'odpt:railDirection': 'odpt.RailDirection:TokyoMetro.Nishifunabashi', 'odpt:calendar': 'odpt.Calendar:Special', 'odpt:stationTimetableObject': [{ 'odpt:departureTime': '06:40' }] },
+        'junk',
+      ];
+      const pd = Tr.parseStationTimetable(odpt);
+      ok(pd.length === 2 && pd[0].direction === 'odpt.RailDirection:TokyoMetro.Nakano' && pd[0].railway === 'odpt.Railway:TokyoMetro.Tozai' && eq(pd[0].tables.Weekday, [{ t: '05:01', ty: '快速' }, { t: '05:02', ty: '各停' }]) && eq(pd[0].tables.SaturdayHoliday, [{ t: '06:00', ty: '' }]) && eq(Object.keys(pd[1].tables), ['Holiday']) && pd[1].tables.Holiday[0].t === '06:30', 'parseStationTimetable: 方面ごと・日種ごと・時刻順(5:02 → 05:02)・壊れた要素と知らない日種は捨てる');
+      ok(Tr.idTail('odpt.RailDirection:TokyoMetro.Nakano') === 'Nakano' && Tr.typeLabel('odpt.TrainType:Odakyu.RapidExpress') === '快速急行' && Tr.typeLabel('odpt.TrainType:X.Unknown') === '' && Tr.operatorLabel('odpt.Operator:Toei') === '都営' && Tr.operatorLabel('odpt.Operator:Foo') === 'Foo', 'idTail / typeLabel / operatorLabel');
+      const stj = [{ 'owl:sameAs': 'odpt.Station:TokyoMetro.Tozai.Waseda', 'dc:title': '早稲田', 'odpt:stationTitle': { ja: '早稲田', en: 'Waseda' }, 'odpt:railway': 'odpt.Railway:TokyoMetro.Tozai', 'odpt:operator': 'odpt.Operator:TokyoMetro' }, { 'owl:sameAs': 'odpt.Station:Toei.Arakawa.Waseda', 'dc:title': '早稲田', 'odpt:railway': 'odpt.Railway:Toei.Arakawa', 'odpt:operator': 'odpt.Operator:Toei' }, { 'owl:sameAs': 'odpt.Bus:x', 'dc:title': 'x' }, {}];
+      const ps = Tr.parseStations(stj);
+      ok(ps.length === 2 && ps[0].id === 'odpt.Station:Toei.Arakawa.Waseda' && ps[0].name === '早稲田' && ps[1].railway === 'odpt.Railway:TokyoMetro.Tozai' && ps[1].operator === 'odpt.Operator:TokyoMetro', 'parseStations: odpt.Station だけ・日本語の名前・路線順');
+      ok(eq(Tr.parseTitles([{ 'owl:sameAs': 'odpt.Railway:TokyoMetro.Tozai', 'odpt:railwayTitle': { ja: '東西線', en: 'Tozai' } }, { 'owl:sameAs': 'odpt.RailDirection:TokyoMetro.Nakano', 'dc:title': '中野' }, null], 'odpt:railwayTitle'), { 'odpt.Railway:TokyoMetro.Tozai': '東西線', 'odpt.RailDirection:TokyoMetro.Nakano': '中野' }), 'parseTitles: ja → dc:title の順');
+      const nt = Tr.normalizeTrain({ enabled: true, lines: [{ name: ' 東西線 ', src: 'odpt', station: 'odpt.Station:A', direction: 'odpt.RailDirection:B' }, { name: 'バス', src: 'manual', tables: { Weekday: [{ t: '07:10', ty: '' }, { t: 'x' }, { t: '07:00', ty: 'abcdefghijklmnop' }], SaturdayHoliday: 'no' } }, { name: '壊れ', src: 'odpt' }, { src: 'manual' }, 7] });
+      ok(nt.enabled && nt.lines.length === 2 && nt.lines[0].id === 't_1' && nt.lines[0].name === '東西線' && nt.lines[0].src === 'odpt' && !('tables' in nt.lines[0]) && nt.lines[1].src === 'manual' && eq(nt.lines[1].tables.Weekday.map((x) => x.t), ['07:00', '07:10']) && nt.lines[1].tables.Weekday[0].ty === 'abcdefghij' && eq(nt.lines[1].tables.SaturdayHoliday, []), 'normalizeTrain: 壊れた路線は捨てる・id が無ければ付ける・手入力の時刻は検査して時刻順・ODPT は駅と方面が要る');
+      ok(!Tr.normalizeTrain({ enabled: true, lines: [] }).enabled && Tr.normalizeTrain(null).lines.length === 0 && Tr.normalizeTrain({ lines: Array.from({ length: 7 }, (_, i) => ({ name: `l${i}`, src: 'manual' })) }).lines.length === Tr.MAX_LINES, 'normalizeTrain: 路線が無ければ enabled=false・5 つまで');
+      ok(eq(Tr.tablesOf(nt.lines[1], {}), nt.lines[1].tables) && Tr.tablesOf(nt.lines[0], {}) === null && Tr.tablesOf(nt.lines[0], { t_1: { at: 1, tables: tb } }) === tb && Tr.isFresh({ at: 1000 }, 1000 + 86400000) && !Tr.isFresh({ at: 1000 }, 1000 + 31 * 86400000) && !Tr.isFresh(null, 5), 'tablesOf(手入力は設定・ODPT は控え)/ isFresh(30 日)');
+      const d2 = S.migrate({ schema: 1, settings: { train: { enabled: true, lines: [{ name: 'A', src: 'manual', tables: { Weekday: [{ t: '07:00', ty: '' }] } }] } } });
+      ok(d2.settings.train.enabled && d2.settings.train.lines.length === 1 && S.SCALAR_FIELDS.includes('train') && !S.defaultSettings().train.enabled, 'store: settings.train を正規化して持つ・同期は項目ごと(SCALAR_FIELDS)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

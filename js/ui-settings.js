@@ -13,6 +13,8 @@ import * as bgm from './bgm.js';
 import { playBgm, rateChips, reopen } from './ui-bgm.js';
 import * as feed from './feed.js';
 import { FEATURES } from './features.js';
+import { sectionTrain } from './ui-train.js';
+import * as train from './train.js';
 import { feedSheet, unmark, addSourceSheet, manageSourcesSheet, ghToken, setGhToken, ensureSource, setupPrivateSheet, usePublicCatalog } from './ui-feed.js';
 
 const S = () => store.state.data.settings;
@@ -59,6 +61,7 @@ const summary = {
   tiles() { const s = S(); const keys = s.tiles || store.defaultTiles(s); const nm = (k) => (k.startsWith('kind:') ? (s.kinds || []).find((x) => `kind:${x.id}` === k)?.name : s.categories.find((x) => `cat:${x.id}` === k)?.name); const names = keys.map(nm).filter(Boolean); return names.length ? `${names.slice(0, 4).join(' / ')}${names.length > 4 ? ' …' : ''}${s.tiles ? '' : '(既定)'}` : 'なし'; },
   bgm() { const b = bgm.normalizeBgm(S().bgm); if (!b.enabled) return '使わない'; const n = Object.values(store.state.data.bgm || {}).filter((p) => !p.deletedAt).length; return `ホームに ♪・${b.genres.length ? b.genres.slice(0, 3).map((g) => bgm.GENRE_LABELS[g]).join(' / ') + (b.genres.length > 3 ? ' …' : '') : 'ジャンルはおまかせ'}${n ? `・聞いた ${n} 曲` : ''}`; },
   feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); const nk = feed.allWords(c).length; return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${nk ? `・気になる語 ${nk}` : ''}${c.off.length ? `・取得元 ${c.off.length} つ OFF` : ''}`; },
+  train() { const t = train.normalizeTrain(S().train); return t.enabled && t.lines.length ? `ホームに印・${t.lines.map((l) => l.name).slice(0, 2).join(' / ')}${t.lines.length > 2 ? ' …' : ''}` : t.lines.length ? `${t.lines.length} 路線(印は出さない)` : '使わない'; }, // v0.50・F18
   weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
   goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
 };
@@ -655,6 +658,8 @@ function sectionHelp() {
     li(['設定 › AI で有効にすると、ふり返りに「AI」の節(「AI の返事」の欄と 頼む / 返事を貼り付け / 相談 › のボタン)が出ます(v0.29.4)。「きょうのふり返りを頼む」はその日の記録・アプリのふり返り・日記の3行をまとめた文を、「相談」は いまの状況(時刻・記録中・きょうの作業・目安の残り・近い期限)と質問を、iPhone のショートカット「モデルを使用」へ渡します。', '返事はショートカットの中で表示され、クリップボードにも入ります。メリハリに戻って「返事を貼り付け」を 1 回押すと、そのまま「AI の返事」の欄に入って自動で保存されます(メモとは別の欄。iOS が最初に「ペースト」の許可を聞くことがあります)。', 'アプリの中に AI はありません。文が端末の外に出るかどうかは、ショートカットで選ぶモデルで決まります(「端末上」なら出ません。Private Cloud Compute と ChatGPT は外に出ます)。', '「文をコピー」は、ショートカットを開かずに文だけをコピーします(PC や、別の AI に貼りたいとき)。']),
     h('天気と服装(任意・v0.29)'),
     li(['設定 › 天気と服装 で地名を検索して地域を登録(5 つまで)し「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印(先頭の地域の天気の絵)が出ます。タップすると地域ごとの札(大きな絵・最高 / 最低気温・天気・降水確率・服装のチップ: 半袖 / 長袖 / 上着 / コート、朝晩の差)。v0.47: 傘が要る日(降水 30% 以上)は、ホームの印が傘の絵+点になり、札の大きな絵も傘、チップの先頭に「傘を持って」(50% 以上)か「折りたたみ傘があると安心」(30% 以上)が出ます。札の下に あす の予報も小さく 1 行(v0.29.2・傘が要れば「傘」)。「更新」で取り直し、「地域 ›」で設定へ(v0.29.1)。', 'データは Open-Meteo(無料・キー不要)。接続先はその 2 つのドメインだけで、端末の位置情報は使いません。取れないとき(オフライン・遅い)は何も出さず、起動も待たせません。取得した天気はこの端末に 1 時間、地域は設定として同期します。']),
+    h('電車(任意・v0.50)'),
+    li(['設定 › 電車 で路線(駅と方面)を登録して「ホームに電車の印を出す」にすると、ホーム右上(天気の左)に電車の印と「次の電車まで ◯分」(先頭の路線)が出ます。タップすると路線ごとに次の 4 本(時刻・あと ◯分・種別)。上の いま / 15分後 / 30分後 / 60分後 で、出発をずらしたときの電車が見られます。路線は 5 つまで。', '時刻表の出どころは 2 つ。①公共交通オープンデータセンター(ODPT): developer.odpt.org で無料の開発者登録(承認まで数日)をしてアクセストークンを 設定 › 電車 に貼り、駅名で検索 → 方面を選ぶ。対象は 東京メトロ・都営・ゆりかもめ・りんかい線・つくばエクスプレス・横浜市営・多摩モノレール(2026-11 時点)。②手入力: 発車時刻を貼る(「7 02 12 22」の行か「7:02 7:12」。平日 / 土休日)。JR や私鉄の多くは ODPT の無償データに無いので手入力で。', '時刻表は端末に置く(ODPT は 30 日で取り直し・「更新」でも)ので、見るときは通信しません。土曜 / 日祝 / 年末年始の判定はアプリの中(祝日は法で計算)。トークンはこの端末だけ(同期しない)、路線の登録は同期します。']),
     h('作業用 BGM(任意・v0.32)'),
     li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム左上(カレンダーの右・きょうだけ)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう・×)。題名をタップで もう一度開きます。× でその日だけ消え、設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出しません。流していない日は何も出ません。', 'ふり返り(期限が近いタスク と 最近 の間)に「きょうの BGM」: その日に流した曲を順に(サムネイル・題名・流した時刻・ジャンル・♡ / ⊖ で 好き / ちがう)。タップでもう一度開きます(v0.32.1〜v0.32.2)。', '曲の一覧は毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直し、アプリは次に開いたときから新しい一覧を使います(版の更新は要りません・v0.32.1)。']),
     h('キャッチアップ(任意・v0.34)'),
@@ -678,6 +683,7 @@ const SECTIONS = {
   money: { title: 'お金', build: (re) => sectionMoney(re) },
   ai: { title: 'AI(ショートカット)', build: (re) => sectionAI(re) },
   weather: { title: '天気と服装', build: (re) => sectionWeather(re) },
+  train: { title: '電車', build: (re) => sectionTrain(re) }, // v0.50・F18
   bgm: { title: '作業用 BGM', build: (re) => sectionBgm(re) },
   feed: { title: 'キャッチアップ', build: (re) => sectionFeed(re) },
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
@@ -798,7 +804,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('1日の目標', summary.goals(), open('goals')),
       srow('レポートのタイル', summary.tiles(), open('tiles')),
     ]),
-    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('キャッチアップ', summary.feed(), open('feed')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
+    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('電車', summary.train(), open('train')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('キャッチアップ', summary.feed(), open('feed')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後の書き出し ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {
