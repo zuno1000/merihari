@@ -27,7 +27,8 @@ import * as weather from './weather.js';
 import * as bgm from './bgm.js';
 import * as feed from './feed.js';
 import * as train from './train.js';
-export const APP_VERSION = '0.50.0';
+import * as drinks from './drinks.js';
+export const APP_VERSION = '0.51.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -178,6 +179,7 @@ if (ui.DEV) window.M = {
   feed: { recentlyRead: feed.recentlyRead, RECENT_READ_MIN: feed.RECENT_READ_MIN, normalizeFeed: feed.normalizeFeed, splitKeywords: feed.splitKeywords, parseFeed: feed.parseFeed, genreName: feed.genreName, sourcesOf: feed.sourcesOf, activeMarks: feed.activeMarks, unread: feed.unread, keywordHits: feed.keywordHits, daysAgo: feed.daysAgo, score: feed.score, pick: feed.pick, countByGenre: feed.countByGenre, summaryLine: feed.summaryLine, hostOf: feed.hostOf, recentMarks: feed.recentMarks, stats: feed.stats, loadFeed: feed.loadFeed, FEED_URL: feed.FEED_URL, N_CHOICES: feed.N_CHOICES, DEFAULT_N: feed.DEFAULT_N, MAX_KEYWORDS: feed.MAX_KEYWORDS, FRESH_DAYS: feed.FRESH_DAYS, W: feed.W, HIT_SHARE: feed.HIT_SHARE, hitCap: feed.hitCap, MAX_OFF: feed.MAX_OFF, GENRE_HUES: feed.GENRE_HUES, HUE_CHOICES: feed.HUE_CHOICES, genreHue: feed.genreHue, orderedGenres: feed.orderedGenres, moveGenre: feed.moveGenre, savedOf: feed.savedOf, hitsOf: feed.hitsOf, filterItems: feed.filterItems, saved: feed.saved, wordsFor: feed.wordsFor, allWords: feed.allWords, addWords: feed.addWords, removeWord: feed.removeWord, groupOfWord: feed.groupOfWord, slugId: feed.slugId, arxivUrl: feed.arxivUrl, addSourceToCatalog: feed.addSourceToCatalog, removeSourceFromCatalog: feed.removeSourceFromCatalog, addGenreToCatalog: feed.addGenreToCatalog, removeGenreFromCatalog: feed.removeGenreFromCatalog, visible: feed.visible, isReadMark: feed.isReadMark, b64enc: feed.b64enc, b64dec: feed.b64dec, feedsEditUrl: feed.feedsEditUrl, GITHUB_REPO: feed.GITHUB_REPO, repoOf: feed.repoOf, isPrivate: feed.isPrivate, SETUP_FILES: feed.SETUP_FILES, privateFeedUrl: feed.privateFeedUrl, configureFeedSource: feed.configureFeedSource, feedSource: feed.feedSource, refreshFeed: feed.refreshFeed, FEEDS_PATH: feed.FEEDS_PATH, MAX_KW_GROUPS: feed.MAX_KW_GROUPS, titleOf: feed.titleOf, leadOf: feed.leadOf, jaStats: feed.jaStats },
   kiai,
   train, // v0.50・F18
+  drinks, // v0.51・F19
   time,
   log,
   plan,

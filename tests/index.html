@@ -1312,6 +1312,37 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(d2.settings.train.enabled && d2.settings.train.lines.length === 1 && S.SCALAR_FIELDS.includes('train') && !S.defaultSettings().train.enabled, 'store: settings.train を正規化して持つ・同期は項目ごと(SCALAR_FIELDS)');
     }
 
+    // ---- v0.51・F19: 飲んだもの(drinks.js) ----
+    log('\n# v0.51 飲んだもの');
+    {
+      const Dk = M.drinks;
+      ok(Dk.KINDS.length === 5 && Dk.KINDS.every((k) => k.axes.length === 5) && Dk.axesOf('coffee').map((a) => a[1]).join() === '酸味,苦味,甘み,コク,香り' && Dk.axesOf('wine').some((a) => a[0] === 'tannin') && Dk.kindOf('zzz').id === 'other' && Dk.axisName('sake', 'sharp') === 'キレ', 'KINDS: 5 種類 × 5 軸(コーヒー=酸味・苦味・甘み・コク・香り / ワインに渋み / 日本酒にキレ)・知らない種類は その他');
+      ok(Dk.clampOverall(4.7) === 4.7 && Dk.clampOverall('2.34') === 2.3 && Dk.clampOverall(5) === 5 && Dk.clampOverall(5.1) === null && Dk.clampOverall(-1) === null && Dk.clampOverall('') === null && Dk.clampOverall(null) === null && Dk.fmtOverall(4.7) === '4.7' && Dk.fmtOverall(3) === '3.0' && Dk.fmtOverall(null) === '–', 'clampOverall / fmtOverall: 0.0〜5.0・0.1 刻み(2.34 → 2.3)・範囲外は null');
+      const nd = Dk.normalizeDrink({ id: 'x', kind: 'coffee', name: '  エチオピア  ', maker: 'A', taste: { acid: 4.4, bitter: 0, sweet: '3', tannin: 5, body: 9 }, overall: '4.66', note: 'n', photo: 'yes', date: '2026-11-11', updatedAt: 'u' }, 'q');
+      ok(nd && nd.id === 'x' && nd.name === 'エチオピア' && eq(nd.taste, { acid: 4, sweet: 3 }) && nd.overall === 4.7 && nd.photo === false && nd.date === '2026-11-11' && nd.maker === 'A' && nd.updatedAt === 'u' && nd.deletedAt === null, 'normalizeDrink: 名前を trim・味はその種類の軸で 1〜5 の整数だけ(4.4 → 4・0 や 9 は捨てる・他の種類の軸は捨てる)・総評は 0.1 刻み・photo は true だけ');
+      ok(Dk.normalizeDrink({ name: '' }) === null && Dk.normalizeDrink(null) === null && Dk.normalizeDrink({ name: 'x', kind: 'tea' }, 'id9').kind === 'other' && Dk.normalizeDrink({ name: 'x', kind: 'tea' }, 'id9').id === 'id9' && Dk.normalizeDrink({ name: 'x', date: '2026/11/11' }).date === null, 'normalizeDrink: 名前が無ければ null・知らない種類は その他・id が無ければ付ける・壊れた日付は null');
+      const mk = (id, kind, name, overall, taste, date, maker = '') => ({ id, kind, name, maker, place: '', date, taste, overall, note: '', photo: false, updatedAt: `2026-11-${id.slice(-2)}T00:00:00+09:00`, deletedAt: null });
+      const DK = { c1: mk('c01', 'coffee', 'A', 4.5, { acid: 5, bitter: 1, sweet: 3 }, '2026-11-01', 'ロースターX'), c2: mk('c02', 'coffee', 'B', 4.0, { acid: 4, bitter: 2, sweet: 3 }, '2026-11-03', 'ロースターX'), c3: mk('c03', 'coffee', 'C', 2.5, { acid: 2, bitter: 4, sweet: 3 }, '2026-11-02', 'ロースターY'), c4: mk('c04', 'coffee', 'D', 1.5, { acid: 1, bitter: 5, sweet: 3 }, '2026-11-02', 'ロースターY'), c5: mk('c05', 'coffee', 'E', 3.0, { acid: 3, bitter: 3 }, '2026-11-05'),
+        s1: mk('s01', 'sake', '獺祭', 4.7, { aroma: 5 }, '2026-10-30'), s2: mk('s02', 'sake', '久保田', null, {}, '2026-10-31'), w1: { ...mk('w01', 'wine', '消した', 5, {}, '2026-11-04'), deletedAt: 'x' } };
+      ok(eq(Dk.listDrinks(DK).map((d) => d.id), ['c05', 'c02', 'c04', 'c03', 'c01', 's02', 's01']) && Dk.listDrinks(DK, 'sake').length === 2 && Dk.listDrinks({}).length === 0, 'listDrinks: 生きているものを 日付の新しい順(同じ日は更新の新しい順)・種類で絞る');
+      const sm = Dk.summary(DK);
+      ok(sm.coffee.n === 5 && sm.coffee.avg === 3.1 && sm.coffee.best.id === 'c01' && sm.sake.n === 2 && sm.sake.rated === 1 && sm.sake.avg === 4.7 && !sm.wine, 'summary: 種類ごとの件数・総評の平均(総評つきだけ)・いちばん高い 1 件');
+      ok(Dk.pearson([1, 2, 3], [2, 4, 6]) === 1 && Dk.pearson([1, 2, 3], [3, 2, 1]) === -1 && Dk.pearson([1, 2], [1, 2]) === null && Dk.pearson([2, 2, 2], [1, 2, 3]) === null && Math.abs(Dk.pearson([1, 2, 3, 4], [1, 3, 2, 4]) - 0.8) < 0.01, 'pearson: 相関(3 件未満・分散 0 は null)');
+      const pf = Dk.preference(DK, 'coffee');
+      ok(pf.enough && pf.n === 5 && pf.axes[0].r > 0.9 && pf.axes[0].text === '酸味は強いほど好み' && pf.axes[1].r < -0.9 && pf.axes[1].text === '苦味は控えめが好み' && pf.axes[2].r === null && pf.axes[2].text === null && pf.axes[3].r === null && pf.axes[3].avgAll === null, 'preference: 酸味は正の相関 →「強いほど好み」・苦味は負 →「控えめが好み」・甘みは分散 0 で言わない・コクは記録なし');
+      ok(pf.axes[0].avgTop === 4.5 && pf.axes[0].avgAll === 3 && pf.best.id === 'c01' && eq(pf.makers, [{ name: 'ロースターX', n: 2, avg: 4.3 }, { name: 'ロースターY', n: 2, avg: 2 }]) && eq(pf.lines, ['酸味は強いほど好み', '苦味は控えめが好み']), 'preference: 好きなもの(総評 4 以上)の軸の平均・作り手の平均(2 件以上・高い順)・言葉の一覧');
+      const pfS = Dk.preference(DK, 'sake');
+      ok(!pfS.enough && pfS.n === 1 && pfS.best.id === 's01' && pfS.lines.length === 0 && pfS.axes.every((a) => a.r === null) && Dk.preference({}, 'wine').n === 0 && Dk.preference({}, 'wine').best === null, 'preference: 3 件未満は enough=false(言葉なし・いちばん高いものは出す)・空');
+      const d3 = S.migrate({ schema: 1, drinks: { a: { id: 'a', kind: 'wine', name: 'ボルドー', taste: { tannin: 4 }, overall: 4.2 }, b: { name: '' }, c: 5 } });
+      ok(Object.keys(d3.drinks).join() === 'a' && d3.drinks.a.taste.tannin === 4 && d3.drinks.a.overall === 4.2 && eq(S.defaultSettings().train, { enabled: false, lines: [] }) && 'drinks' in M.store.defaultData(), 'store.migrate: drinks を検査して持つ(壊れたものは捨てる)');
+      const Sy2 = M.sync;
+      const base = S.migrate({ schema: 1 });
+      const dA = { ...base, drinks: { a: { ...mk('a', 'coffee', '古い', 3, {}, '2026-11-01'), updatedAt: '2026-11-01T00:00:00+09:00' } } }, dB = { ...base, drinks: { a: { ...mk('a', 'coffee', '新しい', 4, {}, '2026-11-01'), updatedAt: '2026-11-09T00:00:00+09:00' }, b: { ...mk('b', 'sake', 'b', 2, {}, '2026-11-02'), updatedAt: '2026-11-02T00:00:00+09:00' } } };
+      ok(Sy2.merge(dA, dB).drinks.a.name === '新しい' && Sy2.merge(dB, dA).drinks.a.name === '新しい' && Sy2.merge(dA, dB).drinks.b.name === 'b', 'sync.merge: 飲んだものは id ごとに updatedAt の新しい方');
+      const pr = Sy2.pruneTombstones({ ...base, drinks: { x: { ...mk('x', 'coffee', 'x', 3, {}, '2026-01-01'), updatedAt: '2026-01-01T00:00:00+09:00', deletedAt: '2026-01-01T00:00:00+09:00' }, y: { ...mk('y', 'coffee', 'y', 3, {}, '2026-01-01'), updatedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-11-11T00:00:00+09:00');
+      ok(!pr.drinks.x && pr.drinks.y, 'pruneTombstones: 古い削除の飲んだものを落とす');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

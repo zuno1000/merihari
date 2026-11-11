@@ -15,6 +15,7 @@ import * as sync from './sync.js';
 import { displayColor } from './palette.js';
 import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js'; // v0.30: 上の 1 行と月のカレンダーはホームと共通(循環 import だが呼ぶのは描画時だけ)
 import { dateKey, minuteOfDay, mm, fmtMD, addDays, DAY_JA, weekday } from './time.js';
+import { drinksButton, renderDrinks } from './ui-drinks.js'; // v0.51・F19: 飲んだもの(右上のカップ → 1 画面はさむ)
 
 const S = () => store.state.data.settings;
 const E = () => store.state.data.entries;
@@ -32,6 +33,7 @@ export function renderMoney(view, ctx, dateArg = null) {
   clear(view);
   ctx.setTick(null);
   if (!store.state.data.meta.setupAt) { view.append(el('section.hero', [el('h1', 'まず設定を済ませましょう'), el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => ctx.go('settings') }, '設定をはじめる'))])); return; }
+  if (dateArg === 'drinks') return renderDrinks(view, ctx); // v0.51・F19: 飲んだもの(タスクの区分の画面と同じく 1 画面はさむ・‹ お金 で戻る)
   const today = dateKey(); // お金は暦日(1日の切れ目は使わない: 財布の日付と合わせる)
   const date = typeof dateArg === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateArg) && dateArg < today ? dateArg : today;
   const isToday = date === today;
@@ -49,7 +51,7 @@ export function renderMoney(view, ctx, dateArg = null) {
   const head = headBar({
     left: [calButton(() => calendarSheet(date, today, (k) => goDate(k))), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(today) }, '今日')],
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [el('button.btn.sm.ghost.gear.recur', { type: 'button', 'aria-label': '定期(サブスク・給料日)', title: '定期', onclick: () => recurringSheet(today, rerender) }, RECUR_ICON()), piggy], // v0.47: 定期は貯金箱の左
+    right: [drinksButton(ctx), el('button.btn.sm.ghost.gear.recur', { type: 'button', 'aria-label': '定期(サブスク・給料日)', title: '定期', onclick: () => recurringSheet(today, rerender) }, RECUR_ICON()), piggy], // v0.47: 定期は貯金箱の左。v0.51: 飲んだもの(カップ)はその左
   });
 
   // その日(F10-9): 支出(大きく)・収入(あれば)・予算の残り(きょうだけ)。下に 2 タップ入力と、その日の一覧
