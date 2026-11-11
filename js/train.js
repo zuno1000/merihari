@@ -8,6 +8,7 @@ import { hm, addDays, weekday } from './time.js';
 export const ODPT_URL = 'https://api.odpt.org/api/v4';
 export const MAX_LINES = 5;
 export const TTL_MS = 30 * 86400000;      // 時刻表の控えを置く日数(ダイヤ改正に備えて 30 日で取り直す)
+export const REPO_TTL_MS = 6 * 3600000;    // v0.54・F18-6: 自分だけのリポジトリの trains.json(Actions が週 1 で作り直す)は 6 時間ごとに見に行く
 export const FETCH_MS = 8000;
 export const MAX_BYTES = 2 * 1024 * 1024; // 応答の上限(駅時刻表は数十 KB・odpt:Station の一覧は数百 KB)
 /** 列車種別 id の末尾 → 日本語(無ければ空) */
@@ -150,16 +151,31 @@ export function parseTitles(json, key) {
 // ---- 設定の正規化 ----
 const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
 const cleanTimes = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === 'object' && typeof x.t === 'string' && hm(x.t) != null ? { t: x.t, ty: str(x.ty, 10) } : null)).filter(Boolean).sort((a, b) => hm(a.t) - hm(b.t)).slice(0, 400);
-/** 1 路線を正規化: { id, name, src:'odpt'|'manual', station, direction, railway, operator, tables?(手入力だけ) }。壊れていれば null */
+/** 1 路線を正規化: { id, name, src:'odpt'|'manual'|'repo', station, direction, railway, operator, key?(repo: trains.json の id), tables?(手入力だけ) }。壊れていれば null */
 export function normalizeLine(l) {
   if (!l || typeof l !== 'object') return null;
-  const src = l.src === 'manual' ? 'manual' : 'odpt';
+  const src = l.src === 'manual' ? 'manual' : l.src === 'repo' ? 'repo' : 'odpt';
   const name = str(l.name, 60).trim();
   if (!name) return null;
   const out = { id: str(l.id, 40), name, src, station: str(l.station, 120), direction: str(l.direction, 120), railway: str(l.railway, 120), operator: str(l.operator, 80) };
   if (src === 'odpt') { if (!out.station || !out.direction) return null; }
+  else if (src === 'repo') { out.key = str(l.key, 40); if (!out.key) return null; } // v0.54・F18-6: 時刻表は自分だけのリポジトリの data/trains.json(控えは local.trainCache)
   else out.tables = { Weekday: cleanTimes(l.tables?.Weekday), SaturdayHoliday: cleanTimes(l.tables?.SaturdayHoliday) };
   return out;
+}
+/**
+ * 自分だけのリポジトリの data/trains.json(tools/train_fetch.py が作る)を読む(v0.54・F18-6・純関数): { updated, lines: { id: { id, name, tables:{Weekday,SaturdayHoliday}, fetched, error } } }。
+ * 壊れた路線は捨てる・時刻は検査(cleanTimes)。
+ */
+export function parseTrainsJson(json) {
+  const o = json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  const lines = {};
+  for (const l of Array.isArray(o.lines) ? o.lines : []) {
+    if (!l || typeof l !== 'object' || typeof l.id !== 'string' || !l.id) continue;
+    const id = l.id.slice(0, 40);
+    lines[id] = { id, name: str(l.name, 60).trim() || id, tables: { Weekday: cleanTimes(l.tables?.Weekday), SaturdayHoliday: cleanTimes(l.tables?.SaturdayHoliday) }, fetched: str(l.fetched, 40) || null, error: str(l.error, 200) || null };
+  }
+  return { updated: str(o.updated, 40) || null, lines };
 }
 /** 設定の正規化(F18-1): enabled は路線があるときだけ true・路線は 5 つまで・id が無ければ付ける。純関数 */
 export function normalizeTrain(raw) {

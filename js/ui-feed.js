@@ -223,13 +223,13 @@ const GH = feed.GH_API;
 export function ensureSource() {
   feed.configureFeedSource(feed.isPrivate(S().feed) ? { repo: feed.repoOf(S().feed), token: ghToken(), cacheGet: () => (typeof L().feedCache === 'string' ? L().feedCache : null), cacheSet: (t) => { L().feedCache = t; store.saveLocal(); } } : null);
 }
-async function ghGet(path, token, repo = feed.repoOf(S().feed)) {
+export async function ghGet(path, token, repo = feed.repoOf(S().feed)) { // v0.54: 電車(ui-train)からも
   const r = await fetch(`${GH}/repos/${repo}/contents/${path}?ref=main`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
   if (!r.ok) { const e = new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 404 ? 'リポジトリかファイルが見つかりません(トークンの Repository access を確かめてください)' : `GitHub ${r.status}`); e.status = r.status; throw e; }
   const j = await r.json();
   return { sha: j.sha, text: feed.b64dec(j.content) };
 }
-async function ghPut(path, token, text, sha, message, repo = feed.repoOf(S().feed)) {
+export async function ghPut(path, token, text, sha, message, repo = feed.repoOf(S().feed)) {
   const r = await fetch(`${GH}/repos/${repo}/contents/${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify({ message, content: feed.b64enc(text), sha, branch: 'main' }) });
   if (!r.ok) throw new Error(r.status === 401 ? 'トークンが違うか期限切れです' : r.status === 403 ? '書き込みの権限がありません(Contents: Read and write)' : r.status === 409 ? '同時に変更があったので もう一度' : `GitHub ${r.status}`);
   return r.json();

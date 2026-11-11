@@ -4,6 +4,8 @@ import { el, clear, toast, sheet, confirmSheet, svg, sortable } from './ui.js';
 import * as store from './store.js';
 import * as train from './train.js';
 import { dateKey, minuteOfDay, addDays, fmtMD } from './time.js';
+import { ghToken, ghGet, ghPut } from './ui-feed.js'; // v0.54・F18-6: URL から(自分だけのリポジトリ・キャッチアップと同じトークン)
+import * as feed from './feed.js';
 
 const S = () => store.state.data.settings;
 const L = () => store.state.local;
@@ -14,6 +16,24 @@ export function setOdptKey(t) { L().odptKey = String(t || '').trim().slice(0, 20
 const cfg = () => { S().train = train.normalizeTrain(S().train); return S().train; };
 const saveCfg = () => { S().train = train.normalizeTrain(S().train); store.touchSettings(); };
 const inflight = new Set();
+// ---- v0.54・F18-6: URL から(自分だけのリポジトリの data/trains.json・tools/train_fetch.py が Actions で作る) ----
+export const TRAINS_PATH = 'data/trains.json', TIMETABLES_PATH = 'data/timetables.json';
+export const repoReady = () => feed.isPrivate(S().feed) && !!ghToken();
+let repoPromise = null;
+/** trains.json を読む(同時に呼ばれても 1 回)。{ updated, lines } */
+export function fetchRepoTrains(force = false) {
+  if (!repoReady()) return Promise.reject(new Error('設定 › キャッチアップ の「自分だけの取得元リポジトリ」とトークンが要ります'));
+  if (!navigator.onLine) return Promise.reject(new Error('オフラインです'));
+  if (!repoPromise || force) repoPromise = ghGet(TRAINS_PATH, ghToken()).then((got) => train.parseTrainsJson(JSON.parse(got.text))).catch((e) => { repoPromise = null; if (e.status === 404) return { updated: null, lines: {} }; throw e; });
+  return repoPromise;
+}
+/** リポジトリの路線の時刻表を控えに置く。戻り値 取れた数 */
+export async function refreshRepoLines(lines) {
+  const repo = await fetchRepoTrains(true);
+  let n = 0;
+  for (const l of lines) { const r = repo.lines[l.key]; if (r && (r.tables.Weekday.length || r.tables.SaturdayHoliday.length)) { setCache(l.id, { at: Date.now(), tables: r.tables, dirName: '', rwName: r.name, error: r.error }); n++; } }
+  return n;
+}
 
 /** 電車の絵(線の SVG・タブのアイコンと同じ流儀) */
 export function trainIcon(cls = 'tr-ico') {
@@ -21,10 +41,11 @@ export function trainIcon(cls = 'tr-ico') {
 }
 /** 路線の時刻表を ODPT から取り直して控えに置く(方面はその路線のもの)。戻り値 { tables, at } か throw */
 export async function refreshLine(line) {
-  const key = odptKey();
-  if (!key) throw new Error('設定 › 電車 でトークンを貼ってください');
   if (!navigator.onLine) throw new Error('オフラインです');
+  const key = odptKey();
+  if (line.src !== 'repo' && !key) throw new Error('設定 › 電車 でトークンを貼ってください');
   if (inflight.has(line.id)) throw new Error('取得中です');
+  if (line.src === 'repo') { if (!(await refreshRepoLines([line]))) throw new Error('リポジトリの trains.json にこの路線の時刻表がまだありません(Actions が動くまで数分)'); return cache()[line.id]; } // v0.54
   inflight.add(line.id);
   try {
     const dirs = await train.fetchStationTimetable(line.station, key);
@@ -38,6 +59,8 @@ export async function refreshLine(line) {
 /** 控えが古い ODPT の路線を裏で取り直す(失敗は黙る) */
 function refreshStale(lines, onDone) {
   for (const l of lines) if (l.src === 'odpt' && !train.isFresh(cache()[l.id], Date.now()) && odptKey() && navigator.onLine) refreshLine(l).then(onDone).catch(() => {});
+  const repo = lines.filter((l) => l.src === 'repo' && !train.isFresh(cache()[l.id], Date.now(), train.REPO_TTL_MS)); // v0.54: リポジトリの分は 1 回で
+  if (repo.length && repoReady() && navigator.onLine) refreshRepoLines(repo).then((n) => { if (n) onDone(); }).catch(() => {});
 }
 const nowInfo = () => ({ date: dateKey(), min: minuteOfDay() });
 /** 1 路線の次の発車(いまから offset 分後を基準)。{ list, type, tables, next } */
@@ -85,9 +108,9 @@ export function trainSheet(ctx) {
     const cardOf = (line) => {
       const ce = cache()[line.id];
       const { list, type, tables, first } = departuresOf(line, offset);
-      const sub = [line.src === 'odpt' ? (ce?.dirName ? `${ce.dirName}方面` : '') : '手入力', TYPE_JA[type]].filter(Boolean).join('・');
+      const sub = [line.src === 'odpt' ? (ce?.dirName ? `${ce.dirName}方面` : '') : line.src === 'repo' ? 'URL から' : '手入力', TYPE_JA[type]].filter(Boolean).join('・');
       let body;
-      if (!tables) body = el('div.row.tr-none', [el('span.muted.small.grow', line.src === 'odpt' ? '時刻表がまだありません' : '時刻が入っていません'), line.src === 'odpt' ? el('button.btn.sm', { type: 'button', onclick: () => fetchNow(line) }, '取得') : null]);
+      if (!tables) body = el('div.row.tr-none', [el('span.muted.small.grow', line.src === 'manual' ? '時刻が入っていません' : '時刻表がまだありません'), line.src !== 'manual' ? el('button.btn.sm', { type: 'button', onclick: () => fetchNow(line) }, '取得') : null]);
       else if (!train.pickTable(tables, type)) body = el('p.muted.small', `${TYPE_JA[type]}の時刻表がありません`);
       else if (!list.length) body = el('p.muted.small', `もうありません${first ? `(始発 ${first.t.replace(/^0/, '')})` : ''}`);
       else body = el('div.trdeps', list.map((d, i) => el('span.trdep', { class: `trdep${i === 0 ? ' first' : ''}` }, [el('b', d.t.replace(/^0/, '')), el('small', [d.wait <= 0 ? 'いま' : `あと${d.wait}分`, d.ty ? `・${d.ty}` : ''].join(''))])));
@@ -95,9 +118,10 @@ export function trainSheet(ctx) {
     };
     const fetchNow = (line) => { toast('取得中…'); refreshLine(line).then(() => { toast('取得しました'); draw(); }).catch((e) => toast(e.message || '取得できませんでした')); };
     const ats = c.lines.map((l) => cache()[l.id]?.at).filter(Boolean);
-    const foot = el('p.muted.small.grow', ats.length ? `取得 ${fmtMD(dateKey(new Date(Math.max(...ats))))}・ODPT` : c.lines.some((l) => l.src === 'odpt') ? 'ODPT' : '');
+    const srcs = [c.lines.some((l) => l.src === 'odpt') ? 'ODPT' : null, c.lines.some((l) => l.src === 'repo') ? 'JR東日本のページ' : null].filter(Boolean).join('・');
+    const foot = el('p.muted.small.grow', ats.length ? `取得 ${fmtMD(dateKey(new Date(Math.max(...ats))))}${srcs ? '・' + srcs : ''}` : srcs);
     const refreshAll = () => {
-      const odpt = c.lines.filter((l) => l.src === 'odpt');
+      const odpt = c.lines.filter((l) => l.src !== 'manual');
       if (!odpt.length) { toast('手入力の路線は設定で直します'); return; }
       toast('取得中…');
       Promise.allSettled(odpt.map((l) => refreshLine(l))).then((rs) => { const ng = rs.filter((r) => r.status === 'rejected'); toast(ng.length ? (ng[0].reason?.message || '取得できませんでした') : '取得しました'); draw(); });
@@ -121,7 +145,7 @@ function lineList(c, rerender) {
   const list = el('div.list.catlist');
   c.lines.forEach((l) => {
     const ce = cache()[l.id];
-    const tag = l.src === 'manual' ? '手入力' : ce?.tables ? `取得 ${fmtMD(dateKey(new Date(ce.at)))}` : '未取得';
+    const tag = l.src === 'manual' ? '手入力' : ce?.tables ? `${l.src === 'repo' ? 'URL・' : ''}取得 ${fmtMD(dateKey(new Date(ce.at)))}` : '未取得';
     list.append(el('div.srow.catrow', [
       el('span.handle', { role: 'button', tabindex: '0', 'aria-label': `${l.name} を並べ替え(引っ張るか ↑ ↓)`, title: '引っ張って並べ替え' }, '≡'),
       el('button.cmain', { type: 'button', 'aria-label': `${l.name} の操作`, onclick: () => lineSheet(l, c, rerender) }, [trainIcon('tr-ico sm'), el('span.cname', l.name), el('span.ckind', tag), el('span.chev', { 'aria-hidden': 'true' }, '›')]),
@@ -133,9 +157,9 @@ function lineList(c, rerender) {
 function lineSheet(l, c, rerender) {
   sheet((close) => [
     el('h2', l.name),
-    el('p.muted.small', l.src === 'odpt' ? `${train.operatorLabel(l.operator)}・${cache()[l.id]?.rwName || train.idTail(l.railway)}・${cache()[l.id]?.dirName ? cache()[l.id].dirName + '方面' : train.idTail(l.direction)}` : `手入力・平日 ${l.tables.Weekday.length} 本・土休日 ${l.tables.SaturdayHoliday.length} 本`),
+    el('p.muted.small', l.src === 'odpt' ? `${train.operatorLabel(l.operator)}・${cache()[l.id]?.rwName || train.idTail(l.railway)}・${cache()[l.id]?.dirName ? cache()[l.id].dirName + '方面' : train.idTail(l.direction)}` : l.src === 'repo' ? `URL から(自分だけのリポジトリの時刻表・${cache()[l.id]?.rwName || l.key})${cache()[l.id]?.error ? `・最後の取得で: ${cache()[l.id].error}` : ''}` : `手入力・平日 ${l.tables.Weekday.length} 本・土休日 ${l.tables.SaturdayHoliday.length} 本`),
     el('div.row', [
-      l.src === 'odpt' ? el('button.btn.grow', { type: 'button', onclick: () => { toast('取得中…'); refreshLine(l).then(() => { toast('取得しました'); close(); rerender(); }).catch((e) => toast(e.message || '取得できませんでした')); } }, '時刻表を取り直す') : el('button.btn.grow', { type: 'button', onclick: () => { close(); manualSheet(c, rerender, l); } }, '時刻を直す'),
+      l.src !== 'manual' ? el('button.btn.grow', { type: 'button', onclick: () => { toast('取得中…'); refreshLine(l).then(() => { toast('取得しました'); close(); rerender(); }).catch((e) => toast(e.message || '取得できませんでした')); } }, '時刻表を取り直す') : el('button.btn.grow', { type: 'button', onclick: () => { close(); manualSheet(c, rerender, l); } }, '時刻を直す'),
       el('button.btn.danger', { type: 'button', onclick: () => confirmSheet(`「${l.name}」を消しますか?`, null, '消す', () => { c.lines = c.lines.filter((x) => x.id !== l.id); if (!c.lines.length) c.enabled = false; const lc = L(); if (lc.trainCache) { delete lc.trainCache[l.id]; store.saveLocal(); } saveCfg(); close(); rerender(); }, true) }, '消す'),
     ]),
     el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
@@ -213,6 +237,57 @@ function stationSearch(c, rerender) {
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
   return [el('div.row.field', { style: { marginTop: '6px' } }, [q, el('button.btn', { type: 'button', onclick: search }, '検索')]), results];
 }
+/** URL を貼って登録(F18-6): 自分だけのリポジトリの data/timetables.json に { name, url } を足して commit → Actions が時刻表を取る */
+function urlSheet(c, rerender) {
+  const name = el('input.text', { type: 'text', placeholder: '名前(例: 山手線 高田馬場 → 池袋)', maxlength: 60, 'aria-label': '名前' });
+  const url = el('input.text', { type: 'text', placeholder: 'https://timetables.jreast.co.jp/…/0938010.html', maxlength: 300, autocomplete: 'off', inputmode: 'url', 'aria-label': 'JR東日本の駅時刻表の URL' });
+  const status = el('p.muted.small', '');
+  sheet((close) => [
+    el('h2', 'URL を貼って登録'),
+    el('p.muted.small', 'JR東日本の時刻表(timetables.jreast.co.jp)で 駅 → 路線 → 方面 を開き、平日か土休日のページの URL を貼ります(もう片方は自動で取ります)。自分だけのリポジトリに保存すると数分で時刻表が作られ、「リポジトリから読み込む」で路線に足せます。'),
+    el('div.field.col', [name, url]),
+    status,
+    el('div.row', [el('button.btn', { type: 'button', onclick: () => close() }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: async () => {
+      const u = url.value.trim(), nm = name.value.trim();
+      if (!/^https:\/\/timetables\.jreast\.co\.jp\/\d{4}\/timetable\/tt\d+\/\d+\.html$/.test(u)) { toast('JR東日本の駅時刻表の URL(https://timetables.jreast.co.jp/YYMM/timetable/ttNNNN/NNNNNNN.html)を貼ってください'); return; }
+      if (!nm) { toast('名前を入れてください'); return; }
+      status.textContent = 'GitHub から timetables.json を読んでいます…';
+      try {
+        let got; try { got = await ghGet(TIMETABLES_PATH, ghToken()); } catch (e) { if (e.status === 404) got = { sha: undefined, text: '{ "lines": [] }' }; else throw e; }
+        const cfg = JSON.parse(got.text); if (!Array.isArray(cfg.lines)) cfg.lines = [];
+        if (cfg.lines.some((l) => l && l.url === u)) { status.textContent = 'この URL はもう登録されています'; return; }
+        cfg.lines.push({ name: nm, url: u });
+        status.textContent = '保存しています…';
+        await ghPut(TIMETABLES_PATH, ghToken(), JSON.stringify(cfg, null, 1) + '\n', got.sha, `timetables: 追加「${nm}」(アプリから)`);
+        close(); toast('GitHub に保存しました。数分で時刻表が作られます(Actions)。そのあと「リポジトリから読み込む」で足せます'); rerender();
+      } catch (e) { status.textContent = `できませんでした: ${e.message}`; }
+    } }, '登録')]),
+  ]);
+}
+/** リポジトリの trains.json にある路線を一覧 → タップで路線に足す(時刻表は控えに) */
+function repoPickSheet(c, rerender) {
+  sheet((close) => {
+    const body = el('div.list', el('div.srow.plain', el('span.val.left', '読み込み中…')));
+    fetchRepoTrains(true).then((repo) => {
+      clear(body);
+      const all = Object.values(repo.lines);
+      if (!all.length) { body.append(el('div.srow.plain', el('span.val.left', 'まだ時刻表がありません。「URL を貼って登録」のあと、Actions が動くまで数分待ってから もう一度。'))); return; }
+      for (const r of all) {
+        const n = r.tables.Weekday.length + r.tables.SaturdayHoliday.length;
+        const have = c.lines.find((l) => l.src === 'repo' && l.key === r.id);
+        body.append(el('button.srow', { type: 'button', disabled: !n, onclick: () => {
+          if (have) { toast('もう登録されています'); return; }
+          if (c.lines.length >= train.MAX_LINES) { toast(`路線は ${train.MAX_LINES} つまでです`); return; }
+          const id = 't_' + store.uid().slice(0, 8);
+          c.lines.push({ id, name: r.name.slice(0, 60), src: 'repo', key: r.id, station: '', direction: '', railway: '', operator: '' }); c.enabled = true; saveCfg();
+          setCache(id, { at: Date.now(), tables: r.tables, dirName: '', rwName: r.name, error: r.error });
+          close(); rerender(); toast(`${r.name} を登録しました`);
+        } }, [el('span.lbl', r.name), el('span.val', n ? `平日 ${r.tables.Weekday.length}・土休日 ${r.tables.SaturdayHoliday.length}${have ? '・登録済み' : ''}` : `取れていません${r.error ? ': ' + r.error : ''}`), el('span.chev', { 'aria-hidden': 'true' }, have ? '✓' : '＋')]));
+      }
+    }).catch((e) => { clear(body); body.append(el('div.srow.plain', el('span.val.left', e.message || '読めませんでした'))); });
+    return [el('h2', 'リポジトリの時刻表'), body, el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる'))];
+  });
+}
 /** 設定 › 電車(F18-1) */
 export function sectionTrain(rerender) {
   const c = cfg();
@@ -228,9 +303,16 @@ export function sectionTrain(rerender) {
     el('p.muted.small', ['developer.odpt.org で無料の開発者登録(承認まで数日)をして、アクセストークンをここに貼ります。対象は 東京メトロ・都営地下鉄・ゆりかもめ・りんかい線・つくばエクスプレス・横浜市営地下鉄・多摩モノレール(2026-11 時点の無償データ)。JR東日本や私鉄の多くは対象外なので 手入力 で。']),
     el('div.row.field', [tok, el('button.btn', { type: 'button', onclick: saveTok }, '保存')]),
     searchRow, results,
+    el('h3.help-h', 'JR東日本の時刻表の URL から足す(自分だけのリポジトリ・Actions)'),
+    repoReady()
+      ? el('div', [
+        el('p.muted.small', 'JR東日本の駅時刻表ページの URL を自分だけのリポジトリ(キャッチアップと同じ・data/timetables.json)に登録すると、GitHub Actions が時刻表(平日 / 土休日)を取って data/trains.json を作り、週 1 で取り直します。'),
+        el('div.row', [el('button.btn.grow', { type: 'button', onclick: () => urlSheet(c, rerender) }, '＋ URL を貼って登録'), el('button.btn.grow', { type: 'button', onclick: () => repoPickSheet(c, rerender) }, 'リポジトリから読み込む')]),
+      ])
+      : el('p.muted.small', '先に 設定 › キャッチアップ で「自分だけの取得元リポジトリ」とトークン(Contents: Read and write)を設定してください。同じリポジトリに時刻表を置きます(公開リポジトリには置きません)。リポジトリには tools/train_fetch.py と .github/workflows/update-trains.yml(このアプリの tools/ と同じもの)が要ります。'),
     el('h3.help-h', '手入力で足す'),
     el('p.muted.small', '対象外の路線やバスは、発車時刻を貼って登録します(平日 / 土休日)。'),
     el('button.btn.block', { type: 'button', onclick: () => manualSheet(c, rerender) }, '＋ 時刻を貼って登録'),
-    el('p.muted.small', '安全について: 接続先は api.odpt.org だけ(CSP)。送るのは 駅名・駅 id・方面 id とトークン、受け取るのは 時刻・種別・名前だけです。トークンはこの端末だけに置き、同期しません。路線の登録(駅と方面)は同期しますが、時刻表の控えは端末ごとです。'),
+    el('p.muted.small', '安全について: 接続先は api.odpt.org と api.github.com(自分だけのリポジトリ・キャッチアップと同じ)だけ(CSP)。送るのは 駅名・駅 id・方面 id・URL とトークン、受け取るのは 時刻・種別・名前だけです。トークンはこの端末だけに置き、同期しません。路線の登録は同期しますが、時刻表の控えは端末ごとです。'),
   );
 }

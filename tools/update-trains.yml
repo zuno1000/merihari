@@ -1,0 +1,32 @@
+# merihari ─ 次の電車(F18-6・v0.54)の時刻表 data/trains.json を data/timetables.json の URL(JR東日本の駅時刻表ページ)から作り直す。
+# 置き場所: 自分だけの private リポジトリ(v0.41 の merihari-feeds)の .github/workflows/update-trains.yml(公開リポジトリには置かない: JR の時刻表を再配布しない)。
+# 週 1(月 3:23 JST)と、timetables.json かツールを push したとき、手動(Run workflow)。変わったときだけ commit。
+# アプリは GitHub の contents API(端末のトークン)で data/trains.json を読む(キャッチアップの private と同じ)。
+name: update-trains
+on:
+  schedule:
+    - cron: '23 18 * * 0'  # 月 3:23 JST(= 日 18:23 UTC)。ダイヤ改正(3 月など)や版(YYMM)の切り替えを週 1 で拾う
+  push:
+    branches: [main]
+    paths: ['data/timetables.json', 'tools/train_fetch.py', '.github/workflows/update-trains.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: data/trains.json を作り直す
+        run: python -X utf8 -I tools/train_fetch.py data/timetables.json
+      - name: 変わっていれば commit
+        run: |
+          git add data/trains.json
+          if git diff --cached --quiet -- data/trains.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "trains: 時刻表を更新($(TZ=Asia/Tokyo date +%Y-%m-%d))"
+          git push
