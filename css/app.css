@@ -1291,10 +1291,31 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .brief h3{font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 4px}
 .brief p{margin:2px 0;font-size:14px;line-height:1.6}
 .brief p.brief-due{font-weight:600}
-.brief ul{margin:0;padding-left:20px}
-.brief li{font-size:14px;line-height:1.6;margin:3px 0}
-.brief li.brief-switch{font-weight:600;color:var(--accent)}
 .brief .list{margin-top:6px}
 .brief .trow .tmain{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:9px 10px 9px 0;min-width:0;flex:1}
 .brief-act{margin-top:16px;gap:8px;flex-wrap:wrap}
 .brief-link{display:block;margin:10px auto 0;color:var(--muted)}
+/* v0.55.1: ブリーフィングのふり返りを タイル+帯+凡例 に・提案を 札+短い 1 行 に(実機 FB「文字が多すぎる」) */
+.brief-review{display:flex;flex-direction:column;gap:8px}
+.brief .br-head{font-size:16px;font-weight:700;margin:0}
+.br-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.br-tiles .gl-tile .gl-v{font-size:24px;line-height:1.15}
+.br-sub{font-size:11px;color:var(--muted)}
+.br-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--line);gap:2px}
+.br-bar i{display:block;min-width:3px;flex-basis:0}
+.br-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
+.br-legend span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.br-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.br-legend b{color:var(--fg);font-weight:600}
+.brief p.br-long{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;margin:0}
+.br-prog{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+.br-pk{font-size:12px;color:var(--muted)}
+.br-pk b{color:var(--fg);font-size:14px}
+.br-track{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.br-track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.brief-sug{display:flex;flex-direction:column;gap:6px}
+.bs-row{display:flex;align-items:baseline;gap:8px;font-size:14px;line-height:1.45}
+.bs-k{flex:none;font-size:11px;font-weight:600;color:var(--muted);background:var(--bg);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.bs-row.hot .bs-k{background:var(--accent);color:var(--card)}
+.bs-row.hot .bs-t{font-weight:600}
+.bs-t{min-width:0}

@@ -4,7 +4,9 @@ import { el, clear, sheet, toast } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
 import * as brief from './brief.js';
-import { dateKey, minuteOfDay, effectiveDay, fmtMD } from './time.js';
+import { dateKey, minuteOfDay, effectiveDay, fmtMD, fmtMin, mm } from './time.js';
+import { catOf } from './ui-today.js';
+import { driftLabelOf } from './report.js';
 import { overdueCheck } from './ui-tasks.js';
 import { autoSync } from './sync.js';
 
@@ -53,6 +55,33 @@ export async function enableAppBadge() {
 }
 export function disableAppBadge() { store.state.local.appBadge = false; store.saveLocal(); lastBadge = null; setAppBadge(0); }
 
+/**
+ * ふり返りの箱(v0.55.1・実機 FB「文字が多すぎる。特に昨日のふり返りが文字列すぎる」): 文ではなく
+ * 判定の見出し(朝だけ)→ 作業 / ダラダラ のタイル(大きな数字)→ カテゴリの色の帯(その範囲の内訳)→ 凡例(上位 3 つ)→ いちばん長いダラダラ(1 行)→ きょうの作業の進み(昼・夜)。
+ */
+function reviewBox(b) {
+  const st = b.stats;
+  const total = st.top.reduce((a, x) => a + x.min, 0) || 1;
+  const col = (x) => catOf(x.id).color || 'var(--line)';
+  const tile = (k, v, sub, cls = '') => el('div.gl-tile', { class: `gl-tile${cls}` }, [el('span.gl-k', k), el('span.gl-v', v), sub ? el('span.br-sub', sub) : null]);
+  const diff = st.baseWork != null ? st.work - st.baseWork : null;
+  const pg = b.progress;
+  return el('div.brief-review', [
+    st.head ? el('p.br-head', st.head) : null,
+    el('div.br-tiles', [
+      tile('作業', fmtMin(st.work), diff == null ? null : `先週平均 ${diff >= 0 ? '+' : '−'}${fmtMin(Math.abs(diff))}`),
+      tile(driftLabelOf(S()), fmtMin(st.drift), st.logged ? `記録の ${Math.round((st.drift / st.logged) * 100)}%` : null, b.switch ? ' warn' : ''),
+    ]),
+    el('div.br-bar', { role: 'img', 'aria-label': st.top.map((x) => `${x.name} ${fmtMin(x.min)}`).join('・') }, st.top.map((x) => el('i', { style: { flexGrow: String(x.min), background: col(x) }, title: `${x.name} ${fmtMin(x.min)}` }))),
+    el('div.br-legend', st.top.slice(0, 3).map((x) => el('span', [el('i.dot', { style: { background: col(x) }, 'aria-hidden': 'true' }), `${x.name} `, el('b', fmtMin(x.min)), ` ${Math.round((x.min / total) * 100)}%`]))),
+    st.longest ? el('p.br-long', [el('span.bs-k', `最長の${driftLabelOf(S())}`), `${mm(st.longest.start % 1440)}–${mm(st.longest.end % 1440)} ${st.longest.name} `, el('b', fmtMin(st.longest.min))]) : null,
+    pg ? el('div.br-prog', [
+      el('span.br-pk', [`きょうの作業 `, el('b', fmtMin(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`]),
+      el('div.br-track', el('i', { style: { width: `${Math.min(100, Math.round((pg.workMin / pg.targetMin) * 100))}%` } })),
+    ]) : null,
+  ]);
+}
+
 /** いまの枠をまだ見ていなければ出す(起動時・復帰時)。ほかのシートが開いているときは出さず、印も付けない(次の機会に)。出したら true */
 export function maybeBrief(ctx) {
   if (!store.state.data.meta.setupAt || !briefEnabled()) return false;
@@ -87,11 +116,11 @@ export function openBrief(ctx) {
     clear(body);
     body.append(...[
       el('h2', b.title),
-      el('h3', b.reviewTitle), ...b.review.map((x) => el('p', x)),
+      el('h3', b.reviewTitle), b.stats ? reviewBox(b) : el('p.muted', b.empty),
       el('h3', b.taskTitle), el('p', { class: b.due.count ? 'brief-due' : '' }, b.taskLine),
       rows.length ? el('div.list', rows) : null,
       b.suggest.length ? el('h3', b.suggestTitle) : null,
-      b.suggest.length ? el('ul', b.suggest.map((x, i) => el('li', { class: b.switch && i === 0 ? 'brief-switch' : '' }, x))) : null,
+      b.suggest.length ? el('div.brief-sug', b.suggest.map((x) => el('div.bs-row', { class: `bs-row${x.kind === 'switch' || x.kind === 'now' ? ' hot' : ''}` }, [el('span.bs-k', brief.SUGGEST_LABEL[x.kind] || ''), el('span.bs-t', x.text)]))) : null,
       el('div.row.brief-act', [
         b.due.overdue.length ? el('button.btn', { type: 'button', onclick: () => { close(); overdueCheck(ctx, { force: true }); } }, '期限切れを処理') : null,
         el('button.btn', { type: 'button', onclick: () => { close(); ctx.go('tasks'); } }, 'タスクを開く'),
