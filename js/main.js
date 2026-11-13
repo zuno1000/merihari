@@ -29,7 +29,9 @@ import * as feed from './feed.js';
 import * as train from './train.js';
 import * as drinks from './drinks.js';
 import * as shopping from './shopping.js';
-export const APP_VERSION = '0.54.0';
+import * as brief from './brief.js';
+import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
+export const APP_VERSION = '0.55.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -40,7 +42,7 @@ store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
 store.init();
 
 let tickFn = null;
-const ctx = { version: APP_VERSION, news: loadNews, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw() };
+const ctx = { version: APP_VERSION, news: loadNews, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw(), openBrief: () => openBrief(ctx) }; // openBrief(v0.55・F21): ホームの「ブリーフィング ›」と設定から
 const screens = { now: (arg) => renderNow(view, ctx, arg), timeline: (arg) => renderTimeline(view, ctx, arg), tasks: (arg) => renderTasks(view, ctx, arg), settings: (arg) => renderSettings(view, ctx, arg), diary: (arg) => renderDiary(view, ctx, arg), money: (arg) => renderMoney(view, ctx, arg) };
 uiReport.hooks.go = (tab, arg) => go(tab, arg); // レポートの中から日記へ(v0.18)
 let current = 'now';
@@ -67,6 +69,7 @@ function go(tab, arg) {
   store.saveLocal();
   screens[tab](arg);
   refreshAddButton();
+  refreshTaskBadge(tabs); // v0.55・F5-16: タスクのタブの数字(期限切れ+今日が期限 の残り)
   window.scrollTo(0, 0);
   sync.autoSync();
 }
@@ -80,6 +83,7 @@ const redraw = () => {
   if (uiBusy()) { redrawPending = true; return; }
   redrawPending = false;
   screens[current](currentArg);
+  refreshTaskBadge(tabs);
 };
 sync.hooks.onChanged = redraw;
 tabs.addEventListener('click', (e) => {
@@ -123,7 +127,7 @@ function handleParams() {
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
-if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx)) overdueCheck(ctx); }
+if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)
 
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
@@ -131,16 +135,19 @@ if (google.isConnected()) {
 }
 // 自動同期(v0.7・tangoquest 方式): 開いた直後に鍵があれば静かに。無ければ最初のタップで(ユーザー操作の中なので認証ポップアップが通る)
 if (!firstRun) sync.autoSyncOnOpen();
-document.addEventListener('click', () => { sync.autoSyncOnGesture(); }, { capture: true });
+document.addEventListener('click', () => { sync.autoSyncOnGesture(); setTimeout(() => refreshTaskBadge(tabs), 0); }, { capture: true }); // v0.55: タスクを済ませた / 足した直後にタブの数字を合わせる
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
-setInterval(() => { try { if (redrawPending && !uiBusy()) { redraw(); return; } if (tickFn) tickFn(); refreshAddButton(); } catch (e) { console.error(e); } }, 15000);
+setInterval(() => { try { if (redrawPending && !uiBusy()) { redraw(); return; } if (tickFn) tickFn(); refreshAddButton(); refreshTaskBadge(tabs); } catch (e) { console.error(e); } }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();
   if (!store.state.data.meta.setupAt) return;
   finalizePending();
-  if (!checkOpenEntry(ctx) && (current === 'now' || current === 'timeline')) redraw();
+  const asked = checkOpenEntry(ctx);
+  if (!asked && (current === 'now' || current === 'timeline')) redraw();
+  if (!asked) maybeBrief(ctx); // v0.55・F21: 昼 12 時以降 / 19 時以降 に初めて戻ってきたとき
+  refreshTaskBadge(tabs);
   google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) redraw(); }).catch(() => {});
   sync.autoSyncOnOpen();
 });
@@ -182,6 +189,7 @@ if (ui.DEV) window.M = {
   train, // v0.50・F18
   drinks, // v0.51・F19
   shopping, // v0.52・F20
+  brief, // v0.55・F21
   time,
   log,
   plan,

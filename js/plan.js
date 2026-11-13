@@ -381,6 +381,22 @@ export function rollWeekly(tasks, entries, today, ctx) {
   return { tasks: out, rolled };
 }
 
+/**
+ * きょうまでに済ませるタスク(v0.55・F5-16 / F21・ユーザー要望「今日が期限のタスクのやり残しを無くしたい」): 済んでいない期限つきのタスク(習慣・やりたいこと・メモは除く)を
+ * overdue(期限切れ・overdueTasks と同じ)/ today(今日が期限)/ tomorrow(明日が期限)に分ける。count = overdue + today(タスクのタブの数字・アイコンの数字)。
+ * 並び: 時刻つきを時刻順に先・時刻なしは名前順(期限切れは期限の古い順)。純関数
+ */
+export function dueTasks(tasks, date, entries = {}, opts = {}) {
+  const overdue = overdueTasks(tasks, date, entries, opts).filter((t) => t.kind !== 'memo');
+  const skip = new Set(overdue.map((t) => t.id));
+  const open = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.length >= 10 && !skip.has(t.id));
+  const byTime = (a, b) => { const x = deadlineMin(a), y = deadlineMin(b); return x != null && y != null ? x - y : x != null ? -1 : y != null ? 1 : (a.name || '').localeCompare(b.name || ''); };
+  const tmr = addDays(date, 1);
+  const today = open.filter((t) => t.deadline.slice(0, 10) === date).sort(byTime);
+  const tomorrow = open.filter((t) => t.deadline.slice(0, 10) === tmr).sort(byTime);
+  return { overdue, today, tomorrow, count: overdue.length + today.length };
+}
+
 /** 期限超過かつ残りがある義務タスク(F5-5)。期限順。残りは記録を自動で引いたもの(v0.12) */
 export function overdueTasks(tasks, today, entries = {}, opts = {}) {
   const noEst = !estimating(opts); // v0.44: 目安を使わないなら残りに関係なく、済んでいなければ期限切れ

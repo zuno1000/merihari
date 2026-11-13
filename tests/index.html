@@ -1371,6 +1371,40 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(!pr2.shopping.x && pr2.shopping.y, 'pruneTombstones: 古い削除の買い物を落とす');
     }
 
+    // ---- v0.55・F21: ブリーフィング(brief.js)/ F5-16: きょうまでのタスク(plan.dueTasks) ----
+    log('\n# v0.55 ブリーフィング');
+    {
+      const B = M.brief, d5 = S.defaultSettings();
+      const workId = d5.categories.find((c) => M.store.catRole(d5, c.id).work).id, driftCat = d5.categories.find((c) => M.store.catRole(d5, c.id).drift);
+      ok(B.slotOf(0) === 'morning' && B.slotOf(719) === 'morning' && B.slotOf(720) === 'noon' && B.slotOf(1139) === 'noon' && B.slotOf(1140) === 'evening' && B.slotOf(1500) === 'evening', 'slotOf: 12:00 から 昼・19:00 から 夜・深夜(24:00 超)は 夜');
+      const seen1 = B.markSeen(null, '2026-11-13', 'morning'), seen2 = B.markSeen(seen1, '2026-11-13', 'noon'), seen3 = B.markSeen(seen2, '2026-11-14', 'morning');
+      ok(B.shouldShow(null, '2026-11-13', 'morning') && !B.shouldShow(seen1, '2026-11-13', 'morning') && B.shouldShow(seen1, '2026-11-13', 'noon') && eq(seen2.slots, ['morning', 'noon']) && B.shouldShow(seen2, '2026-11-14', 'morning') && eq(seen3, { date: '2026-11-14', slots: ['morning'] }) && eq(B.markSeen(seen2, '2026-11-13', 'noon').slots, ['morning', 'noon']), 'shouldShow / markSeen: 枠ごとに 1 日 1 回・日が変われば最初から・二重に積まない');
+      const tk = (id, name, x = {}) => ({ id, name, kind: 'duty', deadline: null, repeat: null, doneAt: null, deletedAt: null, checks: [], categoryId: workId, ...x });
+      const TK = { a: tk('a', '期限切れA', { deadline: '2026-11-12' }), b: tk('b', 'きょうB', { deadline: '2026-11-13' }), c: tk('c', 'きょうC', { deadline: '2026-11-13T17:00' }), d: tk('d', 'きょうD', { deadline: '2026-11-13T09:00' }), e: tk('e', 'あすE', { deadline: '2026-11-14' }),
+        f: tk('f', '済みF', { deadline: '2026-11-13', doneAt: '2026-11-13T08:00:00+09:00' }), g: tk('g', '習慣G', { repeat: { type: 'daily', min: 30 } }), h: tk('h', 'やりたいH', { kind: 'wish', deadline: '2026-11-13' }), m: tk('m', 'メモM', { kind: 'memo' }), x: tk('x', '消したX', { deadline: '2026-11-13', deletedAt: 'z' }) };
+      const du = M.plan.dueTasks(TK, '2026-11-13');
+      ok(eq(du.overdue.map((t) => t.id), ['a']) && eq(du.today.map((t) => t.id), ['d', 'c', 'b']) && eq(du.tomorrow.map((t) => t.id), ['e']) && du.count === 4 && M.plan.dueTasks({}, '2026-11-13').count === 0, 'plan.dueTasks: 期限切れ / 今日(時刻つきを時刻順に先)/ 明日・済み・習慣・やりたいこと・メモ・消したものは除く・count=期限切れ+今日');
+      const en = (id, start, end, categoryId, x = {}) => ({ id, date: '2026-11-13', start, end, categoryId, taskId: null, deletedAt: null, ...x });
+      const EN = { e1: en('e1', '09:00', '10:00', workId), e2: en('e2', '10:00', '12:30', driftCat.id), e3: en('e3', '13:00', null, driftCat.id) };
+      const am = B.rangeTotals(EN, '2026-11-13', 0, 720, 810, d5), pm = B.rangeTotals(EN, '2026-11-13', 720, 810, 810, d5);
+      ok(am.work === 60 && am.drift === 120 && am.logged === 180 && am.top[0].name === driftCat.name && am.topDrift.min === 120 && pm.work === 0 && pm.drift === 60 && B.rangeTotals({}, '2026-11-13', 0, 720, 720, d5).logged === 0, 'rangeTotals: 範囲に重なる分だけ(12:00 で切る・記録中は いま まで)・いちばん長いもの');
+      ok(B.needsSwitch({ work: 0, drift: 60 }) && B.needsSwitch({ work: 20, drift: 30 }) && !B.needsSwitch({ work: 120, drift: 45 }) && !B.needsSwitch({ work: 0, drift: 20 }) && !B.needsSwitch(null), 'needsSwitch: ダラダラ 60 分以上、または 30 分以上で作業より多い');
+      const bn = B.build({ slot: 'noon', date: '2026-11-13', nowMin: 750, entries: { e1: EN.e1, e2: EN.e2 }, tasks: TK, settings: d5 });
+      ok(bn.title === '昼のブリーフィング' && bn.reviewTitle === '午前' && bn.review[0].startsWith('午前は 作業1時間') && bn.switch === true && bn.suggest[0].includes(`午前は ${driftCat.name} が2時間`) && bn.suggest[0].includes('ここで切り替えましょう。まず 期限切れA を 5 分だけ。') && bn.taskLine === '今日が期限 3件・期限切れ 1件が残っています。' && bn.suggest.length <= 4 && bn.suggest.some((x) => x.startsWith('きょうD は 09:00 の期限を過ぎています')), 'build(昼): 午前のふり返り・ダラダラが多ければ切り替えの声かけ(最初の一歩はやり残しのタスク)・残りの件数・時刻つきの期限');
+      const bn2 = B.build({ slot: 'noon', date: '2026-11-13', nowMin: 810, entries: EN, tasks: {}, settings: d5 }), bn3 = B.build({ slot: 'noon', date: '2026-11-13', nowMin: 900, entries: EN, tasks: {}, settings: d5 });
+      ok(bn2.suggest[0].startsWith(`いまは ${driftCat.name} を記録中です(30分)`) && bn2.reviewTitle === '午前' && bn2.taskLine === '今日が期限のタスクは残っていません。' && bn2.suggest[1].includes('まず作業を 1 つ、5 分だけ') && bn3.reviewTitle === 'ここまで' && bn3.review[0].startsWith('ここまでは'), 'build(昼): ダラダラを記録中なら「区切るなら いま」が先頭・14:00 以降に初めて開いたら「ここまで」');
+      const calm = B.build({ slot: 'noon', date: '2026-11-13', nowMin: 750, entries: { e1: en('e1', '08:00', '12:00', workId) }, tasks: {}, settings: d5 });
+      ok(calm.switch === false && !calm.suggest.some((x) => x.includes('切り替え')) && calm.suggest.some((x) => x.includes('作業はきょう4時間')), 'build(昼): 作業が進んでいる日は切り替えを言わない(事実だけ)');
+      const be = B.build({ slot: 'evening', date: '2026-11-13', nowMin: 1200, entries: { e1: EN.e1, e2: EN.e2, e4: en('e4', '14:00', '16:00', workId) }, tasks: TK, settings: { ...d5, goals: { ...d5.goals, workMin: 300 } } });
+      ok(be.title === '夜のブリーフィング' && be.reviewTitle === '午後' && be.review[0].startsWith('午後は 作業2時間') && be.review[1].startsWith('きょうの合計は 作業3時間') && be.due.tomorrow.length === 1 && be.suggest.some((x) => x.includes('目標の5時間まであと2時間')) && be.suggestTitle === '残りの時間で', 'build(夜): 午後ときょうの合計・明日が期限・目標まであと');
+      const YE = { y1: { ...en('y1', '09:00', '11:00', workId), date: '2026-11-12' }, y2: { ...en('y2', '11:00', '13:00', driftCat.id), date: '2026-11-12' } };
+      const bm = B.build({ slot: 'morning', date: '2026-11-13', nowMin: 480, entries: YE, tasks: TK, settings: d5 }), bm0 = B.build({ slot: 'morning', date: '2026-11-13', nowMin: 480, entries: {}, tasks: {}, settings: d5 });
+      ok(bm.title === '朝のブリーフィング' && bm.reviewTitle === '昨日' && bm.review.some((x) => x.startsWith('作業は2時間・')) && bm.review.some((x) => x.includes('次は 30 分で区切ってみてください')) && bm.suggest[0] === 'まず 期限切れA を 5 分だけ始めてみてください。' && bm.taskLine === '今日が期限 3件・期限切れ 1件があります。' && bm.suggest.some((x) => x === 'きょうの習慣は 習慣G です。') && eq(bm0.review, ['昨日は記録がありませんでした。']) && bm0.taskLine === '今日が期限のタスクはありません。' && bm0.suggest.length === 0, 'build(朝): 昨日の作業とダラダラ・「ここをこうしたら」・最初の一歩・きょうの習慣・空でも壊れない');
+      ok(S.defaultSettings().brief.enabled === true && S.migrate({ schema: 1, settings: { brief: { enabled: false } } }).settings.brief.enabled === false && S.migrate({ schema: 1, settings: { brief: 'x' } }).settings.brief.enabled === true && S.SCALAR_FIELDS.includes('brief') && sw.includes(`'./js/brief.js'`) && sw.includes(`'./js/ui-brief.js'`), 'settings.brief(既定は有効・項目ごとに同期)・sw.js の ASSETS に brief.js / ui-brief.js');
+      const tabB = W.document.querySelector('#tabs button[data-tab="tasks"]');
+      ok(tabB && W.getComputedStyle(tabB).position === 'relative' && !tabB.querySelector('.tbadge'), 'タスクのタブ: 残りが無ければ数字を出さない(F5-16)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

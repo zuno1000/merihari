@@ -179,7 +179,7 @@ export function reportLines(agg, { tasks = {}, entries = {}, date, settings = nu
 /** 割合(%)。合計 0 なら 0(v0.26・F3-7 改: 円の凡例とカテゴリ別の棒に割合を添える) */
 export function sharePct(min, total) { return total > 0 ? Math.round((min / total) * 100) : 0; }
 /** ダラダラ種別の名前(ユーザーが変えられる)。無ければ「ダラダラ」 */
-const driftLabelOf = (settings) => (Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds()).filter((k) => k.drift).map((k) => k.name).join('・') || 'ダラダラ';
+export const driftLabelOf = (settings) => (Array.isArray(settings?.kinds) && settings.kinds.length ? settings.kinds : defaultKinds()).filter((k) => k.drift).map((k) => k.name).join('・') || 'ダラダラ';
 const r5 = (m) => Math.max(5, Math.round(m / 5) * 5);
 
 /**

@@ -14,6 +14,7 @@ import { playBgm, rateChips, reopen } from './ui-bgm.js';
 import * as feed from './feed.js';
 import { FEATURES } from './features.js';
 import { sectionTrain } from './ui-train.js';
+import { appBadgeSupported, enableAppBadge, disableAppBadge } from './ui-brief.js'; // v0.55・F21
 import * as train from './train.js';
 import { feedSheet, unmark, addSourceSheet, manageSourcesSheet, ghToken, setGhToken, ensureSource, setupPrivateSheet, usePublicCatalog } from './ui-feed.js';
 
@@ -634,6 +635,7 @@ function sectionHelp() {
     h('配色'),
     li(['設定 › 配色 に配色セットの一覧(組み込み: パステル / やわらか / くっきり / パステル Pt.2 / しずか、と自分のセット)。「適用」でカテゴリの色がまとめて切り替わります。', '自分のセットは「いまの色を保存」(いまのカテゴリの色をセットにする)か、組み込みの「複製して編集」から作ります。編集ではカテゴリごとにピッカーかカラーコードで色を決め、「適用して閉じる」で反映します。', '個別の色は 設定 › カテゴリ でも変えられます(行をタップ)。', '設定 › カテゴリ の一覧は 1 行ずつ(色・名前・種別)。≡ を引っ張って並べ替え(≡ にフォーカスして ↑ ↓ でも)。行をタップで 名前・種別・色・非表示(v0.28.1)。', '設定 › 種別 も同じ(≡ で並べ替え・行をタップで 名前・「作業」「ダラダラ」として数えるか・削除・v0.29.3)。', '自分の配色セットの「編集」に「予備の色」(v0.29.3): 新しいカテゴリを作ったとき順に使う色で、カテゴリの色を選ぶパレットにも出ます。「＋ 色を追加」で足し、ピッカーかカラーコードで直せます。']),
     h('タスクと目安'),
+    li(['v0.55: 期限切れと今日が期限のタスクが残っていると、タスクのタブに赤い数字が出ます。朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたときは「ブリーフィング」のシートが 1 回ずつ出ます(朝=昨日のふり返りときょうのタスク / 昼=午前のふり返りと残りのタスク / 夜=午後のふり返りと残りの時間でやること)。ダラダラが続いていたら、切り替えの一歩を 1 つ提案します。タスクはその場で ✓ にできます。見直すときはホームのいちばん下の「ブリーフィングをもう一度 ›」。止める・アプリのアイコンにも数字を出すのは 設定 › ブリーフィング。']),
     li(['v0.52: リストの「買い物」は買い物リストです(タスクとは別・期限も目安も持たず、ふり返りにも入りません)。上の欄に「牛乳 2」のように書いて Enter(最後の語が数字で始まれば数量)。✓ で買ったものへ(✓ を外せば戻る)。行のタップで名前・数量・メモを直す。買ったものは折りたたみに最近 30 件、「まとめて消す」で片づけ。両端末で同期します。', 'v0.47.2: タスク画面の「今週が期限」は「1週間以内が期限」になりました(今日を除いて 7 日後まで。日曜までだと週末に近いほど一覧が短く、来週の頭の期限が見えなかったため)。追加の「いつまで」の 今週(日曜まで)は変わりません。', 'v0.47: 追加の種類の並びは タスク / 習慣 / やりたいこと / メモ で、既定は「タスク」です(名前だけで Enter なら今週が期限のタスク)。「今日が期限」の行は色付き(強く)、「今週が期限」のうち明日が期限の行は薄い色で、今日 > 明日 > それ以外 の順に目立ちます。', 'v0.44: タスクは「どれくらい」(残り見積)と「きょうの目安」を持たなくなりました(細かく分かれるとやり忘れに気づかないため)。期限(日付+時刻)だけを決め、タスク画面は 期限切れ → 今日が期限 → 1週間以内が期限(v0.47.1 までは 今週が期限)の一覧、その下に「リスト」のタイルです。チェックで済ませます。', 'タスク画面は 期限切れ と きょう の分だけを見せます(v0.26)。メモ / 期限までに / 習慣 / やりたいこと / 完了 は下の「リスト」のタイルから開き、‹ で戻ります。開いた区分の先頭の追加欄は、その種類(習慣など)が選ばれています。先頭に「メモ」: 名前を入れて Enter で書き残せます(期限も量も持ちません)。触ると 種類(メモ / タスク / 習慣 / やりたいこと)と、いつまで / 繰り返す / どれくらい / カテゴリ の札が出ます(札をタップでその選択肢・v0.28.1)。メモは一覧の先頭に新しい順。タップして 期限 / 毎日 / 毎週 / やりたい を選ぶと、そのままタスクや習慣になります。', '期限のあるタスク: 残り ÷ 期限までの日数 が「きょうの目安」。期限が近づくほど増えます。「期限までに」には、1日あたりが15分に満たないもの・期限の無いもの・記録で残りが0になったものが入ります。期限を過ぎたら朝に1回「+1週 / 半分にして +1週 / 完了 / 消す」を聞きます。', '毎週繰り返す(課題など): 済ませると「完了」に入り、期限を過ぎた朝に翌週の同じ曜日が期限になって戻ってきます。済ませないまま期限を過ぎれば「期限切れ」です。', '時間なし(用事): 銀行・メールのように時間を計らないもの。残りや目安は持たず、チェックで済ませます。期限が明日までの用事はホームの「タスクと習慣」にも出ます。', '毎日 ◯分: 毎日の目安(英語など)。きょうの記録と比べます。「時間なし」の習慣(薬を飲む など)はチェックだけ。', '毎週 ◯時間: 週の目安。週(日曜まで)の記録と比べ、週が変わると「先週 x/yh」を残して戻します。', 'やりたいこと: 目安は持ちません。この7日の記録と最後にふれた日を出し、1週間ふれていなければレポートの「明日への一言」で思い出させます。', '目安は「予定」ではありません。入れなくても責めませんし、いつやるかはあなたが決めます。']),
     li(['期限つきのタスクの きょうの目安 は 残り ÷ 期限までの日数 ですが、v0.31.3 からは合計はそのままで 30 分以上の塊にまとめます(15 分 × 4 ではなく 30 分 × 2)。入らなかったタスクは別の日に回り、期限の近いものと きょう記録したものは必ず入ります。塊の大きさ(15 分〜2 時間)は 設定 › 1日の目標 の「目安の 1 回の大きさ」で変えられます(v0.31.4)。']),
     h('習慣・やりたいことを始めやすく'),
@@ -671,6 +673,24 @@ function sectionHelp() {
   ]);
 }
 
+/**
+ * ブリーフィング(v0.55・F21)と タスクのタブの数字(F5-16)。有効 / 無効は settings.brief(同期)。アイコンの数字は端末ごと(local.appBadge)。
+ * 閉じていても届く通知(プッシュ)はサーバーが要るので出さない(§2-8 サーバー無し)。代わりに iPhone の「ショートカット」のオートメーションで 12:00 / 19:00 にメリハリを開く手を案内する。
+ */
+function sectionBrief(rerender, ctx) {
+  const s = S();
+  const b = s.brief || (s.brief = { enabled: true });
+  const local = store.state.local;
+  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りときょうのタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること。タスクはその場で ✓ にできます。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled !== false, onchange: (e) => { b.enabled = e.target.checked; store.touchSettings(); sync.autoSync(); rerender(); } }), el('span', '開いたときにブリーフィングを出す')]),
+    el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => ctx.openBrief() }, 'いまのブリーフィングを見る')]),
+    el('h3.help-h', 'やり残しの数字'),
+    el('p.muted.small', '期限切れと今日が期限のタスクが残っていると、タスクのタブに赤い数字が出ます(いつも)。下を有効にすると、ホーム画面のアプリのアイコンにも同じ数字を出します(この端末だけ・最後に開いたときの数・iPhone は通知の許可が要ります)。'),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!local.appBadge, disabled: !appBadgeSupported(), onchange: async (e) => { if (e.target.checked) { const ok = await enableAppBadge(); if (!ok) e.target.checked = false; else toast('アイコンに数字を出します'); } else disableAppBadge(); } }), el('span', appBadgeSupported() ? 'アプリのアイコンにも数字を出す' : 'アプリのアイコンにも数字を出す(この端末 / ブラウザは未対応)')]),
+    el('p.muted.small', 'アプリを閉じている間に届く通知は、サーバーを持たないこのアプリからは出せません。決まった時刻に気づきたいときは、iPhone の「ショートカット」› オートメーション ›「時刻」で 12:00 や 19:00 に「App を開く: メリハリ」を置くと、その時刻にブリーフィングが開きます。'),
+  );
+}
+
 const SECTIONS = {
   window: { title: '作業時間帯', build: () => sectionWindow() },
   help: { title: '使い方', build: () => sectionHelp() },
@@ -686,6 +706,7 @@ const SECTIONS = {
   train: { title: '電車', build: (re) => sectionTrain(re) }, // v0.50・F18
   bgm: { title: '作業用 BGM', build: (re) => sectionBgm(re) },
   feed: { title: 'キャッチアップ', build: (re) => sectionFeed(re) },
+  brief: { title: 'ブリーフィング', build: (re, ctx) => sectionBrief(re, ctx) }, // v0.55・F21
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -734,7 +755,7 @@ function renderSection(view, ctx, key) {
     view.classList.add('section-view');
     view.append(
       el('div.row.subhead', [el('button.btn.sm.ghost.back', { type: 'button', onclick: () => ctx.go('settings') }, '‹ 設定'), el('h1', sec.title)]),
-      ...[sec.build(draw)].flat(),
+      ...[sec.build(draw, ctx)].flat(),
       el('div.row.actions', el('button.btn.primary.grow', { type: 'button', onclick: () => ctx.go('settings') }, '完了')),
     );
   };
@@ -803,6 +824,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('すき間', summary.logging(), open('logging')),
       srow('1日の目標', summary.goals(), open('goals')),
       srow('レポートのタイル', summary.tiles(), open('tiles')),
+      srow('ブリーフィング', `${S().brief?.enabled === false ? '出さない' : '朝・昼・夜の初回'}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
     ]),
     group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('電車', summary.train(), open('train')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('キャッチアップ', summary.feed(), open('feed')), srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),

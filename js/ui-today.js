@@ -465,6 +465,7 @@ export function renderNow(view, ctx, dateArg = null) {
     hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
     isToday ? habitsBox(v, rerender, ctx) : null, // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
     isToday ? feedBox(rerender) : null, // v0.34・F17: キャッチアップ(有効なときだけ・折りたたみ・きょうだけ)
+    isToday && S().brief?.enabled !== false && ctx.openBrief ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(きょうだけ・いまの時点で作り直す)
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す

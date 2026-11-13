@@ -1282,3 +1282,19 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 /* v0.53: 飲み物の「ネットで調べる / AI に聞く」 */
 .dk-lookup{gap:6px;flex-wrap:wrap;margin:-2px 0 6px}
 .dk-lookup .btn.sm{padding:6px 10px}
+
+/* v0.55・F5-16: タスクのタブの数字(期限切れ+今日が期限 の残り) */
+#tabs button{position:relative}
+#tabs .tbadge{position:absolute;top:4px;left:calc(50% + 5px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;font-style:normal;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--card)}
+@media (prefers-color-scheme:dark){#tabs .tbadge{color:#161718}}
+/* v0.55・F21: ブリーフィングのシート */
+.brief h3{font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 4px}
+.brief p{margin:2px 0;font-size:14px;line-height:1.6}
+.brief p.brief-due{font-weight:600}
+.brief ul{margin:0;padding-left:20px}
+.brief li{font-size:14px;line-height:1.6;margin:3px 0}
+.brief li.brief-switch{font-weight:600;color:var(--accent)}
+.brief .list{margin-top:6px}
+.brief .trow .tmain{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:9px 10px 9px 0;min-width:0;flex:1}
+.brief-act{margin-top:16px;gap:8px;flex-wrap:wrap}
+.brief-link{display:block;margin:10px auto 0;color:var(--muted)}
