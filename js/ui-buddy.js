@@ -419,7 +419,7 @@ export function dayGuide(o) {
     out.push(o.written ? { key: 'diary_done', mood: 'happy' } : { key: o.isToday ? 'diary_ask' : 'diary_past', mood: 'base' });
     // v0.81(実機 FB「報告の文が アシスタントの口調になっていない」): レポートの文は そのまま言わず、場面 tell_good / tell_back / tell_better / tell_next の台詞に「」で引いて伝える
     const seen = new Set(out.map((x) => x.vars && x.vars.text).filter(Boolean));
-    const tell = (t, key, mood) => { const s = typeof t === 'string' ? t.trim().replace(/[。.]$/, '').replace(/「/g, '『').replace(/」/g, '』') : ''; // 文の中の「」は 『』に(台詞の「」と 重ならないように) if (s && !seen.has(s)) { seen.add(s); out.push({ key, vars: { text: s }, mood }); } };
+    const tell = (t, key, mood) => { const s = typeof t === 'string' ? t.trim().replace(/[。.]$/, '').replace(/「/g, '『').replace(/」/g, '』') : ''; /* 文の中の「」は 『』に(台詞の「」と 重ならないように) */ if (s && !seen.has(s)) { seen.add(s); out.push({ key, vars: { text: s }, mood }); } };
     for (const t of fb.good || []) tell(t, 'tell_good', 'happy');
     for (const t of fb.lookBack || []) tell(t, 'tell_back', 'base');
     tell(fb.better, 'tell_better', 'base');
