@@ -1643,6 +1643,35 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(H.TOPICS.length === 12 && new Set(H.TOPICS.map((t) => t.key)).size === 12 && H.TOPICS.every((t) => t.title && t.sub && t.steps.length >= 3 && t.steps.length <= 5 && t.steps.every((x) => x.t && x.d && x.d.length <= 110 && (x.d.match(/\[\[/g) || []).length === (x.d.match(/\]\]/g) || []).length) && (t.tips || []).length <= 3) && eq(H.TABS.map((t) => t.id), [...W.document.querySelectorAll('#tabs button[data-tab]')].map((b) => b.dataset.tab)) && H.FIRST.length === 3 && sw.includes(`'./js/ui-help.js'`), '使い方: 12 のテーマ・手順は 3〜5 つで 1 つ 110 字まで・ボタンの印 [[ ]] が閉じている・タブの見取り図は 下のタブと同じ順・sw.js の ASSETS に ui-help.js');
     }
 
+    // ---- v0.71: つぎは これ(next.js・ホームの作り替え)----
+    log('\n# v0.71 つぎは これ');
+    {
+      const N = M.next, s7 = S.defaultSettings(), D = '2026-11-14';
+      s7.goals = { ...(s7.goals || {}), workMin: 240 };
+      const wc = N.workCategories(s7), w0 = wc[0].id;
+      const tk = (id, name, x = {}) => ({ id, name, kind: 'duty', deadline: null, categoryId: w0, remainingH: 0, remainingSetAt: null, repeat: null, note: '', doneAt: null, updatedAt: '2026-11-14T08:00:00+09:00', deletedAt: null, checks: [], noTime: false, recur: null, ...x });
+      const en = (id, start, end, categoryId = w0, x = {}) => ({ id, date: D, start, end, categoryId, taskId: null, note: '', asKind: null, updatedAt: '2026-11-14T08:00:00+09:00', deletedAt: null, ...x });
+      const tasks = { o: tk('o', '返す本', { deadline: '2026-11-12' }), s: tk('s', '資料を送る', { deadline: `${D}T11:00` }), p: tk('p', 'スライド', { deadline: D }), m: tk('m', '計画', { deadline: '2026-11-15' }), h: tk('h', '音読', { repeat: { type: 'daily', min: 20 } }), z: tk('z', '済んだ', { deadline: D, doneAt: '2026-11-14T09:00:00+09:00' }) };
+      const c1 = N.candidates({ date: D, nowMin: 600, entries: {}, tasks, settings: s7, planBlocks: {} });
+      ok(eq(c1.slice(0, 5).map((x) => [x.kind, x.taskId]), [['soon', 's'], ['over', 'o'], ['due', 'p'], ['habit', 'h'], ['tmr', 'm']]) && c1.slice(5).every((x) => x.kind === 'goal' && !x.taskId) && c1.length === 5 + Math.min(3, wc.length) && c1[0].reason.includes('11:00') && c1[0].reason.includes('1時間') && c1.every((x) => x.title && x.reason && x.categoryId) && !c1.some((x) => x.taskId === 'z'), 'candidates: もうすぐ期限 → 期限切れ → きょうが期限 → 習慣 → 明日が期限 → 目標(作業のカテゴリ 3 つまで)・済んだタスクは出ない');
+      const c2 = N.candidates({ date: D, nowMin: 600, entries: {}, tasks: { ...tasks, s: tk('s', '資料を送る', { deadline: `${D}T15:00` }) }, settings: s7, planBlocks: {} });
+      const c2b = N.candidates({ date: D, nowMin: 700, entries: {}, tasks, settings: s7, planBlocks: {} });
+      ok(eq(c2.slice(0, 3).map((x) => [x.kind, x.taskId]), [['over', 'o'], ['due', 's'], ['due', 'p']]) && c2[1].reason === 'きょう 15:00 まで' && c2b[0].kind === 'soon' && c2b[0].reason === '11:00 を過ぎています', `candidates: 時刻つきの期限は ${N.SOON_MIN} 分以内で 先頭に・過ぎたら「過ぎています」`);
+      const pb = { b1: { id: 'b1', date: D, start: '09:30', end: '11:00', categoryId: w0, taskId: 's', note: '', updatedAt: '', deletedAt: null }, b2: { id: 'b2', date: D, start: '13:00', end: '14:00', categoryId: w0, taskId: null, note: '', updatedAt: '', deletedAt: null } };
+      const c3 = N.candidates({ date: D, nowMin: 600, entries: {}, tasks, settings: s7, planBlocks: pb });
+      const c3b = N.candidates({ date: D, nowMin: 600, entries: { e1: en('e1', '09:30', '10:20', w0, { taskId: 's' }) }, tasks, settings: s7, planBlocks: pb });
+      ok(c3[0].kind === 'plan' && c3[0].taskId === 's' && c3[0].reason === '09:30〜11:00 の予定' && c3.filter((x) => x.taskId === 's').length === 1 && c3b[0].kind !== 'plan', 'candidates: いまの時間の予定が いちばん上・同じタスクは 1 回だけ・予定の半分を もう記録していれば 予定としては出さない');
+      const noGoal = { ...s7, goals: { ...s7.goals, workMin: null } };
+      const c4 = N.candidates({ date: D, nowMin: 600, entries: {}, tasks: {}, settings: noGoal, planBlocks: {} });
+      const c4b = N.candidates({ date: D, nowMin: 900, entries: { e1: en('e1', '09:00', '13:30') }, tasks: {}, settings: s7, planBlocks: {} });
+      const c4c = N.candidates({ date: D, nowMin: 900, entries: { e1: en('e1', '09:00', '11:00') }, tasks: {}, settings: s7, planBlocks: {} });
+      ok(eq(c4.map((x) => [x.kind, x.categoryId]), [['work', w0]]) && eq(c4b.map((x) => x.kind), ['work']) && c4c[0].kind === 'goal' && c4c[0].reason === '目標まで あと2時間' && eq(N.candidates({ date: D, nowMin: 600, entries: {}, tasks: {}, settings: { ...s7, categories: [] }, planBlocks: {} }), []), 'candidates: 何も無ければ 作業を 1 つ・目標に届いていれば 目標の候補は出さない・作業のカテゴリが無ければ 空');
+      const fav = { ...s7, categories: s7.categories.map((c, i) => ({ ...c, fav: c.id === wc[wc.length - 1].id, archived: c.id === w0 })) };
+      ok(N.workCategories(fav)[0].id === wc[wc.length - 1].id && !N.workCategories(fav).some((c) => c.id === w0) && wc.every((c) => M.store.catRole(s7, c.id).work), 'workCategories: 作業の種別だけ・★ が先・非表示は除く');
+      const p1 = N.progress({ date: D, nowMin: 900, entries: { e1: en('e1', '09:00', '11:00') }, settings: s7 }), p2 = N.progress({ date: D, nowMin: 900, entries: { e1: en('e1', '09:00', '15:00') }, settings: noGoal, fallback: 240 });
+      ok(eq(p1, { workMin: 120, targetMin: 240, goal: true, rate: 0.5 }) && p2.goal === false && p2.targetMin === 240 && p2.rate === 1 && sw.includes(`'./js/next.js'`), 'progress: きょうの作業 / 目標(無ければ fallback)・1 を超えない・sw.js の ASSETS に next.js');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

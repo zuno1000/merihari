@@ -75,15 +75,16 @@ function departuresOf(line, offset = 0, n = 4) {
   return { list, type, tables, table, first: table && table.length ? table[0] : null };
 }
 
-/** ホーム右上の電車の印(v0.50): 先頭の路線の次の電車まで「◯分」。タップでシート。控えが無いときは絵だけ */
-export function trainButton(ctx) {
+/** ホームの「いま知りたいこと」のタイル(v0.71): 絵・次の電車まで「◯分」・路線の名前。タップでシート。使っていなければ null */
+export function trainTile(ctx) {
   const c = cfg();
   if (!c.enabled || !c.lines.length) return null;
   const first = c.lines[0];
-  const d = departuresOf(first).list[0] || null;
-  const lab = train.waitLabel(d);
-  const b = el('button.btn.sm.ghost.gear.trbtn', { type: 'button', 'aria-label': lab ? `次の電車(${first.name} まで あと${lab === 'いま' ? '0分' : lab})` : '次の電車', title: '次の電車', onclick: () => trainSheet(ctx) }, [trainIcon(), lab ? el('span.tr-wait', lab) : null]);
-  refreshStale([first], () => { if (!b.isConnected) return; const nd = departuresOf(first).list[0] || null; const nl = train.waitLabel(nd); const sp = b.querySelector('.tr-wait'); if (nl) { if (sp) sp.textContent = nl; else b.append(el('span.tr-wait', nl)); } });
+  const labOf = () => train.waitLabel(departuresOf(first).list[0] || null);
+  const lab = labOf();
+  const v = el('span.qt-v', lab ? (lab === 'いま' ? 'いま' : `あと${lab}`) : '時刻表');
+  const b = el('button.qtile', { type: 'button', 'aria-label': `次の電車(${first.name})`, onclick: () => trainSheet(ctx) }, [trainIcon('qt-ico'), v, el('span.qt-k', first.name || '電車')]);
+  refreshStale([first], () => { if (!b.isConnected) return; const nl = labOf(); if (nl) v.textContent = nl === 'いま' ? 'いま' : `あと${nl}`; });
   return b;
 }
 

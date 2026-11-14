@@ -1576,3 +1576,50 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .rf-hints{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
 .rf-hint{border:1px dashed var(--line);background:none;color:var(--fg);border-radius:12px;padding:8px 12px;font:inherit;font-size:13px;line-height:1.5;text-align:left;cursor:pointer}
 .rf-hint:active{background:var(--accent-bg)}
+
+/* v0.71・F2-9: ホームの作り替え ─ ①つぎは これ(.nx-card)②きょう がんばること(.focus-box)③いま知りたいこと(.quick-row のタイル .qtile) */
+.nx-card{background:var(--card);border-radius:var(--radius);padding:12px;margin:0 0 16px;display:flex;flex-direction:column;gap:10px}
+.nx-card .bd-home{margin:0}
+.nx-card .bd-bubble{background:var(--bg);border-color:transparent}
+.nx-card .bd-bubble::before{background:var(--bg);border-color:transparent}
+.nx-top{display:flex;align-items:center;gap:8px;margin-top:2px}
+.nx-k{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.nx-tag{flex:none;font-size:11px;font-weight:600;color:var(--muted);background:var(--bg);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.nx-tag.hot{background:var(--accent);color:var(--card)}
+.nx-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.nx-title{display:flex;align-items:center;gap:8px;font-size:21px;line-height:1.35;font-weight:700;overflow-wrap:anywhere}
+.nx-title .dot{width:12px;height:12px}
+.nx-reason{font-size:14px;color:var(--muted)}
+.nx-btns{gap:8px;align-items:stretch}
+.nx-start{flex:1;min-height:54px;font-size:18px}
+.nx-more{min-height:54px;font-size:14px;padding:8px 14px;white-space:nowrap}
+.nx-other{align-self:center;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:6px 10px;min-height:36px;cursor:pointer}
+.nx-card.rec .now-card{margin:0;background:var(--bg);box-shadow:none}
+.nx-list{margin:8px 0 12px}
+.nx-row{display:flex;align-items:center;gap:10px;width:100%;border:0;border-top:1px solid var(--line);background:none;color:var(--fg);font:inherit;text-align:left;padding:10px 12px;min-height:52px;cursor:pointer}
+.nx-row:first-child{border-top:0}
+.nx-row:active{background:var(--accent-bg)}
+.nx-rmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nx-rt{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.nx-rt .dot{width:9px;height:9px}
+.nx-rr{font-size:12px;color:var(--muted)}
+.focus-box .fx-card{padding:12px 14px;margin:0 0 8px;display:flex;flex-direction:column;gap:8px}
+.fx-prog{display:flex;flex-direction:column;gap:6px;width:100%;border:0;background:none;color:var(--fg);font:inherit;text-align:left;padding:0;cursor:pointer}
+.fx-pk{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+.fx-pk b{color:var(--fg);font-size:17px}
+.fx-more{flex:none;font-size:12px;color:var(--accent)}
+.fx-prog .br-track{height:10px;border-radius:5px}
+.fx-un{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:13px;text-align:left;padding:8px 0 0;min-height:36px;cursor:pointer}
+.fx-un .ask{color:var(--accent);font-weight:600}
+.focus-box .trow .tmain{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:9px 12px 9px 0;min-width:0;flex:1;border:0;background:none;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+.fx-rest{width:100%;border:0;border-top:1px solid var(--line);background:none;color:var(--accent);font:inherit;font-size:13px;padding:10px;min-height:40px;cursor:pointer}
+.fx-none{margin:0 14px}
+.quick-row{display:flex;gap:8px}
+.qtile{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:var(--card);color:var(--fg);border-radius:var(--radius);padding:10px 4px 9px;min-height:76px;font:inherit;cursor:pointer}
+.qtile:active{background:var(--accent-bg)}
+.qt-icowrap{display:flex}
+.qt-ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block;color:var(--muted)}
+.qt-v{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.qt-k{max-width:100%;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.qtile.hot .qt-ico,.qtile.hot .qt-v{color:var(--accent)}
+@media (prefers-color-scheme:dark){.nx-card,.qtile{border:1px solid var(--line)}}

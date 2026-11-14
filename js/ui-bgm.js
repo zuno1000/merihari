@@ -67,11 +67,14 @@ export function rateChips(p, rerender) {
   const b = (v, label) => el('button.chip.sm2', { type: 'button', class: `chip sm2${p.rating === v ? ' on' : ''}`, 'aria-pressed': p.rating === v ? 'true' : 'false', 'aria-label': `${label}(${v === 1 ? 'こういう曲を多めに' : '控えめに'})`, onclick: () => rate(p.id, v, rerender) }, label);
   return el('div.chips.small.bgm-rate', { role: 'group', 'aria-label': '好み' }, [b(1, '好き'), b(-1, 'ちがう')]);
 }
-/** ホーム右上の ♪(設定 › BGM で有効なときだけ)。カタログはここで先読みしておく(タップのときに待たない) */
-export function bgmButton(rerender) {
+/** ホームの「いま知りたいこと」のタイル(v0.71): ♪・「流す」・きょう流した曲があれば その題名。タップで 1 曲 流す。使っていなければ null */
+export function bgmTile(rerender) {
   if (!bgmOn()) return null;
   bgm.loadCatalog().catch(() => {});
-  return el('button.btn.sm.ghost.gear.bgmbtn', { type: 'button', 'aria-label': '作業用 BGM を流す', title: '作業用 BGM', onclick: () => playBgm(rerender) }, NOTE_ICON());
+  const p = playOf(effNow().date);
+  const cat = bgm.catalogNow();
+  const song = p && cat ? cat.songs.find((s) => s.id === p.id) : null;
+  return el('button.qtile', { type: 'button', 'aria-label': '作業用 BGM を流す', onclick: () => playBgm(rerender) }, [NOTE_ICON('qt-ico'), el('span.qt-v', p ? '次の曲' : '流す'), el('span.qt-k', song ? song.t : '作業用 BGM')]);
 }
 /** その日に流した曲(いちばん新しいもの) */
 export function playOf(date) {

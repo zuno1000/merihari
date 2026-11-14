@@ -1,5 +1,5 @@
 // merihari ─ ui-buddy.js: アシスタント(v0.59・F24。v0.62: キャラクター・ホームに常駐・会話・手帳・日報のおすすめ)の画面。計算と台詞は buddy.js(純関数)。
-// 入口: buddyHome(ホームの 1 行)・bubble / recoPage(ブリーフィング=日報の中)・sectionBuddy / buddySummary(設定)・buddyNotes / prime(AI に渡す材料)。
+// 入口: buddyHead / buddyActs(ホームの いちばん上のカードの頭と、下の 日報 / ふり返る / 話す・v0.71)・bubble / recoPage(ブリーフィング=日報の中)・sectionBuddy / buddySummary(設定)・buddyNotes / prime(AI に渡す材料)。
 // どれも FEATURES.BUDDY が false か 設定で止めていれば何も出さない。名前・口調は settings.buddy(同期)、絵は端末の IndexedDB(photos.js・id は buddy:<表情>・同期しない)、会話の控えは local.buddy.chat(端末ごと)。
 import { el, clear, sheet, toast, svg, confirmSheet } from './ui.js';
 import * as store from './store.js';
@@ -115,44 +115,42 @@ export function bubble(key, vars = {}, mood = 'base') {
 }
 
 /**
- * ホームのアシスタント(v0.66・ユーザー要望「ホームも含めて アシスタントを中心に配置を再設計」): ホームのいちばん上のカード。
- * 顔(タップで 話す / 手帳)+吹き出し(タップで ほかのコメント)→ 小説とピースの進み(strips: ui-quest / ui-art の行をそのまま中に)→ 日報 / ふり返る / 話す。
- * 状況に合わせて ひとこと(届いた続き・絵はがき・作業中の進み・ダラダラが 20 分・45 分 何も記録していない・夜)。30 秒ごとに文字と表情だけ更新。
+ * v0.71(ユーザー要望「ホームを開けば 次に何をやるか分かる画面に。アシスタントが提案する・絵は 1 つに」): ホームのカードは ui-today の nextCard が組み、
+ * ここは その頭(顔+切り替わる吹き出し)だけを返す。絵は ホームで ここ 1 か所。日報 / ふり返る / 話す は buddyActs(ホームの下)。
  */
-export function buddyHome(ctx, strips = []) {
+export function buddyHead(ctx) {
   if (!buddyOn()) return null;
   const b = B();
   const text = el('span.bd-text'), av = el('span.bd-avwrap'), nameEl = el('span.bd-name', b.name);
-  let mood = null, turn = 0; // turn: 吹き出しをタップした回数(タップで ほかのコメント)
+  let mood = null, turn = 0;
   const paint = () => {
-    const b = B(); // v0.68: シートでキャラクターを替えたあとも、名前・絵・口調が いまのキャラクターになるように 毎回読む
+    const b = B();
     const list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
     const l = list[turn % list.length];
     if (nameEl.textContent !== b.name) nameEl.textContent = b.name;
     if (text.textContent !== l.text) text.textContent = l.text;
     const face = `${b.cur}:${l.mood}`;
-    if (face !== mood) { mood = face; clear(av); av.append(avatar(l.mood, 60)); }
+    if (face !== mood) { mood = face; clear(av); av.append(avatar(l.mood, 56)); }
   };
-  const rows = strips.filter(Boolean);
-  const act = (label, fn) => el('button.bd-act', { type: 'button', onclick: fn }, label);
-  const node = el('section.bd-homecard', [
-    el('div.bd-home', [
-      el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
-      el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [nameEl, text]),
-    ]),
-    rows.length ? el('div.q-row', rows) : null,
-    el('div.bd-quick', [
-      ctx && ctx.openBrief && S().brief?.enabled !== false ? act('日報', () => ctx.openBrief()) : null,
-      act('ふり返る', () => { requestReflect(); ctx.go('diary'); }),
-      act('話す', () => openBuddy(ctx, paint)),
-    ]),
+  const node = el('div.bd-home', [
+    el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
+    el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [nameEl, text]),
   ]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
   const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } paint(); }, 30000);
   return node;
 }
-
+/** ホームの下の 3 つ(日報 / ふり返る / 話す)。止めていれば null */
+export function buddyActs(ctx) {
+  if (!buddyOn()) return null;
+  const act = (label, fn) => el('button.bd-act', { type: 'button', onclick: fn }, label);
+  return el('div.bd-quick', [
+    ctx && ctx.openBrief && S().brief?.enabled !== false ? act('日報', () => ctx.openBrief()) : null,
+    act('ふり返る', () => { requestReflect(); ctx.go('diary'); }),
+    act('話す', () => openBuddy(ctx, () => ctx.redraw())),
+  ]);
+}
 /** 手帳: 段と力・旅した土地のスタンプ・台詞を増やす */
 function notebook(redraw) {
   const lv = buddy.levelOf(totalWork());

@@ -14,12 +14,13 @@ import * as money from './money.js';
 import * as kiai from './kiai.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
-import { bgmButton, bgmStrip } from './ui-bgm.js';
-import { feedBox } from './ui-feed.js'; // v0.34・F17: キャッチアップ(ホームの折りたたみ・きょうだけ)
-import { buddyHome, buddyOn } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
+import { bgmStrip, bgmTile } from './ui-bgm.js'; // v0.71: ♪ は「いま知りたいこと」のタイルに
+import { feedTile } from './ui-feed.js'; // v0.34・F17: キャッチアップ(v0.71: ホームは 新着の数のタイルだけ・中身は 一覧のシートと 日報)
+import { buddyHead, buddyActs, buddyOn } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
 import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
-import { trainButton } from './ui-train.js'; // v0.50・F18: 次の電車(ホーム右上の印)
+import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
+import * as next from './next.js'; // v0.71: つぎは これ(候補の順位・純関数)
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -361,24 +362,6 @@ export function weatherIcon(key, cls = 'wx-ico') {
   };
   return svg('svg', { class: `${cls} ${cls}-${key}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, kids[key] || kids.none);
 }
-/** 天気の印の中身(v0.47): 傘が要る日(降水 ≥30%・weather.umbrella)は天気の絵の代わりに傘の絵+右上の点(通知の印)。それ以外は天気の絵 */
-function weatherMark(d) {
-  const u = weather.umbrella(d);
-  if (!u) return [weatherIcon(d ? weather.iconKey(d.code) : 'none')];
-  return [weatherIcon('umbrella', 'wx-ico'), el('span.badge.wx-badge', { class: `badge wx-badge ${u}`, 'aria-hidden': 'true' })];
-}
-/** ホーム右上の天気の印(v0.29.1): 控えがあれば先頭の地域の天気の絵、無ければ一般の絵。タップでシート。v0.47: 傘が要る日は傘の絵と点 */
-function weatherButton(ctx) {
-  const w = S().weather;
-  if (!w || !w.enabled || !Array.isArray(w.regions) || !w.regions.length) return null;
-  const c = wxCache()[w.regions[0].id];
-  const d = c && c.data ? c.data : null;
-  const u = weather.umbrella(d);
-  const label = u === 'umbrella' ? '天気と服装(きょうは傘が要ります)' : u === 'folding' ? '天気と服装(折りたたみ傘があると安心)' : '天気と服装';
-  const b = el('button.btn.sm.ghost.gear.wxbtn', { type: 'button', class: `btn sm ghost gear wxbtn${u ? ' need-' + u : ''}`, 'aria-label': label, title: label, onclick: () => weatherSheet(ctx) }, weatherMark(d));
-  if (!d) loadWeather(w.regions[0], (nd) => { if (b.isConnected) { b.replaceChildren(...weatherMark(nd)); b.classList.toggle('need-umbrella', weather.umbrella(nd) === 'umbrella'); b.classList.toggle('need-folding', weather.umbrella(nd) === 'folding'); } });
-  return b;
-}
 const fmtClock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 /**
  * 天気のシート(v0.29.1・天気アプリ風): 地域ごとに 1 枚の札 ─ 大きな絵・最高(大)/ 最低・天気の言葉・降水確率・服装のチップ・あすの予報(v0.29.2・小さく 1 行)。札の地の色は天気の種類で薄く変わる。
@@ -437,7 +420,8 @@ const stripRow = (strips) => { const xs = strips.filter(Boolean); return xs.leng
 
 // ================= ホーム =================
 /**
- * ホーム(v0.28・実機 FB ①): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
+ * ホーム(v0.71・ユーザー要望「開けば 次に何をやるか分かる画面に」): きょうは ①つぎは これ(nextCard)②きょう がんばること(focusBox・habitsBox)③いま知りたいこと(quickRow)④小説と図録・日報 / ふり返る / 話す。過去の日は 円と内訳(breakdown)。
+ * 以下は v0.28 のときの説明(過去の日のホームに残る): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
  * v0.28 で外したもの: 気合のカード(FEATURES.KIAI)・きょうのタスク・きょうの予定・「きょうをふり返る」・同期と書き出しの 1 行(→ 歯車の赤い点と 設定 の先頭)。
  * 秒の更新は textContent だけ、状態が変わったら描き直す。
  */
@@ -458,25 +442,32 @@ export function renderNow(view, ctx, dateArg = null) {
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   if (attentionItems().length) { gear.append(el('i.badge', { 'aria-hidden': 'true' })); gear.setAttribute('aria-label', '設定(お知らせあり)'); } // v0.28: 未同期・予定が古い・控えの書き出し → 赤い点(中身は設定の先頭)
   const head = headBar({
-    left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? bgmButton(rerender) : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')], // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)。v0.32.3(実機 FB「› と ♪ が重なる」): ♪ は左上(カレンダーの右・きょうだけ)。右は 天気・歯車 の 2 つまでにして日付の › と重ならない
+    left: [calButton(() => calendarSheet(date, e.date, goDate)), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => goDate(e.date) }, '今日')].filter(Boolean), // v0.28・FB ②: ホームにもカレンダーの印(過去の日のホームへ)
     center: dateNav(date, { prev: () => goDate(addDays(date, -1)), next: isToday ? null : () => goDate(addDays(date, 1)) }),
-    right: [trainButton(ctx), weatherButton(ctx), gear], // v0.29.1: 天気の印は歯車の左。v0.50: 電車の印はその左(DOM は逆順・CSS で row-reverse)
+    right: [gear], // v0.71: 電車・天気・♪ は 上の 1 行から「いま知りたいこと」のタイルへ
   });
   let swipe = null;
-  const home = el('section.home', { ontouchstart: (ev) => { if (ev.target.closest && ev.target.closest('.feed-box')) { swipe = null; return; } const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => { // v0.39(実機 FB「チップをスクロールすると昨日に移る」): キャッチアップの中から始まった触りは日付を動かさない
+  const home = el('section.home', { ontouchstart: (ev) => { const t = ev.touches[0]; swipe = { x: t.clientX, y: t.clientY }; }, ontouchend: (ev) => { // v0.39(実機 FB「チップをスクロールすると昨日に移る」): キャッチアップの中から始まった触りは日付を動かさない
     if (!swipe) return;
     const t = ev.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     swipe = null;
     if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) goDate(addDays(date, -1)); else if (!isToday) goDate(addDays(date, 1)); } // 左へスワイプ=前の日・右へ=次の日
   } }, [
     head,
-    isToday ? buddyHome(ctx, [questStrip(), artStrip()]) : null, // v0.66・F24-15: アシスタントのカードを いちばん上に(顔・ひとこと・小説とピースの進み・日報 / ふり返る / 話す)。止めていれば 進みの行だけを これまでの位置に
-    FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
-    hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
-    isToday && !buddyOn() ? stripRow([questStrip(), artStrip()]) : null, // v0.56・F22 解読 / v0.58・F23 名画のピース: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
-    isToday ? habitsBox(v, rerender, ctx) : null, // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
-    isToday ? feedBox(rerender) : null, // v0.34・F17: キャッチアップ(有効なときだけ・折りたたみ・きょうだけ)
-    isToday && S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(きょうだけ・いまの時点で作り直す)
+    // v0.71(ユーザー要望「開けば 次に何をやるか分かり、すぐ取りかかりたくなる画面に」): きょうは ①つぎは これ(アシスタントの顔と吹き出し・記録中は そのカード)→ ②きょう がんばること(作業の進み・期限のタスク・習慣)
+    //   → ③いま知りたいこと(電車・天気・BGM・記事 のタイル)→ ④小説と図録の進み・日報 / ふり返る / 話す。円と内訳・キャッチアップの折りたたみ・BGM の 1 行は きょうのホームから外した(過去の日は これまでどおり 円と内訳)
+    ...(isToday ? [
+      nextCard(e, hero, rerender, ctx),
+      FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
+      focusBox(e, rerender, ctx),
+      habitsBox(v, rerender, ctx), // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
+      quickRow(ctx, rerender),
+      stripRow([questStrip(), artStrip()]), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
+      buddyActs(ctx),
+      S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(いまの時点で作り直す)
+    ] : [
+      bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // 過去の日: その日に流した BGM の 1 行+円と内訳
+    ]),
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す
@@ -489,6 +480,99 @@ export function renderNow(view, ctx, dateArg = null) {
     if (em.date !== e.date || homeKey(em) !== key) { rerender(); return; }
     if (hero?.tick) hero.tick(em);
   });
+}
+/**
+ * ① つぎは これ(v0.71・F2-9): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
+ * 記録中なら 記録中のカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 始める」(その場で記録を始める・タスクも紐づく)。
+ * 「ほかの候補」は 残りの候補のシート(タップで始める)、「ほかのことを記録」は これまでの記録のシート。
+ */
+function nextCard(n, hero, rerender, ctx) {
+  const head = buddyHead(ctx);
+  if (hero) return el('section.nx-card.rec', [head, hero.node].filter(Boolean));
+  const list = next.candidates({ date: n.date, nowMin: n.min, entries: E(), tasks: T(), settings: S(), planBlocks: store.state.data.planBlocks });
+  const top = list[0] || null;
+  const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
+  const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
+  const begin = (c) => { startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
+  const other = () => chipsSheet(effNow(), rerender);
+  const more = () => sheet((close) => [
+    el('h2', 'ほかの候補'),
+    el('p.muted.small', 'タップで その記録を始めます。'),
+    el('div.list.nx-list', list.map((c) => el('button.nx-row', { type: 'button', 'aria-label': `${c.title} を始める`, onclick: () => { close(); begin(c); } }, [
+      el('span.nx-rmain', [el('span.nx-rt', [dot(c), c.title]), el('span.nx-rr', c.reason)]), tag(c),
+    ]))),
+    el('div.row', [el('button.btn.grow', { type: 'button', onclick: () => { close(); other(); } }, 'ほかのことを記録'), el('button.btn.ghost', { type: 'button', onclick: () => close() }, '閉じる')]),
+  ]);
+  const body = top ? [
+    el('div.nx-top', [el('span.nx-k', 'つぎは これ'), tag(top)]),
+    el('div.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
+    el('div.row.nx-btns', [
+      el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める'),
+      list.length > 1 ? el('button.btn.nx-more', { type: 'button', onclick: more }, `ほかの候補 ${list.length - 1}`) : null,
+    ]),
+    el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›'),
+  ] : [
+    el('div.nx-top', el('span.nx-k', 'つぎは')),
+    el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', onclick: other }, '記録する')),
+  ];
+  return el('section.nx-card', [head, ...body].filter(Boolean));
+}
+/**
+ * ② きょう がんばること(v0.71): きょうの作業の進み(目標。無ければ 4 時間・タップで その日のレポート = 円と内訳・7 日 / 30 日 への入口)と 未記録の 1 行(30 分以上・「何をしていた?」)、
+ * きょうが期限 / 期限切れ のタスク(✓ で その場で完了・5 件まで・名前のタップで タスク)。習慣は この下の habitsBox。
+ */
+function focusBox(n, rerender, ctx) {
+  const pg = next.progress({ date: n.date, nowMin: n.min, entries: E(), settings: S(), fallback: report.SOLID_WORK_MIN });
+  const W = windowFor(S(), n.date);
+  const un = report.unlogged(E(), n.date, W, n.min);
+  const last = lastEndMin(n.date, n.min);
+  const from = W && n.min >= W.start && n.min < W.end ? (last != null && n.min - last <= 360 ? last : Math.max(W.start, n.min - 360)) : null;
+  const ask = un.unloggedMin >= 30 && from != null && n.min - from >= 5
+    ? el('button.fx-un', { type: 'button', onclick: () => entrySheet({ date: n.date, start: from, end: n.min, title: '何をしていた?' }, rerender) }, [el('span', `未記録 ${fmtMin(un.unloggedMin)}`), el('span.ask', `${mm(from % 1440)} から何をしていた? ›`)]) : null;
+  const prog = el('button.fx-prog', { type: 'button', 'aria-label': `きょうの作業 ${fmtMinJa(pg.workMin)}(レポートを開く)`, onclick: () => reportSheet(n.date, 'day') }, [
+    el('span.fx-pk', [el('span', ['きょうの作業 ', el('b', fmtMinJa(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMinJa(pg.targetMin)}`]), el('span.fx-more', 'レポート ›')]),
+    el('div.br-track', el('i', { style: { width: `${Math.round(pg.rate * 100)}%` } })),
+  ]);
+  const due = plan.dueTasks(T(), n.date, E());
+  const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
+  const row = (t, over) => {
+    const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
+    return el('div.trow', { class: `trow${over ? '' : ' due-today'}` }, [
+      el('button.check', { type: 'button', 'aria-label': `${t.name} を完了にする`, onclick: () => done(t) }, ''),
+      el('button.tmain.fx-t', { type: 'button', 'aria-label': `${t.name}(タスクを開く)`, onclick: () => ctx.go('tasks') }, [el('span.tname', t.name), el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, over ? `期限切れ(${fmtMD(t.deadline.slice(0, 10))}${tm})` : `期限 今日${tm}`)]),
+    ]);
+  };
+  const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
+  const rows = all.slice(0, 5).map(([t, over]) => row(t, over));
+  if (all.length > 5) rows.push(el('button.fx-rest', { type: 'button', onclick: () => ctx.go('tasks') }, `ほか ${all.length - 5} 件 ›`));
+  return el('section.group.focus-box', [
+    el('h2', 'きょう がんばること'),
+    el('section.card.fx-card', [prog, ask].filter(Boolean)),
+    rows.length ? el('div.list', rows) : el('p.muted.small.fx-none', 'きょうが期限のタスクは ありません。'),
+  ]);
+}
+/** ホームの天気のタイル(v0.71): 絵(傘が要る日は傘)・最高 / 最低・ひとこと。タップで 天気のシート。使っていなければ null */
+function weatherTile(ctx) {
+  const w = S().weather;
+  if (!w || !w.enabled || !Array.isArray(w.regions) || !w.regions.length) return null;
+  const r = w.regions[0];
+  const ico = el('span.qt-icowrap'), v = el('span.qt-v'), k = el('span.qt-k');
+  const b = el('button.qtile', { type: 'button', 'aria-label': '天気と服装', onclick: () => weatherSheet(ctx) }, [ico, v, k]);
+  const paint = (d) => {
+    const u = weather.umbrella(d);
+    ico.replaceChildren(weatherIcon(u ? 'umbrella' : d ? weather.iconKey(d.code) : 'none', 'qt-ico'));
+    v.textContent = d ? `${d.tmax != null ? d.tmax : '–'}° / ${d.tmin != null ? d.tmin : '–'}°` : '天気';
+    k.textContent = u === 'umbrella' ? '傘が要ります' : u === 'folding' ? '折りたたみ傘を' : (d && d.label) || r.name;
+    b.classList.toggle('hot', !!u);
+  };
+  paint(wxCache()[r.id]?.data || null);
+  loadWeather(r, (nd) => { if (b.isConnected) paint(nd); });
+  return b;
+}
+/** ③ いま知りたいこと(v0.71): 電車・天気・作業用 BGM・キャッチアップ のタイル(使っているものだけ・横に並ぶ)。1 つも無ければ出さない */
+function quickRow(ctx, rerender) {
+  const xs = [trainTile(ctx), weatherTile(ctx), bgmTile(rerender), feedTile(rerender)].filter(Boolean);
+  return xs.length ? el('section.group.quick-box', [el('h2', 'いま知りたいこと'), el('div.quick-row', xs)]) : null;
 }
 /**
  * きょうの習慣(v0.49・F5-15・ユーザー要望「習慣をよりサポート」): 内訳の下に 毎日 / 毎週 の習慣を 1 行ずつ(✓=済んだの印(タスク画面と同じ・明日はまた出る)・きょう(今週)の分 / 目安・◯日続いてる・今週 m/n 日)。

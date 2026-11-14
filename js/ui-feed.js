@@ -6,7 +6,7 @@
 //   ☆ でブックマーク(印 state='save'・題名と URL も印に持つので一覧から消えても残る・同期)。ブックマークは「ぜんぶ見る」の ★ と設定に。★ をもう一度で外す(既読になる)。
 // v0.37(FB「論文の題名が英語のままでとっつきにくい」): 題名は日本語(tj・Actions が付ける)があればそれ、行には原題を小さく。arXiv は要旨の 1 文目の日本語(aj)を 2 行まで添える。
 // v0.36(FB「Discover のようにサムネイルで視覚的に」): ホームは 2 列のカード(画像(og:image・遅延・参照元なし・読めなければジャンル色の札)→ ジャンルの札 → 題名 → 出どころ)。シートと設定の行は左に小さなサムネイル(thumb)。設定「記事の画像を出す」で切れる。
-import { el, toast, sheet, confirmSheet } from './ui.js';
+import { el, toast, sheet, confirmSheet, svg } from './ui.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as feed from './feed.js';
@@ -172,6 +172,21 @@ export function feedBox(rerender) {
   ].filter(Boolean));
   box.addEventListener('toggle', () => setBoxOpen(box.open));
   return box;
+}
+
+/**
+ * ホームの「いま知りたいこと」のタイル(v0.71・ユーザー要望「キャッチアップは ホームから ほかの場所へ」): 新着の数だけを出し、タップで 一覧のシート。
+ * 一覧が手元に無ければ 読み込んでから描き直す。使っていない・トークンが無い ときは null(設定で気づける)
+ */
+const FEED_ICON = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'qt-ico' }, [svg('rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5 }), svg('path', { d: 'M8 9h8M8 12.5h8M8 16h5' })]);
+export function feedTile(rerender) {
+  if (!feedOn()) return null;
+  ensureSource();
+  if (feed.isPrivate(S().feed) && !ghToken()) return null;
+  const f = feed.feedNow();
+  if (!f) { feed.loadFeed().then(() => { if (rerender) rerender(); }).catch(() => {}); return null; }
+  const n = feed.unread(f.items, MK(), S().feed.genres, S().feed.off).length;
+  return el('button.qtile', { type: 'button', class: `qtile${n ? ' hot' : ''}`, 'aria-label': `キャッチアップ(新着 ${n} 本)`, onclick: () => feedSheet(rerender) }, [FEED_ICON(), el('span.qt-v', n ? `新着 ${n}` : '記事'), el('span.qt-k', 'キャッチアップ')]);
 }
 
 /**
