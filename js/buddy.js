@@ -265,8 +265,8 @@ export function variety(key, tone = 'bright', extra = []) {
 export const TEACH = Object.freeze({
   hello: { label: 'あいさつ', when: '相手がアプリを開いたときの、短いあいさつ', vars: [] },
   working: { label: '作業中', when: '相手が作業を記録している最中の、短い応援', vars: ['n'], hint: '{n} は「小説の続きが届くまでの分」。入れなくてもよい' },
-  idle: { label: '声かけ', when: '45 分ほど何も記録していない相手を、責めずに「5 分だけ始めてみないか」と軽く誘う', vars: [] },
-  switch: { label: '区切り', when: '相手の息抜きが {min} 分続いたとき、責めずに区切りを提案する', vars: ['min'], hint: '{min} は「息抜きが続いた分」。入れなくてもよい' },
+  idle: { label: '声かけ', when: '45 分ほど何も記録していない相手を、やさしく「5 分だけ始めてみないか」と軽く誘う', vars: [] },
+  switch: { label: '区切り', when: '相手の息抜きが {min} 分続いたとき、やさしく区切りを提案する', vars: ['min'], hint: '{min} は「息抜きが続いた分」。入れなくてもよい' },
   rest: { label: '休憩', when: '相手が休憩を記録しているときの、ねぎらい', vars: [] },
   night: { label: '夜', when: '夜遅く、きょうをねぎらって おやすみを言う', vars: [] },
 });
@@ -278,9 +278,9 @@ export function teachPrompt(key, name, tone, n = 8) {
   const t = TEACH[key];
   if (!t) return '';
   return [
-    persona(name, tone),
+    writerHead(name, tone),
     '',
-    `次の場面で あなたが言う台詞を ${n} 個、書いてください。`,
+    `次の場面で このキャラクターが言う台詞を ${n} 個、書いてください。`,
     `場面: ${t.when}`,
     '',
     '決まり:',
@@ -288,7 +288,7 @@ export function teachPrompt(key, name, tone, n = 8) {
     `・1 つは ${LINE_MAX} 字まで。言い回しは 1 つずつ変える。`,
     '・あとで何度も使い回すので、きょうの日付・時刻・タスクの名前・具体的な数字などの「その場だけの事実」は入れない(5 分だけ、のような誘いの数字はよい)。',
     '・書庫の灯り、棚、しおり、絵の扉 など、大図書館の世界の言葉を ときどき使う。',
-    '・責めない。押しつけない。',
+    '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     t.hint ? `・差し込み: ${t.hint}。` : '・{ } の差し込みは使わない。',
   ].join('\n');
 }
@@ -346,12 +346,12 @@ export const SCENES = Object.freeze({
   hello: { g: 'home', when: 'アプリを開いた相手への、短いあいさつ(時間帯を問わない)' },
   postcard: { g: 'home', when: '絵の扉の向こうの土地から戻り、絵はがきを図録に入れたと知らせる', v: { place: '行ってきた土地の名前' }, need: ['place'] },
   unread: { g: 'home', when: '小説の続きを書庫から持ってきたと知らせる', v: { n: '届いた回数(「{n}回分」のように使う)' }, need: ['n'] },
-  switch: { g: 'home', when: '相手の息抜きが長く続いたとき、責めずに区切りを提案する', v: { min: '息抜きが続いた分(「{min}分」のように使う)' } },
+  switch: { g: 'home', when: '相手の息抜きが長く続いたとき、やさしく区切りを提案する', v: { min: '息抜きが続いた分(「{min}分」のように使う)' } },
   working: { g: 'home', when: '作業中の相手への、短い応援', v: { n: '小説の続きが届くまでの残りの分(「あと{n}分」のように使う)' } },
   working_art: { g: 'home', when: '作業中の相手に、絵の次の情報が もうすぐ開くと知らせる', v: V_ART, need: ['n', 'label'] },
   rest: { g: 'home', when: '休憩中の相手への、ねぎらい' },
-  idle: { g: 'home', when: 'しばらく何も記録していない相手を、責めずに「5分だけ始めてみないか」と軽く誘う' },
-  due: { g: 'home', when: 'きょうが期限のタスクが残っていると、責めずに知らせる', v: { n: '件数' }, need: ['n'] },
+  idle: { g: 'home', when: 'しばらく何も記録していない相手を、やさしく「5分だけ始めてみないか」と軽く誘う' },
+  due: { g: 'home', when: 'きょうが期限のタスクが残っていると、やさしく知らせる', v: { n: '件数' }, need: ['n'] },
   night: { g: 'home', when: '夜遅く、きょうをねぎらって おやすみを言う' },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
@@ -366,7 +366,7 @@ export const SCENES = Object.freeze({
   article: { g: 'brief', when: '新しい記事が届いていると伝える' },
   ins_band: { g: 'brief', when: '作業がいちばん進む時間帯を伝える', v: { name: '時間帯の名前(例: 午前)', pct: 'この2週間の作業に占める割合の数字(「{pct}%」のように使う)' }, need: ['name', 'pct'] },
   ins_week_up: { g: 'brief', when: 'この7日の作業が、その前の7日より増えたと伝える', v: V_WEEK, need: ['avg', 'diff'] },
-  ins_week_down: { g: 'brief', when: 'この7日の作業が、その前の7日より少なめだと、責めずに伝える', v: V_WEEK, need: ['avg', 'diff'] },
+  ins_week_down: { g: 'brief', when: 'この7日の作業が、その前の7日より少なめだと、やさしく伝える', v: V_WEEK, need: ['avg', 'diff'] },
   ins_weekday: { g: 'brief', when: 'ある曜日は 息抜きが長くなりやすいと伝える', v: { day: '曜日の1文字(「{day}曜」のように使う)', avg: 'その曜日の平均の時間' }, need: ['day', 'avg'] },
   ins_weekday_today: { g: 'brief', when: 'きょうは 息抜きが長くなりやすい曜日なので、最初の一歩を小さくしようと伝える', v: { day: '曜日の1文字(「{day}曜」のように使う)' }, need: ['day'] },
   ins_run: { g: 'brief', when: 'この30日で いちばん長く集中できた記録を伝える', v: { best: 'その長さ(例: 2時間10分)', date: 'その日付(例: 11/3)' }, need: ['best', 'date'] },
@@ -434,9 +434,9 @@ export function personaPrompt(group, name, voice) {
   if (!g) return '';
   const keys = groupKeys(group);
   return [
-    persona(name, voice),
+    writerHead(name, voice),
     '',
-    `次の ${keys.length} の場面で あなたが言う台詞を、場面ごとに ${g.per} つずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
+    `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} つずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
     '',
     '書き方:',
     '・1 行に 1 つ。「場面の名前: 台詞」の形で書く(例: hello: やあ、待ってたよ。)。場面の名前は 下の英字をそのまま使う。',
@@ -444,7 +444,7 @@ export function personaPrompt(group, name, voice) {
     `・1 つは 60 字まで。${g.per > 1 ? '同じ場面の台詞は 言い回しを変える。' : ''}`,
     '・{n} のような { } の差し込みは、その場面に書いてあるものだけを、そのままの形で使う。「必ず」とあるものは 必ず入れる。',
     '・あとで何度も使い回すので、日付・時刻・タスクの名前などの「その場だけの事実」は入れない。',
-    '・責めない。押しつけない。',
+    '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
     '',
     '場面:',
@@ -565,6 +565,19 @@ export function stamps(doneWorks) {
 }
 
 const TONE_HINT = Object.freeze({ bright: '明るく軽い、親しい友だちのような口調', polite: 'ていねいで物静かな口調', cool: '口数が少なく ぶっきらぼうだが 面倒見のよい口調' });
+/**
+ * 台詞を書いてもらう文の頭(v0.67.1・実機 FB「モデルでこのリクエストに対する応答を提供できません」): 「あなたは ◯◯ です」と なりきりを頼む形をやめ、
+ * アプリの画面に出す台詞を書く仕事として頼む(端末の AI は なりきりの依頼や 強い否定の言葉を断ることがある)。台詞を増やす / 性格を足す の両方で使う
+ */
+export function writerHead(name, tone) {
+  const b = normalizeBuddy({ name });
+  const how = tone && typeof tone === 'object' ? `「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}` : TONE_HINT[baseOf(tone)];
+  return [
+    '時間管理アプリの画面に出す、案内役のキャラクターの短い台詞を書く仕事です。',
+    `キャラクター: 大図書館の見習い司書「${b.name}」。利用者の作業時間が 書庫の灯りになる、という設定です。`,
+    `話し方: ${how}`,
+  ].join('\n');
+}
 /** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
 export function persona(name, tone) {
   const b = normalizeBuddy({ name });

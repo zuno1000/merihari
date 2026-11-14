@@ -416,6 +416,10 @@ function customBox(b, c, save, rerender) {
     if (url) location.href = url;
     else { toast('頼む文をコピーしました。AI に貼り、返事をコピーして戻ってください'); rerender(); }
   };
+  // v0.67.1(実機 FB): ショートカットの AI に断られたとき用に、頼んだ束の文をコピーして ほかの AI に貼れるようにする
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(buddy.personaPrompt(pending.group, b.name, c)); toast('頼む文をコピーしました。ほかの AI に貼り、返事をコピーして戻ってください'); } catch { toast('コピーできませんでした'); }
+  };
   const learn = async () => {
     if (!pending) { toast('先に 束を選んで、AI に頼んでください'); return; }
     let text = '';
@@ -439,6 +443,7 @@ function customBox(b, c, save, rerender) {
     el('p.muted.small', todo.length ? `束を選ぶと、その場面の台詞を AI に書いてもらいます(${local.ai?.enabled ? 'ショートカットが開きます' : '頼む文をコピーします'})。返事をコピーして戻り「返事から覚える」を押してください。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : 'どの場面にも台詞があります。頼み直すと、その束の場面は 新しい台詞に置き換わります。'),
     el('div.chips.small', buddy.GROUP_KEYS.map((g) => el('button', { type: 'button', class: `chip sm2${cov[g].have >= cov[g].total ? ' on' : ''}`, onclick: () => ask(g) }, `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total})`))),
     el('div.row', [el('button', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事から覚える'), pending ? el('span.muted.small', `「${buddy.GROUPS[pending.group].label}」を頼んであります`) : null]),
+    pending && local.ai?.enabled ? el('div.row', [el('button.btn.sm.ghost', { type: 'button', onclick: copy }, '頼む文をコピー'), el('span.muted.small', 'ショートカットの AI に断られたら、ほかの AI に貼れます')]) : null,
     all.length ? el('details.bd-lines', [el('summary', `台詞の一覧を開く(${all.length})`), ...all.map((x) => el('div.bd-prow', [el('div.bd-pmain', [el('span.bd-pwhen', buddy.SCENES[x.k].when), el('span.bd-linetext', sample(x.s))]), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save(buddy.patchCustom(b, c.id, { set: { [x.k]: c.set[x.k].filter((_, j) => j !== x.i) } })) }, '×')]))]) : null,
     el('div.row', [
       el('button.btn.sm', { type: 'button', onclick: () => customSheet(b, c, save) }, '名前と説明を直す'),
