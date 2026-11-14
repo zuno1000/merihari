@@ -22,7 +22,7 @@ import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: つぎは これ(候補の順位・純関数)
 import * as pomo from './pomo.js'; // v0.72・F25: ポモドーロ
-import { pomoOn, pomoCard, startPomo, settle as pomoSettle } from './ui-pomo.js';
+import { pomoOn, pomoCard, startPomo } from './ui-pomo.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -199,18 +199,18 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   commit(started, `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める(v0.24: 時計で決めた開始はそのまま)
   refreshAddButton();
   const nm = taskName(extra.taskId, categoryId);
-  if (!extra.quiet) toast((startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`) + lastSleepFill); // quiet(v0.72): ポモドーロが 区切りごとに置く記録は 黙って
+  toast((startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`) + lastSleepFill);
   sync.autoSync();
   return r;
 }
 /** 「終わる」。シートは出さない(直すのはタイムライン) */
-export function stopRecording(at = null, { quiet = false } = {}) {
+export function stopRecording(at = null) {
   const n = effNow();
   const r = log.stop(E(), { date: n.date, nowMin: n.min, at, windowEndOf }, LCTX);
-  if (!r.closed) { if (!quiet) toast('記録中のものはありません'); return r; }
+  if (!r.closed) { toast('記録中のものはありません'); return r; }
   commit(r.entries, `${catOf(r.closed.categoryId).name} の終了`);
   refreshAddButton();
-  if (!quiet) toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
+  toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
   sync.autoSync();
   return r;
 }
@@ -225,6 +225,23 @@ function addClosed({ date, startMin, endMin, categoryId, taskId = null, busyKey:
   if (bk) { S().busyMemory = { ...(S().busyMemory || {}), [bk]: categoryId }; store.touchSettings(); } // 予定の時間に何をしたかを覚える(次からその候補)
   sync.autoSync();
   toast(`${taskName(taskId, categoryId)}${mm(startMin % 1440)}〜${mm(endMin % 1440)}を記録${lastSleepFill}`);
+}
+
+/**
+ * 閉じた記録を まとめて足す(v0.73・F25: ポモドーロの「この内容で記録する」)。list = [{ date, startMin, endMin, categoryId, taskId }]。↶ は 1 回で ぜんぶ戻る。足した数を返す
+ */
+export function addSpans(list, label = 'ポモドーロの記録') {
+  let out = E(), n = 0;
+  for (const x of list) {
+    if (!(x.endMin > x.startMin)) continue;
+    out = log.addEntry(out, { date: x.date, startMin: x.startMin, endMin: x.endMin, categoryId: x.categoryId, taskId: x.taskId || null, note: '', asKind: null }, LCTX, dayEndOf(x.date));
+    n++;
+  }
+  if (!n) return 0;
+  commit(out, label);
+  refreshAddButton();
+  sync.autoSync();
+  return n;
 }
 
 /** 前日までのレポートを確定(F3-5)。起動時・復帰時に呼ぶ */
@@ -438,10 +455,9 @@ export function renderNow(view, ctx, dateArg = null) {
   const v = isToday ? e : { date, min: 1440 + dayCut(S(), date) }; // 過去の日は1日ぜんぶ(切れ目まで)
   const rerender = () => renderNow(view, ctx, isToday ? null : date);
   const goDate = (d) => ctx.go('now', d >= e.date ? undefined : d);
-  if (isToday) pomoSettle(); // v0.72・F25: ポモドーロの区切りを越えていたら 先に記録へ
   const o = isToday ? log.openEntry(E()) : null;
-  // v0.72: ポモドーロが走っていれば タイマーのカード(記録していない休憩の間も)、そうでなければ ふつうの記録中のカード
-  const hero = isToday ? (pomoCard(o, { edit: () => { if (o) editEntrySheet(o.id, e, rerender); }, other: () => chipsSheet(effNow(), rerender, 'now'), rerender }) || (o ? recordingCard(o, e, rerender) : null)) : null;
+  // v0.72: ポモドーロが走っていれば タイマーのカード、そうでなければ ふつうの記録中のカード(v0.73: タイマーの間は 記録に触らない・終わったら 確かめてから記録)
+  const hero = isToday ? (pomoCard({ rerender, ctx }) || (o ? recordingCard(o, e, rerender) : null)) : null;
   // v0.18: 設定はタブから外し、ホーム右上の歯車に(タブは 日記 に)
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   if (attentionItems().length) { gear.append(el('i.badge', { 'aria-hidden': 'true' })); gear.setAttribute('aria-label', '設定(お知らせあり)'); } // v0.28: 未同期・予定が古い・控えの書き出し → 赤い点(中身は設定の先頭)
@@ -463,8 +479,7 @@ export function renderNow(view, ctx, dateArg = null) {
     ...(isToday ? [
       nextCard(e, hero, rerender, ctx),
       FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
-      focusBox(e, rerender, ctx),
-      habitsBox(v, rerender, ctx), // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
+      focusBox(e, rerender, ctx), // v0.73: 作業の進み・期限のタスク・きょうの習慣(F5-15)を 1 枚に
       quickRow(ctx, rerender),
       stripRow([questStrip(), artStrip()]), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
       buddyActs(ctx),
@@ -486,15 +501,26 @@ export function renderNow(view, ctx, dateArg = null) {
   });
 }
 /**
- * ① つぎは これ(v0.71・F2-9): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
- * 記録中なら 記録中のカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 始める」(その場で記録を始める・タスクも紐づく)。
- * 「ほかの候補」は 残りの候補のシート(タップで始める)、「ほかのことを記録」は これまでの記録のシート。
+ * ① つぎは これ(v0.71・F24-20): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
+ * 記録中 / タイマー中なら そのカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 25 分 始める」。
+ * v0.73(ユーザー要望「ほかの候補のボタンではなく、つぎは これ として出ているものをタップして 作業するものを替えられるように」): 名前の所をタップ →「なにをやる?」のシート
+ * (候補+ほかの作業のカテゴリ)。選ぶと カードの中身が替わり(その日のあいだ覚える・nextPick)、始めるのは そのあと。作業いがいの記録は「ほかのことを記録」。
  */
+let nextPick = null; // { date, key }(自分で選んだもの。key = t:<タスク> / c:<カテゴリ>)
+const pickKey = (c) => (c.taskId ? `t:${c.taskId}` : `c:${c.categoryId}`);
 function nextCard(n, hero, rerender, ctx) {
   const head = buddyHead(ctx);
   if (hero) return el('section.nx-card.rec', [head, hero.node].filter(Boolean));
   const list = next.candidates({ date: n.date, nowMin: n.min, entries: E(), tasks: T(), settings: S(), planBlocks: store.state.data.planBlocks });
-  const top = list[0] || null;
+  if (nextPick && nextPick.date !== n.date) nextPick = null;
+  let top = list[0] || null, picked = false;
+  if (nextPick) {
+    const hit = list.find((c) => pickKey(c) === nextPick.key);
+    const cat = !hit && nextPick.key.startsWith('c:') ? cats().find((x) => x.id === nextPick.key.slice(2)) : null;
+    if (hit) { top = hit; picked = hit !== list[0]; }
+    else if (cat) { top = { kind: 'pick', taskId: null, categoryId: cat.id, title: cat.name, reason: '自分で選んだ作業' }; picked = true; }
+    else nextPick = null; // 済んだタスク・消したカテゴリ → おすすめに戻す
+  }
   const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
   const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
   const begin = (c) => { startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
@@ -514,21 +540,28 @@ function nextCard(n, hero, rerender, ctx) {
     return row;
   };
   const other = () => chipsSheet(effNow(), rerender);
-  const more = () => sheet((close) => [
-    el('h2', 'ほかの候補'),
-    el('p.muted.small', pm ? `タップで ${pm.work} 分 × ${pm.sets} セット を始めます。` : 'タップで その記録を始めます。'),
-    el('div.list.nx-list', list.map((c) => el('button.nx-row', { type: 'button', 'aria-label': `${c.title} を始める`, onclick: () => { close(); if (pm) beginPomo(c); else begin(c); } }, [
-      el('span.nx-rmain', [el('span.nx-rt', [dot(c), c.title]), el('span.nx-rr', c.reason)]), tag(c),
-    ]))),
-    el('div.row', [el('button.btn.grow', { type: 'button', onclick: () => { close(); other(); } }, 'ほかのことを記録'), el('button.btn.ghost', { type: 'button', onclick: () => close() }, '閉じる')]),
-  ]);
+  const choose = () => sheet((close) => {
+    const pick = (key) => { nextPick = key ? { date: n.date, key } : null; close(); rerender(); };
+    const used = new Set(list.map(pickKey));
+    const others = next.workCategories(S()).filter((c) => !used.has(`c:${c.id}`));
+    return [
+      el('h2', 'なにをやる?'),
+      el('p.muted.small', 'タップで「つぎは これ」を替えます(始めるのは そのあと)。'),
+      list.length ? el('div.list.nx-list', list.map((c, i) => el('button.nx-row', { type: 'button', class: `nx-row${top && pickKey(c) === pickKey(top) ? ' on' : ''}`, 'aria-pressed': top && pickKey(c) === pickKey(top) ? 'true' : 'false', 'aria-label': `${c.title} にする`, onclick: () => pick(i === 0 ? null : pickKey(c)) }, [
+        el('span.nx-rmain', [el('span.nx-rt', [dot(c), c.title]), el('span.nx-rr', i === 0 ? `${c.reason}・おすすめ` : c.reason)]), tag(c),
+      ]))) : null,
+      others.length ? el('h3.help-h', 'ほかの作業') : null,
+      others.length ? el('div.chips.small.nx-cats', others.map((c) => el('button.chip.sm2', { type: 'button', class: `chip sm2${top && top.kind === 'pick' && top.categoryId === c.id ? ' on' : ''}`, onclick: () => pick(`c:${c.id}`) }, [dot({ categoryId: c.id }), c.name]))) : null,
+      el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+    ];
+  });
   const body = top ? [
-    el('div.nx-top', [el('span.nx-k', 'つぎは これ'), tag(top)]),
-    el('div.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
-    el('div.row.nx-btns', [
-      el('button.btn.primary.nx-start', { type: 'button', 'aria-label': pm ? `${top.title} を ${pm.work} 分 始める` : `${top.title} を始める`, onclick: () => (pm ? beginPomo(top) : begin(top)) }, pm ? `▶ ${pm.work} 分 始める` : '▶ 始める'),
-      list.length > 1 ? el('button.btn.nx-more', { type: 'button', onclick: more }, `ほかの候補 ${list.length - 1}`) : null,
+    el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : 'つぎは これ'), tag(top)]),
+    el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
+      el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
+      el('span.nx-chev', { 'aria-hidden': 'true' }, '替える ▾'),
     ]),
+    el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', 'aria-label': pm ? `${top.title} を ${pm.work} 分 始める` : `${top.title} を始める`, onclick: () => (pm ? beginPomo(top) : begin(top)) }, pm ? `▶ ${pm.work} 分 始める` : '▶ 始める')),
     pm ? setRow() : null,
     el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => begin(top) }, '時間を決めずに始める') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
   ].filter(Boolean) : [
@@ -538,8 +571,9 @@ function nextCard(n, hero, rerender, ctx) {
   return el('section.nx-card', [head, ...body].filter(Boolean));
 }
 /**
- * ② きょう がんばること(v0.71): きょうの作業の進み(目標。無ければ 4 時間・タップで その日のレポート = 円と内訳・7 日 / 30 日 への入口)と 未記録の 1 行(30 分以上・「何をしていた?」)、
- * きょうが期限 / 期限切れ のタスク(✓ で その場で完了・5 件まで・名前のタップで タスク)。習慣は この下の habitsBox。
+ * ② きょう がんばること(v0.71。v0.73 ユーザー要望「がんばること・タスク・習慣が とっ散らかっているので 統合を」): 1 枚のカードに
+ * きょうの作業の進み(目標。無ければ 4 時間・タップで その日のレポート = 円と内訳・7 日 / 30 日 への入口)→ やること(きょうが期限 / 期限切れ のタスク 5 件まで+きょうの習慣。
+ * どれも 左の ✓ で済ませる・右に札・名前のタップで タスク)→ 習慣の声かけ(plan.habitNudge)→ 未記録の 1 行(30 分以上・「何をしていた?」)。
  */
 function focusBox(n, rerender, ctx) {
   const pg = next.progress({ date: n.date, nowMin: n.min, entries: E(), settings: S(), fallback: report.SOLID_WORK_MIN });
@@ -553,22 +587,42 @@ function focusBox(n, rerender, ctx) {
     el('span.fx-pk', [el('span', ['きょうの作業 ', el('b', fmtMinJa(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMinJa(pg.targetMin)}`]), el('span.fx-more', 'レポート ›')]),
     el('div.br-track', el('i', { style: { width: `${Math.round(pg.rate * 100)}%` } })),
   ]);
+  const line = ({ cls = '', on = false, checkLabel, onCheck, name, color = null, meta, metaCls = '', tag, hot = false, open }) => el('div.fx-row', { class: `fx-row${cls}` }, [
+    el('button.check', { type: 'button', class: `check${on ? ' on' : ''}`, 'aria-label': checkLabel, onclick: onCheck }, on ? '✓' : ''),
+    el('button.fx-t', { type: 'button', 'aria-label': `${name}(タスクを開く)`, onclick: open }, [el('span.tname', [color ? el('i.dot', { style: { background: color }, 'aria-hidden': 'true' }) : null, name].filter(Boolean)), el('span.tmeta', { class: `tmeta${metaCls}` }, meta)]),
+    el('span.nx-tag', { class: `nx-tag${hot ? ' hot' : ''}` }, tag),
+  ]);
+  // タスク: きょうが期限 → 期限切れ
   const due = plan.dueTasks(T(), n.date, E());
   const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
-  const row = (t, over) => {
-    const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
-    return el('div.trow', { class: `trow${over ? '' : ' due-today'}` }, [
-      el('button.check', { type: 'button', 'aria-label': `${t.name} を完了にする`, onclick: () => done(t) }, ''),
-      el('button.tmain.fx-t', { type: 'button', 'aria-label': `${t.name}(タスクを開く)`, onclick: () => ctx.go('tasks') }, [el('span.tname', t.name), el('span.tmeta', { class: `tmeta${over ? ' over' : ''}` }, over ? `期限切れ(${fmtMD(t.deadline.slice(0, 10))}${tm})` : `期限 今日${tm}`)]),
-    ]);
-  };
   const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
-  const rows = all.slice(0, 5).map(([t, over]) => row(t, over));
-  if (all.length > 5) rows.push(el('button.fx-rest', { type: 'button', onclick: () => ctx.go('tasks') }, `ほか ${all.length - 5} 件 ›`));
+  const rows = all.slice(0, 5).map(([t, over]) => {
+    const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
+    return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `きょう${tm} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
+  });
+  if (all.length > 5) rows.push(el('button.fx-rest', { type: 'button', onclick: () => ctx.go('tasks') }, `タスクは ほか ${all.length - 5} 件 ›`));
+  // 習慣(v0.49・F5-15): ✓=済んだの印(明日はまた出る)・きょう(今週)の分 / 目安・◯日続いてる・今週 m/n 日
+  const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && T()[g.taskId]);
+  const habits = gs.map((g) => ({ g, task: T()[g.taskId], stats: plan.habitStats(T()[g.taskId], E(), n.date) }));
+  const nudge = habits.length ? plan.habitNudge(habits, n.min, windowEndOf(n.date)) : null;
+  for (const { g, task: t, stats: st } of habits) {
+    const span = g.kind === 'weekly' ? '今週' : 'きょう', unit = g.kind === 'weekly' ? '週' : '日';
+    const meta = [
+      g.targetMin == null ? `${span}は${g.checked ? '済' : 'まだ'}` : `${span}${fmtMinJa(g.doneMin)} / ${fmtMinJa(g.targetMin)}${g.checked ? '・済' : ''}`,
+      st && st.streak >= 2 ? `${st.streak}${unit}続いてる` : null,
+      st && st.week ? `今週${st.week.met}/${st.week.days}日` : null,
+    ].filter(Boolean).join('・');
+    const onCheck = () => { t.checks = plan.toggleCheck(t, n.date); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(plan.isChecked(t, n.date) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); };
+    rows.push(line({ cls: g.done ? ' done' : '', on: g.checked || g.done, checkLabel: `${t.name} を${g.checked ? `${span}の済みから外す` : `${span}は済んだことにする`}`, onCheck, name: t.name, color: catOf(g.categoryId).color, meta, tag: g.kind === 'weekly' ? '毎週' : '習慣', open: () => ctx.go('tasks', 'habits') }));
+  }
   return el('section.group.focus-box', [
     el('h2', 'きょう がんばること'),
-    el('section.card.fx-card', [prog, ask].filter(Boolean)),
-    rows.length ? el('div.list', rows) : el('p.muted.small.fx-none', 'きょうが期限のタスクは ありません。'),
+    el('section.card.fx-card', [
+      prog,
+      rows.length ? el('div.fx-rows', rows) : el('p.muted.small.fx-none', 'きょうが期限のタスクも 習慣も ありません。'),
+      nudge ? el('p.fx-nudge', nudge) : null,
+      ask,
+    ].filter(Boolean)),
   ]);
 }
 /** ホームの天気のタイル(v0.71): 絵(傘が要る日は傘)・最高 / 最低・ひとこと。タップで 天気のシート。使っていなければ null */
@@ -583,7 +637,7 @@ function weatherTile(ctx) {
     ico.replaceChildren(weatherIcon(u ? 'umbrella' : d ? weather.iconKey(d.code) : 'none', 'qt-ico'));
     v.textContent = d ? `${d.tmax != null ? d.tmax : '–'}° / ${d.tmin != null ? d.tmin : '–'}°` : '天気';
     k.textContent = u === 'umbrella' ? '傘が要ります' : u === 'folding' ? '折りたたみ傘を' : (d && d.label) || r.name;
-    b.classList.toggle('hot', !!u);
+    b.className = `qtile wx k-${u ? 'umbrella' : d ? weather.iconKey(d.code) : 'none'}`; // v0.73: 天気の種類で 絵と地の色(晴れ=橙・雨と傘=青・雪=水色・雷=紫・くもり=灰)
   };
   paint(wxCache()[r.id]?.data || null);
   loadWeather(r, (nd) => { if (b.isConnected) paint(nd); });
@@ -594,37 +648,10 @@ function quickRow(ctx, rerender) {
   const xs = [trainTile(ctx), weatherTile(ctx), bgmTile(rerender), feedTile(rerender)].filter(Boolean);
   return xs.length ? el('section.group.quick-box', [el('h2', 'いま知りたいこと'), el('div.quick-row', xs)]) : null;
 }
-/**
- * きょうの習慣(v0.49・F5-15・ユーザー要望「習慣をよりサポート」): 内訳の下に 毎日 / 毎週 の習慣を 1 行ずつ(✓=済んだの印(タスク画面と同じ・明日はまた出る)・きょう(今週)の分 / 目安・◯日続いてる・今週 m/n 日)。
- * 上に声かけ 1 行(plan.habitNudge・責めない・昼のうちは出さない)。行のタップでタスク › 習慣。習慣が無ければ何も出さない。きょうだけ(過去の日は出さない)
- */
-function habitsBox(n, rerender, ctx) {
-  const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && T()[g.taskId]);
-  if (!gs.length) return null;
-  const list = gs.map((g) => ({ g, task: T()[g.taskId], stats: plan.habitStats(T()[g.taskId], E(), n.date) }));
-  const nudge = plan.habitNudge(list, n.min, windowEndOf(n.date));
-  const row = ({ g, task: t, stats: st }) => {
-    const span = g.kind === 'weekly' ? '今週' : 'きょう', unit = g.kind === 'weekly' ? '週' : '日';
-    const meta = [
-      g.targetMin == null ? `${span}は${g.checked ? '済' : 'まだ'}` : `${span}${fmtMinJa(g.doneMin)} / ${fmtMinJa(g.targetMin)}${g.checked ? '・済' : ''}`,
-      st && st.streak >= 2 ? `${st.streak}${unit}続いてる` : null,
-      st && st.week ? `今週${st.week.met}/${st.week.days}日` : null,
-    ].filter(Boolean).join('・');
-    const onCheck = () => { t.checks = plan.toggleCheck(t, n.date); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(plan.isChecked(t, n.date) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); };
-    return el('div.srow.goal.hrow', { class: `srow goal hrow${g.done ? ' done' : ''}` }, [
-      el('button.check', { type: 'button', class: `check${g.checked ? ' on' : ''}`, 'aria-label': `${t.name} を${g.checked ? `${span}の済みから外す` : `${span}は済んだことにする`}`, onclick: onCheck }, g.checked ? '✓' : ''),
-      el('button.gmain', { type: 'button', 'aria-label': `${t.name}(タスクの習慣を開く)`, onclick: () => ctx.go('tasks', 'habits') }, [
-        el('span.gname', [el('i.dot', { style: { background: catOf(g.categoryId).color }, 'aria-hidden': 'true' }), t.name, g.done && !g.checked ? el('span.gok', '✓') : null]),
-        el('span.gmeta', meta),
-      ]),
-    ]);
-  };
-  return el('section.group.habits-box', [el('h2', 'きょうの習慣'), nudge ? el('p.nudge', nudge) : null, el('div.list', list.map(row))]);
-}
 /** 描き直しが要る状態のキー: 記録中の id / 直近の記録の終わり / 分(内訳は分ごとに動く) */
 function homeKey(n) {
   const o = log.openEntry(E());
-  return (o ? 'rec:' + o.id : 'idle') + ':' + Math.floor(n.min / 5);
+  return (o ? 'rec:' + o.id : 'idle') + (store.state.local.pomo ? ':pm' : '') + ':' + Math.floor(n.min / 5); // v0.73: ポモドーロの始まり / 片づけ でも描き直す
 }
 
 /**

@@ -1202,10 +1202,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .rform .seg{margin-bottom:2px}
 .mrecur .list{margin:4px 0 0}
 /* v0.49・F5-15: ホームの「きょうの習慣」。声かけは 1 行・責めない・薄く */
-.habits-box{margin-top:2px}
-.habits-box .nudge{margin:0 4px 8px;font-size:13px;color:var(--fg);line-height:1.5}
-.habits-box .srow.goal.hrow{padding-right:12px}
-.habits-box .srow.goal.hrow .gmain{flex:1;min-width:0}
 /* v0.50・F18: 次の電車 */
 .tr-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .tr-ico.sm{width:18px;height:18px;flex:none}
@@ -1592,7 +1588,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .nx-reason{font-size:14px;color:var(--muted)}
 .nx-btns{gap:8px;align-items:stretch}
 .nx-start{flex:1;min-height:54px;font-size:18px}
-.nx-more{min-height:54px;font-size:14px;padding:8px 14px;white-space:nowrap}
 .nx-other{align-self:center;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:6px 10px;min-height:36px;cursor:pointer}
 .nx-card.rec .now-card{margin:0;background:var(--bg);box-shadow:none}
 .nx-list{margin:8px 0 12px}
@@ -1611,7 +1606,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .fx-prog .br-track{height:10px;border-radius:5px}
 .fx-un{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:13px;text-align:left;padding:8px 0 0;min-height:36px;cursor:pointer}
 .fx-un .ask{color:var(--accent);font-weight:600}
-.focus-box .trow .tmain{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:9px 12px 9px 0;min-width:0;flex:1;border:0;background:none;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
 .fx-rest{width:100%;border:0;border-top:1px solid var(--line);background:none;color:var(--accent);font:inherit;font-size:13px;padding:10px;min-height:40px;cursor:pointer}
 .fx-none{margin:0 14px}
 .quick-row{display:flex;gap:8px}
@@ -1621,7 +1615,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .qt-ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block;color:var(--muted)}
 .qt-v{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
 .qt-k{max-width:100%;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
-.qtile.hot .qt-ico,.qtile.hot .qt-v{color:var(--accent)}
 @media (prefers-color-scheme:dark){.nx-card,.qtile{border:1px solid var(--line)}}
 
 /* v0.72・F25: ポモドーロ ─ タイマーのカード(.pm-card: 残りの輪・区間・名前・BGM / 終わる)と ホームのセット数のチップ(.pm-sets) */
@@ -1649,3 +1642,56 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .pm-sets .chip.sm2{min-width:40px;min-height:36px;justify-content:center}
 .pm-total{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
 .nx-links{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
+
+/* v0.73: つぎは これ の選び直し(.nx-pick)・きょう がんばること を 1 枚に(.fx-rows / .fx-row)・タイルの色(--tc)・ポモドーロの確認のシート(.pm-fin) */
+.nx-pick{display:flex;align-items:center;gap:10px;width:100%;border:0;background:var(--bg);color:var(--fg);font:inherit;text-align:left;border-radius:12px;padding:10px 12px;cursor:pointer}
+.nx-pick:active{background:var(--accent-bg)}
+.nx-pick .nx-main{flex:1}
+.nx-chev{flex:none;font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+.nx-row.on{background:var(--accent-bg)}
+.nx-cats{margin:0 0 12px}
+.focus-box .fx-card{margin:0;gap:10px}
+.fx-rows{display:flex;flex-direction:column;margin:0 -6px}
+.fx-row{display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);min-height:52px;padding-right:6px}
+.fx-row .check{width:44px;align-self:stretch}
+.fx-row .fx-t{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;border:0;background:none;color:var(--fg);font:inherit;text-align:left;padding:8px 8px 8px 0;cursor:pointer}
+.fx-row .tname{font-size:15px;overflow-wrap:anywhere}
+.fx-row.today .tname{font-weight:600}
+.fx-row.today .tmeta{color:var(--accent);font-weight:600}
+.fx-row.done .tname{color:var(--muted)}
+.fx-rows .fx-rest{border-top:1px solid var(--line)}
+.fx-nudge{margin:0;font-size:13px;line-height:1.5}
+.focus-box .fx-none{margin:0}
+.qtile{--tc:var(--muted);background:color-mix(in srgb,var(--tc) 9%,var(--card))}
+.qtile .qt-ico{color:var(--tc)}
+.qtile.tr{--tc:#2f9e6e}
+.qtile.bg{--tc:#b05cc6}
+.qtile.fd{--tc:var(--muted)}
+.qtile.fd.hot{--tc:var(--accent)}
+.qtile.wx.k-sun,.qtile.wx.k-partly{--tc:#f08c00}
+.qtile.wx.k-cloud,.qtile.wx.k-fog,.qtile.wx.k-none{--tc:#7c8698}
+.qtile.wx.k-rain,.qtile.wx.k-umbrella{--tc:#2f6fc0}
+.qtile.wx.k-snow{--tc:#3aa7c9}
+.qtile.wx.k-thunder{--tc:#7a5bd0}
+.qtile.wx.k-umbrella .qt-v,.qtile.fd.hot .qt-v{color:var(--tc)}
+@media (prefers-color-scheme:dark){.qtile.tr{--tc:#5fcf9d}.qtile.bg{--tc:#d391e6}.qtile.wx.k-sun,.qtile.wx.k-partly{--tc:#ffb347}.qtile.wx.k-rain,.qtile.wx.k-umbrella{--tc:#7fb0e8}.qtile.wx.k-snow{--tc:#7fd3ee}.qtile.wx.k-thunder{--tc:#a995f0}.qtile.wx.k-cloud,.qtile.wx.k-fog,.qtile.wx.k-none{--tc:#a0a8b8}}
+.pm-card.done{padding:14px 16px}
+.pm-card .pm-name{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pm-card .pm-name b{font-size:17px;overflow-wrap:anywhere}
+.pm-fin{display:flex;flex-direction:column;gap:10px}
+.pm-fin .bd-say{margin:0}
+.pm-fin-h{margin:2px 0 0;font-size:22px;text-align:center}
+.pm-tiles{display:flex;gap:8px}
+.pm-tile{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--bg);border-radius:12px;padding:10px 4px}
+.pm-tk{font-size:11px;color:var(--muted)}
+.pm-tv{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pm-how{margin:0}
+.pm-plan{margin:0}
+.pm-prow{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+.pm-prow:first-child{border-top:0}
+.pm-pt{flex:none;font-variant-numeric:tabular-nums;color:var(--muted)}
+.pm-pn{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
+.pm-pn .dot{width:9px;height:9px}
+.pm-pm{flex:none;font-weight:600}
+.pm-fin-btns{gap:8px;margin-top:4px}
+.pm-card .pm-name .sub{font-size:12px}

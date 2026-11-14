@@ -655,7 +655,7 @@ function sectionPomo(rerender) {
   const check = (label, key) => el('label.row.field', [el('input', { type: 'checkbox', checked: !!p[key], onchange: (e) => set({ [key]: e.target.checked }) }), el('span', label)]);
   const name = textInput(p.shortcut, (v) => set({ shortcut: v }), { 'aria-label': 'ショートカットの名前', maxlength: 60 });
   const test = () => { const url = notifyUrl({ startMs: Date.now(), work: 1, rest: 1, sets: 1 }); if (url) location.href = url; };
-  return card('ポモドーロ', 'ホームの「▶ 始める」が、作業と休憩を 決めたセット数だけ くり返すタイマーになります。作業と休憩は 自動で記録します(休憩は 種別が休憩の 先頭のカテゴリ)。アプリを閉じていても 時刻から計算するので、開き直せば 記録は合います。',
+  return card('ポモドーロ', 'ホームの「▶ 始める」が、作業と休憩を 決めたセット数だけ くり返すタイマーになります。タイマーの間は 記録に触りません。終わると「おつかれさま」の画面が出て、できた分を確かめてから 作業と休憩を記録します(休憩は 種別が休憩の 先頭のカテゴリ)。アプリを閉じていても 時刻から計算するので、開き直したときに 同じ画面が出ます。',
     check('ポモドーロを使う(外すと「▶ 始める」は 時間を決めない記録)', 'enabled'),
     chips('作業', pomo.WORK_CHOICES, p.work, 'work', '分'),
     chips('休憩', pomo.REST_CHOICES, p.rest, 'rest', '分'),

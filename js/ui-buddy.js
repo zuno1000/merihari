@@ -20,6 +20,8 @@ import { feedOn, feedRow, ensureSource } from './ui-feed.js';
 import { dateKey, minuteOfDay, effectiveDay, fmtMin, hm, windowFor } from './time.js';
 import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
+import * as pomo from './pomo.js';
+import { runNow } from './ui-pomo.js'; // v0.73: タイマーの間は 作業中 / 休憩中 として話す
 
 const S = () => store.state.data.settings;
 const B = () => buddy.normalizeBuddy(S().buddy);
@@ -101,6 +103,8 @@ function homeState() {
       idleMin = Math.max(0, n.min - last);
     }
   }
+  const run = !o ? runNow() : null; // v0.73・F25: ポモドーロの間は 記録が無くても 作業中 / 休憩中
+  if (run) { const ph = pomo.phaseAt(run, Date.now()); if (ph.kind !== 'done') { open = { role: ph.kind === 'rest' ? 'rest' : 'work', min: Math.max(0, Math.floor((Date.now() - run.startMs) / 60000)) }; idleMin = null; } }
   const a = primed && primed.art, q = primed && primed.quest;
   return { min: n.min, open, idleMin, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle };
 }
@@ -417,8 +421,11 @@ function customBox(b, c, save, rerender) {
   };
   const take = (text) => { // 返事 → 台詞(どの束の場面でも拾う)→ 確認のシート。見つからなければ false
     const found = buddy.parsePersona(text);
-    const rows = buddy.SCENE_KEYS.filter((k) => found[k]).flatMap((k) => found[k].map((s) => ({ k, s })));
+    const every = buddy.SCENE_KEYS.filter((k) => found[k]).flatMap((k) => found[k].map((s) => ({ k, s })));
+    const role = buddy.roleOf(B());
+    const rows = every.filter((r) => !buddy.offWorld(r.s, role)); // v0.73: 世界を変えたキャラクターでは、図書館の言葉が残った行は 覚える前に外す
     if (!rows.length) return false;
+    if (rows.length < every.length) toast(`図書館の言葉が入った ${every.length - rows.length} 行は外しました`);
     previewSheet(rows, (kept) => {
       const set = {};
       for (const r of kept) (set[r.k] || (set[r.k] = [])).push(r.s);
@@ -455,9 +462,19 @@ function customBox(b, c, save, rerender) {
     all.length ? el('details.bd-lines', [el('summary', `台詞の一覧を開く(${all.length})`), ...all.map((x) => el('div.bd-prow', [el('div.bd-pmain', [el('span.bd-pwhen', buddy.SCENES[x.k].when), el('span.bd-linetext', sample(x.s))]), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save(buddy.patchCustom(b, c.id, { set: { [x.k]: c.set[x.k].filter((_, j) => j !== x.i) } })) }, '×')]))]) : null,
     el('div.row', [
       el('button.btn.sm', { type: 'button', onclick: () => customSheet(b, c, save) }, '名前と説明を直す'),
+      all.length ? el('button.btn.sm.ghost', { type: 'button', onclick: () => renew(b, c.id, save) }, '台詞をぜんぶ消す') : null,
       el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${c.label}」を消しますか?`, 'この性格と その台詞を消します。口調は 土台に戻ります。', '消す', () => save(buddy.removeCustom(B(), c.id)), true) }, 'この性格を消す'),
-    ]),
+    ].filter(Boolean)),
   ].filter(Boolean));
+}
+
+/**
+ * 台詞を一新する(v0.73): その口調の 作ってもらった台詞と 手帳で覚えた台詞を、確かめてから ぜんぶ消す。性格そのもの(名前・説明)は残るので、束のボタンで 頼み直せる
+ */
+function renew(b, id, save) {
+  const n = buddy.lineCount(b, id), label = buddy.toneLabel(b, id);
+  if (!n.made && !n.learned) { toast('消す台詞は ありません'); return; }
+  confirmSheet(`「${label}」の台詞を ぜんぶ消しますか?`, `${[n.made ? `作ってもらった台詞 ${n.made} 個` : null, n.learned ? `手帳で覚えた台詞 ${n.learned} 個` : null].filter(Boolean).join('と ')}を消します。性格の名前と説明は残るので、束のボタンで 頼み直せます。消したあとは 内蔵の台詞で話します。`, 'ぜんぶ消す', () => { save(buddy.resetLines(B(), id)); toast('台詞を消しました'); }, true);
 }
 
 // ---- キャラクターを複数(v0.68・F24-17)----
@@ -592,7 +609,8 @@ export function sectionBuddy(rerender) {
     el('div.row.field', [el('span.label', '名前'), name]),
     el('div.row.field', [el('span.label', '肩書き'), title]),
     el('p.bd-h', '世界(どんな所の、どんな役か)'), world,
-    el('p.muted.small', buddy.roleOf(b).custom ? '肩書きと世界は、会話と 台詞を頼む文に入ります。内蔵の 3 つの口調の台詞は 大図書館の言葉のままなので、「\uff0b 性格を足す」で この世界の台詞を作ると そろいます(作り直すときは 束のボタンをもう一度)。' : '空のままなら 大図書館の見習い司書です。変えると、会話と 台詞を頼む文に その肩書きと世界が入ります。'),
+    el('p.muted.small', buddy.roleOf(b).custom ? '肩書きと世界は、会話と 台詞を頼む文に入ります。世界を決めたキャラクターは、内蔵の台詞のうち 大図書館の言葉(書庫・灯り・扉 など)が入ったものを 話しません。その世界の言葉で話させるには「\uff0b 性格を足す」で 台詞を作ります。' : '空のままなら 大図書館の見習い司書です。変えると、会話と 台詞を頼む文に その肩書きと世界が入ります。'),
+    (() => { const n = buddy.lineCount(b, b.tone); return buddy.roleOf(b).custom && (n.made || n.learned) ? el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => renew(b, b.tone, save) }, '台詞を一新する'), el('span.muted.small', `世界を変える前の台詞が残っていたら、ここで消して 頼み直せます(いま ${n.made + n.learned} 個)`)]) : null; })(),
     el('h3.help-h', '口調と性格'),
     el('div.chips.small', [
       ...[...buddy.TONES, ...b.custom.map((c) => c.id)].map((k) => el('button', { type: 'button', class: `chip sm2${k === b.tone ? ' on' : ''}`, 'aria-pressed': k === b.tone ? 'true' : 'false', onclick: () => save(buddy.patchChar(b, b.cur, { tone: k })) }, buddy.toneLabel(b, k))),
@@ -608,6 +626,7 @@ export function sectionBuddy(rerender) {
     ].filter(Boolean)),
     b.lines.length ? el('h3.help-h', `手帳で覚えた台詞(${b.lines.length})`) : null,
     b.lines.length ? el('p.muted.small', '手帳の「台詞を増やす」で覚えた台詞です(場面ごと・口調ごと)。\u00d7 で消せます。') : null,
+    b.lines.length ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('手帳で覚えた台詞を ぜんぶ消しますか?', `どの口調の分も合わせて ${b.lines.length} 個を消します(作ってもらった 性格の台詞は残ります)。`, 'ぜんぶ消す', () => { save({ ...B(), lines: [] }); toast('覚えた台詞を消しました'); }, true) }, '覚えた台詞をぜんぶ消す')) : null,
     b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.toneLabel(b, x.t)}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
   ].filter(Boolean));
 }

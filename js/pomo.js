@@ -1,6 +1,7 @@
 // merihari ─ pomo.js: ポモドーロ(v0.72・F25)。すべて純関数。
 // ユーザー要望「ポモドーロタイマーを実装し、それを用いて作業できるように。セットの回数は 事前に指定。通知は ショートカットを組み合わせて鳴らせるように」。
 // 走っている回(run)は 始めた時刻と 長さだけを持ち、いまの区間は 時刻から計算する(アプリを閉じていても ずれない・毎秒 保存しない)。
+// v0.73(ユーザー要望「タイマーどおりに いくかは分からないので、記録に反映する前に ワンクッション」): 走っている間は 記録に触らない。終わったとき(か 途中でやめたとき)に spans で 記録の案を作り、確かめてから置く。
 // 設定は settings.pomo(同期)、走っている回は local.pomo(端末ごと)。画面と記録は ui-pomo.js。
 
 export const WORK_CHOICES = Object.freeze([15, 20, 25, 30, 45, 50]);
@@ -23,15 +24,13 @@ export function normalizePomo(raw) {
   };
 }
 
-/** 走っている回(local.pomo)。形が合わなければ null。seg = 記録に反映し終えた区間の番号(0 から) */
+/** 走っている回(local.pomo)。形が合わなければ null */
 export function normalizeRun(raw) {
   if (!isObj(raw) || !Number.isFinite(+raw.startMs) || +raw.startMs <= 0 || typeof raw.categoryId !== 'string' || !raw.categoryId) return null;
   return {
     startMs: Math.round(+raw.startMs), work: int(raw.work, 1, 180, 25), rest: int(raw.rest, 1, 60, 5), sets: int(raw.sets, 1, MAX_SETS, 1),
     categoryId: raw.categoryId, taskId: typeof raw.taskId === 'string' && raw.taskId ? raw.taskId : null,
     restId: typeof raw.restId === 'string' && raw.restId ? raw.restId : null,
-    entryId: typeof raw.entryId === 'string' && raw.entryId ? raw.entryId : null,
-    seg: int(raw.seg, 0, MAX_SETS * 2, 0),
   };
 }
 
@@ -60,6 +59,28 @@ export function phaseAt(run, nowMs) {
   const spanSec = Math.round((s.endMs - s.startMs) / 1000);
   const leftSec = Math.max(0, Math.min(spanSec, Math.ceil((s.endMs - nowMs) / 1000)));
   return { index: i, kind: s.kind, set: s.set, sets: run.sets, leftSec, spanSec, rate: spanSec ? 1 - leftSec / spanSec : 1, endMs: s.endMs, next: segs[i + 1] ? segs[i + 1].kind : null };
+}
+
+/**
+ * 記録の案: stopMs までに済んだ区間(途中の区間は stopMs で切る・1 分に満たない端数は捨てる)。[{ kind, set, startMs, endMs, min(分) }]
+ * opts = { sets(できたセット数。それより後の区間は入れない), rest(false なら 休憩を入れない) }。最後に残った休憩(次の作業が無い)は入れない
+ */
+export function spans(run, stopMs, { sets = null, rest = true } = {}) {
+  const out = [];
+  for (const s of schedule(run)) {
+    if (s.startMs >= stopMs) break;
+    if (sets != null && s.set > sets) break;
+    const endMs = Math.min(s.endMs, stopMs);
+    const min = Math.floor(endMs / 60000) - Math.floor(s.startMs / 60000);
+    if (min < 1) continue;
+    out.push({ kind: s.kind, set: s.set, startMs: s.startMs, endMs, min });
+  }
+  while (out.length && out[out.length - 1].kind === 'rest') out.pop();
+  return rest ? out : out.filter((s) => s.kind === 'work');
+}
+/** 記録の案の まとめ: { workMin, restMin, sets(作業の区間の数) } */
+export function summary(list) {
+  return { workMin: list.filter((s) => s.kind === 'work').reduce((a, s) => a + s.min, 0), restMin: list.filter((s) => s.kind === 'rest').reduce((a, s) => a + s.min, 0), sets: list.filter((s) => s.kind === 'work').length };
 }
 
 /** 残りの表示「24:59」(60 分以上は「61:05」のまま) */

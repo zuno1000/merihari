@@ -74,7 +74,7 @@ export function bgmTile(rerender) {
   const p = playOf(effNow().date);
   const cat = bgm.catalogNow();
   const song = p && cat ? cat.songs.find((s) => s.id === p.id) : null;
-  return el('button.qtile', { type: 'button', 'aria-label': '作業用 BGM を流す', onclick: () => playBgm(rerender) }, [NOTE_ICON('qt-ico'), el('span.qt-v', p ? '次の曲' : '流す'), el('span.qt-k', song ? song.t : '作業用 BGM')]);
+  return el('button.qtile.bg', { type: 'button', 'aria-label': '作業用 BGM を流す', onclick: () => playBgm(rerender) }, [NOTE_ICON('qt-ico'), el('span.qt-v', p ? '次の曲' : '流す'), el('span.qt-k', song ? song.t : '作業用 BGM')]);
 }
 /** その日に流した曲(いちばん新しいもの) */
 export function playOf(date) {

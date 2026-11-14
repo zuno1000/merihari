@@ -83,7 +83,7 @@ export function trainTile(ctx) {
   const labOf = () => train.waitLabel(departuresOf(first).list[0] || null);
   const lab = labOf();
   const v = el('span.qt-v', lab ? (lab === 'いま' ? 'いま' : `あと${lab}`) : '時刻表');
-  const b = el('button.qtile', { type: 'button', 'aria-label': `次の電車(${first.name})`, onclick: () => trainSheet(ctx) }, [trainIcon('qt-ico'), v, el('span.qt-k', first.name || '電車')]);
+  const b = el('button.qtile.tr', { type: 'button', 'aria-label': `次の電車(${first.name})`, onclick: () => trainSheet(ctx) }, [trainIcon('qt-ico'), v, el('span.qt-k', first.name || '電車')]);
   refreshStale([first], () => { if (!b.isConnected) return; const nl = labOf(); if (nl) v.textContent = nl === 'いま' ? 'いま' : `あと${nl}`; });
   return b;
 }

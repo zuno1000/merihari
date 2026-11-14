@@ -186,7 +186,7 @@ export function feedTile(rerender) {
   const f = feed.feedNow();
   if (!f) { feed.loadFeed().then(() => { if (rerender) rerender(); }).catch(() => {}); return null; }
   const n = feed.unread(f.items, MK(), S().feed.genres, S().feed.off).length;
-  return el('button.qtile', { type: 'button', class: `qtile${n ? ' hot' : ''}`, 'aria-label': `キャッチアップ(新着 ${n} 本)`, onclick: () => feedSheet(rerender) }, [FEED_ICON(), el('span.qt-v', n ? `新着 ${n}` : '記事'), el('span.qt-k', 'キャッチアップ')]);
+  return el('button.qtile', { type: 'button', class: `qtile fd${n ? ' hot' : ''}`, 'aria-label': `キャッチアップ(新着 ${n} 本)`, onclick: () => feedSheet(rerender) }, [FEED_ICON(), el('span.qt-v', n ? `新着 ${n}` : '記事'), el('span.qt-k', 'キャッチアップ')]);
 }
 
 /**

@@ -7,7 +7,7 @@ import { dueTasks, deadlineMin, goals, habitStats, chunkOf, planCompare } from '
 import { entryRole, kindRole } from './store.js';
 
 /** 候補の札(kind → 見出し) */
-export const NEXT_LABEL = Object.freeze({ plan: '予定', soon: 'もうすぐ期限', over: '期限切れ', due: 'きょうが期限', habit: '習慣', tmr: '明日が期限', goal: '目標', work: '作業' });
+export const NEXT_LABEL = Object.freeze({ plan: '予定', soon: 'もうすぐ期限', over: '期限切れ', due: 'きょうが期限', habit: '習慣', tmr: '明日が期限', goal: '目標', work: '作業', pick: '選んだ作業' });
 /** 時刻つきの期限が「もうすぐ」になる幅(分) */
 export const SOON_MIN = 180;
 
