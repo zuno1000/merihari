@@ -1706,3 +1706,6 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .bd-charbox .bd-custom{background:var(--bg);border:0;padding:10px 12px}
 .bd-charbox textarea.text.bd-ta{background:var(--bg)}
 .bd-slot-acts .btn.sm{padding:6px 10px}
+/* v0.75.1: 性格の箱のボタンの行は 折り返す(v0.73 で「台詞をぜんぶ消す」を足して 3 つになり、幅 390px で 右にはみ出していた = 設定 › アシスタント だけ 画面が縮んで 細く見えた原因) */
+.bd-custom .row,.bd-charbox>.row{flex-wrap:wrap}
+.bd-charbox>.row>.muted{flex:1 1 180px;min-width:0}

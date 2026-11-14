@@ -487,7 +487,13 @@ function customBox(b, c, save, rerender) {
     el('p.bd-h', `「${c.label}」の台詞`),
     c.hint ? el('p.muted.small', c.hint) : null,
     el('p.muted.small', todo.length ? `①束のボタンを押すと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。「日常」は 何気ない ひとことを 15 個ずつ(頼み直すと 入れ替わります)。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : 'どの場面にも台詞があります。頼み直すと、その束の場面は 新しい台詞に置き換わります。'),
-    el('div.chips.small', buddy.GROUP_KEYS.map((g) => el('button', { type: 'button', class: `chip sm2${cov[g].have >= cov[g].total ? ' on' : ''}`, onclick: () => ask(g) }, `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total})`))),
+    // 括弧の中: 場面が いくつもある束は「台詞のある場面 / 場面の数」、場面が 1 つだけの束(日常)は 台詞の個数(v0.75.1・実機 FB「日常が 1 / 1 になるのは 想定どおり?」)
+    el('div.chips.small', buddy.GROUP_KEYS.map((g) => {
+      const keys = buddy.groupKeys(g), one = keys.length === 1 ? keys[0] : null;
+      const n = one ? (c.set[one] || []).length : 0;
+      const label = one ? `${buddy.GROUPS[g].label}(${n} 個 / ${buddy.capOf(one)} 個まで)` : `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total} 場面)`;
+      return el('button', { type: 'button', class: `chip sm2${(one ? n >= buddy.GROUPS[g].per : cov[g].have >= cov[g].total) ? ' on' : ''}`, onclick: () => ask(g) }, label);
+    })),
     el('div.row', [el('button', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事を貼り付けて覚える'), pending ? el('span.muted.small', `「${buddy.GROUPS[pending.group].label}」の文をコピー済み`) : null]),
     all.length ? el('details.bd-lines', [el('summary', `台詞の一覧を開く(${all.length})`), ...all.map((x) => el('div.bd-prow', [el('div.bd-pmain', [el('span.bd-pwhen', buddy.SCENES[x.k].when), el('span.bd-linetext', sample(x.s))]), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save(buddy.patchCustom(b, c.id, { set: { [x.k]: c.set[x.k].filter((_, j) => j !== x.i) } })) }, '×')]))]) : null,
     el('div.row', [
