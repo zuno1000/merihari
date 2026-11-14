@@ -12,4 +12,10 @@ export const FEATURES = Object.freeze({
    * true に戻すと 残り見積・目安・塊(chunkMin)・用事(時間なし)の区別が復活する(plan.todayShare / goals / overdueTasks は opts.estimate でも切り替えられる)。
    */
   TASK_ESTIMATE: false,
+  /**
+   * v0.56・F22(ユーザー要望「作業をすき間時間に自発的にやりたくなる仕組み」): 解読。作業の記録時間で、伏せられた記録(物語の断片)が開いていく。
+   * 隔離した実装: js/quest.js・js/ui-quest.js・data/story.json と、ホームの 1 行(ui-today)・設定の 1 項目(ui-settings)・settings.quest だけ。
+   * false にすると ホームの行も設定の項目も出ない(データは settings.quest と local.quest が残るだけ)。
+   */
+  QUEST: true,
 });

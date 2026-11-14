@@ -1319,3 +1319,46 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .bs-row.hot .bs-k{background:var(--accent);color:var(--card)}
 .bs-row.hot .bs-t{font-weight:600}
 .bs-t{min-width:0}
+
+/* v0.56・F22: 解読(作業の記録で物語の断片が開く)。ホームの 1 行(.q-strip)と シートの中の暗い板(.q-panel)。FEATURES.QUEST を切ればどれも使われない */
+.q-strip{display:flex;align-items:center;gap:10px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;margin:0 0 12px;min-height:48px;font:inherit;color:var(--fg);text-align:left;cursor:pointer}
+.q-strip[hidden]{display:none}
+.q-s-ico{flex:none;width:9px;height:9px;border-radius:50%;border:2px solid var(--muted);box-sizing:border-box}
+.q-strip.active .q-s-ico{border-color:var(--accent);background:var(--accent);animation:q-pulse 1.6s ease-in-out infinite}
+.q-strip.hot .q-s-ico{border-color:var(--accent);background:var(--accent)}
+.q-s-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.q-s-label{font-size:13px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
+.q-strip.hot .q-s-label{color:var(--accent)}
+.q-s-sub{flex:none;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.q-strip.hot .q-s-sub{color:var(--accent);font-weight:600}
+.q-bar{display:block;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.q-bar i{display:block;height:100%;border-radius:2px;background:var(--accent);transition:width .6s ease}
+@keyframes q-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.q-panel{--q-bg:#0d131d;--q-fg:#d5e2f3;--q-dim:#7f90a8;--q-line:#223046;--q-ac:#6fd3e6;background:var(--q-bg);color:var(--q-fg);border-radius:16px;padding:16px 14px 14px;font-size:15px;line-height:1.85}
+.q-panel p{margin:0}
+.q-title{font-size:12px;letter-spacing:.18em;color:var(--q-ac);font-weight:600}
+.q-meta{font-size:12px;color:var(--q-dim);margin-bottom:12px!important}
+.q-head{font-size:12px;color:var(--q-dim);display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin-bottom:6px!important;line-height:1.5}
+.q-no{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--q-ac);letter-spacing:.04em}
+.q-lock{margin-left:auto;font-size:11px;border:1px solid var(--q-line);border-radius:999px;padding:0 8px;color:var(--q-dim)}
+.q-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.q-frag{border-top:1px solid var(--q-line);padding-top:12px;min-height:120px}
+.q-frag.typing .q-text::after{content:"▍";color:var(--q-ac);animation:q-pulse .8s steps(2) infinite}
+.q-more{display:block;width:100%;margin-top:14px;border:1px solid var(--q-ac);background:none;color:var(--q-ac);border-radius:999px;min-height:46px;font:inherit;font-weight:600;cursor:pointer}
+.q-next{margin-top:16px;border:1px dashed var(--q-line);border-radius:12px;padding:12px}
+.q-mask{font-size:14px;line-height:1.9;color:var(--q-dim);overflow-wrap:anywhere}
+.q-mask i{font-style:normal;background:var(--q-line);border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.q-prog{display:flex;align-items:center;gap:10px;margin-top:10px}
+.q-prog .q-bar{flex:1;height:6px;border-radius:3px;background:var(--q-line)}
+.q-prog .q-bar i{background:var(--q-ac)}
+.q-pct{flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;color:var(--q-ac);font-variant-numeric:tabular-nums}
+.q-need{font-size:13px;color:var(--q-fg);margin-top:4px!important}
+.q-next.active .q-need{color:var(--q-ac)}
+.q-end{margin-top:16px!important;font-size:13px;color:var(--q-dim)}
+.q-arch{margin-top:16px;border-top:1px solid var(--q-line);padding-top:10px;font-size:13px}
+.q-arch>summary{color:var(--q-dim);cursor:pointer;min-height:36px;display:flex;align-items:center}
+.q-ch{font-size:11px;color:var(--q-dim);letter-spacing:.1em;margin:10px 0 2px!important}
+.q-old>summary{cursor:pointer;padding:7px 0;color:var(--q-fg);display:flex;gap:8px;align-items:baseline;list-style:none}
+.q-old>summary::-webkit-details-marker{display:none}
+.q-old .q-text{font-size:14px;color:var(--q-fg);padding:2px 0 12px;border-bottom:1px solid var(--q-line)}
+.q-act{margin-top:12px;gap:10px;align-items:center}
