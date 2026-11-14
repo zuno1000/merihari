@@ -1477,3 +1477,9 @@ button.a-thumb{cursor:pointer}
 .bd-linerow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
 .bd-linetext{flex:1;min-width:0;line-height:1.5}
 .bd-linerow .btn{min-height:36px;padding:4px 10px}
+/* v0.64: ホームの吹き出しはタップで ほかのコメント(顔は シート)。ふり返りタブの節の頭の吹き出し */
+div.bd-home{cursor:default}
+.bd-avbtn{flex:none;display:flex;border:0;background:none;padding:0;cursor:pointer}
+button.bd-bubble{font:inherit;color:var(--fg);text-align:left;cursor:pointer}
+button.bd-bubble:active{background:var(--accent-bg)}
+.group>.bd-say{margin:0 0 8px}

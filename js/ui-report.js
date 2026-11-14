@@ -2,6 +2,7 @@
 // v0.15.1: 上の切替で 今日 / 7日 / 30日 / すべて。ホームに今日の内訳があるので、ホームからは「7日」で開く(昨日の未読があれば昨日)。
 // 今日: 一言 → 1日の円 → 作業の合計(先週比)→ ことば → くわしく。期間: 一言 → 内訳の円(記録した時間の割合)→ カテゴリ別の棒 → 推移(日/週)→ 目安のふり返り。
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
+import { lead } from './ui-buddy.js'; // v0.64・F24-13
 import * as diaryMod from './diary.js';
 import * as planMod from './plan.js';
 import * as kiaiMod from './kiai.js';
@@ -49,6 +50,8 @@ export function reportSheet(date, range0 = 'day') {
   const seg = el('div.seg', RANGES.map(([k, label]) => el('button', { type: 'button', class: k === range ? 'active' : '', onclick: (e) => { range = k; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === e.currentTarget)); draw(); } }, label)));
   const draw = () => {
     while (body.firstChild) body.removeChild(body.firstChild);
+    const say = lead(range === 'day' ? 'report_open' : 'report_period', {}, 'base', null); // v0.64: アシスタントの ひとこと(止めていれば無し)
+    if (say) body.append(say);
     if (range === 'day') body.append(...dayView(date, today, nowMin, () => { close(); reportSheet(date, 'day'); }, () => close()).filter(Boolean));
     else body.append(...periodView(range, date, nowMin).filter(Boolean));
   };

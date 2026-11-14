@@ -166,6 +166,18 @@ const LINES = Object.freeze({
   article: { bright: ['書庫に新しい記事が届いてたよ。気になるの、ある?', '新しい記事を 棚に並べておいたよ。'], polite: ['新しい記事が届いています。'], cool: ['新しい記事が届いている。'] },
   tasks_none: { bright: ['きょうが期限のものは無いよ。好きな扉からどうぞ!'], polite: ['今日が期限のものはありません。'], cool: ['期限のものは無い。'] },
   tasks_some: { bright: ['きょうまでのものが {n} 件。ここで済ませられるよ。'], polite: ['今日までのものが {n} 件あります。ここで済ませられます。'], cool: ['きょうまでが {n} 件。ここで済ませろ。'] },
+  quest_wait: { bright: ['あと {n} 分ぶんの灯りで、小説の続きを取ってこられるよ。', '小説の続きまで、あと {n} 分。棚の場所は もう見つけてあるよ。'], polite: ['あと {n} 分の灯りで、小説の続きをお持ちできます。'], cool: ['あと {n} 分で小説の続きだ。'] },
+  art_wait: { bright: ['あと {n} ピースで{kind}の「{label}」がわかるよ。', '{kind}の「{label}」まで、あと {n} ピース。扉の向こうが少し見えてきた。'], polite: ['あと {n} ピースで{kind}の「{label}」が開きます。'], cool: ['あと {n} ピースで「{label}」だ。'] },
+  review_head: { bright: ['記録を読んだよ。きょうは「{text}」だね。', 'きょうの記録、棚に並べたよ。「{text}」だって。'], polite: ['記録を拝見しました。「{text}」でした。'], cool: ['記録は読んだ。「{text}」だ。'] },
+  review_mid: { bright: ['きょうの記録、ここまでを まとめておいたよ。', 'ここまでの灯り、数えておいたよ。'], polite: ['ここまでの記録をまとめました。'], cool: ['ここまでのぶんだ。'] },
+  review_none: { bright: ['まだ記録が無いみたい。ひとつ付けたら、すぐ棚に並べるね。'], polite: ['まだ記録がありません。ひとつ付けていただければ、すぐに並べます。'], cool: ['記録が無い。ひとつ付けろ。'] },
+  review_past: { bright: ['この日の記録、書庫から出してきたよ。'], polite: ['この日の記録を、書庫からお出ししました。'], cool: ['この日の記録だ。'] },
+  diary_ask: { bright: ['きょうの気持ち、書庫に残しておかない? ひとことでいいよ。', 'よかったこと、ひとつだけ教えて。わたしが綴じておくから。'], polite: ['今日のお気持ちを、書庫に残しませんか。ひとことで結構です。'], cool: ['気持ちを残しておけ。ひとことでいい。'] },
+  diary_past: { bright: ['この日のこと、覚えてる? 書き足してもいいよ。'], polite: ['この日のことを、書き足すこともできます。'], cool: ['書き足すなら、いまだ。'] },
+  ai_offer: { bright: ['ふり返りを、わたしの言葉でまとめようか?', 'この日のこと、わたしからも ひとこと言っていい?'], polite: ['ふり返りを、わたくしの言葉でおまとめしましょうか。'], cool: ['まとめが要るなら言え。'] },
+  near: { bright: ['この先 7 日の期限、棚に並べておいたよ。'], polite: ['この先 7 日の期限を並べておきました。'], cool: ['この先 7 日の期限だ。'] },
+  report_open: { bright: ['数字で見ると、こんな一日だったよ。', 'この日の灯りを、ぜんぶ並べてみたよ。'], polite: ['数字でご覧になると、このような一日でした。'], cool: ['数字だ。見ておけ。'] },
+  report_period: { bright: ['この期間を まとめて見てみよう。'], polite: ['この期間をまとめてご覧ください。'], cool: ['まとめて見ろ。'] },
   bye: { bright: ['じゃあ、いってらっしゃい!', '灯りを持って、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
 });
 export const LINE_KEYS = Object.freeze(Object.keys(LINES));
@@ -199,7 +211,16 @@ export function say(key, tone = 'bright', vars = {}, seed = 0, extra = []) {
     const b = s % (cl.length + 1);
     t = (a ? op[a - 1] : '') + t + (b ? cl[b - 1] : '');
   }
-  return t.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ''));
+  return tidy(t.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : '')));
+}
+/**
+ * 台詞を整える(v0.64・ユーザー要望「台詞に謎のスペースが挟まらないように」): 空白(半角・全角)を詰める。英単語どうしの間の空白だけは 1 つ残す。
+ * 日本語のあとの ! と ? は全角にする(詰めても窮屈に見えないように)。
+ */
+export function tidy(s) {
+  return String(s == null ? '' : s)
+    .replace(/[ 　]+/g, (m, off, str) => (/[A-Za-z]/.test(str[off - 1] || '') && /[A-Za-z]/.test(str[off + m.length] || '') ? ' ' : ''))
+    .replace(/([^\x00-\x7f])!/g, '$1！').replace(/([^\x00-\x7f])\?/g, '$1？');
 }
 /** その場面・その口調で言える文の数(内蔵 × 呼びかけ × ひとこと + 覚えた分) */
 export function variety(key, tone = 'bright', extra = []) {
@@ -249,6 +270,7 @@ export function cleanLine(raw, key) {
   if (!t || typeof raw !== 'string') return null;
   let s = raw.trim().replace(/^[\s\-*・●◦▪■□◆◇>]+/, '').replace(/^[((]?\d{1,2}[)).、.:]\s*/, '').trim();
   s = s.replace(/^[「『"']+/, '').replace(/[」』"']+$/, '').trim();
+  s = tidy(s); // v0.64: 台詞の中の空白を詰める
   if (s.length < LINE_MIN || s.length > LINE_MAX || /https?:|[<>]|[\r\n]/.test(s)) return null;
   const used = [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
   if (used.some((v) => !t.vars.includes(v)) || /[{}]/.test(s.replace(/\{\w+\}/g, ''))) return null;
@@ -308,6 +330,24 @@ export function homeLine(st, tone = 'bright', seed = 0, lines = []) {
   if (!o && s.idleOn !== false && s.idleMin != null && s.idleMin >= 45) return mk('idle', 'worry');
   if (!o && s.due > 0 && m >= 1020) return mk('due', 'worry', { n: s.due });
   return mk('hello', 'base');
+}
+
+/**
+ * ホームで言えるコメントの一覧(v0.64・ユーザー要望「吹き出しをタップすると ほかのコメントが出るように」): 先頭は homeLine(いまいちばん言いたいこと)。
+ * そのあとに、言える話題を足す(小説の続きまで あと何分 / 絵の次の情報まで あと何ピース / きょうまでの期限 / あいさつ)。同じ場面は 1 つだけ。
+ * 画面はタップのたびに 次の話題へ進み、seed も進めるので、一巡したあとは言い回しが変わる。戻り値 [{ key, text, mood }](1 つ以上)
+ */
+export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
+  const s = st || {};
+  const first = homeLine(s, tone, seed, lines);
+  const out = [first];
+  const add = (key, mood, vars = {}) => { if (!out.some((x) => x.key === key)) out.push({ key, mood, text: say(key, tone, vars, seed, learned(lines, key, tone)) }); };
+  if (first.key === 'night') return out; // 夜は おやすみ だけ
+  if (s.quest && !s.quest.done && !(s.quest.unread > 0) && first.key !== 'working') add('quest_wait', 'base', { n: s.quest.need });
+  if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
+  if (s.due > 0) add('due', 'worry', { n: s.due });
+  add('hello', 'base');
+  return out;
 }
 
 /** 旅した土地のスタンプ: 完成した絵と写真を 国ごとに。戻り値 [{ country, n, last(最後に完成した題名 / 場所) }](多い順・同数なら先に行った順) */

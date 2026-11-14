@@ -10,7 +10,7 @@ import { FEATURES } from './features.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
 import * as ai from './ai.js';
-import { buddyNotes, buddyPersona, prime } from './ui-buddy.js'; // v0.60: AI に渡す材料
+import { buddyNotes, buddyPersona, prime, lead, buddyOn, buddyName } from './ui-buddy.js'; // v0.60: AI に渡す材料
 import * as sync from './sync.js';
 import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
 import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js';
@@ -152,7 +152,7 @@ export function renderDiary(view, ctx, dateArg = null) {
   const aiOn = !!store.state.local.ai?.enabled;
   let aiBox = null;
   if (aiOn || (draft.ai && draft.ai.trim())) {
-    const aiField = field('ai', 'AI の返事', aiOn ? '「返事を貼り付け」で入ります' : '');
+    const aiField = field('ai', buddyOn() ? `${buddyName()}の返事` : 'AI の返事', aiOn ? '「返事を貼り付け」で入ります' : '');
     aiOpts.aiField = fields.ai;
     const pasteInto = async () => {
       let text = '';
@@ -163,7 +163,7 @@ export function renderDiary(view, ctx, dateArg = null) {
       if (cur === text) { toast('同じ返事がもう入っています'); return; }
       fields.ai.value = cur ? `${cur}\n\n${text}` : text; draft.ai = fields.ai.value; fields.ai.fit(); queue(); toast('返事を貼り付けました');
     };
-    aiBox = el('section.group', [el('h2', 'AI'), el('section.card.dcard.aisec', [
+    aiBox = el('section.group', [lead('ai_offer', {}, 'base', 'AI'), el('section.card.dcard.aisec', [
       aiField,
       aiOn ? el('div.row.wrap.airow', [
         el('button.btn.sm', { type: 'button', onclick: () => aiCard(aiOpts).send?.() }, isToday ? 'きょうのふり返りを頼む' : 'この日のふり返りを頼む'),
@@ -178,8 +178,11 @@ export function renderDiary(view, ctx, dateArg = null) {
   // v0.27.1・案 A・F9-7: ふり返りの流れ=①きょうはどうだった(レポートの見出しとタイル)→ ②気持ちを残す(日記・明日は を含む)→ AI(有効なら)→ 期限が近いタスク(きょうだけ)
   // v0.30(実機 FB): 「材料」と「明日の予定」の札を廃止、「明日は」を ひっかかったこと の下へ、AI とタスクの順を入れ替え
   const top = dayTop(date, nowMin);
-  const topSec = top ? el('section.group', [el('h2', isToday ? 'きょうはどうだった' : 'この日はどうだった'), top]) : null;
-  const cardSec = el('section.group', [el('h2', '気持ちを残す'), card]);
+  // v0.64(ユーザー要望「ふり返りタブも アシスタントが中心に」): 節の見出しを アシスタントの吹き出しに(止めていれば 従来の見出し)。記録が無い日も ひとこと出す
+  const headText = fb.head || (fb.good && fb.good[0]) || '';
+  const topLead = !isToday ? lead('review_past', {}, 'base', 'この日はどうだった') : !top ? lead('review_none', {}, 'worry', null) : headText && fb.judged ? lead('review_head', { text: String(headText).replace(/[。.]$/, '') }, 'happy', 'きょうはどうだった') : lead('review_mid', {}, 'base', 'きょうはどうだった');
+  const topSec = top || topLead ? el('section.group', [topLead, top].filter(Boolean)) : null;
+  const cardSec = el('section.group', [lead(isToday ? 'diary_ask' : 'diary_past', {}, 'base', '気持ちを残す'), card]);
   let taskSec = null;
   if (isToday) {
     const tmr = addDays(date, 1);
@@ -189,7 +192,7 @@ export function renderDiary(view, ctx, dateArg = null) {
     const catOf = (id) => S().categories.find((c) => c.id === id) || null;
     const dlText = (t) => { const k = t.deadline.slice(0, 10); const dd = plan.daysBetween(date, k); return k === tmr ? '明日が期限' : `${fmtMD(k)}が期限(あと${dd}日)`; };
     taskSec = el('section.group', [
-      el('h2', '期限が近いタスク'),
+      lead('near', {}, 'base', '期限が近いタスク'),
       el('div.list', near.length ? near.map((t) => { const c = catOf(t.categoryId); return el('button.srow.goal.dlrow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
         el('span.gmain', [el('span.gname', [c ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, t.name]), el('span.gmeta', `${dlText(t)}${!FEATURES.TASK_ESTIMATE ? (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '') : t.noTime ? '・用事' : `・残り ${fmtMin(plan.remainingMin(t, E()))}`}`)]),
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),

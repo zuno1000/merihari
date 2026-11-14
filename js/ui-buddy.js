@@ -42,6 +42,9 @@ export function buddyNotes() {
   const d = store.state.data;
   return buddy.insights({ entries: d.entries, settings: S(), today: now().date, workMin: totalWork(), progress: primed }).map((x) => `${x.label}: ${x.text}`);
 }
+export const buddyName = () => B().name;
+/** 吹き出し、止めていれば 見出し(h2)。ふり返りタブとレポートの節の頭に使う(v0.64) */
+export function lead(key, vars, mood, title) { return bubble(key, vars, mood) || (title ? el('h2', title) : null); }
 /** 日報の題(止めていれば null): 「リブの日報・昼」 */
 export const reportTitle = (slot) => (buddyOn() ? `${B().name}の日報・${{ morning: '朝', noon: '昼', evening: '夜' }[slot] || ''}` : null);
 /** AI に渡す人格の一文(止めていれば '') */
@@ -116,13 +119,17 @@ export function buddyHome(ctx) {
   if (!buddyOn()) return null;
   const b = B();
   const text = el('span.bd-text'), av = el('span.bd-avwrap');
-  let mood = null;
+  let mood = null, turn = 0; // turn: 吹き出しをタップした回数(v0.64: タップで ほかのコメント)
   const paint = () => {
-    const l = buddy.homeLine(homeState(), b.tone, seed(), b.lines);
+    const list = buddy.homeLines(homeState(), b.tone, seed() + turn, b.lines);
+    const l = list[turn % list.length];
     if (text.textContent !== l.text) text.textContent = l.text;
     if (l.mood !== mood) { mood = l.mood; clear(av); av.append(avatar(mood, 44)); }
   };
-  const node = el('button.bd-home', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, [av, el('span.bd-bubble', [el('span.bd-name', b.name), text])]);
+  const node = el('div.bd-home', [
+    el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
+    el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [el('span.bd-name', b.name), text]),
+  ]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
   const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } paint(); }, 30000);
@@ -249,7 +256,7 @@ export function recoPage(slot, redraw) {
     const day = d && slot === 'evening' && d.tomorrow ? d.tomorrow : d;
     if (day) {
       const text = weather.lineText(day);
-      parts.weather = card(slot === 'evening' && d.tomorrow ? `あすの天気・${r.name}` : `天気・${r.name}`, on ? `${line('weather', { text })}${weather.umbrella(day) ? ` ${line('umbrella')}` : ''}` : `${text}${weather.umbrella(day) ? '・傘' : ''}`);
+      parts.weather = card(slot === 'evening' && d.tomorrow ? `あすの天気・${r.name}` : `天気・${r.name}`, on ? `${line('weather', { text })}${weather.umbrella(day) ? line('umbrella') : ''}` : `${text}${weather.umbrella(day) ? '・傘' : ''}`);
     }
   }
   if (bgmOn()) parts.bgm = card('作業用 BGM', line('bgm'), el('div.row', el('button.btn.sm', { type: 'button', onclick: () => playBgm() }, '♪ 1 曲 流す')));
