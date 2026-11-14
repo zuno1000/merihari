@@ -127,46 +127,162 @@ export const TONE_LABEL = Object.freeze({ bright: '明るく軽め', polite: '�
 export const MOODS = Object.freeze(['base', 'happy', 'work', 'worry', 'night']);
 export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれしい', work: '作業中', worry: '気にかけている', night: 'おやすみ' });
 
-/** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone, idle(ホームで声をかける・既定 true) } */
+/** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone, idle(ホームで声をかける・既定 true), lines(覚えた台詞・v0.63) } */
 export function normalizeBuddy(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const name = typeof o.name === 'string' ? o.name.trim().slice(0, 12) : '';
-  return { enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false };
+  return { enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false, lines: normalizeLines(o.lines) };
 }
 
 const LINES = Object.freeze({
-  hello_morning: { bright: ['おはよう! 書庫の灯り、つけておいたよ。', 'おはよう! きのうの記録をまとめておいたよ。'], polite: ['おはようございます。昨日の記録をまとめておきました。'], cool: ['おはよう。昨日のぶんは まとめてある。'] },
-  hello_noon: { bright: ['おつかれさま! 午前のぶんを見てみよう。'], polite: ['お疲れさまです。午前の記録をまとめました。'], cool: ['昼だ。午前のぶんを置いておく。'] },
-  hello_evening: { bright: ['こんばんは! きょうも あと少しだね。'], polite: ['こんばんは。午後の記録をまとめました。'], cool: ['夜だ。午後のぶんを まとめた。'] },
-  hello: { bright: ['やあ! 書庫で待ってたよ。', 'きょうは どの扉をくぐろうか。'], polite: ['こんにちは。書庫でお待ちしていました。'], cool: ['来たか。書庫は開いている。'] },
-  postcard: { bright: ['{place}に行ってきたよ! 絵はがきを図録に入れておいたからね。'], polite: ['{place}へ行ってまいりました。絵はがきを図録に収めてあります。'], cool: ['{place}から戻った。絵はがきは図録に入れてある。'] },
-  unread: { bright: ['書庫から続きを {n} 回分 持ってきたよ。読む?'], polite: ['書庫から続きを {n} 回分 お持ちしました。'], cool: ['続きが {n} 回分 届いている。'] },
-  switch: { bright: ['{min} 分たったね。区切るなら、いまがちょうどいいかも!'], polite: ['{min} 分たちました。区切るなら、いまがよい頃合いです。'], cool: ['{min} 分だ。区切るなら いま。'] },
-  working: { bright: ['いい調子! あと {n} 分で小説の続きを取ってこられるよ。', '灯りがついてる。あと {n} 分で続きが届くよ!'], polite: ['順調です。あと {n} 分で小説の続きをお持ちできます。'], cool: ['その調子。あと {n} 分で続きが届く。'] },
-  working_art: { bright: ['あと {n} ピースで{kind}の「{label}」がわかるよ!'], polite: ['あと {n} ピースで{kind}の「{label}」が開きます。'], cool: ['あと {n} ピースで「{label}」が開く。'] },
-  rest: { bright: ['ひと休み中だね。戻ったら また灯りをつけよう。'], polite: ['休憩中ですね。戻られたら また灯りをともしましょう。'], cool: ['休憩か。戻ったら続きだ。'] },
-  idle: { bright: ['ちょっと静かだね。5 分だけ、灯りをつけてみない?', 'いまなら 5 分で 1 ピース。やってみる?'], polite: ['少し間があきました。5 分だけ 始めてみませんか。'], cool: ['間があいた。5 分だけ、どうだ。'] },
-  due: { bright: ['きょうが期限のものが {n} 件 残ってるよ。先に片づけちゃおう!'], polite: ['今日が期限のものが {n} 件 残っています。'], cool: ['期限のものが {n} 件 残っている。'] },
-  night: { bright: ['きょうも おつかれさま。灯りを消しておくね、おやすみ!'], polite: ['今日もお疲れさまでした。おやすみなさい。'], cool: ['きょうは ここまで。休め。'] },
+  hello_morning: { bright: ['おはよう! 書庫の灯り、つけておいたよ。', 'おはよう! きのうの記録をまとめておいたよ。', 'おはよう。朝の書庫は 紙のいい匂いがするよ。'], polite: ['おはようございます。昨日の記録をまとめておきました。', 'おはようございます。書庫の窓を開けておきました。'], cool: ['おはよう。昨日のぶんは まとめてある。', '朝だ。昨日の記録を置いておく。'] },
+  hello_noon: { bright: ['おつかれさま! 午前のぶんを見てみよう。', 'お昼だね。午前の灯り、ちゃんと数えておいたよ。'], polite: ['お疲れさまです。午前の記録をまとめました。', 'お昼になりました。午前のぶんをお持ちします。'], cool: ['昼だ。午前のぶんを置いておく。', '午前の記録だ。見ておけ。'] },
+  hello_evening: { bright: ['こんばんは! きょうも あと少しだね。', 'こんばんは。午後の灯りも、ちゃんと届いてたよ。'], polite: ['こんばんは。午後の記録をまとめました。', 'お疲れさまでした。午後のぶんをお持ちします。'], cool: ['夜だ。午後のぶんを まとめた。', '午後の記録だ。'] },
+  hello: {
+    bright: ['やあ! 書庫で待ってたよ。', 'きょうは どの扉をくぐろうか。', 'おかえり! 灯りの準備はできてるよ。', '書庫は きょうも静かだよ。いい日になりそう。', 'あ、来た来た。きょうの本、棚から出しておくね。', '絵の扉、きょうは どこにつながるかな。'],
+    polite: ['こんにちは。書庫でお待ちしていました。', 'お帰りなさいませ。灯りの用意はできています。', '本日も書庫は開いております。', 'きょうの本を、棚からお出ししておきます。'],
+    cool: ['来たか。書庫は開いている。', '灯りの用意はある。', 'きょうの本は出してある。', '扉は開けてある。好きにしろ。'],
+  },
+  postcard: { bright: ['{place}に行ってきたよ! 絵はがきを図録に入れておいたからね。', '{place}から ただいま! おみやげの絵はがき、図録にあるよ。'], polite: ['{place}へ行ってまいりました。絵はがきを図録に収めてあります。', '{place}より戻りました。絵はがきは図録にございます。'], cool: ['{place}から戻った。絵はがきは図録に入れてある。', '{place}の絵はがきだ。図録を見ろ。'] },
+  unread: { bright: ['書庫から続きを {n} 回分 持ってきたよ。読む?', '続きが {n} 回分 届いてるよ! いいところで切れてたよね。'], polite: ['書庫から続きを {n} 回分 お持ちしました。', '続きが {n} 回分 届いております。'], cool: ['続きが {n} 回分 届いている。', '{n} 回分だ。読め。'] },
+  switch: { bright: ['{min} 分たったね。区切るなら、いまがちょうどいいかも!', 'もう {min} 分だよ。ここで一度、しおりを挟まない?', '{min} 分 遊んだね。次は 5 分だけ、こっちに付き合って!'], polite: ['{min} 分たちました。区切るなら、いまがよい頃合いです。', '{min} 分になります。ここで一度、しおりを挟みませんか。'], cool: ['{min} 分だ。区切るなら いま。', '{min} 分。しおりを挟め。'] },
+  working: {
+    bright: ['いい調子! あと {n} 分で小説の続きを取ってこられるよ。', '灯りがついてる。あと {n} 分で続きが届くよ!', '書庫が明るくなってきた。続きまで あと {n} 分!', 'その灯りなら 奥の棚まで行けそう。あと {n} 分だよ。', '集中してるね。わたしも静かに運ぶよ。あと {n} 分。'],
+    polite: ['順調です。あと {n} 分で小説の続きをお持ちできます。', '灯りがともっています。続きまで あと {n} 分です。', '静かにお運びします。あと {n} 分ほどです。'],
+    cool: ['その調子。あと {n} 分で続きが届く。', '灯りは足りている。あと {n} 分。', '続けろ。あと {n} 分だ。'],
+  },
+  working_art: { bright: ['あと {n} ピースで{kind}の「{label}」がわかるよ!', 'もうすぐだよ。あと {n} ピースで「{label}」が開く!'], polite: ['あと {n} ピースで{kind}の「{label}」が開きます。'], cool: ['あと {n} ピースで「{label}」が開く。'] },
+  rest: { bright: ['ひと休み中だね。戻ったら また灯りをつけよう。', '休むのも大事。お茶でも いれておくね。', 'ゆっくりしてて。書庫は逃げないよ。'], polite: ['休憩中ですね。戻られたら また灯りをともしましょう。', 'どうぞ ごゆっくり。お茶をご用意しておきます。'], cool: ['休憩か。戻ったら続きだ。', '休め。書庫は逃げない。'] },
+  idle: {
+    bright: ['ちょっと静かだね。5 分だけ、灯りをつけてみない?', 'いまなら 5 分で 1 ピース。やってみる?', '書庫が ちょっと暗いかも。5 分だけ、どう?', '最初の 1 ページだけ開いてみない? 続きは あとで決めればいいよ。', '扉の前で待ってるね。5 分だけ付き合ってくれたら、1 ピース持って帰るよ。'],
+    polite: ['少し間があきました。5 分だけ 始めてみませんか。', '灯りが弱くなっています。5 分だけ、いかがでしょう。', '最初の一歩だけ、ご一緒しませんか。'],
+    cool: ['間があいた。5 分だけ、どうだ。', '灯りが落ちている。5 分でいい。', '1 ピースぶんだけ、やってみろ。'],
+  },
+  due: { bright: ['きょうが期限のものが {n} 件 残ってるよ。先に片づけちゃおう!', '期限が きょうのものが {n} 件。いまやれば、夜は ゆっくり読めるよ。'], polite: ['今日が期限のものが {n} 件 残っています。', '期限が本日のものが {n} 件ございます。'], cool: ['期限のものが {n} 件 残っている。', '{n} 件、きょうまでだ。'] },
+  night: { bright: ['きょうも おつかれさま。灯りを消しておくね、おやすみ!', 'もう遅いよ。続きは あしたの灯りで読もう。', '書庫を閉めるね。いい夢を!'], polite: ['今日もお疲れさまでした。おやすみなさい。', '夜も更けました。続きは 明日にいたしましょう。'], cool: ['きょうは ここまで。休め。', '書庫を閉める。寝ろ。'] },
   weather: { bright: ['きょうの空は {text} だよ。'], polite: ['今日の天気は {text} です。'], cool: ['きょうは {text}。'] },
   umbrella: { bright: ['傘を忘れずにね!'], polite: ['傘をお持ちください。'], cool: ['傘を持て。'] },
-  clothes: { bright: ['{text}'], polite: ['{text}'], cool: ['{text}'] },
-  bgm: { bright: ['この時間に合いそうな 1 曲、選んでおいたよ。'], polite: ['この時間に合う 1 曲を選びました。'], cool: ['この時間向けの 1 曲だ。'] },
-  article: { bright: ['書庫に新しい記事が届いてたよ。気になるの、ある?'], polite: ['新しい記事が届いています。'], cool: ['新しい記事が届いている。'] },
+  bgm: { bright: ['この時間に合いそうな 1 曲、選んでおいたよ。', '書庫で流すなら、この 1 曲かな。'], polite: ['この時間に合う 1 曲を選びました。'], cool: ['この時間向けの 1 曲だ。'] },
+  article: { bright: ['書庫に新しい記事が届いてたよ。気になるの、ある?', '新しい記事を 棚に並べておいたよ。'], polite: ['新しい記事が届いています。'], cool: ['新しい記事が届いている。'] },
   tasks_none: { bright: ['きょうが期限のものは無いよ。好きな扉からどうぞ!'], polite: ['今日が期限のものはありません。'], cool: ['期限のものは無い。'] },
   tasks_some: { bright: ['きょうまでのものが {n} 件。ここで済ませられるよ。'], polite: ['今日までのものが {n} 件あります。ここで済ませられます。'], cool: ['きょうまでが {n} 件。ここで済ませろ。'] },
-  bye: { bright: ['じゃあ、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
+  bye: { bright: ['じゃあ、いってらっしゃい!', '灯りを持って、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
 });
 export const LINE_KEYS = Object.freeze(Object.keys(LINES));
 
-/** 台詞: key と口調から 1 つ選び、{n} などを埋める。seed(日付や分)で言い回しを選ぶ(同じ seed なら同じ文)。知らない key は '' */
-export function say(key, tone = 'bright', vars = {}, seed = 0) {
+/** 言い回しを増やす部品(v0.63): 文の前に置く呼びかけと、後ろに添える ひとこと。文法が崩れない場面(作業中・声かけ)だけに使う */
+const OPENERS = Object.freeze({
+  working: { bright: ['ふふ、', 'お、'], polite: ['失礼します。'], cool: ['ふん。'] },
+  idle: { bright: ['ねえねえ、', 'あのね、'], polite: ['ひとつだけ。'], cool: ['おい。'] },
+});
+const CLOSERS = Object.freeze({
+  working: { bright: [' 応援してるよ。', ' 無理はしないでね。'], polite: [' 応援しております。'], cool: [' 無理はするな。'] },
+  idle: { bright: [' あとででも、いいからね。'], polite: [' 後ほどでも かまいません。'], cool: [' 気が向いたらでいい。'] },
+});
+
+/**
+ * 台詞: key と口調から 1 つ選び、{n} などを埋める。seed で言い回しを選ぶ(同じ seed なら同じ文・seed 0 は内蔵の 1 つ目そのまま)。
+ * extra = 覚えた台詞(その場面・その口調の文字列の配列・F24-12)。内蔵の文には、場面によって 呼びかけ と ひとこと を組み合わせる。知らない key は ''
+ */
+export function say(key, tone = 'bright', vars = {}, seed = 0, extra = []) {
   const set = LINES[key];
   if (!set) return '';
-  const list = set[TONES.includes(tone) ? tone : 'bright'];
-  const t = list[Math.abs(Math.floor(seed)) % list.length];
+  const tn = TONES.includes(tone) ? tone : 'bright';
+  const base = set[tn], more = Array.isArray(extra) ? extra.filter((x) => typeof x === 'string' && x) : [];
+  const all = base.concat(more);
+  let s = Math.abs(Math.floor(seed));
+  const i = s % all.length; s = Math.floor(s / all.length);
+  let t = all[i];
+  if (i < base.length) {
+    const op = (OPENERS[key] && OPENERS[key][tn]) || [], cl = (CLOSERS[key] && CLOSERS[key][tn]) || [];
+    const a = s % (op.length + 1); s = Math.floor(s / (op.length + 1));
+    const b = s % (cl.length + 1);
+    t = (a ? op[a - 1] : '') + t + (b ? cl[b - 1] : '');
+  }
   return t.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ''));
 }
+/** その場面・その口調で言える文の数(内蔵 × 呼びかけ × ひとこと + 覚えた分) */
+export function variety(key, tone = 'bright', extra = []) {
+  const set = LINES[key];
+  if (!set) return 0;
+  const tn = TONES.includes(tone) ? tone : 'bright';
+  const op = (OPENERS[key] && OPENERS[key][tn]) || [], cl = (CLOSERS[key] && CLOSERS[key][tn]) || [];
+  return set[tn].length * (op.length + 1) * (cl.length + 1) + (Array.isArray(extra) ? extra.length : 0);
+}
+
+// ---- 台詞を覚える(v0.63・F24-12): 場面を決めて AI(F11 のショートカット)に「使い回せる台詞」を書いてもらい、検査してから覚える ----
+/** 覚えられる場面: 説明(AI に渡す)と、使ってよい差し込み */
+export const TEACH = Object.freeze({
+  hello: { label: 'あいさつ', when: '相手がアプリを開いたときの、短いあいさつ', vars: [] },
+  working: { label: '作業中', when: '相手が作業を記録している最中の、短い応援', vars: ['n'], hint: '{n} は「小説の続きが届くまでの分」。入れなくてもよい' },
+  idle: { label: '声かけ', when: '45 分ほど何も記録していない相手を、責めずに「5 分だけ始めてみないか」と軽く誘う', vars: [] },
+  switch: { label: '区切り', when: '相手の息抜きが {min} 分続いたとき、責めずに区切りを提案する', vars: ['min'], hint: '{min} は「息抜きが続いた分」。入れなくてもよい' },
+  rest: { label: '休憩', when: '相手が休憩を記録しているときの、ねぎらい', vars: [] },
+  night: { label: '夜', when: '夜遅く、きょうをねぎらって おやすみを言う', vars: [] },
+});
+export const TEACH_KEYS = Object.freeze(Object.keys(TEACH));
+export const MAX_LINES = 300, LINE_MIN = 6, LINE_MAX = 60;
+
+/** AI に渡す文: その場面の台詞を n 個、1 行に 1 つ */
+export function teachPrompt(key, name, tone, n = 8) {
+  const t = TEACH[key];
+  if (!t) return '';
+  return [
+    persona(name, tone),
+    '',
+    `次の場面で あなたが言う台詞を ${n} 個、書いてください。`,
+    `場面: ${t.when}`,
+    '',
+    '決まり:',
+    '・1 行に 1 つ。番号・記号・かぎかっこ・説明は付けない。',
+    `・1 つは ${LINE_MAX} 字まで。言い回しは 1 つずつ変える。`,
+    '・あとで何度も使い回すので、きょうの日付・時刻・タスクの名前・具体的な数字などの「その場だけの事実」は入れない(5 分だけ、のような誘いの数字はよい)。',
+    '・書庫の灯り、棚、しおり、絵の扉 など、大図書館の世界の言葉を ときどき使う。',
+    '・責めない。押しつけない。',
+    t.hint ? `・差し込み: ${t.hint}。` : '・{ } の差し込みは使わない。',
+  ].join('\n');
+}
+
+/** 1 行を台詞として整える。使えなければ null(長さ・改行・URL・その場面で使えない差し込み) */
+export function cleanLine(raw, key) {
+  const t = TEACH[key];
+  if (!t || typeof raw !== 'string') return null;
+  let s = raw.trim().replace(/^[\s\-*・●◦▪■□◆◇>]+/, '').replace(/^[((]?\d{1,2}[)).、.:]\s*/, '').trim();
+  s = s.replace(/^[「『"']+/, '').replace(/[」』"']+$/, '').trim();
+  if (s.length < LINE_MIN || s.length > LINE_MAX || /https?:|[<>]|[\r\n]/.test(s)) return null;
+  const used = [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
+  if (used.some((v) => !t.vars.includes(v)) || /[{}]/.test(s.replace(/\{\w+\}/g, ''))) return null;
+  return s;
+}
+/** AI の返事 → 台詞の配列(行ごとに検査・重複は 1 つ・12 個まで) */
+export function parseLines(text, key) {
+  const out = [];
+  for (const row of String(text || '').split(/\r?\n/)) {
+    const s = cleanLine(row, key);
+    if (s && !out.includes(s)) out.push(s);
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+/** 覚えた台詞の一覧を整える: [{ k(場面), t(口調), s }](場面・口調・文が正しいものだけ・重複なし・新しい MAX_LINES 件) */
+export function normalizeLines(raw) {
+  const out = [], seen = new Set();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (!x || !TEACH[x.k] || !TONES.includes(x.t)) continue;
+    const s = cleanLine(x.s, x.k), id = `${x.k}|${x.t}|${s}`;
+    if (!s || seen.has(id)) continue;
+    seen.add(id); out.push({ k: x.k, t: x.t, s });
+  }
+  return out.slice(-MAX_LINES);
+}
+/** 覚えた台詞を足す。戻り値 { lines, added } */
+export function addLines(lines, key, tone, texts) {
+  const before = normalizeLines(lines);
+  const after = normalizeLines([...before, ...(texts || []).map((s) => ({ k: key, t: tone, s }))]);
+  return { lines: after, added: Math.max(0, after.length - before.length) };
+}
+/** その場面・その口調で覚えた台詞(文字列の配列) */
+export function learned(lines, key, tone) { return (Array.isArray(lines) ? lines : []).filter((x) => x && x.k === key && x.t === tone).map((x) => x.s); }
 
 /**
  * ホームでのひとこと(状況から 1 つ・上にあるものほど優先)。
@@ -174,9 +290,9 @@ export function say(key, tone = 'bright', vars = {}, seed = 0) {
  *        quest: { need, unread, done } | null, art: { need, next, name, allDone } | null, postcard: { place } | null, idleOn(声かけの設定) }
  * 戻り値 { key, text, mood }
  */
-export function homeLine(st, tone = 'bright', seed = 0) {
+export function homeLine(st, tone = 'bright', seed = 0, lines = []) {
   const s = st || {};
-  const mk = (key, mood, vars = {}) => ({ key, mood, text: say(key, tone, vars, seed) });
+  const mk = (key, mood, vars = {}) => ({ key, mood, text: say(key, tone, vars, seed, learned(lines, key, tone)) });
   if (s.postcard) return mk('postcard', 'happy', { place: s.postcard.place });
   if (s.quest && s.quest.unread > 0) return mk('unread', 'happy', { n: s.quest.unread });
   const o = s.open;

@@ -25,7 +25,8 @@ const B = () => buddy.normalizeBuddy(S().buddy);
 const L = () => { const l = store.state.local; return l.buddy && typeof l.buddy === 'object' ? l.buddy : (l.buddy = { chat: [] }); };
 export const buddyOn = () => FEATURES.BUDDY && !!store.state.data.meta.setupAt && B().enabled;
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
-const seed = () => Math.floor(Date.now() / 3600000); // 言い回しは 1 時間ごとに変わる
+const seed = () => Math.floor(Date.now() / 600000); // 言い回しは 10 分ごとに変わる(v0.63: 台詞が増えたので 1 時間 → 10 分)
+const ex = (key) => buddy.learned(B().lines, key, B().tone); // その場面で覚えた台詞
 const totalWork = () => { const d = store.state.data, n = now(); return workByDay(d.entries, S(), buddy.EPOCH, n.date, n.min).reduce((a, x) => a + x.min, 0); };
 
 /** 小説と図録の進み(読めた分だけ)。prime(cb) で読み、届いたら cb */
@@ -102,7 +103,7 @@ function homeState() {
 export function bubble(key, vars = {}, mood = 'base') {
   if (!buddyOn()) return null;
   const b = B();
-  const text = buddy.say(key, b.tone, vars, seed());
+  const text = buddy.say(key, b.tone, vars, seed(), ex(key));
   if (!text) return null;
   return el('div.bd-say', [avatar(mood, 44), el('div.bd-bubble', [el('span.bd-name', b.name), el('span.bd-text', text)])]);
 }
@@ -117,7 +118,7 @@ export function buddyHome(ctx) {
   const text = el('span.bd-text'), av = el('span.bd-avwrap');
   let mood = null;
   const paint = () => {
-    const l = buddy.homeLine(homeState(), b.tone, seed());
+    const l = buddy.homeLine(homeState(), b.tone, seed(), b.lines);
     if (text.textContent !== l.text) text.textContent = l.text;
     if (l.mood !== mood) { mood = l.mood; clear(av); av.append(avatar(mood, 44)); }
   };
@@ -128,8 +129,8 @@ export function buddyHome(ctx) {
   return node;
 }
 
-/** 手帳: 段と力・旅した土地のスタンプ */
-function notebook() {
+/** 手帳: 段と力・旅した土地のスタンプ・台詞を増やす */
+function notebook(redraw) {
   const lv = buddy.levelOf(totalWork());
   const a = primed && primed.art;
   const st = buddy.stamps(a ? a.doneWorks : []);
@@ -140,7 +141,45 @@ function notebook() {
     el('p.bd-h', `旅した土地のスタンプ ${st.length ? `${st.length} か国` : ''}`),
     st.length ? el('div.bd-stamps', st.map((x) => el('span.bd-stamp', { title: x.last }, [el('b', x.country), el('i', `× ${x.n}`)])))
       : el('p.muted.small', '図録の 1 枚が完成すると、その土地のスタンプが押されます。'),
+    ...teachBox(redraw),
   ].filter(Boolean));
+}
+
+/**
+ * 台詞を増やす(v0.63・F24-12): 場面を選ぶ → ショートカットの AI に「使い回せる台詞」を頼む → 戻って「返事から覚える」(クリップボードの返事を行ごとに検査して settings.buddy.lines へ)。
+ * 頼んだ場面と口調は local.buddy.teach に控える(戻ってきたときに どの場面の返事か分かるように)。
+ */
+function teachBox(redraw) {
+  const b = B(), local = store.state.local, loc = L();
+  const pending = loc.teach && buddy.TEACH[loc.teach.key] ? loc.teach : null;
+  const ask = async (key) => {
+    if (!local.ai?.enabled) { toast('設定 › AI(ショートカット)を有効にすると、台詞を増やせます'); return; }
+    const text = buddy.teachPrompt(key, b.name, b.tone);
+    const { url, viaClipboard } = ai.shortcutURL(local.ai?.shortcutName || ai.DEFAULT_SHORTCUT, text);
+    try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
+    loc.teach = { key, tone: b.tone, at: Date.now() }; store.saveLocal();
+    location.href = url;
+  };
+  const learn = async () => {
+    if (!pending) { toast('先に場面を選んで、AI に頼んでください'); return; }
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { toast('貼り付けられませんでした(ペーストを許可してください)'); return; }
+    const found = buddy.parseLines(text, pending.key);
+    if (!found.length) { toast('使える台詞が見つかりませんでした(返事をコピーしてから押してください)'); return; }
+    const r = buddy.addLines(b.lines, pending.key, pending.tone, found);
+    S().buddy = buddy.normalizeBuddy({ ...b, lines: r.lines }); store.touchSettings(); autoSync();
+    loc.teach = null; store.saveLocal();
+    toast(r.added ? `「${buddy.TEACH[pending.key].label}」の台詞を ${r.added} 個 覚えました` : 'もう覚えている台詞でした');
+    redraw();
+  };
+  return [
+    el('p.bd-h', `台詞を増やす(覚えた台詞 ${b.lines.length})`),
+    el('div.bd-teach', [
+      el('p.muted.small', '場面を選ぶと、ショートカットの AI に台詞を書いてもらいます。返事が出たら戻って「返事から覚える」を押してください。'),
+      el('div.chips.small', buddy.TEACH_KEYS.map((k) => el('button.chip.sm2', { type: 'button', onclick: () => ask(k) }, `${buddy.TEACH[k].label}(${buddy.variety(k, b.tone, buddy.learned(b.lines, k, b.tone))})`))),
+      el('div.row', [el('button.btn.sm', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事から覚える'), pending ? el('span.muted.small', `「${buddy.TEACH[pending.key].label}」を頼んであります`) : null]),
+    ]),
+  ];
 }
 
 /** 話す: iPhone のショートカット(端末の AI)へ文を送り、返事を貼り付ける(F11 と同じ道)。控えは この端末に 20 件まで */
@@ -180,13 +219,13 @@ export function openBuddy(ctx, onClose = null) {
   const body = el('div.bd-sheet');
   let tab = 'talk', close = () => {};
   const draw = () => {
-    const b = B(), l = buddy.homeLine(homeState(), b.tone, seed());
+    const b = B(), l = buddy.homeLine(homeState(), b.tone, seed(), b.lines);
     clear(body);
     body.append(...[
       el('div.bd-top', [avatar(l.mood, 84), el('div.bd-bubble.big', [el('span.bd-name', b.name), el('span.bd-text', l.text)])]),
       el('div.row.bd-acts', [ctx && ctx.openBrief && S().brief?.enabled !== false ? el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.openBrief(); } }, 'きょうの日報を開く') : null]),
       el('div.seg', [['talk', '話す'], ['note', '手帳']].map(([k, t]) => el('button', { type: 'button', class: k === tab ? 'active' : '', onclick: () => { tab = k; draw(); } }, t))),
-      tab === 'talk' ? talk(ctx, draw, () => close()) : notebook(),
+      tab === 'talk' ? talk(ctx, draw, () => close()) : notebook(draw),
       el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
     ].filter(Boolean));
   };
@@ -284,9 +323,12 @@ export function sectionBuddy(rerender) {
     el('div.chips.small', buddy.TONES.map((k) => el('button', { type: 'button', class: `chip sm2${k === b.tone ? ' on' : ''}`, 'aria-pressed': k === b.tone ? 'true' : 'false', onclick: () => save({ ...b, tone: k }) }, buddy.TONE_LABEL[k]))),
     el('p.muted.small', `例: ${buddy.say('working', b.tone, { n: 4 }, 0)}`),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.idle, onchange: (e) => save({ ...b, idle: e.target.checked }) }), el('span', 'ホームで声をかける(45 分 何も記録していない・ダラダラが 20 分)')]),
+    el('h3.help-h', `覚えた台詞(${b.lines.length})`),
+    el('p.muted.small', '手帳の「台詞を増やす」で、AI に書いてもらった台詞です(場面ごと・口調ごと)。内蔵の台詞に混ざって出ます。要らないものは × で消せます。両方の端末で同じになります。'),
+    b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.TONE_LABEL[x.t]}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
     el('h3.help-h', '絵(この端末だけ)'),
     el('p.muted.small', '表情ごとに画像を選べます。「ふだん」だけ入れれば、ほかの表情にも使われます。正方形で、顔が中央にある絵が合います(丸く切り抜いて表示・長辺 512px に縮めて端末に保存)。入れていない表情は、内蔵の顔になります。'),
     el('div.bd-slots', buddy.MOODS.map(slot)),
     el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('絵をぜんぶ外しますか?', 'この端末に入れたアシスタントの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
-  ]);
+  ].filter(Boolean));
 }

@@ -1471,3 +1471,9 @@ button.a-thumb{cursor:pointer}
 .brief-dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
 .brief-dots i.on{background:var(--accent)}
 .buddy h3{margin-top:6px}
+/* v0.63: 台詞を増やす(手帳)・覚えた台詞の一覧(設定) */
+.bd-teach{display:flex;flex-direction:column;gap:8px}
+.bd-lines>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-size:13px;color:var(--muted)}
+.bd-linerow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.bd-linetext{flex:1;min-width:0;line-height:1.5}
+.bd-linerow .btn{min-height:36px;padding:4px 10px}
