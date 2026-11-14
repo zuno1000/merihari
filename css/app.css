@@ -1653,7 +1653,7 @@ button.bd-bubble:active{background:var(--accent-bg)}
 /* v0.79.1: 名前の箱の右に「▶ 始める」(.nx-line)・「替える」の表記は無くす・下のリンクの段を詰める */
 .nx-line{display:flex;align-items:stretch;gap:8px}
 .nx-line .nx-pick{flex:1;min-width:0;width:auto}
-.nx-line .nx-start{flex:none;min-height:56px;font-size:16px;padding:0 16px;white-space:nowrap}
+.nx-line .nx-start{flex:none;min-height:56px;font-size:16px;padding:0 16px;white-space:nowrap;border-radius:12px} /* v0.79.2: 角は 名前の箱と同じ丸み(楕円だと 浮いて見える) */
 .nx-line .nx-title{font-size:19px}
 .nx-card .nx-links{margin:-4px 0 -6px}
 .nx-row.on{background:var(--accent-bg)}
