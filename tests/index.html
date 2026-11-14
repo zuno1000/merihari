@@ -1834,6 +1834,20 @@ document.getElementById('app').addEventListener('load', async () => {
         && M.ai.consultText({ question: '次は?', nowMin: 600, open: null, persona: 'ぺ'.repeat(1000) }).includes('ぺ'.repeat(700)) && !M.ai.consultText({ question: '次は?', nowMin: 600, open: null, persona: 'ぺ'.repeat(1000) }).includes('ぺ'.repeat(701)), '上限: 名前 20 / 性格の名前 20 / 説明 800 / 肩書き 40 / 世界 400 / 作品 60 / 台詞の例 20 個 × 100 字・会話に渡す人格は 短く切る');
     }
 
+    // ---- v0.77.1: 台詞を囲む かぎかっこは 行ぜんたいを囲んでいるときだけ外す(「{name}」が… の頭の「 が消えていた)----
+    log('\n# v0.77.1 かぎかっこ');
+    {
+      const Bd = M.buddy;
+      ok(Bd.unquote('「やあ、待ってたよ。」') === 'やあ、待ってたよ。' && Bd.unquote('「{name}」が まだだよ。') === '「{name}」が まだだよ。' && Bd.unquote('「{name}」は「まだ」') === '「{name}」は「まだ」' && Bd.unquote('"「よう。」"') === 'よう。' && Bd.unquote('  『行くぞ』 ') === '行くぞ'
+        && Bd.unquote('きょうは「{text}」') === 'きょうは「{text}」' && Bd.unquote('「') === '「' && Bd.unquote(null) === '' && Bd.fixQuotes('{name}」が まだだよ。') === '「{name}」が まだだよ。' && Bd.fixQuotes('きょうは「{text}') === 'きょうは「{text}」'
+        && Bd.fixQuotes('「{name}」が まだ。') === '「{name}」が まだ。' && Bd.fixQuotes('やあ。') === 'やあ。' && Bd.fixQuotes('{n}件」と「{n}件') === '{n}件」と「{n}件', 'unquote / fixQuotes: 行ぜんたいを囲む かっこだけ外す・差し込みを囲む「 」は残す・前の版で欠けた 片方を足す');
+      const got = Bd.parsePersona(['habit_left: 「{name}」が まだみたいやで。少しだけ どうや。', 'habit_back: 「「{name}」は きょうから また 1 日目や。」', 'review_head: 記録を読んだで。きょうは「{text}」', 'hello: 「やあ、待ってたで。」'].join('\n'));
+      const old = Bd.normalizeCustom([{ id: 'c1', label: 'a', set: { habit_left: ['{name}」が まだやで。'], review_head: ['きょうは「{text}'], hello: ['やあ。'] } }])[0].set;
+      ok(eq(got, { habit_left: ['「{name}」がまだみたいやで。少しだけどうや。'], habit_back: ['「{name}」はきょうからまた1日目や。'], review_head: ['記録を読んだで。きょうは「{text}」'], hello: ['やあ、待ってたで。'] })
+        && eq(old, { hello: ['やあ。'], habit_left: ['「{name}」がまだやで。'], review_head: ['きょうは「{text}」'] }) && Bd.cleanLine('「ちょっと休もか。ええ感じやで。」', 'rest') === 'ちょっと休もか。ええ感じやで。'
+        && eq(Bd.cleanSamples(['「よう、相棒。」', '「星」が見えるぜ、相棒。']), ['よう、相棒。', '「星」が見えるぜ、相棒。']), '台詞の検査: 「{name}」が… の頭の「 を残す・行ぜんたいの かっこは外す・覚えてあった 欠けた台詞は 読み込みで直る');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

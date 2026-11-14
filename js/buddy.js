@@ -161,13 +161,41 @@ export function normalizeBuddy(raw) {
 // ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
 export const MAX_CHARS = 8, MAIN_ID = 'main', NAME_MAX = 20;
 export const SOURCE_MAX = 60, SAMPLE_MAX = 20, SAMPLE_LEN = 100;
+/**
+ * 台詞を囲む かぎかっこ・引用符を外す(v0.77.1・実機 FB「習慣の台詞で {習慣}」まだ… のように 頭の「 だけが無い」)。
+ * これまでは 行の頭の「 と 行の末尾の 」 を 別々に削っていたので、「{name}」が まだだよ。 のように 差し込みを囲む「 が頭に来る台詞で 「 だけが消えていた。
+ * 外すのは、行の頭の かっこが 末尾の かっこと 対になっているとき(= 行ぜんたいを囲んでいるとき)だけ
+ */
+const QUOTE_PAIRS = Object.freeze({ '「': '」', '『': '』', '"': '"', "'": "'", '`': '`', '“': '”' });
+export function unquote(raw) {
+  let t = String(raw == null ? '' : raw).trim();
+  for (;;) {
+    const o = t[0], c = QUOTE_PAIRS[o];
+    if (!c || t.length < 2 || t[t.length - 1] !== c) break;
+    const inner = t.slice(1, -1);
+    if (o === c) { if (inner.includes(o)) break; } // " ' ` は 中に同じ印があれば 囲みとは見ない
+    else { let depth = 0, wraps = true; for (let i = 0; i < t.length; i++) { if (t[i] === o) depth++; else if (t[i] === c && --depth === 0 && i < t.length - 1) { wraps = false; break; } } if (!wraps || depth !== 0) break; } // 頭の「 が 末尾の 」 と対のときだけ(「A」は「B」 は 囲みではない)
+    t = inner.trim();
+  }
+  return t;
+}
+/** v0.77.0 までに覚えた 壊れた台詞を直す: 頭が {差し込み}」 で 「 が 1 つ足りなければ 頭に足す・末尾が 「{差し込み} で 」 が 1 つ足りなければ 末尾に足す(『 』も同じ) */
+export function fixQuotes(raw) {
+  let s = String(raw == null ? '' : raw);
+  for (const [o, c] of [['「', '」'], ['『', '』']]) {
+    const no = s.split(o).length - 1, nc = s.split(c).length - 1;
+    if (nc === no + 1 && new RegExp(`^\\{\\w+\\}${c}`).test(s)) s = o + s;
+    else if (no === nc + 1 && new RegExp(`${o}\\{\\w+\\}$`).test(s)) s += c;
+  }
+  return s;
+}
 /** 台詞の例を整える: 文字列(1 行に 1 つ)か 配列 → 空でない行を SAMPLE_MAX 個まで・1 つ SAMPLE_LEN 字まで・頭の記号と かぎかっこは外す・重複は 1 つ */
 export function cleanSamples(raw) {
   const rows = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
   const out = [];
   for (const r of rows) {
     if (typeof r !== 'string') continue;
-    const s = r.replace(/\s+/g, ' ').trim().replace(/^[・\-*●◯○\d.)、]+\s*/, '').replace(/^[「『"]+|[」』"]+$/g, '').trim().slice(0, SAMPLE_LEN);
+    const s = unquote(r.replace(/\s+/g, ' ').trim().replace(/^[・\-*●◯○\d.)、]+\s*/, '')).slice(0, SAMPLE_LEN);
     if (s && !out.includes(s)) out.push(s);
     if (out.length >= SAMPLE_MAX) break;
   }
@@ -456,7 +484,7 @@ export function cleanLine(raw, key) {
   const t = TEACH[key];
   if (!t || typeof raw !== 'string') return null;
   let s = raw.trim().replace(/^[\s\-*・●◦▪■□◆◇>]+/, '').replace(/^[((]?\d{1,2}[)).、.:]\s*/, '').trim();
-  s = s.replace(/^[「『"']+/, '').replace(/[」』"']+$/, '').trim();
+  s = fixQuotes(unquote(s)); // v0.77.1: かぎかっこは 行ぜんたいを囲んでいるときだけ外す
   s = tidy(s); // v0.64: 台詞の中の空白を詰める
   if (s.length < LINE_MIN || s.length > LINE_MAX || /https?:|[<>]|[\r\n]/.test(s)) return null;
   const used = [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
@@ -562,7 +590,7 @@ export const groupKeys = (g) => SCENE_KEYS.filter((k) => SCENES[k].g === g);
 export function cleanPersonaLine(raw, key) {
   const sc = SCENES[key];
   if (!sc || typeof raw !== 'string') return null;
-  const s = tidy(raw.trim().replace(/^[「『"'`]+/, '').replace(/[」』"'`]+$/, ''));
+  const s = tidy(fixQuotes(unquote(raw))); // v0.77.1: かぎかっこは 行ぜんたいを囲んでいるときだけ外す・前の版で欠けた「 」は 直す
   if (s.length < PLINE_MIN || s.length > PLINE_MAX || /https?:|[<>]|[\r\n]/.test(s)) return null;
   const allowed = Object.keys(sc.v || {}), used = [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
   if (used.some((v) => !allowed.includes(v)) || /[{}]/.test(s.replace(/\{\w+\}/g, ''))) return null;
