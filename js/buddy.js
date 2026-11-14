@@ -384,6 +384,11 @@ const LINES = Object.freeze({
   ins_weekday_today: { bright: ['今日は{day}曜。ダラダラが長くなりやすい日だから、最初の一歩を小さくしよう。'], polite: ['今日は{day}曜です。ダラダラが長くなりやすい日ですので、最初の一歩を小さくしましょう。'], cool: ['今日は{day}曜。崩れやすい日だ。最初の一歩を小さくしろ。'] },
   ins_run: { bright: ['この30日でいちばん長く集中できたのは{best}({date})。すごいよね。', '{date}の{best}が、この30日の最長記録だよ。'], polite: ['この30日でもっとも長い集中は{best}({date})でした。'], cool: ['この30日の最長は{best}({date})だ。'] },
   tell: { bright: ['{text}'], polite: ['{text}'], cool: ['{text}'] },
+  // v0.81(実機 FB「ふり返りタブの報告の文が アシスタントの口調になっていない」): レポートの文(よかったこと / 気づき / 良くするには / 次の一歩)は、そのまま言わずに アシスタントの言葉で 引いて伝える
+  tell_good: { bright: ['いいところ、見つけたよ。「{text}」', 'これは うれしい知らせだよ。「{text}」だって!'], polite: ['よかった点を お伝えします。「{text}」とのことです。'], cool: ['いい点だ。「{text}」。'] },
+  tell_back: { bright: ['ひとつ 気づいたことがあるよ。「{text}」', '責めるわけじゃないよ。メモしておくね。「{text}」'], polite: ['ひとつ 気づいた点がございます。「{text}」'], cool: ['気づいた点だ。「{text}」。'] },
+  tell_better: { bright: ['もっと良くするなら、これかな。「{text}」'], polite: ['さらに良くするなら、こちらです。「{text}」'], cool: ['良くするなら これだ。「{text}」。'] },
+  tell_next: { bright: ['次の一歩は これだよ。「{text}」', 'この先のこと、ひとつだけ。「{text}」'], polite: ['次の一歩を お伝えします。「{text}」'], cool: ['次は これだ。「{text}」。'] },
   diary_done: { bright: ['この日の気持ちは、もう綴じてあるよ。', 'この日のページ、ちゃんと棚にあるよ。'], polite: ['この日の記録は、綴じてあります。'], cool: ['この日は綴じてある。'] },
   wz_scales: { bright: ['いまの気分と元気、色で教えて。'], polite: ['いまの気分と元気を、色でお知らせください。'], cool: ['気分と元気を選べ。'] },
   wz_hard: { bright: ['ひっかかったことは、あった? なければ、とばしていいよ。'], polite: ['気になったことはありましたか。なければ、そのままで結構です。'], cool: ['ひっかかったことがあれば書け。なければ、とばせ。'] },
@@ -615,6 +620,10 @@ export const SCENES = Object.freeze({
   wz_hard: { g: 'review', when: 'ひっかかったことがあったかを尋ねる。無ければ とばしてよいと添える' },
   wz_tomorrow: { g: 'review', when: 'あしたの最初の一歩を、ひとつだけ決めようと促す' },
   wz_done: { g: 'review', when: 'ふり返りを綴じ終えたと伝えて、ねぎらう' },
+  tell_good: { g: 'review', when: 'その日の記録から見つけた よかった点を、うれしそうに伝える', v: { text: 'よかった点の文(例: 作業は合計3時間でした。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
+  tell_back: { g: 'review', when: 'その日の記録から気づいた点を、責めずに伝える', v: { text: '気づいた点の文(例: 午後に 息抜きが1時間続きました。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
+  tell_better: { g: 'review', when: 'もっと良くするための ひと工夫を すすめる', v: { text: '工夫の文(例: 最初の5分だけ先に始める。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
+  tell_next: { g: 'review', when: '次の一歩(あした やること など)を伝える', v: { text: '次の一歩の文(例: 明日は 英語を30分。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
 });
 export const SCENE_KEYS = Object.freeze(Object.keys(SCENES));
 export const groupKeys = (g) => SCENE_KEYS.filter((k) => SCENES[k].g === g);
