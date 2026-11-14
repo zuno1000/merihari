@@ -1369,3 +1369,34 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .srow.on .slabel{font-weight:600;color:var(--accent)}
 .srow .slabel{flex:none;max-width:44%}
 .srow .sval{flex:1;text-align:right;color:var(--muted);font-size:12px;min-width:0}
+/* v0.58・F23: 名画のピース。ホームでは解読の行と横に並ぶ(.q-row)。シートは解読と同じ暗い板(.q-panel)の中 */
+.q-row{display:flex;gap:8px;margin:0 0 12px}
+.q-row .q-strip{margin:0;flex:1;min-width:0;padding:9px 10px;gap:8px}
+.q-row .q-s-label,.q-row .q-s-sub{white-space:nowrap}
+.q-s-ico.sq{border-radius:2px}
+.a-frame{position:relative;border-radius:6px;overflow:hidden;background:#05080d;line-height:0;margin:4px 0 10px}
+.a-frame img{display:block;width:100%;height:auto}
+.a-grid{position:absolute;inset:0;display:grid}
+.a-cell{background:#16202f;box-shadow:inset 0 0 0 .5px #0d131d}
+.a-cell.open{background:none;box-shadow:none}
+.a-cell.new{animation:a-open .7s ease both}
+@keyframes a-open{0%{opacity:1;background:#6fd3e6}60%{opacity:1;background:#6fd3e6}100%{opacity:0;background:#6fd3e6}}
+@media (prefers-reduced-motion:reduce){.a-cell.new{opacity:0}}
+.a-done{color:var(--q-ac);font-weight:600;letter-spacing:.1em;margin-bottom:6px!important}
+.a-info{margin:12px 0 0;border-top:1px solid var(--q-line)}
+.a-row{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--q-line);font-size:14px;line-height:1.7}
+.a-row dt{flex:none;width:4.2em;color:var(--q-dim);font-size:12px;padding-top:2px}
+.a-row dd{margin:0;flex:1;min-width:0}
+.a-row.lock dd{color:var(--q-dim);font-size:12px;padding-top:2px}
+.a-row.long{flex-direction:column;gap:2px}
+.a-row.long dt{width:auto}
+.a-credit{font-size:12px;color:var(--q-dim);margin-top:10px!important;line-height:1.6}
+.a-credit a{color:var(--q-ac)}
+.a-next{display:block;width:100%;margin-top:14px}
+.a-h{font-size:12px;color:var(--q-dim);letter-spacing:.1em;margin:18px 0 8px!important}
+.a-shelf{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.a-thumb{aspect-ratio:1;border-radius:6px;overflow:hidden;border:1px solid var(--q-line);background:#16202f;padding:0;display:flex;align-items:center;justify-content:center;color:var(--q-dim);font-size:13px;font-family:inherit}
+button.a-thumb{cursor:pointer}
+.a-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.a-thumb.on{border-color:var(--q-ac)}
+.a-thumb.cur{color:var(--q-ac);border-style:dashed;font-size:11px}

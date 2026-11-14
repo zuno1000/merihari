@@ -108,7 +108,7 @@ export function mask(text, pct, seed, limit = PREVIEW_CHARS) {
 
 /** ホームの 1 行の文。unread = まだ読んでいない開いた断片の数 */
 export function stripText(p, unread) {
-  if (unread > 0) return { label: `続きが ${unread} 件 読めます`, sub: '読む ›', hot: true };
-  if (p.done) return { label: '解読 完了', sub: '読み終えました', hot: false };
-  return { label: `解読 ${pctLabel(p)}%`, sub: `あと ${p.need} 分の作業で続き`, hot: false };
+  if (unread > 0) return { label: `続き ${unread} 件`, sub: '読む ›', hot: true };
+  if (p.done) return { label: '解読 完了', sub: '読了', hot: false };
+  return { label: `解読 ${pctLabel(p)}%`, sub: `あと ${p.need} 分`, hot: false };
 }

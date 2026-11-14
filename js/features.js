@@ -18,4 +18,9 @@ export const FEATURES = Object.freeze({
    * false にすると ホームの行も設定の項目も出ない(データは settings.quest と local.quest が残るだけ)。
    */
   QUEST: true,
+  /**
+   * v0.58・F23(ユーザー要望「作業を進めるほどピースが埋まって絵ができる・絵の情報が開いていく」): 名画のピース。作業 5 分で 1 ピース、48 ピースで 1 枚が図録に入る。
+   * 隔離した実装: js/art.js・js/ui-art.js・data/art.json・data/art/ と、ホームの 1 行(解読の行の横)・設定の 1 項目・settings.art だけ。false で どちらも出ない。
+   */
+  ART: true,
 });

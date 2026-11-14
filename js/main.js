@@ -31,8 +31,9 @@ import * as drinks from './drinks.js';
 import * as shopping from './shopping.js';
 import * as brief from './brief.js';
 import * as quest from './quest.js';
+import * as art from './art.js';
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.57.0';
+export const APP_VERSION = '0.58.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -192,6 +193,7 @@ if (ui.DEV) window.M = {
   shopping, // v0.52・F20
   brief, // v0.55・F21
   quest, // v0.56・F22
+  art, // v0.58・F23
   time,
   log,
   plan,

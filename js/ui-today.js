@@ -16,6 +16,7 @@ import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import { bgmButton, bgmStrip } from './ui-bgm.js';
 import { feedBox } from './ui-feed.js'; // v0.34・F17: キャッチアップ(ホームの折りたたみ・きょうだけ)
+import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainButton } from './ui-train.js'; // v0.50・F18: 次の電車(ホーム右上の印)
 import { attentionItems } from './ui-settings.js';
@@ -427,6 +428,9 @@ export function weatherSheet(ctx) {
   });
 }
 
+/** 解読と絵の行を横に並べる(どちらも無ければ何も出さない) */
+const stripRow = (strips) => { const xs = strips.filter(Boolean); return xs.length ? el('div.q-row', xs) : null; };
+
 // ================= ホーム =================
 /**
  * ホーム(v0.28・実機 FB ①): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
@@ -464,7 +468,7 @@ export function renderNow(view, ctx, dateArg = null) {
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
     hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
-    isToday ? questStrip() : null, // v0.56・F22: 解読の 1 行(作業の記録で進む・無効なら無し)
+    isToday ? stripRow([questStrip(), artStrip()]) : null, // v0.56・F22 解読 / v0.58・F23 名画のピース: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
     isToday ? habitsBox(v, rerender, ctx) : null, // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
     isToday ? feedBox(rerender) : null, // v0.34・F17: キャッチアップ(有効なときだけ・折りたたみ・きょうだけ)
     isToday && S().brief?.enabled !== false && ctx.openBrief ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(きょうだけ・いまの時点で作り直す)
