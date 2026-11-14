@@ -298,6 +298,25 @@ export function removeChar(b, id) {
   if (cur.chars.length <= 1) return cur;
   return normalizeBuddy({ ...cur, chars: cur.chars.filter((c) => c.id !== id) });
 }
+/**
+ * 話す の控え(v0.80・実機 FB「キャラクターを替えても 会話が替わらず、2 つの口調が混ざる」): キャラクターごとに持つ。
+ * loc(local.buddy・端末ごと)を その場で直して、そのキャラクターの { chat: いまの会話, old: しまった会話 } を返す。
+ * 前の版の loc.chat / loc.old(キャラクターを分けていない控え)は、最初に開いたキャラクターへ移す
+ */
+export function chatBox(loc, charId) {
+  if (!loc.chats || typeof loc.chats !== 'object' || Array.isArray(loc.chats)) loc.chats = {};
+  let box = loc.chats[charId];
+  if (!box || typeof box !== 'object' || Array.isArray(box)) box = loc.chats[charId] = { chat: [], old: [] };
+  if (!Array.isArray(box.chat)) box.chat = [];
+  if (!Array.isArray(box.old)) box.old = [];
+  if ('chat' in loc || 'old' in loc) {
+    const c = Array.isArray(loc.chat) ? loc.chat : [], o = Array.isArray(loc.old) ? loc.old : [];
+    if (c.length) { if (box.chat.length) box.old.unshift({ at: c[0].at, msgs: c }); else box.chat = c; }
+    box.old.push(...o);
+    delete loc.chat; delete loc.old;
+  }
+  return box;
+}
 /** いまの口調を say に渡す形で: 内蔵なら文字列、足した性格なら その性格({ id, label, hint, base, set }) */
 export function voiceOf(b) {
   const c = b && Array.isArray(b.custom) ? b.custom.find((x) => x.id === b.tone) : null;

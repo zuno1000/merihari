@@ -250,7 +250,8 @@ function teachBox(redraw) {
  * - タスク・買い物・予定・習慣・進み・つぎにやること は、アプリの中のデータから その場で答える(reply.js・AI は使わない)。答えの下の
  *   「◯◯の口調で言い直してもらう」で、中身を変えずに 口調だけ AI に頼める(ai.rephraseText・ショートカット か コピー)。
  * - それ以外の相談は これまでどおり AI へ(ai.consultText。聞かれたことに まず答えるように頼み、今日のタスクと進みを 材料に添える。小説と図録の進みは 渡さない)。
- * - 「新しい会話」で いまの会話を しまって 空から(しまった会話は 5 つまで・「前の会話」で 開き直す / 消す)。控えは この端末だけ(local.buddy.chat / old)。
+ * - 「新しい会話」で いまの会話を しまって 空から(しまった会話は 5 つまで・「前の会話」で 開き直す / 消す)。控えは この端末だけ。
+ * - v0.80: 控えは キャラクターごと(local.buddy.chats[<キャラクターの id>] = { chat, old }・buddy.chatBox)。シートの上のチップで キャラクターを替えると 会話も替わる。
  */
 const CHAT_MAX = 60, OLD_MAX = 5;
 function replyData() {
@@ -272,8 +273,8 @@ function talk(ctx, redraw) {
   const local = store.state.local, loc = L();
   const viaShortcut = !!local.ai?.enabled;
   const b = B(), d = store.state.data, n = now();
-  const chat = Array.isArray(loc.chat) ? loc.chat : (loc.chat = []);
-  const old = Array.isArray(loc.old) ? loc.old : (loc.old = []);
+  const box = buddy.chatBox(loc, b.cur); // v0.80: 会話の控えは キャラクターごと(替えると 会話も替わる)
+  const chat = box.chat, old = box.old;
   const push = (who, text, extra = {}) => { chat.push({ who, text: String(text).slice(0, 800), at: Date.now(), ...extra }); while (chat.length > CHAT_MAX) chat.shift(); store.saveLocal(); };
   // AI へ渡す: コピー(好きな AI に貼る)か、ショートカット(端末の AI)。before = 渡せると決まったあと・画面を離れる前に呼ぶ
   const deliver = async (text, copy, before = null) => {
@@ -317,14 +318,14 @@ function talk(ctx, redraw) {
     try { const t = (await navigator.clipboard.readText()).trim(); if (!t) { toast('クリップボードが空です'); return; } push('ai', t); redraw(); } catch { toast('貼り付けられませんでした(ペーストを許可してください)'); }
   };
   const stash = () => { if (chat.length) { old.unshift({ at: chat[0].at, msgs: chat.slice() }); old.length = Math.min(old.length, OLD_MAX); } };
-  const fresh = () => { stash(); loc.chat = []; store.saveLocal(); redraw(); };
+  const fresh = () => { stash(); box.chat = []; store.saveLocal(); redraw(); };
   const history = () => sheet((close) => {
     const title = (x) => String((x.msgs.find((m) => m.who === 'me') || x.msgs[0] || {}).text || '').split('\n')[0].slice(0, 28) || '(空の会話)';
-    const open = (i) => { const pick = old.splice(i, 1)[0]; stash(); loc.chat = pick.msgs; store.saveLocal(); close(); redraw(); };
+    const open = (i) => { const pick = old.splice(i, 1)[0]; stash(); box.chat = pick.msgs; store.saveLocal(); close(); redraw(); };
     const drop = (i) => { old.splice(i, 1); store.saveLocal(); close(); redraw(); if (old.length) history(); };
     return [
       el('h2', '前の会話'),
-      el('p.muted.small', `しまった会話は ${OLD_MAX} つまで この端末に残ります。タップで 開き直します(いまの会話は しまいます)。`),
+      el('p.muted.small', `${b.name}との しまった会話は ${OLD_MAX} つまで この端末に残ります(キャラクターごと)。タップで 開き直します(いまの会話は しまいます)。`),
       el('div.list', old.map((x, i) => el('div.bd-hrow', [
         el('button.bd-hopen', { type: 'button', onclick: () => open(i) }, [el('span.bd-ht', title(x)), el('span.bd-hm', `${fmtMD(dateKey(new Date(x.at)))}・${x.msgs.length} 件`)]),
         el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この会話を消す', onclick: () => drop(i) }, '消す'),
@@ -838,7 +839,7 @@ export function sectionBuddy(rerender) {
     el('p.muted.small', '「ふだん」だけ入れれば、ほかの表情にも使われます。画像を選ぶと、どの部分を顔にするかを決められます(この端末に 512px で保存・元の画像は残しません)。'),
     el('div.bd-slots', buddy.MOODS.map(slot)),
     el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」の絵をぜんぶ外しますか?`, 'この端末に入れた このキャラクターの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
-    b.chars.length > 1 ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」を消しますか?`, 'このキャラクターと、この端末に入れた その絵を消します。足した性格と 覚えた台詞は残ります。', '消す', () => { const id = b.cur; save(buddy.removeChar(B(), id)); Promise.all(buddy.MOODS.map((m) => photos.delPhoto(imgId(m, id)))).then(() => urls.clear()).catch(() => {}); }, true) }, 'このキャラクターを消す')) : null,
+    b.chars.length > 1 ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」を消しますか?`, 'このキャラクターと、この端末に入れた その絵・会話の控えを消します。足した性格と 覚えた台詞は残ります。', '消す', () => { const id = b.cur; save(buddy.removeChar(B(), id)); if (L().chats && L().chats[id]) { delete L().chats[id]; store.saveLocal(); } Promise.all(buddy.MOODS.map((m) => photos.delPhoto(imgId(m, id)))).then(() => urls.clear()).catch(() => {}); }, true) }, 'このキャラクターを消す')) : null,
     ].filter(Boolean)),
     b.lines.length ? el('h3.help-h', `手帳で覚えた台詞(${b.lines.length})`) : null,
     b.lines.length ? el('p.muted.small', '手帳の「台詞を増やす」で覚えた台詞です(場面ごと・口調ごと)。\u00d7 で消せます。') : null,

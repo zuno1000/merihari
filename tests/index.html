@@ -1858,6 +1858,16 @@ document.getElementById('app').addEventListener('load', async () => {
       const big = Bd.mergeSet({ hello: Array.from({ length: 20 }, (_, i) => `あいさつ その${i}やで。`) }, { hello: ['新しい あいさつやで。'] });
       ok(eq(m1, { set: { hello: ['やあ、待ってたで。', 'おう、来たな。', 'ぼちぼち いこか。'], night: ['もう寝えや。'] }, added: 2, dup: 2 }) && eq(Bd.mergeSet(null, null), { set: {}, added: 0, dup: 0 }) && eq(Bd.mergeSet({ hello: ['a'] }, {}).set, {})
         && big.set.hello.length === 20 && big.set.hello[19] === '新しい あいさつやで。' && big.set.hello[0] === 'あいさつ その1やで。' && big.added === 1, 'mergeSet: 返事の台詞を いまの台詞に足す・似た台詞は 入れない・足した場面だけ返す・上限を超えたら 古いものから外す');
+      { // v0.80: 話す の控えは キャラクターごと
+        const m = (t) => ({ who: 'me', text: t, at: 1 });
+        const lc = { teach: null, chat: [m('前の版の会話')], old: [{ at: 1, msgs: [m('しまった会話')] }] };
+        const a = Bd.chatBox(lc, 'main'); a.chat.push(m('リブへ'));
+        const c2 = Bd.chatBox(lc, 'c2'); c2.chat.push(m('ノアへ'));
+        const lg = { chat: [m('古い')], chats: { main: { chat: [m('いまの')], old: [] } } }; const g = Bd.chatBox(lg, 'main');
+        ok(!('chat' in lc) && !('old' in lc) && eq(a.chat.map((x) => x.text), ['前の版の会話', 'リブへ']) && a.old.length === 1 && eq(c2.chat.map((x) => x.text), ['ノアへ']) && c2.old.length === 0
+          && Bd.chatBox(lc, 'main') === a && Bd.chatBox(lc, 'c2') === c2 && eq(Bd.chatBox({ chats: [] }, 'x'), { chat: [], old: [] }) && eq(Bd.chatBox({ chats: { x: { chat: 'bad' } } }, 'x'), { chat: [], old: [] })
+          && eq(g.chat.map((x) => x.text), ['いまの']) && eq(g.old[0].msgs.map((x) => x.text), ['古い']), 'chatBox: 話す の控えは キャラクターごと・前の版の控えは 最初に開いたキャラクターへ移す・壊れた形は 空から');
+      }
       const b0 = Bd.addCustom(Bd.normalizeBuddy({ name: 'ノア' }), 'c1', { label: '相棒', base: 'cool' });
       const b1 = Bd.patchCustom(b0, 'c1', { set: { hello: ['よう、来たな。', 'よう 来たな!', '待ってたぜ。'], chat: Array.from({ length: 40 }, (_, i) => `日常の話 その${i}だ。`) } });
       const v1 = Bd.voiceOf(b1), pa = Bd.personaPrompt('home', 'ノア', v1, null, { avoid: true }), pd = Bd.personaPrompt('daily', 'ノア', v1, null, { avoid: true }), p0 = Bd.personaPrompt('home', 'ノア', v1);
