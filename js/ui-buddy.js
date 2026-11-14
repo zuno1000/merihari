@@ -178,50 +178,75 @@ function notebook(redraw) {
 function teachBox(redraw) {
   const b = B(), local = store.state.local, loc = L();
   const pending = loc.teach && buddy.TEACH[loc.teach.key] ? loc.teach : null;
+  // v0.74(v0.67.2 と同じ道): 端末の AI(ショートカット)は 台詞を頼む文を断るので、場面のチップは 頼む文をコピーするだけ。好きな AI に貼り、返事をコピーして戻る
   const ask = async (key) => {
-    if (!local.ai?.enabled) { toast('設定 › AI(ショートカット)を有効にすると、台詞を増やせます'); return; }
     const text = buddy.teachPrompt(key, b.name, buddy.voiceOf(b), 8, buddy.roleOf(b));
-    const { url, viaClipboard } = ai.shortcutURL(local.ai?.shortcutName || ai.DEFAULT_SHORTCUT, text);
-    try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
+    try { await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
     loc.teach = { key, tone: b.tone, at: Date.now() }; store.saveLocal();
-    location.href = url;
+    toast(`「${buddy.TEACH[key].label}」の頼む文をコピーしました。AI に貼り、返事をコピーして戻ってください`);
+    redraw();
   };
-  const learn = async () => {
-    if (!pending) { toast('先に場面を選んで、AI に頼んでください'); return; }
-    let text = '';
-    try { text = await navigator.clipboard.readText(); } catch { toast('貼り付けられませんでした(ペーストを許可してください)'); return; }
-    const found = buddy.parseLines(text, pending.key);
-    if (!found.length) { toast('使える台詞が見つかりませんでした(返事をコピーしてから押してください)'); return; }
+  const take = (text) => { // 返事 → 台詞。見つからなければ false
+    const role = buddy.roleOf(b);
+    const found = buddy.parseLines(text, pending.key).filter((s) => !buddy.offWorld(s, role));
+    if (!found.length) return false;
     const r = buddy.addLines(b.lines, pending.key, pending.tone, found);
     S().buddy = buddy.normalizeBuddy({ ...b, lines: r.lines }); store.touchSettings(); autoSync();
     loc.teach = null; store.saveLocal();
     toast(r.added ? `「${buddy.TEACH[pending.key].label}」の台詞を ${r.added} 個 覚えました` : 'もう覚えている台詞でした');
     redraw();
+    return true;
+  };
+  const pasteSheet = (why) => sheet((close) => {
+    const ta = el('textarea.text.bd-ta', { rows: 8, placeholder: '台詞を 1 行に 1 つ', 'aria-label': 'AI の返事' });
+    return [
+      el('h2', '返事を貼り付ける'),
+      el('p.muted.small', `${why} AI の返事を ここに貼って「台詞を探す」を押してください。`),
+      ta,
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => { if (take(ta.value)) close(); else toast('使える台詞が見つかりませんでした'); } }, '台詞を探す')]),
+    ];
+  });
+  const learn = async () => {
+    if (!pending) { toast('先に場面を選んで、AI に頼んでください'); return; }
+    let text = null;
+    try { text = await navigator.clipboard.readText(); } catch { text = null; }
+    if (text == null) { pasteSheet('クリップボードを読めませんでした。'); return; }
+    if (!take(text)) pasteSheet('コピーした中に 使える台詞が見つかりませんでした。');
   };
   return [
     el('p.bd-h', `台詞を増やす(覚えた台詞 ${b.lines.length})`),
     el('div.bd-teach', [
-      el('p.muted.small', '場面を選ぶと、ショートカットの AI に台詞を書いてもらいます。返事が出たら戻って「返事から覚える」を押してください。'),
+      el('p.muted.small', '①場面を選ぶと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。'),
       el('div.chips.small', buddy.TEACH_KEYS.map((k) => el('button.chip.sm2', { type: 'button', onclick: () => ask(k) }, `${buddy.TEACH[k].label}(${buddy.variety(k, buddy.voiceOf(b), buddy.learned(b.lines, k, b.tone))})`))),
-      el('div.row', [el('button.btn.sm', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事から覚える'), pending ? el('span.muted.small', `「${buddy.TEACH[pending.key].label}」を頼んであります`) : null]),
+      el('div.row', [el('button.btn.sm', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事を貼り付けて覚える'), pending ? el('span.muted.small', `「${buddy.TEACH[pending.key].label}」の文をコピー済み`) : null]),
     ]),
   ];
 }
 
-/** 話す: iPhone のショートカット(端末の AI)へ文を送り、返事を貼り付ける(F11 と同じ道)。控えは この端末に 20 件まで */
+/**
+ * 話す: iPhone のショートカット(端末の AI)へ文を送り、返事を貼り付ける(F11 と同じ道)。控えは この端末に 20 件まで。
+ * v0.74: ショートカットを使っていない / 端末の AI に断られる ときのために、文をコピーして 好きな AI に聞く道(コピーで聞く)。返事は 同じ「返事を貼り付け」で
+ */
 function talk(ctx, redraw, closeSheet) {
   const local = store.state.local;
-  if (!local.ai?.enabled) return el('div.bd-talk', [el('p.muted.small', '会話には iPhone の「ショートカット」(端末の AI)を使います。設定 › AI(ショートカット)で有効にすると、ここから話しかけられます。'), el('div.row', el('button.btn.sm', { type: 'button', onclick: () => { closeSheet(); ctx.go('settings', 'ai'); } }, '設定を開く'))]);
+  const viaShortcut = !!local.ai?.enabled;
   const b = B(), d = store.state.data, n = now();
   const chat = Array.isArray(L().chat) ? L().chat : (L().chat = []);
   const push = (who, text) => { chat.push({ who, text: String(text).slice(0, 600), at: Date.now() }); while (chat.length > 20) chat.shift(); store.saveLocal(); };
-  const send = async (q) => {
+  const send = async (q, copy = !viaShortcut) => {
     const question = String(q || '').trim();
     if (!question) { toast('話しかける文を入れてください'); return; }
     const o = log.openEntry(d.entries);
     const open = o ? { name: S().categories.find((c) => c.id === o.categoryId)?.name || '記録', elapsedMin: log.elapsedMin(o, n.date, n.min) } : null;
     const workMin = log.totalsByRole(d.entries, n.date, n.min, (e) => store.entryRole(S(), e)).work;
     const text = ai.consultText({ question, nowMin: n.min, open, workMin, goals: S().goals, gs: [], near: [], mood: null, notes: buddyNotes(), persona: buddyPersona() });
+    if (copy) { // 好きな AI に貼る
+      try { await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
+      push('me', question);
+      toast('聞く文をコピーしました。AI に貼り、返事をコピーして戻ってください');
+      redraw();
+      return;
+    }
     const { url, viaClipboard } = ai.shortcutURL(local.ai?.shortcutName || ai.DEFAULT_SHORTCUT, text);
     try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
     push('me', question);
@@ -233,10 +258,10 @@ function talk(ctx, redraw, closeSheet) {
   };
   const input = el('input.text', { type: 'text', placeholder: `${b.name}に話しかける`, maxlength: 200, autocomplete: 'off', onkeydown: (e) => { if (e.key === 'Enter') send(input.value); } });
   return el('div.bd-talk', [
-    chat.length ? el('div.bd-log', chat.slice(-6).map((m) => el('div', { class: `bd-msg ${m.who === 'me' ? 'me' : 'ai'}` }, m.text))) : el('p.muted.small', '話しかけると、ショートカットが開いて返事が出ます。戻ってきたら「返事を貼り付け」を押してください。'),
+    chat.length ? el('div.bd-log', chat.slice(-6).map((m) => el('div', { class: `bd-msg ${m.who === 'me' ? 'me' : 'ai'}` }, m.text))) : el('p.muted.small', viaShortcut ? '話しかけると、ショートカットが開いて返事が出ます。戻ってきたら「返事を貼り付け」を押してください。「コピーで聞く」なら 好きな AI に貼れます。' : '話しかけると、聞く文がコピーされます。好きな AI に貼り、返事をコピーして戻って「返事を貼り付け」を押してください(設定 › AI(ショートカット)を有効にすると、iPhone のショートカットへ 直接送れます)。'),
     el('div.chips.small', ai.QUICK_QUESTIONS.slice(0, 3).map((q) => el('button.chip.sm2', { type: 'button', onclick: () => send(q) }, q))),
-    el('div.row', [input, el('button.btn.primary', { type: 'button', onclick: () => send(input.value) }, '送る')]),
-    el('div.row', [el('button.btn.sm', { type: 'button', onclick: paste }, '返事を貼り付け'), chat.length ? el('button.btn.sm.ghost', { type: 'button', onclick: () => { L().chat = []; store.saveLocal(); redraw(); } }, '控えを消す') : null]),
+    el('div.row', [input, el('button.btn.primary', { type: 'button', onclick: () => send(input.value) }, viaShortcut ? '送る' : 'コピー')]),
+    el('div.row', [el('button.btn.sm', { type: 'button', onclick: paste }, '返事を貼り付け'), viaShortcut ? el('button.btn.sm', { type: 'button', onclick: () => send(input.value, true) }, 'コピーで聞く') : null, chat.length ? el('button.btn.sm.ghost', { type: 'button', onclick: () => { L().chat = []; store.saveLocal(); redraw(); } }, '控えを消す') : null]),
   ]);
 }
 
