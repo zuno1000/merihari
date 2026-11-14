@@ -129,7 +129,7 @@ export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれし�
 
 // ---- 自分で足す性格(v0.67・F24-16): 口調の 4 つ目以降。台詞は AI に書いてもらい(personaPrompt)、検査して custom[].set に持つ。無い場面は 土台(base)の内蔵の台詞 ----
 // v0.77(実機 FB「キャラクターの設定を書いていると 文字数の上限で切られる」): 上限は 端末の AI に渡す文(1,800 字)に収めるための 意図したものだったが、台詞は ほかの AI に頼む形になったので 広げた
-export const MAX_CUSTOM = 8, CUSTOM_PER = 4, LABEL_MAX = 20, HINT_MAX = 800, PLINE_MIN = 2, PLINE_MAX = 80;
+export const MAX_CUSTOM = 8, CUSTOM_PER = 20, LABEL_MAX = 20, HINT_MAX = 800, PLINE_MIN = 2, PLINE_MAX = 80;
 const isCustomId = (t) => typeof t === 'string' && /^c[0-9a-z]{1,10}$/.test(t);
 /** 口調の id。say などの tone には、内蔵の口調の文字列か、足した性格({ id, base, set, … }= voiceOf の戻り値)を渡せる */
 export const toneId = (tone) => (tone && typeof tone === 'object' ? tone.id : tone);
@@ -161,6 +161,15 @@ export function normalizeBuddy(raw) {
 // ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
 export const MAX_CHARS = 8, MAIN_ID = 'main', NAME_MAX = 20;
 export const SOURCE_MAX = 60, SAMPLE_MAX = 20, SAMPLE_LEN = 100;
+/**
+ * 似た台詞を見分ける鍵(v0.78・ユーザー要望「台詞を どんどんストックしたい。なるべく重複がないように」): 空白・句読点・記号・長音を外し、
+ * 文末の 終助詞(よ / ね / な / ぞ / ぜ / わ / さ)を 2 字まで外す(残りが 4 字に満たなければ 外さない)。鍵が同じ台詞は 同じものとして 1 つだけ持つ
+ */
+export function dupKey(raw) {
+  const t = String(raw == null ? '' : raw).toLowerCase().replace(/[\s　。、．，,.!！?？〜~ー―─…‥・「」『』()（）♪☆★♡]/g, '');
+  const u = t.replace(/[よねなぞぜわさ]{1,2}$/, '');
+  return u.length >= 4 ? u : t;
+}
 /**
  * 台詞を囲む かぎかっこ・引用符を外す(v0.77.1・実機 FB「習慣の台詞で {習慣}」まだ… のように 頭の「 だけが無い」)。
  * これまでは 行の頭の「 と 行の末尾の 」 を 別々に削っていたので、「{name}」が まだだよ。 のように 差し込みを囲む「 が頭に来る台詞で 「 だけが消えていた。
@@ -456,12 +465,13 @@ export const TEACH = Object.freeze({
   chat: { label: '日常', when: '作業の合間に かける、日常の何気ない ひとこと(雑談・ひとりごと・相手を気づかう言葉)。時間帯や状況を選ばず いつでも言える内容', vars: [] }, // v0.75
 });
 export const TEACH_KEYS = Object.freeze(Object.keys(TEACH));
-export const MAX_LINES = 300, LINE_MIN = 6, LINE_MAX = 60;
+export const MAX_LINES = 1000, LINE_MIN = 6, LINE_MAX = 60; // v0.78: 300 → 1000(台詞を ためていけるように)
 
 /** AI に渡す文: その場面の台詞を n 個、1 行に 1 つ */
-export function teachPrompt(key, name, tone, n = 8, role = null) {
+export function teachPrompt(key, name, tone, n = 8, role = null, avoid = []) {
   const t = TEACH[key];
   if (!t) return '';
+  const had = (Array.isArray(avoid) ? avoid : []).filter((x) => typeof x === 'string' && x).slice(-AVOID_MAX);
   return [
     writerHead(name, tone, role),
     '',
@@ -476,9 +486,13 @@ export function teachPrompt(key, name, tone, n = 8, role = null) {
     ...sourceRule(role), ...sampleRule(role),
     '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     t.hint ? `・差し込み: ${t.hint}。` : '・{ } の差し込みは使わない。',
+    ...(had.length ? ['', AVOID_HEAD, ...had.map((s) => `・${s}`)] : []),
   ].join('\n');
 }
 
+/** 頼む文に添える「すでにある台詞」(v0.78): AI は 前に書いた台詞を知らないので、いま持っている台詞を見せて 別の言い回しを頼む。場面ごとに 新しい AVOID_PER 個(日常と 手帳は AVOID_MAX 個)まで */
+export const AVOID_PER = 6, AVOID_MAX = 30;
+const AVOID_HEAD = 'すでにある台詞(これらとは 別の言い回しで書く。同じ文や、句読点・語尾だけを変えた よく似た文は 書かない):';
 /** 1 行を台詞として整える。使えなければ null(長さ・改行・URL・その場面で使えない差し込み) */
 export function cleanLine(raw, key) {
   const t = TEACH[key];
@@ -506,7 +520,7 @@ export function normalizeLines(raw) {
   const out = [], seen = new Set();
   for (const x of Array.isArray(raw) ? raw : []) {
     if (!x || !TEACH[x.k] || !(TONES.includes(x.t) || isCustomId(x.t))) continue; // 足した性格の id も通す(その性格が無くなっていれば normalizeBuddy が落とす)
-    const s = cleanLine(x.s, x.k), id = `${x.k}|${x.t}|${s}`;
+    const s = cleanLine(x.s, x.k), id = `${x.k}|${x.t}|${dupKey(s)}`; // v0.78: 句読点や文末だけが違う台詞は 1 つ
     if (!s || seen.has(id)) continue;
     seen.add(id); out.push({ k: x.k, t: x.t, s });
   }
@@ -525,7 +539,7 @@ export function learned(lines, key, tone) { const id = toneId(tone); return (Arr
 /** 台詞の束: AI に 1 回で頼む単位(3 回に分ける・1 回の返事を 20 行ほどに)。per = 1 つの場面に頼む数 */
 export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 }, daily: { label: '日常', per: 15 } }); // daily(v0.75): 日常の ひとことを まとめて 15 個
 /** 場面ごとの 台詞の上限(無ければ CUSTOM_PER)。日常の ひとことは 数が欲しいので多め */
-export const SCENE_CAP = Object.freeze({ chat: 30 });
+export const SCENE_CAP = Object.freeze({ chat: 100 }); // v0.78: 30 → 100
 export const capOf = (k) => SCENE_CAP[k] || CUSTOM_PER;
 export const GROUP_KEYS = Object.freeze(Object.keys(GROUPS));
 const V_ART = Object.freeze({ n: '残りのピースの数', label: '開く情報の名前(作者・題名 など)', kind: '「絵」か「写真」' });
@@ -601,7 +615,8 @@ const cleanSet = (raw) => {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}, out = {};
   for (const k of SCENE_KEYS) {
     const list = [];
-    for (const x of Array.isArray(o[k]) ? o[k] : []) { const s = cleanPersonaLine(x, k); if (s && !list.includes(s) && list.length < capOf(k)) list.push(s); }
+    const seen = new Set();
+    for (const x of Array.isArray(o[k]) ? o[k] : []) { const s = cleanPersonaLine(x, k), d = s && dupKey(s); if (s && !seen.has(d) && list.length < capOf(k)) { seen.add(d); list.push(s); } }
     if (list.length) out[k] = list;
   }
   return out;
@@ -630,12 +645,14 @@ export function coverage(c) {
  * 「やさしく前向きに・命令や否定は使わない」の決まりを外し、そのキャラクターらしさを優先してもらう(再現度のため)
  */
 export const ALL_GROUP = 'all';
-export function personaPrompt(group, name, voice, role = null) {
+export function personaPrompt(group, name, voice, role = null, opts = {}) {
   const all = group === ALL_GROUP, g = GROUPS[group];
   if (!g && !all) return '';
   const keys = all ? GROUP_KEYS.flatMap((x) => groupKeys(x)) : groupKeys(group);
   const per = (k) => GROUPS[SCENES[k].g].per;
   const total = keys.reduce((a, k) => a + per(k), 0);
+  // v0.78: opts.avoid = その性格が もう持っている台詞を「これとは別の言い回しで」と添える(場面ごとに 新しい数個)
+  const had = opts && opts.avoid ? keys.flatMap((k) => ownLines(voice, k).slice(-(capOf(k) > CUSTOM_PER ? AVOID_MAX : AVOID_PER)).map((s) => `${k}: ${s}`)) : [];
   return [
     writerHead(name, voice, role),
     '',
@@ -657,6 +674,7 @@ export function personaPrompt(group, name, voice, role = null) {
       const sc = SCENES[k], vs = Object.keys(sc.v || {});
       return `${k} = ${(customRole(role) && sc.wn) || sc.when}${vs.length ? `。差し込み: ${vs.map((v) => `{${v}}=${sc.v[v]}${(sc.need || []).includes(v) ? '・必ず' : ''}`).join(' / ')}` : ''}${all ? ` 【${per(k)} 個】` : ''}`;
     }),
+    ...(had.length ? ['', AVOID_HEAD, ...had] : []),
   ].join('\n');
 }
 /** AI の返事 → { 場面: [台詞] }(行ごとに検査・場面ごとに CUSTOM_PER 個まで・重複は 1 つ)。group を渡せば その束の場面だけ */
@@ -666,7 +684,7 @@ export function parsePersona(text, group = null) {
     const m = /^[\s\-*・●>`#\d.)、]*([a-z][a-z_]*)`?\s*[:：=|｜]\s*(.+)$/.exec(row);
     if (!m || !SCENES[m[1]] || (group && SCENES[m[1]].g !== group)) continue;
     const s = cleanPersonaLine(m[2], m[1]), list = out[m[1]] || [];
-    if (s && !list.includes(s) && list.length < capOf(m[1])) { list.push(s); out[m[1]] = list; }
+    if (s && !list.some((x) => dupKey(x) === dupKey(s)) && list.length < capOf(m[1])) { list.push(s); out[m[1]] = list; }
   }
   return out;
 }
@@ -750,6 +768,23 @@ export function applyProfile(b, p, { newId = null, customId = null } = {}) {
   return { buddy: next, persona };
 }
 
+/**
+ * 返事の台詞を いまの台詞に 足す(v0.78・これまでは 場面ごとに 入れ替えていた): 似た台詞(dupKey が同じ)は 入れない・場面ごとの上限を超えたら 古いものから外す。
+ * 戻り値 { set(足した場面だけ・patchCustom に そのまま渡せる), added(入った数), dup(似ていて 入れなかった数) }
+ */
+export function mergeSet(oldSet, newSet) {
+  const o = oldSet && typeof oldSet === 'object' ? oldSet : {}, n = newSet && typeof newSet === 'object' ? newSet : {};
+  const set = {};
+  let added = 0, dup = 0;
+  for (const k of SCENE_KEYS) {
+    const inc = Array.isArray(n[k]) ? n[k] : [];
+    if (!inc.length) continue;
+    const list = Array.isArray(o[k]) ? o[k].slice() : [], seen = new Set(list.map(dupKey));
+    for (const s of inc) { const d = dupKey(s); if (seen.has(d)) { dup++; continue; } seen.add(d); list.push(s); added++; }
+    set[k] = list.slice(-capOf(k));
+  }
+  return { set, added, dup };
+}
 /** 性格を足す。戻り値は新しい buddy(口調を その性格に)。MAX_CUSTOM 件を超えるか 名前が空なら null */
 export function addCustom(b, id, { label, hint, base } = {}) {
   const cur = normalizeBuddy(b);

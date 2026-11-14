@@ -198,7 +198,8 @@ function teachBox(redraw) {
   const pending = loc.teach && buddy.TEACH[loc.teach.key] ? loc.teach : null;
   // v0.74(v0.67.2 と同じ道): 端末の AI(ショートカット)は 台詞を頼む文を断るので、場面のチップは 頼む文をコピーするだけ。好きな AI に貼り、返事をコピーして戻る
   const ask = async (key) => {
-    const text = buddy.teachPrompt(key, b.name, buddy.voiceOf(b), 8, buddy.roleOf(b));
+    const v = buddy.voiceOf(b), own = v && typeof v === 'object' && v.set && Array.isArray(v.set[key]) ? v.set[key] : [];
+    const text = buddy.teachPrompt(key, b.name, v, 8, buddy.roleOf(b), [...own, ...buddy.learned(b.lines, key, b.tone)]); // v0.78: いま持っている台詞を添えて、別の言い回しを頼む
     try { await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
     loc.teach = { key, tone: b.tone, at: Date.now() }; store.saveLocal();
     toast(`「${buddy.TEACH[key].label}」の頼む文をコピーしました。AI に貼り、返事をコピーして戻ってください`);
@@ -206,12 +207,13 @@ function teachBox(redraw) {
   };
   const take = (text) => { // 返事 → 台詞。見つからなければ false
     const role = buddy.roleOf(b);
-    const found = buddy.parseLines(text, pending.key).filter((s) => !buddy.offWorld(s, role));
+    const v0 = buddy.voiceOf(b), own = new Set((v0 && typeof v0 === 'object' && v0.set && Array.isArray(v0.set[pending.key]) ? v0.set[pending.key] : []).map(buddy.dupKey));
+    const found = buddy.parseLines(text, pending.key).filter((s) => !buddy.offWorld(s, role) && !own.has(buddy.dupKey(s))); // v0.78: 性格の台詞と似たものは 入れない
     if (!found.length) return false;
     const r = buddy.addLines(b.lines, pending.key, pending.tone, found);
     S().buddy = buddy.normalizeBuddy({ ...b, lines: r.lines }); store.touchSettings(); autoSync();
     loc.teach = null; store.saveLocal();
-    toast(r.added ? `「${buddy.TEACH[pending.key].label}」の台詞を ${r.added} 個 覚えました` : 'もう覚えている台詞でした');
+    toast(r.added ? `「${buddy.TEACH[pending.key].label}」の台詞を ${r.added} 個 覚えました${found.length > r.added ? `(似た台詞 ${found.length - r.added} 個は 入れませんでした)` : ''}` : 'もう覚えている台詞(か よく似た台詞)でした');
     redraw();
     return true;
   };
@@ -234,7 +236,7 @@ function teachBox(redraw) {
   return [
     el('p.bd-h', `台詞を増やす(覚えた台詞 ${b.lines.length})`),
     el('div.bd-teach', [
-      el('p.muted.small', '①場面を選ぶと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。'),
+      el('p.muted.small', `①場面を選ぶと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。覚えた台詞は たまっていきます(ぜんぶで ${buddy.MAX_LINES} 個まで)。頼む文には いま覚えている台詞が入るので、別の言い回しが返ってきます。似た台詞は 入りません。`),
       el('div.chips.small', buddy.TEACH_KEYS.map((k) => el('button.chip.sm2', { type: 'button', onclick: () => ask(k) }, `${buddy.TEACH[k].label}(${buddy.variety(k, buddy.voiceOf(b), buddy.learned(b.lines, k, b.tone))})`))),
       el('div.row', [el('button.btn.sm', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事を貼り付けて覚える'), pending ? el('span.muted.small', `「${buddy.TEACH[pending.key].label}」の文をコピー済み`) : null]),
     ]),
@@ -568,21 +570,22 @@ function customSheet(b, c, save) {
   });
 }
 
-/** 返事から見つかった台詞を 覚える前に見せる(差し込みは 見本の値で)。× で外せる */
+/** 返事から見つかった台詞を 覚える前に見せる(差し込みは 見本の値で)。× で外せる。v0.78: 「足して覚える」(いまの台詞に足す)が主・「入れ替える」(見つかった場面を この台詞だけにする)は 小さく。onOk(list, mode: 'add' | 'replace') */
 function previewSheet(rows, onOk) {
   let list = rows.slice();
   const body = el('div.bd-plist');
   sheet((close) => {
     const head = el('p.muted.small');
     const draw = () => {
-      head.textContent = `台詞が ${list.length} 個 見つかりました(${new Set(list.map((r) => r.k)).size} 場面ぶん)。要らないものは × で外せます。無い場面は 土台の口調で話します。`;
+      head.textContent = `台詞が ${list.length} 個 見つかりました(${new Set(list.map((r) => r.k)).size} 場面ぶん)。要らないものは × で外せます。「足して覚える」は いまの台詞に足します(似た台詞は 入りません)。`;
       clear(body);
       body.append(...list.map((r) => el('div.bd-prow', [el('div.bd-pmain', [el('span.bd-pwhen', buddy.SCENES[r.k].when), el('span.bd-linetext', sample(r.s))]), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を外す', onclick: () => { list = list.filter((x) => x !== r); draw(); } }, '×')])));
     };
     draw();
     return [
       el('h2', '見つかった台詞'), head, body,
-      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => { if (!list.length) { toast('覚える台詞がありません'); return; } close(); onOk(list); } }, '覚える')]),
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: () => { if (!list.length) { toast('覚える台詞がありません'); return; } close(); onOk(list, 'add'); } }, '足して覚える')]),
+      el('div.row', el('button.btn.sm.ghost.grow', { type: 'button', onclick: () => { if (!list.length) { toast('覚える台詞がありません'); return; } close(); onOk(list, 'replace'); } }, 'いまの台詞と 入れ替える(見つかった場面だけ)')),
     ];
   });
 }
@@ -595,7 +598,7 @@ function customBox(b, c, save, rerender) {
   const allRows = buddy.GROUP_KEYS.reduce((a, g) => a + buddy.groupKeys(g).length * buddy.GROUPS[g].per, 0);
   // v0.67.2(実機 FB「端末の AI では断られる。ほかの AI サービスを使う」): 束のボタンは 頼む文をコピーするだけ(ショートカットは開かない)。好きな AI に貼り、返事をコピーして戻る
   const ask = async (g) => {
-    try { await navigator.clipboard.writeText(buddy.personaPrompt(g, b.name, c, buddy.roleOf(b))); } catch { toast('コピーできませんでした'); return; }
+    try { await navigator.clipboard.writeText(buddy.personaPrompt(g, b.name, c, buddy.roleOf(b), { avoid: true })); } catch { toast('コピーできませんでした'); return; } // v0.78: いまの台詞を添えて、別の言い回しを頼む
     loc.pset = { id: c.id, group: g, at: Date.now() }; store.saveLocal();
     toast(`「${gLabel(g)}」の頼む文をコピーしました。AI に貼り、返事をコピーして戻ってください`);
     rerender();
@@ -607,12 +610,15 @@ function customBox(b, c, save, rerender) {
     const rows = every.filter((r) => !buddy.offWorld(r.s, role)); // v0.73: 世界を変えたキャラクターでは、図書館の言葉が残った行は 覚える前に外す
     if (!rows.length) return false;
     if (rows.length < every.length) toast(`図書館の言葉が入った ${every.length - rows.length} 行は外しました`);
-    previewSheet(rows, (kept) => {
+    previewSheet(rows, (kept, mode) => {
       const set = {};
       for (const r of kept) (set[r.k] || (set[r.k] = [])).push(r.s);
       loc.pset = null; store.saveLocal();
-      toast(`「${c.label}」の台詞を ${kept.length} 個 覚えました`);
-      save(buddy.patchCustom(B(), c.id, { set }));
+      if (mode === 'replace') { toast(`「${c.label}」の台詞を ${kept.length} 個に 入れ替えました`); save(buddy.patchCustom(B(), c.id, { set })); return; }
+      // v0.78: いまの台詞に足す(似た台詞は 入れない・場面ごとの上限を超えたら 古いものから外れる)
+      const now = B().custom.find((x) => x.id === c.id) || c, m = buddy.mergeSet(now.set, set);
+      toast(m.added ? `「${c.label}」の台詞を ${m.added} 個 足しました${m.dup ? `(似た台詞 ${m.dup} 個は 入れませんでした)` : ''}` : 'どれも もう持っている台詞(か よく似た台詞)でした');
+      if (m.added) save(buddy.patchCustom(B(), c.id, { set: m.set })); else rerender();
     });
     return true;
   };
@@ -637,12 +643,13 @@ function customBox(b, c, save, rerender) {
   return el('div.bd-custom', [
     el('p.bd-h', `「${c.label}」の台詞`),
     c.hint ? el('p.muted.small', c.hint) : null,
-    el('p.muted.small', todo.length ? `①束のボタンを押すと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります(調べてもらった AI の 同じ会話に貼ると、調べた内容も活かされます)。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。「ぜんぶ まとめて」は 4 つの束を 1 回で頼みます(返事が途中で切れたら、足りない束だけ 頼み直せます)。「日常」は 何気ない ひとことを 15 個ずつ(頼み直すと 入れ替わります)。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : 'どの場面にも台詞があります。頼み直すと、その束の場面は 新しい台詞に置き換わります。'),
+    el('p.muted.small', todo.length ? `①束のボタンを押すと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります(調べてもらった AI の 同じ会話に貼ると、調べた内容も活かされます)。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。「ぜんぶ まとめて」は 4 つの束を 1 回で頼みます(返事が途中で切れたら、足りない束だけ 頼み直せます)。返事は いまの台詞に 足されていきます(1 場面 ${buddy.CUSTOM_PER} 個・日常は ${buddy.capOf('chat')} 個まで。似た台詞は 入りません)。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : `どの場面にも台詞があります。もう一度 頼むと、いまの台詞とは 別の言い回しが返り、足されていきます(1 場面 ${buddy.CUSTOM_PER} 個・日常は ${buddy.capOf('chat')} 個まで。似た台詞は 入りません)。`),
     // 括弧の中: 場面が いくつもある束は「台詞のある場面 / 場面の数」、場面が 1 つだけの束(日常)は 台詞の個数(v0.75.1・実機 FB「日常が 1 / 1 になるのは 想定どおり?」)
     el('div.chips.small', [el('button.chip.sm2.bd-allchip', { type: 'button', onclick: () => ask(buddy.ALL_GROUP) }, `ぜんぶ まとめて(${allRows} 行)`), ...buddy.GROUP_KEYS.map((g) => {
       const keys = buddy.groupKeys(g), one = keys.length === 1 ? keys[0] : null;
       const n = one ? (c.set[one] || []).length : 0;
-      const label = one ? `${buddy.GROUPS[g].label}(${n} 個 / ${buddy.capOf(one)} 個まで)` : `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total} 場面)`;
+      const cnt = keys.reduce((a, k) => a + (c.set[k] || []).length, 0);
+      const label = one ? `${buddy.GROUPS[g].label}(${n} 個 / ${buddy.capOf(one)} 個まで)` : `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total} 場面・${cnt} 個)`;
       return el('button', { type: 'button', class: `chip sm2${(one ? n >= buddy.GROUPS[g].per : cov[g].have >= cov[g].total) ? ' on' : ''}`, onclick: () => ask(g) }, label);
     })]),
     el('div.row', [el('button', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事を貼り付けて覚える'), pending ? el('span.muted.small', `「${gLabel(pending.group)}」の文をコピー済み`) : null]),
