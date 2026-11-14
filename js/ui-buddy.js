@@ -50,7 +50,7 @@ export function lead(key, vars, mood, title) { return bubble(key, vars, mood) ||
 /** 日報の題(止めていれば null): 「リブの日報・昼」 */
 export const reportTitle = (slot) => (buddyOn() ? `${B().name}の日報・${{ morning: '朝', noon: '昼', evening: '夜' }[slot] || ''}` : null);
 /** AI に渡す人格の一文(止めていれば '') */
-export const buddyPersona = () => (buddyOn() ? buddy.persona(B().name, V()) : '');
+export const buddyPersona = () => (buddyOn() ? buddy.persona(B().name, V(), buddy.roleOf(B())) : '');
 
 // ---- 絵(端末に置いた画像・無ければ内蔵の顔) ----
 const urls = new Map(); // id → objectURL | null
@@ -159,7 +159,7 @@ function notebook(redraw) {
   const a = primed && primed.art;
   const st = buddy.stamps(a ? a.doneWorks : []);
   return el('div.bd-note', [
-    el('p.bd-h', `見習い司書 Lv.${lv.level}`),
+    el('p.bd-h', `${buddy.roleOf(B()).title} Lv.${lv.level}`),
     el('div.bd-skills', buddy.LEVELS.map((l, i) => el('div', { class: `bd-skill${i < lv.level ? ' on' : ''}` }, [el('b', i < lv.level ? '✓' : `${l.h}h`), el('span', l.name)]))),
     lv.next ? el('p.muted.small', `あと ${fmtMin(lv.next.needMin)} の作業で「${lv.next.name}」を言えるようになります`) : null,
     el('p.bd-h', `旅した土地のスタンプ ${st.length ? `${st.length} か国` : ''}`),
@@ -178,7 +178,7 @@ function teachBox(redraw) {
   const pending = loc.teach && buddy.TEACH[loc.teach.key] ? loc.teach : null;
   const ask = async (key) => {
     if (!local.ai?.enabled) { toast('設定 › AI(ショートカット)を有効にすると、台詞を増やせます'); return; }
-    const text = buddy.teachPrompt(key, b.name, buddy.voiceOf(b));
+    const text = buddy.teachPrompt(key, b.name, buddy.voiceOf(b), 8, buddy.roleOf(b));
     const { url, viaClipboard } = ai.shortcutURL(local.ai?.shortcutName || ai.DEFAULT_SHORTCUT, text);
     try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
     loc.teach = { key, tone: b.tone, at: Date.now() }; store.saveLocal();
@@ -366,7 +366,7 @@ function customSheet(b, c, save) {
   let base = c ? c.base : (buddy.TONES.includes(b.tone) ? b.tone : 'bright');
   sheet((close) => {
     const label = el('input.text', { type: 'text', value: c ? c.label : '', maxlength: buddy.LABEL_MAX, placeholder: '例: 関西弁の先輩', autocomplete: 'off', 'aria-label': '性格の名前' });
-    const hint = el('textarea.text', { rows: 4, maxlength: buddy.HINT_MAX, placeholder: '例: 面倒見がよくて 少しせっかち。関西弁で、短く話す。一人称は「うち」。', 'aria-label': '性格と口調の説明' }, c ? c.hint : '');
+    const hint = el('textarea.text.bd-ta', { rows: 4, maxlength: buddy.HINT_MAX, placeholder: '例: 面倒見がよくて 少しせっかち。関西弁で、短く話す。一人称は「うち」。', 'aria-label': '性格と口調の説明' }, c ? c.hint : '');
     const seg = el('div.seg');
     const drawSeg = () => { clear(seg); seg.append(...buddy.TONES.map((k) => el('button', { type: 'button', class: k === base ? 'active' : '', onclick: () => { base = k; drawSeg(); } }, buddy.TONE_LABEL[k]))); };
     drawSeg();
@@ -412,7 +412,7 @@ function customBox(b, c, save, rerender) {
   const pending = loc.pset && loc.pset.id === c.id && buddy.GROUPS[loc.pset.group] ? loc.pset : null;
   // v0.67.2(実機 FB「端末の AI では断られる。ほかの AI サービスを使う」): 束のボタンは 頼む文をコピーするだけ(ショートカットは開かない)。好きな AI に貼り、返事をコピーして戻る
   const ask = async (g) => {
-    try { await navigator.clipboard.writeText(buddy.personaPrompt(g, b.name, c)); } catch { toast('コピーできませんでした'); return; }
+    try { await navigator.clipboard.writeText(buddy.personaPrompt(g, b.name, c, buddy.roleOf(b))); } catch { toast('コピーできませんでした'); return; }
     loc.pset = { id: c.id, group: g, at: Date.now() }; store.saveLocal();
     toast(`「${buddy.GROUPS[g].label}」の頼む文をコピーしました。AI に貼り、返事をコピーして戻ってください`);
     rerender();
@@ -432,7 +432,7 @@ function customBox(b, c, save, rerender) {
   };
   /** クリップボードを読めない / 台詞が見つからない ときは、返事を手で貼る欄を出す */
   const pasteSheet = (why) => sheet((close) => {
-    const ta = el('textarea.text', { rows: 8, placeholder: 'hello: やあ、待ってたよ。\nrest: ゆっくりしてね。\n…', 'aria-label': 'AI の返事' });
+    const ta = el('textarea.text.bd-ta', { rows: 8, placeholder: 'hello: やあ、待ってたよ。\nrest: ゆっくりしてね。\n…', 'aria-label': 'AI の返事' });
     return [
       el('h2', '返事を貼り付ける'),
       el('p.muted.small', `${why} AI の返事を ここに貼って「台詞を探す」を押してください。`),
@@ -490,6 +490,75 @@ function charSheet(b, save) {
   });
 }
 
+// ---- 絵の切り抜き(v0.69・F24-19・ユーザー要望「どの部分をアイコンにするか、トリミングやサイズ、角度の調整を」)----
+const CROP_VIEW = 264, CROP_OUT = 512;
+/** 画像(File / Blob)を読み、丸い枠の中で 位置(引っ張る)・大きさ(つまむ / スライダー)・角度 を決めてから onDone(blob・512px の正方形)。元の画像は残さない */
+async function cropSheet(src, heading, onDone) {
+  let bmp;
+  try {
+    let blob = src;
+    if (/^image\//.test(src.type || '')) { try { blob = await photos.shrink(src, 1600, 0.92); } catch { blob = src; } } // 大きな写真は 先に縮める(引っ張るたびに描き直すので)
+    try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch { bmp = await createImageBitmap(blob); }
+  } catch { toast('画像を読めませんでした'); return; }
+  let st = buddy.normalizeCrop(null);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cv = el('canvas.bd-cropcv', { width: Math.round(CROP_VIEW * dpr), height: Math.round(CROP_VIEW * dpr), 'aria-label': '切り抜く範囲(引っ張って動かす)' });
+  const paintTo = (canvas) => {
+    const n = canvas.width, ctx = canvas.getContext('2d'), t = buddy.cropTransform(bmp.width, bmp.height, n, st);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n, n);
+    ctx.translate(t.dx, t.dy); ctx.rotate(t.rad); ctx.scale(t.k, t.k);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+  };
+  const zoom = el('input', { type: 'range', min: 1, max: buddy.CROP_ZOOM_MAX, step: 0.01, value: 1, 'aria-label': '大きさ' });
+  const rot = el('input', { type: 'range', min: -180, max: 180, step: 1, value: 0, 'aria-label': '角度' });
+  const zv = el('span.bd-cropval'), rv = el('span.bd-cropval');
+  const draw = () => { st = buddy.normalizeCrop(st); paintTo(cv); zoom.value = st.zoom; rot.value = st.rot; zv.textContent = `${Math.round(st.zoom * 100)}%`; rv.textContent = `${Math.round(st.rot)}°`; };
+  zoom.addEventListener('input', () => { st.zoom = +zoom.value; draw(); });
+  rot.addEventListener('input', () => { st.rot = +rot.value; draw(); });
+  // 引っ張って動かす・2 本の指でつまんで大きさ・ホイールで大きさ
+  const pts = new Map(); let pinch = 0;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  cv.addEventListener('pointerdown', (e) => { try { cv.setPointerCapture(e.pointerId); } catch { /* 古い端末 */ } pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) pinch = dist(); });
+  cv.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    const size = cv.getBoundingClientRect().width || CROP_VIEW;
+    if (pts.size === 1) { st.x += (e.clientX - p.x) / size; st.y += (e.clientY - p.y) / size; }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 2) { const d = dist(); if (pinch > 0 && d > 0) st.zoom *= d / pinch; pinch = d; }
+    draw();
+  });
+  const up = (e) => { pts.delete(e.pointerId); pinch = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); st.zoom *= e.deltaY < 0 ? 1.08 : 1 / 1.08; draw(); }, { passive: false });
+  const turn = (d) => { let r = st.rot + d; if (r > 180) r -= 360; if (r < -180) r += 360; st.rot = r; draw(); };
+  sheet((close) => {
+    const use = async () => {
+      const out = document.createElement('canvas'); out.width = CROP_OUT; out.height = CROP_OUT;
+      paintTo(out);
+      const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.9));
+      if (!blob) { toast('画像を保存できませんでした'); return; }
+      close();
+      try { await onDone(blob); } catch (err) { toast((err && err.message) || '画像を保存できませんでした'); }
+    };
+    draw();
+    return [
+      el('h2', heading),
+      el('p.muted.small', '丸の中が 顔になります。絵を引っ張って位置を、スライダー(か 2 本の指)で大きさを、角度で傾きを合わせてください。'),
+      el('div.bd-crop', [cv, el('span.bd-cropring', { 'aria-hidden': 'true' })]),
+      el('label.bd-croprow', [el('span', '大きさ'), zoom, zv]),
+      el('label.bd-croprow', [el('span', '角度'), rot, rv]),
+      el('div.row.bd-cropbtns', [
+        el('button.btn.sm', { type: 'button', onclick: () => turn(-90) }, '左に 90°'),
+        el('button.btn.sm', { type: 'button', onclick: () => turn(90) }, '右に 90°'),
+        el('button.btn.sm.ghost', { type: 'button', onclick: () => { st = buddy.normalizeCrop(null); draw(); } }, '元に戻す'),
+      ]),
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: use }, 'この形で使う')]),
+    ];
+  }, () => { if (bmp.close) bmp.close(); });
+}
+
 /** 設定 › アシスタント: 有効 / 名前 / 口調 / ホームでの声かけ / 絵(表情ごとに端末の画像) */
 export function sectionBuddy(rerender) {
   const s = S(), b = B(), cur = b.custom.find((c) => c.id === b.tone) || null;
@@ -497,16 +566,21 @@ export function sectionBuddy(rerender) {
   const name = el('input.text', { type: 'text', value: b.name, maxlength: 12, autocomplete: 'off', 'aria-label': '名前', onchange: () => save(buddy.patchChar(b, b.cur, { name: name.value })) });
   const slot = (mood) => {
     const prev = el('span.bd-slot-av', avatar(mood, 56));
-    const file = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async (e) => {
+    const put = async (blob) => { await photos.putPhoto(imgId(mood), blob); urls.clear(); toast('絵を替えました'); rerender(); };
+    const file = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => {
       const f = e.target.files && e.target.files[0];
-      if (!f) return;
-      try { const blob = await photos.shrink(f, 512, 0.85); await photos.putPhoto(imgId(mood), blob); urls.clear(); toast('絵を替えました'); rerender(); } catch (err) { toast(err.message || '画像を読めませんでした'); }
+      e.target.value = ''; // 同じ画像を もう一度選べるように
+      if (f) cropSheet(f, `「${buddy.MOOD_LABEL[mood]}」の絵`, put); // v0.69: どの部分を顔にするかを決めてから保存
     } });
     const off = el('button.btn.sm.ghost', { type: 'button', hidden: true, onclick: async () => { await photos.delPhoto(imgId(mood)); urls.clear(); rerender(); } }, '外す');
-    photos.getPhoto(imgId(mood)).then((blob) => { off.hidden = !blob; }).catch(() => {}); // その表情に画像を入れてあるときだけ「外す」
+    const tune = el('button.btn.sm.ghost', { type: 'button', hidden: true, onclick: async () => { const blob = await photos.getPhoto(imgId(mood)); if (blob) cropSheet(blob, `「${buddy.MOOD_LABEL[mood]}」の絵`, put); } }, '調整');
+    photos.getPhoto(imgId(mood)).then((blob) => { off.hidden = !blob; tune.hidden = !blob; }).catch(() => {}); // その表情に画像を入れてあるときだけ「調整」「外す」
     return el('div.bd-slot', [prev, el('span.bd-slot-k', buddy.MOOD_LABEL[mood]), file,
-      el('button.btn.sm', { type: 'button', onclick: () => file.click() }, '画像を選ぶ'), off]);
+      el('div.bd-slot-acts', [el('button.btn.sm', { type: 'button', onclick: () => file.click() }, '画像を選ぶ'), tune, off])]);
   };
+  const me = b.chars.find((c) => c.id === b.cur) || {};
+  const title = el('input.text', { type: 'text', value: me.title || '', maxlength: buddy.TITLE_MAX, placeholder: buddy.DEFAULT_TITLE, autocomplete: 'off', 'aria-label': '肩書き', onchange: () => save(buddy.patchChar(b, b.cur, { title: title.value })) });
+  const world = el('textarea.text.bd-ta', { rows: 2, maxlength: buddy.WORLD_MAX, placeholder: `例: 星を渡る貨物船。あなたの作業時間が 船の燃料になる(空なら: ${buddy.DEFAULT_WORLD})`, 'aria-label': '世界', onchange: () => save(buddy.patchChar(b, b.cur, { world: world.value })) }, me.world || '');
   return el('section.card', [
     el('h2', 'アシスタント'),
     el('p.muted.small', '大図書館の見習い司書です。あなたの作業時間が書庫の灯りになり、そのあいだに小説の続きを運び、絵の扉の向こうの土地から絵はがきを持ち帰ります。ホームに常駐して ひとこと話し、ブリーフィング(日報)を届けます。決まった台詞から状況に合うものを選ぶだけで、記録を外へ送ることはありません(会話だけは iPhone のショートカットへ文を渡します)。'),
@@ -515,6 +589,9 @@ export function sectionBuddy(rerender) {
     el('p.muted.small', 'キャラクターごとに 名前・口調と性格・絵 を決められます。選んだキャラクターが ホーム・日報・ふり返り に出ます(アシスタントのシートからも替えられます)。'),
     charChips(b, (id) => save(buddy.selectChar(b, id)), b.chars.length < buddy.MAX_CHARS ? () => charSheet(b, save) : null),
     el('div.row.field', [el('span.label', '名前'), name]),
+    el('div.row.field', [el('span.label', '肩書き'), title]),
+    el('p.bd-h', '世界(どんな所の、どんな役か)'), world,
+    el('p.muted.small', buddy.roleOf(b).custom ? '肩書きと世界は、会話と 台詞を頼む文に入ります。内蔵の 3 つの口調の台詞は 大図書館の言葉のままなので、「\uff0b 性格を足す」で この世界の台詞を作ると そろいます(作り直すときは 束のボタンをもう一度)。' : '空のままなら 大図書館の見習い司書です。変えると、会話と 台詞を頼む文に その肩書きと世界が入ります。'),
     el('h3.help-h', '口調と性格'),
     el('div.chips.small', [
       ...[...buddy.TONES, ...b.custom.map((c) => c.id)].map((k) => el('button', { type: 'button', class: `chip sm2${k === b.tone ? ' on' : ''}`, 'aria-pressed': k === b.tone ? 'true' : 'false', onclick: () => save(buddy.patchChar(b, b.cur, { tone: k })) }, buddy.toneLabel(b, k))),
@@ -527,7 +604,7 @@ export function sectionBuddy(rerender) {
     el('p.muted.small', '手帳の「台詞を増やす」で、AI に書いてもらった台詞です(場面ごと・口調ごと)。内蔵の台詞に混ざって出ます。要らないものは × で消せます。両方の端末で同じになります。'),
     b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.toneLabel(b, x.t)}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
     el('h3.help-h', `「${b.name}」の絵(この端末だけ)`),
-    el('p.muted.small', '表情ごとに画像を選べます。「ふだん」だけ入れれば、ほかの表情にも使われます。正方形で、顔が中央にある絵が合います(丸く切り抜いて表示・長辺 512px に縮めて端末に保存)。入れていない表情は、内蔵の顔になります。'),
+    el('p.muted.small', '表情ごとに画像を選べます。「ふだん」だけ入れれば、ほかの表情にも使われます。画像を選ぶと、どの部分を顔にするか(位置・大きさ・角度)を決められます。入れたあとも「調整」で直せます(丸く切り抜いて表示・512px の正方形にして端末に保存。元の画像は残しません)。入れていない表情は、内蔵の顔になります。'),
     el('div.bd-slots', buddy.MOODS.map(slot)),
     el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」の絵をぜんぶ外しますか?`, 'この端末に入れた このキャラクターの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
     b.chars.length > 1 ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」を消しますか?`, 'このキャラクターと、この端末に入れた その絵を消します。足した性格と 覚えた台詞は残ります。', '消す', () => { const id = b.cur; save(buddy.removeChar(B(), id)); Promise.all(buddy.MOODS.map((m) => photos.delPhoto(imgId(m, id)))).then(() => urls.clear()).catch(() => {}); }, true) }, 'このキャラクターを消す')) : null,

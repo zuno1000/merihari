@@ -1481,6 +1481,17 @@ button.a-thumb{cursor:pointer}
 .bd-custom{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;padding:12px;border:1px solid var(--line);border-radius:12px}
 .bd-custom>p{margin:0}
 .bd-addtone{border-style:dashed}
+/* v0.69: 絵の切り抜き(丸い枠・引っ張る・スライダー) */
+.bd-crop{position:relative;width:264px;height:264px;max-width:100%;margin:6px auto 10px;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px var(--line)}
+.bd-cropcv{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.bd-cropring{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 200px rgba(0,0,0,.45),inset 0 0 0 2px #fff;pointer-events:none}
+.bd-croprow{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px;color:var(--muted)}
+.bd-croprow>span:first-child{flex:none;width:3.2em}
+.bd-croprow input{flex:1;min-width:0}
+.bd-cropval{flex:none;width:3.4em;text-align:right;font-variant-numeric:tabular-nums}
+.bd-cropbtns{flex-wrap:wrap;margin-bottom:10px}
+textarea.text.bd-ta{display:block;width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);padding:8px 10px;font:inherit;font-size:15px;line-height:1.5;resize:vertical;margin:0 0 8px}
+.bd-slot-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto}
 /* v0.68: キャラクターのチップ(顔と名前) */
 .bd-charchip{display:inline-flex;align-items:center;gap:6px;padding-left:6px}
 .bd-sheet .bd-chars{justify-content:center;margin:2px 0 8px}

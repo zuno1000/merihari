@@ -1622,6 +1622,20 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(Bd.say('hello', Bd.voiceOf(b2), {}, 0) === Bd.say('hello', 'cool', {}, 0) && Bd.say('hello', Bd.voiceOf(b3), {}, 0) === Bd.say('hello', 'polite', {}, 0) && Bd.persona(b2.name, Bd.voiceOf(b2)).includes('「ノア」') && Bd.personaPrompt('home', c1.name, Bd.voiceOf(c1)).includes('「ノア」'), '台詞と AI に渡す文は、選んでいるキャラクターの 名前と口調で');
     }
 
+    // ---- v0.69・F24-18 / 19: 肩書きと世界(キャラクターごと)・絵の切り抜き ----
+    log('\n# v0.69 肩書きと世界・絵の切り抜き');
+    {
+      const Bd = M.buddy;
+      const b0 = Bd.addChar(Bd.normalizeBuddy({ name: 'リブ' }), 'k1', 'ノア');
+      const b1 = Bd.patchChar(b0, 'k1', { title: '  見習い  航海士 ', world: '星を渡る貨物船。\nあなたの作業時間が 船の燃料になる' }), r1 = Bd.roleOf(b1), r0 = Bd.roleOf(Bd.selectChar(b1, 'main'));
+      ok(eq(b0.chars[1], { id: 'k1', name: 'ノア', tone: 'bright' }) && eq(b1.chars[1], { id: 'k1', name: 'ノア', tone: 'bright', title: '見習い 航海士', world: '星を渡る貨物船。 あなたの作業時間が 船の燃料になる' }) && eq(r1, { title: '見習い 航海士', world: '星を渡る貨物船。 あなたの作業時間が 船の燃料になる', custom: true }) && eq(r0, { title: Bd.DEFAULT_TITLE, world: '', custom: false }) && eq(Bd.patchChar(b1, 'k1', { title: Bd.DEFAULT_TITLE, world: '  ' }).chars[1], b0.chars[1]) && Bd.patchChar(b1, 'k1', { title: 'あ'.repeat(50), world: 'い'.repeat(300) }).chars[1].title.length === Bd.TITLE_MAX && Bd.patchChar(b1, 'k1', { world: 'い'.repeat(300) }).chars[1].world.length === Bd.WORLD_MAX && Bd.roleOf(Bd.patchChar(b0, 'k1', { title: '船長' })).custom === true && eq(S.migrate({ schema: 1, settings: { buddy: b1 } }).settings.buddy, b1), 'roleOf / patchChar: 肩書き(20 字まで)と世界(120 字まで)は キャラクターごと・決めたときだけ持つ(既定は 見習い司書・大図書館)・保存と読み込みで変わらない');
+      const p0 = Bd.persona('リブ', 'bright'), p1 = Bd.persona('ノア', 'cool', r1), w1 = Bd.writerHead('ノア', 'cool', r1);
+      const pp = Bd.personaPrompt('home', 'ノア', 'cool', r1), tp = Bd.teachPrompt('idle', 'ノア', 'cool', 8, r1);
+      ok(p0 === Bd.persona('リブ', 'bright', r0) && p0.includes('大図書館の見習い司書「リブ」') && p1.includes('見習い 航海士「ノア」') && p1.includes('星を渡る貨物船') && !p1.includes('大図書館') && !p1.includes('書庫') && p1.includes('ぶっきらぼう') && w1.includes('見習い 航海士「ノア」') && w1.includes('舞台: 星を渡る貨物船') && !w1.includes('大図書館') && [pp, tp].every((t) => t.includes('肩書きと舞台に合う言葉') && !t.includes('大図書館の') && t.includes('見習い 航海士')) && Bd.personaPrompt('home', 'リブ', 'cool').includes('大図書館の言葉') && Bd.teachPrompt('idle', 'リブ', 'cool') === Bd.teachPrompt('idle', 'リブ', 'cool', 8, r0) && Bd.persona('ノア', 'cool', { title: '船長', world: '' }) .includes('あなたは船長「ノア」です。') && Object.keys(Bd.parsePersona(pp.split('\n').filter((x) => / = /.test(x)).map((x) => x.split(' = ')[0] + ': {n}{label}{place}{min}{kind}').join('\n'))).length >= 0, 'persona / writerHead / personaPrompt / teachPrompt: 肩書きと世界を決めたキャラクターは その言葉で頼む(大図書館の言葉は入れない)・決めていなければ これまでどおり');
+      const c0 = Bd.normalizeCrop(null), t1 = Bd.cropTransform(400, 200, 264, c0), t2 = Bd.cropTransform(400, 200, 512, { zoom: 2, rot: 90, x: 0.25, y: -0.5 });
+      ok(eq(c0, { zoom: 1, rot: 0, x: 0, y: 0 }) && eq(Bd.normalizeCrop({ zoom: 99, rot: -999, x: 'a', y: 9 }), { zoom: Bd.CROP_ZOOM_MAX, rot: -180, x: 0, y: 2 }) && Bd.normalizeCrop({ zoom: 0.2 }).zoom === 1 && eq(t1, { k: 264 / 200, rad: 0, dx: 132, dy: 132 }) && t2.k === (512 / 200) * 2 && Math.abs(t2.rad - Math.PI / 2) < 1e-9 && t2.dx === 256 + 128 && t2.dy === 0 && Math.abs(Bd.cropTransform(400, 200, 512, { zoom: 2 }).k / Bd.cropTransform(400, 200, 264, { zoom: 2 }).k - 512 / 264) < 1e-9, 'normalizeCrop / cropTransform: 大きさ 1 は 短い辺がちょうど収まる・位置は 枠の一辺に対する割合(見ている枠と 保存する 512px で 同じ絵になる)・角度は 度');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

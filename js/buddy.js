@@ -150,6 +150,29 @@ export function normalizeBuddy(raw) {
 }
 // ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
 export const MAX_CHARS = 5, MAIN_ID = 'main';
+export const DEFAULT_TITLE = '見習い司書', DEFAULT_WORLD = '大図書館。あなたの作業時間が 書庫の灯りになる', TITLE_MAX = 20, WORLD_MAX = 120;
+/** 選んでいるキャラクターの 肩書きと世界: { title, world, custom(どちらかを自分で決めている) } */
+export function roleOf(b) {
+  const c = b && Array.isArray(b.chars) ? b.chars.find((x) => x.id === b.cur) : null;
+  const title = (c && c.title) || DEFAULT_TITLE, world = (c && c.world) || '';
+  return { title, world, custom: title !== DEFAULT_TITLE || !!world };
+}
+const customRole = (role) => !!(role && typeof role === 'object' && (role.world || (role.title && role.title !== DEFAULT_TITLE)));
+const WORLD_RULE = '・キャラクターの肩書きと舞台に合う言葉を ときどき使う。場面の説明にある「書庫」「絵の扉」は、それに合う言葉に言い換えてよい(小説の続き・絵はがき・図録・ピース は そのままの言葉で)。';
+
+// ---- 絵の切り抜き(v0.69・F24-19): どの部分を 丸い顔にするか(位置・大きさ・角度)----
+const clampN = (v, lo, hi, d) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : d);
+export const CROP_ZOOM_MAX = 5;
+/** 切り抜きの状態を整える: { zoom(1 = 短い辺がちょうど収まる 〜 5), rot(度・-180〜180), x, y(中心からのずれ。枠の一辺を 1 とした割合・-2〜2) } */
+export function normalizeCrop(st) {
+  const o = st && typeof st === 'object' ? st : {};
+  return { zoom: clampN(o.zoom, 1, CROP_ZOOM_MAX, 1), rot: clampN(o.rot, -180, 180, 0), x: clampN(o.x, -2, 2, 0), y: clampN(o.y, -2, 2, 0) };
+}
+/** 画像(w × h)を 一辺 size の枠に置く変換: { k(拡大率), rad(回転), dx, dy(画像の中心を置く位置) }。同じ状態なら 枠の大きさが違っても 同じ絵になる */
+export function cropTransform(w, h, size, st) {
+  const c = normalizeCrop(st);
+  return { k: (size / Math.max(1, Math.min(w, h))) * c.zoom, rad: (c.rot * Math.PI) / 180, dx: size / 2 + c.x * size, dy: size / 2 + c.y * size };
+}
 const isCharId = (t) => t === MAIN_ID || (typeof t === 'string' && /^k[0-9a-z]{1,10}$/.test(t));
 const cleanName = (x) => (typeof x === 'string' ? x.trim().slice(0, 12) : '');
 /** キャラクターの一覧を整える: [{ id, name(12 字まで), tone(内蔵の口調 か 足した性格の id) }](MAX_CHARS 人まで・1 人も無ければ fallback) */
@@ -157,7 +180,13 @@ export function normalizeChars(raw, toneOk, fallback) {
   const out = [];
   for (const x of Array.isArray(raw) ? raw : []) {
     if (!x || typeof x !== 'object' || !isCharId(x.id) || out.some((c) => c.id === x.id)) continue;
-    out.push({ id: x.id, name: cleanName(x.name) || DEFAULT_NAME, tone: toneOk(x.tone) ? x.tone : 'bright' });
+    const c = { id: x.id, name: cleanName(x.name) || DEFAULT_NAME, tone: toneOk(x.tone) ? x.tone : 'bright' };
+    // v0.69・F24-18: 肩書きと世界(決めたときだけ持つ。無ければ 見習い司書・大図書館)
+    const title = typeof x.title === 'string' ? x.title.replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX) : '';
+    const world = typeof x.world === 'string' ? x.world.replace(/\s+/g, ' ').trim().slice(0, WORLD_MAX) : '';
+    if (title && title !== DEFAULT_TITLE) c.title = title;
+    if (world) c.world = world;
+    out.push(c);
     if (out.length >= MAX_CHARS) break;
   }
   return out.length ? out : [fallback];
@@ -310,11 +339,11 @@ export const TEACH_KEYS = Object.freeze(Object.keys(TEACH));
 export const MAX_LINES = 300, LINE_MIN = 6, LINE_MAX = 60;
 
 /** AI に渡す文: その場面の台詞を n 個、1 行に 1 つ */
-export function teachPrompt(key, name, tone, n = 8) {
+export function teachPrompt(key, name, tone, n = 8, role = null) {
   const t = TEACH[key];
   if (!t) return '';
   return [
-    writerHead(name, tone),
+    writerHead(name, tone, role),
     '',
     `次の場面で このキャラクターが言う台詞を ${n} 個、書いてください。`,
     `場面: ${t.when}`,
@@ -323,7 +352,7 @@ export function teachPrompt(key, name, tone, n = 8) {
     '・1 行に 1 つ。番号・記号・かぎかっこ・説明は付けない。',
     `・1 つは ${LINE_MAX} 字まで。言い回しは 1 つずつ変える。`,
     '・あとで何度も使い回すので、きょうの日付・時刻・タスクの名前・具体的な数字などの「その場だけの事実」は入れない(5 分だけ、のような誘いの数字はよい)。',
-    '・書庫の灯り、棚、しおり、絵の扉 など、大図書館の世界の言葉を ときどき使う。',
+    customRole(role) ? WORLD_RULE : '・書庫の灯り、棚、しおり、絵の扉 など、大図書館の世界の言葉を ときどき使う。',
     '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     t.hint ? `・差し込み: ${t.hint}。` : '・{ } の差し込みは使わない。',
   ].join('\n');
@@ -465,12 +494,12 @@ export function coverage(c) {
   return out;
 }
 /** AI に渡す文: その束の場面ぜんぶの台詞を「場面の名前: 台詞」で 1 行ずつ。voice = 足した性格(voiceOf の形) */
-export function personaPrompt(group, name, voice) {
+export function personaPrompt(group, name, voice, role = null) {
   const g = GROUPS[group];
   if (!g) return '';
   const keys = groupKeys(group);
   return [
-    writerHead(name, voice),
+    writerHead(name, voice, role),
     '',
     `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} つずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
     '',
@@ -481,7 +510,7 @@ export function personaPrompt(group, name, voice) {
     '・{n} のような { } の差し込みは、その場面に書いてあるものだけを、そのままの形で使う。「必ず」とあるものは 必ず入れる。',
     '・あとで何度も使い回すので、日付・時刻・タスクの名前などの「その場だけの事実」は入れない。',
     '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
-    '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
+    customRole(role) ? WORLD_RULE : '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
     '',
     '場面:',
     ...keys.map((k) => {
@@ -605,19 +634,21 @@ const TONE_HINT = Object.freeze({ bright: '明るく軽い、親しい友だち�
  * 台詞を書いてもらう文の頭(v0.67.1・実機 FB「モデルでこのリクエストに対する応答を提供できません」): 「あなたは ◯◯ です」と なりきりを頼む形をやめ、
  * アプリの画面に出す台詞を書く仕事として頼む(端末の AI は なりきりの依頼や 強い否定の言葉を断ることがある)。台詞を増やす / 性格を足す の両方で使う
  */
-export function writerHead(name, tone) {
+export function writerHead(name, tone, role = null) {
   const b = normalizeBuddy({ name });
   const how = tone && typeof tone === 'object' ? `「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}` : TONE_HINT[baseOf(tone)];
   return [
     '時間管理アプリの画面に出す、案内役のキャラクターの短い台詞を書く仕事です。',
-    `キャラクター: 大図書館の見習い司書「${b.name}」。利用者の作業時間が 書庫の灯りになる、という設定です。`,
+    customRole(role) ? `キャラクター: ${role.title || DEFAULT_TITLE}「${b.name}」。${role.world ? `舞台: ${role.world}` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
+      : `キャラクター: 大図書館の見習い司書「${b.name}」。利用者の作業時間が 書庫の灯りになる、という設定です。`,
     `話し方: ${how}`,
   ].join('\n');
 }
 /** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
-export function persona(name, tone) {
+export function persona(name, tone, role = null) {
   const b = normalizeBuddy({ name });
-  const head = `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。`;
+  const head = customRole(role) ? `あなたは${role.title || DEFAULT_TITLE}「${b.name}」です。${role.world ? `舞台は「${role.world}」です。` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
+    : `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。`;
   if (tone && typeof tone === 'object') return `${head}あなたの性格と口調は「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}です。この性格と口調で答えてください。`; // v0.67: 足した性格
   return `${head}${TONE_HINT[baseOf(tone)]}で答えてください。`;
 }
