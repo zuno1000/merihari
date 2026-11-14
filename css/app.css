@@ -1695,3 +1695,14 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .pm-pm{flex:none;font-weight:600}
 .pm-fin-btns{gap:8px;margin-top:4px}
 .pm-card .pm-name .sub{font-size:12px}
+
+/* v0.73.1(実機 FB「アシスタントの設定だけ 細い」「お金で金額を入れようとすると キーボードが開くときに 画面が拡大されることがある」):
+   画面の幅と倍率を崩さない ─ index.html の viewport に maximum-scale=1(iOS は 入力欄に触れたときの自動の拡大をしなくなる。指でつまむ拡大は iOS では そのまま効く)・
+   横にはみ出したものがあっても ページ全体は 横に動かない / 縮まない(overflow-x: clip)・入力欄の文字は どれも 16px 以上(iOS は 16px 未満の欄で拡大する)。
+   アシスタントの設定は 枠の中の枠をやめて 幅を使う(.bd-charbox は 区切り線だけ・.bd-custom は 地の色だけ) */
+html,body{max-width:100%;overflow-x:clip}
+input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{font-size:16px}
+.bd-charbox{margin:12px 0 14px;padding:12px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:none}
+.bd-charbox .bd-custom{background:var(--bg);border:0;padding:10px 12px}
+.bd-charbox textarea.text.bd-ta{background:var(--bg)}
+.bd-slot-acts .btn.sm{padding:6px 10px}
