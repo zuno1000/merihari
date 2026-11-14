@@ -127,12 +127,28 @@ export const TONE_LABEL = Object.freeze({ bright: '明るく軽め', polite: '�
 export const MOODS = Object.freeze(['base', 'happy', 'work', 'worry', 'night']);
 export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれしい', work: '作業中', worry: '気にかけている', night: 'おやすみ' });
 
-/** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone, idle(ホームで声をかける・既定 true), lines(覚えた台詞・v0.63) } */
+// ---- 自分で足す性格(v0.67・F24-16): 口調の 4 つ目以降。台詞は AI に書いてもらい(personaPrompt)、検査して custom[].set に持つ。無い場面は 土台(base)の内蔵の台詞 ----
+export const MAX_CUSTOM = 3, CUSTOM_PER = 4, LABEL_MAX = 12, HINT_MAX = 200, PLINE_MIN = 2, PLINE_MAX = 80;
+const isCustomId = (t) => typeof t === 'string' && /^c[0-9a-z]{1,10}$/.test(t);
+/** 口調の id。say などの tone には、内蔵の口調の文字列か、足した性格({ id, base, set, … }= voiceOf の戻り値)を渡せる */
+export const toneId = (tone) => (tone && typeof tone === 'object' ? tone.id : tone);
+const baseOf = (tone) => { const t = tone && typeof tone === 'object' ? tone.base : tone; return TONES.includes(t) ? t : 'bright'; };
+const ownLines = (tone, key) => (tone && typeof tone === 'object' && tone.set && Array.isArray(tone.set[key]) ? tone.set[key].filter((x) => typeof x === 'string' && x) : []);
+
+/** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone(内蔵の 3 つ か 足した性格の id), idle(ホームで声をかける・既定 true), lines(覚えた台詞・v0.63), custom(足した性格・v0.67) } */
 export function normalizeBuddy(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const name = typeof o.name === 'string' ? o.name.trim().slice(0, 12) : '';
-  return { enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false, lines: normalizeLines(o.lines) };
+  const custom = normalizeCustom(o.custom), ids = custom.map((c) => c.id);
+  return {
+    enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) || ids.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false,
+    lines: normalizeLines(o.lines).filter((x) => TONES.includes(x.t) || ids.includes(x.t)), custom,
+  };
 }
+/** いまの口調を say に渡す形で: 内蔵なら文字列、足した性格なら その性格({ id, label, hint, base, set }) */
+export function voiceOf(b) { const c = b && Array.isArray(b.custom) ? b.custom.find((x) => x.id === b.tone) : null; return c || (b && TONES.includes(b.tone) ? b.tone : 'bright'); }
+/** 口調の名前(チップ・一覧) */
+export function toneLabel(b, id) { const c = b && Array.isArray(b.custom) ? b.custom.find((x) => x.id === id) : null; return c ? c.label : TONE_LABEL[id] || ''; }
 
 const LINES = Object.freeze({
   hello_morning: { bright: ['おはよう! 書庫の灯り、つけておいたよ。', 'おはよう! きのうの記録をまとめておいたよ。', 'おはよう。朝の書庫は 紙のいい匂いがするよ。'], polite: ['おはようございます。昨日の記録をまとめておきました。', 'おはようございます。書庫の窓を開けておきました。'], cool: ['おはよう。昨日のぶんは まとめてある。', '朝だ。昨日の記録を置いておく。'] },
@@ -211,13 +227,13 @@ const CLOSERS = Object.freeze({
 export function say(key, tone = 'bright', vars = {}, seed = 0, extra = []) {
   const set = LINES[key];
   if (!set) return '';
-  const tn = TONES.includes(tone) ? tone : 'bright';
-  const base = set[tn], more = Array.isArray(extra) ? extra.filter((x) => typeof x === 'string' && x) : [];
+  const tn = baseOf(tone), own = ownLines(tone, key); // 足した性格に その場面の台詞があれば それを、無ければ 土台の内蔵の台詞を
+  const base = own.length ? own : set[tn], more = Array.isArray(extra) ? extra.filter((x) => typeof x === 'string' && x) : [];
   const all = base.concat(more);
   let s = Math.abs(Math.floor(seed));
   const i = s % all.length; s = Math.floor(s / all.length);
   let t = all[i];
-  if (i < base.length) {
+  if (i < base.length && !own.length) {
     const op = (OPENERS[key] && OPENERS[key][tn]) || [], cl = (CLOSERS[key] && CLOSERS[key][tn]) || [];
     const a = s % (op.length + 1); s = Math.floor(s / (op.length + 1));
     const b = s % (cl.length + 1);
@@ -238,9 +254,10 @@ export function tidy(s) {
 export function variety(key, tone = 'bright', extra = []) {
   const set = LINES[key];
   if (!set) return 0;
-  const tn = TONES.includes(tone) ? tone : 'bright';
+  const tn = baseOf(tone), own = ownLines(tone, key), n = Array.isArray(extra) ? extra.length : 0;
+  if (own.length) return own.length + n;
   const op = (OPENERS[key] && OPENERS[key][tn]) || [], cl = (CLOSERS[key] && CLOSERS[key][tn]) || [];
-  return set[tn].length * (op.length + 1) * (cl.length + 1) + (Array.isArray(extra) ? extra.length : 0);
+  return set[tn].length * (op.length + 1) * (cl.length + 1) + n;
 }
 
 // ---- 台詞を覚える(v0.63・F24-12): 場面を決めて AI(F11 のショートカット)に「使い回せる台詞」を書いてもらい、検査してから覚える ----
@@ -302,7 +319,7 @@ export function parseLines(text, key) {
 export function normalizeLines(raw) {
   const out = [], seen = new Set();
   for (const x of Array.isArray(raw) ? raw : []) {
-    if (!x || !TEACH[x.k] || !TONES.includes(x.t)) continue;
+    if (!x || !TEACH[x.k] || !(TONES.includes(x.t) || isCustomId(x.t))) continue; // 足した性格の id も通す(その性格が無くなっていれば normalizeBuddy が落とす)
     const s = cleanLine(x.s, x.k), id = `${x.k}|${x.t}|${s}`;
     if (!s || seen.has(id)) continue;
     seen.add(id); out.push({ k: x.k, t: x.t, s });
@@ -316,7 +333,155 @@ export function addLines(lines, key, tone, texts) {
   return { lines: after, added: Math.max(0, after.length - before.length) };
 }
 /** その場面・その口調で覚えた台詞(文字列の配列) */
-export function learned(lines, key, tone) { return (Array.isArray(lines) ? lines : []).filter((x) => x && x.k === key && x.t === tone).map((x) => x.s); }
+export function learned(lines, key, tone) { const id = toneId(tone); return (Array.isArray(lines) ? lines : []).filter((x) => x && x.k === key && x.t === id).map((x) => x.s); }
+
+// ---- 性格を足す(v0.67・F24-16・ユーザー要望「性格を自分で追加・その口調のフレーズも自動で」)----
+/** 台詞の束: AI に 1 回で頼む単位(3 回に分ける・1 回の返事を 20 行ほどに)。per = 1 つの場面に頼む数 */
+export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 } });
+export const GROUP_KEYS = Object.freeze(Object.keys(GROUPS));
+const V_ART = Object.freeze({ n: '残りのピースの数', label: '開く情報の名前(作者・題名 など)', kind: '「絵」か「写真」' });
+const V_WEEK = Object.freeze({ avg: 'この7日の1日あたりの作業時間(例: 3時間20分)', diff: '前の7日との差の時間(例: 40分)' });
+/** 場面の表: g(束)・when(AI に渡す説明)・v(使ってよい差し込みと その意味)・need(必ず入れる差し込み)。tell(記録の文をそのまま伝える)は 入れない */
+export const SCENES = Object.freeze({
+  hello: { g: 'home', when: 'アプリを開いた相手への、短いあいさつ(時間帯を問わない)' },
+  postcard: { g: 'home', when: '絵の扉の向こうの土地から戻り、絵はがきを図録に入れたと知らせる', v: { place: '行ってきた土地の名前' }, need: ['place'] },
+  unread: { g: 'home', when: '小説の続きを書庫から持ってきたと知らせる', v: { n: '届いた回数(「{n}回分」のように使う)' }, need: ['n'] },
+  switch: { g: 'home', when: '相手の息抜きが長く続いたとき、責めずに区切りを提案する', v: { min: '息抜きが続いた分(「{min}分」のように使う)' } },
+  working: { g: 'home', when: '作業中の相手への、短い応援', v: { n: '小説の続きが届くまでの残りの分(「あと{n}分」のように使う)' } },
+  working_art: { g: 'home', when: '作業中の相手に、絵の次の情報が もうすぐ開くと知らせる', v: V_ART, need: ['n', 'label'] },
+  rest: { g: 'home', when: '休憩中の相手への、ねぎらい' },
+  idle: { g: 'home', when: 'しばらく何も記録していない相手を、責めずに「5分だけ始めてみないか」と軽く誘う' },
+  due: { g: 'home', when: 'きょうが期限のタスクが残っていると、責めずに知らせる', v: { n: '件数' }, need: ['n'] },
+  night: { g: 'home', when: '夜遅く、きょうをねぎらって おやすみを言う' },
+  quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
+  art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
+  hello_morning: { g: 'brief', when: '朝の日報の冒頭。あいさつして、昨日の記録をまとめたと伝える' },
+  hello_noon: { g: 'brief', when: '昼の日報の冒頭。午前の記録をまとめたと伝える' },
+  hello_evening: { g: 'brief', when: '夜の日報の冒頭。午後の記録をまとめたと伝える' },
+  tasks_none: { g: 'brief', when: 'きょうが期限のタスクは無いと伝える' },
+  tasks_some: { g: 'brief', when: 'きょうまでのタスクが残っていて、この画面で済ませられると伝える', v: { n: '件数' }, need: ['n'] },
+  weather: { g: 'brief', when: 'きょうの天気を伝える', v: { text: '天気の言葉(例: 晴れのちくもり)' }, need: ['text'] },
+  umbrella: { g: 'brief', when: '傘を持っていくように ひとこと' },
+  bgm: { g: 'brief', when: '作業用の音楽を 1 曲 選んでおいたと伝える' },
+  article: { g: 'brief', when: '新しい記事が届いていると伝える' },
+  ins_band: { g: 'brief', when: '作業がいちばん進む時間帯を伝える', v: { name: '時間帯の名前(例: 午前)', pct: 'この2週間の作業に占める割合の数字(「{pct}%」のように使う)' }, need: ['name', 'pct'] },
+  ins_week_up: { g: 'brief', when: 'この7日の作業が、その前の7日より増えたと伝える', v: V_WEEK, need: ['avg', 'diff'] },
+  ins_week_down: { g: 'brief', when: 'この7日の作業が、その前の7日より少なめだと、責めずに伝える', v: V_WEEK, need: ['avg', 'diff'] },
+  ins_weekday: { g: 'brief', when: 'ある曜日は 息抜きが長くなりやすいと伝える', v: { day: '曜日の1文字(「{day}曜」のように使う)', avg: 'その曜日の平均の時間' }, need: ['day', 'avg'] },
+  ins_weekday_today: { g: 'brief', when: 'きょうは 息抜きが長くなりやすい曜日なので、最初の一歩を小さくしようと伝える', v: { day: '曜日の1文字(「{day}曜」のように使う)' }, need: ['day'] },
+  ins_run: { g: 'brief', when: 'この30日で いちばん長く集中できた記録を伝える', v: { best: 'その長さ(例: 2時間10分)', date: 'その日付(例: 11/3)' }, need: ['best', 'date'] },
+  bye: { g: 'brief', when: '日報の締めの、送り出す ひとこと' },
+  review_head: { g: 'review', when: 'きょうの記録を読んで、その判定の見出しを伝える', v: { text: '判定の見出し(例: よい一日。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
+  review_mid: { g: 'review', when: 'きょうの ここまでの記録をまとめたと伝える' },
+  review_none: { g: 'review', when: 'きょうは まだ記録が無いので、ひとつ付けてみないかと誘う' },
+  review_past: { g: 'review', when: '過去の日の記録を、書庫から出してきたと伝える' },
+  diary_ask: { g: 'review', when: 'きょうの気持ちを ひとことでも書き残さないかと誘う' },
+  diary_past: { g: 'review', when: '過去の日のことを、書き足してもよいと伝える' },
+  diary_done: { g: 'review', when: 'その日のふり返りは、もう書いて綴じてあると伝える' },
+  ai_offer: { g: 'review', when: 'ふり返りを 自分の言葉でまとめようかと申し出る' },
+  near: { g: 'review', when: 'この先7日の期限を並べておいたと伝える' },
+  report_open: { g: 'review', when: '1 日のレポート(数字)を見せるときの ひとこと' },
+  report_period: { g: 'review', when: '7日や30日の期間のレポートを見せるときの ひとこと' },
+  wz_scales: { g: 'review', when: 'いまの気分と元気を、色で選んでもらう' },
+  wz_hard: { g: 'review', when: 'ひっかかったことがあったかを尋ねる。無ければ とばしてよいと添える' },
+  wz_tomorrow: { g: 'review', when: 'あしたの最初の一歩を、ひとつだけ決めようと促す' },
+  wz_done: { g: 'review', when: 'ふり返りを綴じ終えたと伝えて、ねぎらう' },
+});
+export const SCENE_KEYS = Object.freeze(Object.keys(SCENES));
+export const groupKeys = (g) => SCENE_KEYS.filter((k) => SCENES[k].g === g);
+
+/** 足した性格の 1 行を整える。使えなければ null(長さ・URL・その場面に無い差し込み・必ず入れる差し込みが無い) */
+export function cleanPersonaLine(raw, key) {
+  const sc = SCENES[key];
+  if (!sc || typeof raw !== 'string') return null;
+  const s = tidy(raw.trim().replace(/^[「『"'`]+/, '').replace(/[」』"'`]+$/, ''));
+  if (s.length < PLINE_MIN || s.length > PLINE_MAX || /https?:|[<>]|[\r\n]/.test(s)) return null;
+  const allowed = Object.keys(sc.v || {}), used = [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
+  if (used.some((v) => !allowed.includes(v)) || /[{}]/.test(s.replace(/\{\w+\}/g, ''))) return null;
+  if ((sc.need || []).some((v) => !used.includes(v))) return null;
+  return s;
+}
+const cleanSet = (raw) => {
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}, out = {};
+  for (const k of SCENE_KEYS) {
+    const list = [];
+    for (const x of Array.isArray(o[k]) ? o[k] : []) { const s = cleanPersonaLine(x, k); if (s && !list.includes(s) && list.length < CUSTOM_PER) list.push(s); }
+    if (list.length) out[k] = list;
+  }
+  return out;
+};
+/** 足した性格の一覧を整える: [{ id, label(12 字まで・必須), hint(性格と口調の説明・200 字まで), base(土台の内蔵の口調), set: { 場面: [台詞] } }](MAX_CUSTOM 件まで) */
+export function normalizeCustom(raw) {
+  const out = [];
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (!x || typeof x !== 'object' || !isCustomId(x.id) || out.some((c) => c.id === x.id)) continue;
+    const label = typeof x.label === 'string' ? x.label.trim().slice(0, LABEL_MAX) : '';
+    if (!label) continue;
+    out.push({ id: x.id, label, hint: typeof x.hint === 'string' ? x.hint.replace(/\s+/g, ' ').trim().slice(0, HINT_MAX) : '', base: TONES.includes(x.base) ? x.base : 'bright', set: cleanSet(x.set) });
+    if (out.length >= MAX_CUSTOM) break;
+  }
+  return out;
+}
+/** 束ごとに、台詞のある場面の数: { home: { have, total }, brief: …, review: … } */
+export function coverage(c) {
+  const out = {};
+  for (const g of GROUP_KEYS) { const keys = groupKeys(g); out[g] = { have: keys.filter((k) => c && c.set && Array.isArray(c.set[k]) && c.set[k].length).length, total: keys.length }; }
+  return out;
+}
+/** AI に渡す文: その束の場面ぜんぶの台詞を「場面の名前: 台詞」で 1 行ずつ。voice = 足した性格(voiceOf の形) */
+export function personaPrompt(group, name, voice) {
+  const g = GROUPS[group];
+  if (!g) return '';
+  const keys = groupKeys(group);
+  return [
+    persona(name, voice),
+    '',
+    `次の ${keys.length} の場面で あなたが言う台詞を、場面ごとに ${g.per} つずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
+    '',
+    '書き方:',
+    '・1 行に 1 つ。「場面の名前: 台詞」の形で書く(例: hello: やあ、待ってたよ。)。場面の名前は 下の英字をそのまま使う。',
+    '・番号・かぎかっこ・説明・前置き・あとがきは付けない。',
+    `・1 つは 60 字まで。${g.per > 1 ? '同じ場面の台詞は 言い回しを変える。' : ''}`,
+    '・{n} のような { } の差し込みは、その場面に書いてあるものだけを、そのままの形で使う。「必ず」とあるものは 必ず入れる。',
+    '・あとで何度も使い回すので、日付・時刻・タスクの名前などの「その場だけの事実」は入れない。',
+    '・責めない。押しつけない。',
+    '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
+    '',
+    '場面:',
+    ...keys.map((k) => {
+      const sc = SCENES[k], vs = Object.keys(sc.v || {});
+      return `${k} = ${sc.when}${vs.length ? `。差し込み: ${vs.map((v) => `{${v}}=${sc.v[v]}${(sc.need || []).includes(v) ? '・必ず' : ''}`).join(' / ')}` : ''}`;
+    }),
+  ].join('\n');
+}
+/** AI の返事 → { 場面: [台詞] }(行ごとに検査・場面ごとに CUSTOM_PER 個まで・重複は 1 つ)。group を渡せば その束の場面だけ */
+export function parsePersona(text, group = null) {
+  const out = {};
+  for (const row of String(text || '').split(/\r?\n/)) {
+    const m = /^[\s\-*・●>`#\d.)、]*([a-z][a-z_]*)`?\s*[:：=|｜]\s*(.+)$/.exec(row);
+    if (!m || !SCENES[m[1]] || (group && SCENES[m[1]].g !== group)) continue;
+    const s = cleanPersonaLine(m[2], m[1]), list = out[m[1]] || [];
+    if (s && !list.includes(s) && list.length < CUSTOM_PER) { list.push(s); out[m[1]] = list; }
+  }
+  return out;
+}
+/** 性格を足す。戻り値は新しい buddy(口調を その性格に)。MAX_CUSTOM 件を超えるか 名前が空なら null */
+export function addCustom(b, id, { label, hint, base } = {}) {
+  const cur = normalizeBuddy(b);
+  if (cur.custom.length >= MAX_CUSTOM || cur.custom.some((c) => c.id === id)) return null;
+  const custom = normalizeCustom([...cur.custom, { id, label, hint, base, set: {} }]);
+  return custom.length > cur.custom.length ? normalizeBuddy({ ...cur, custom, tone: id }) : null;
+}
+/** 足した性格を直す(patch = { label, hint, base, set } の一部)。set の中は 場面ごとに置き換え([] で その場面を消す) */
+export function patchCustom(b, id, patch = {}) {
+  const cur = normalizeBuddy(b);
+  return normalizeBuddy({ ...cur, custom: cur.custom.map((c) => (c.id !== id ? c : { ...c, ...patch, id, set: { ...c.set, ...(patch.set || {}) } })) });
+}
+/** 足した性格を消す(その性格で覚えた台詞も消え、口調は 土台に戻る) */
+export function removeCustom(b, id) {
+  const cur = normalizeBuddy(b), c = cur.custom.find((x) => x.id === id);
+  return normalizeBuddy({ ...cur, custom: cur.custom.filter((x) => x.id !== id), tone: cur.tone === id && c ? c.base : cur.tone });
+}
 
 /**
  * ホームでのひとこと(状況から 1 つ・上にあるものほど優先)。
@@ -402,6 +567,8 @@ export function stamps(doneWorks) {
 const TONE_HINT = Object.freeze({ bright: '明るく軽い、親しい友だちのような口調', polite: 'ていねいで物静かな口調', cool: '口数が少なく ぶっきらぼうだが 面倒見のよい口調' });
 /** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
 export function persona(name, tone) {
-  const b = normalizeBuddy({ name, tone });
-  return `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。${TONE_HINT[b.tone]}で答えてください。`;
+  const b = normalizeBuddy({ name });
+  const head = `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。`;
+  if (tone && typeof tone === 'object') return `${head}あなたの性格と口調は「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}です。この性格と口調で答えてください。`; // v0.67: 足した性格
+  return `${head}${TONE_HINT[baseOf(tone)]}で答えてください。`;
 }

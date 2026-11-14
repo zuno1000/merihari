@@ -1477,6 +1477,15 @@ button.a-thumb{cursor:pointer}
 .bd-linerow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
 .bd-linetext{flex:1;min-width:0;line-height:1.5}
 .bd-linerow .btn{min-height:36px;padding:4px 10px}
+/* v0.67: 足した性格(設定 > アシスタント)・見つかった台詞の確認 */
+.bd-custom{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.bd-custom>p{margin:0}
+.bd-addtone{border-style:dashed}
+.bd-plist{max-height:50vh;overflow-y:auto;margin:4px 0 10px}
+.bd-prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.bd-pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bd-pwhen{font-size:11px;color:var(--muted);line-height:1.4}
+.bd-prow .btn{min-height:36px;padding:4px 10px}
 /* v0.64: ホームの吹き出しはタップで ほかのコメント(顔は シート)。ふり返りタブの節の頭の吹き出し */
 div.bd-home{cursor:default}
 .bd-avbtn{flex:none;display:flex;border:0;background:none;padding:0;cursor:pointer}
