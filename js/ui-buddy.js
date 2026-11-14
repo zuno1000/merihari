@@ -54,9 +54,10 @@ export const buddyPersona = () => (buddyOn() ? buddy.persona(B().name, V()) : ''
 
 // ---- 絵(端末に置いた画像・無ければ内蔵の顔) ----
 const urls = new Map(); // id → objectURL | null
-const imgId = (mood) => `buddy:${mood}`;
-async function imgUrl(mood) {
-  for (const id of [imgId(mood), imgId('base')]) {
+// v0.68: 絵は キャラクターごと。1 人目(main)は これまでの id(buddy:<表情>)のまま、足したキャラクターは buddy:<キャラクターの id>:<表情>
+const imgId = (mood, cid = B().cur) => (cid === buddy.MAIN_ID ? `buddy:${mood}` : `buddy:${cid}:${mood}`);
+async function imgUrl(mood, cid) {
+  for (const id of [imgId(mood, cid), imgId('base', cid)]) {
     if (!urls.has(id)) { const b = await photos.getPhoto(id); urls.set(id, b ? URL.createObjectURL(b) : null); }
     if (urls.get(id)) return urls.get(id);
   }
@@ -79,9 +80,9 @@ function face(mood) {
     svg('path', { d: mouth, class: 'bd-ln' }),
   ]);
 }
-function avatar(mood, size) {
+function avatar(mood, size, cid = B().cur) {
   const box = el('span.bd-av', { style: { width: `${size}px`, height: `${size}px` } }, face(mood));
-  imgUrl(mood).then((u) => { if (u) { clear(box); box.append(el('img', { src: u, alt: '' })); } }).catch(() => {});
+  imgUrl(mood, cid).then((u) => { if (u) { clear(box); box.append(el('img', { src: u, alt: '' })); } }).catch(() => {});
   return box;
 }
 
@@ -121,20 +122,23 @@ export function bubble(key, vars = {}, mood = 'base') {
 export function buddyHome(ctx, strips = []) {
   if (!buddyOn()) return null;
   const b = B();
-  const text = el('span.bd-text'), av = el('span.bd-avwrap');
+  const text = el('span.bd-text'), av = el('span.bd-avwrap'), nameEl = el('span.bd-name', b.name);
   let mood = null, turn = 0; // turn: 吹き出しをタップした回数(タップで ほかのコメント)
   const paint = () => {
+    const b = B(); // v0.68: シートでキャラクターを替えたあとも、名前・絵・口調が いまのキャラクターになるように 毎回読む
     const list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
     const l = list[turn % list.length];
+    if (nameEl.textContent !== b.name) nameEl.textContent = b.name;
     if (text.textContent !== l.text) text.textContent = l.text;
-    if (l.mood !== mood) { mood = l.mood; clear(av); av.append(avatar(mood, 60)); }
+    const face = `${b.cur}:${l.mood}`;
+    if (face !== mood) { mood = face; clear(av); av.append(avatar(l.mood, 60)); }
   };
   const rows = strips.filter(Boolean);
   const act = (label, fn) => el('button.bd-act', { type: 'button', onclick: fn }, label);
   const node = el('section.bd-homecard', [
     el('div.bd-home', [
       el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
-      el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [el('span.bd-name', b.name), text]),
+      el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [nameEl, text]),
     ]),
     rows.length ? el('div.q-row', rows) : null,
     el('div.bd-quick', [
@@ -243,6 +247,7 @@ export function openBuddy(ctx, onClose = null) {
     clear(body);
     body.append(...[
       el('div.bd-top', [avatar(l.mood, 84), el('div.bd-bubble.big', [el('span.bd-name', b.name), el('span.bd-text', l.text)])]),
+      b.chars.length > 1 ? charChips(b, (id) => { S().buddy = buddy.selectChar(b, id); store.touchSettings(); autoSync(); draw(); }) : null,
       el('div.row.bd-acts', [ctx && ctx.openBrief && S().brief?.enabled !== false ? el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.openBrief(); } }, 'きょうの日報を開く') : null]),
       el('div.seg', [['talk', '話す'], ['note', '手帳']].map(([k, t]) => el('button', { type: 'button', class: k === tab ? 'active' : '', onclick: () => { tab = k; draw(); } }, t))),
       tab === 'talk' ? talk(ctx, draw, () => close()) : notebook(draw),
@@ -457,11 +462,39 @@ function customBox(b, c, save, rerender) {
   ].filter(Boolean));
 }
 
+// ---- キャラクターを複数(v0.68・F24-17)----
+/** キャラクターのチップ(顔と名前・選んでいるものが on)。onAdd があれば 最後に「+ キャラクターを足す」 */
+function charChips(b, onPick, onAdd = null) {
+  return el('div.chips.small.bd-chars', [
+    ...b.chars.map((c) => el('button', { type: 'button', class: `chip sm2 bd-charchip${c.id === b.cur ? ' on' : ''}`, 'aria-pressed': c.id === b.cur ? 'true' : 'false', onclick: () => { if (c.id !== b.cur) onPick(c.id); } }, [avatar('base', 24, c.id), el('span', c.name)])),
+    onAdd ? el('button.chip.sm2.bd-addtone', { type: 'button', onclick: onAdd }, '＋ キャラクターを足す') : null,
+  ]);
+}
+/** キャラクターを足すシート: 名前だけ決める(口調と性格・絵は 足したあとに 設定の画面で) */
+function charSheet(b, save) {
+  sheet((close) => {
+    const name = el('input.text', { type: 'text', maxlength: 12, placeholder: '例: ノア', autocomplete: 'off', 'aria-label': 'キャラクターの名前' });
+    const ok = () => {
+      if (!name.value.trim()) { toast('名前を入れてください'); return; }
+      const next = buddy.addChar(b, `k${Date.now().toString(36)}`, name.value);
+      if (!next) { toast(`キャラクターは ${buddy.MAX_CHARS} 人までです`); return; }
+      close(); save(next);
+    };
+    name.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+    return [
+      el('h2', 'キャラクターを足す'),
+      el('p.muted.small', '名前を決めると、そのキャラクターに替わります。口調と性格・絵は、このあと 設定の画面で決められます。'),
+      el('div.row.field', [el('span.label', '名前'), name]),
+      el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: ok }, '足す')]),
+    ];
+  });
+}
+
 /** 設定 › アシスタント: 有効 / 名前 / 口調 / ホームでの声かけ / 絵(表情ごとに端末の画像) */
 export function sectionBuddy(rerender) {
   const s = S(), b = B(), cur = b.custom.find((c) => c.id === b.tone) || null;
   const save = (next) => { s.buddy = buddy.normalizeBuddy(next); store.touchSettings(); autoSync(); rerender(); };
-  const name = el('input.text', { type: 'text', value: b.name, maxlength: 12, autocomplete: 'off', 'aria-label': '名前', onchange: () => save({ ...b, name: name.value }) });
+  const name = el('input.text', { type: 'text', value: b.name, maxlength: 12, autocomplete: 'off', 'aria-label': '名前', onchange: () => save(buddy.patchChar(b, b.cur, { name: name.value })) });
   const slot = (mood) => {
     const prev = el('span.bd-slot-av', avatar(mood, 56));
     const file = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async (e) => {
@@ -478,10 +511,13 @@ export function sectionBuddy(rerender) {
     el('h2', 'アシスタント'),
     el('p.muted.small', '大図書館の見習い司書です。あなたの作業時間が書庫の灯りになり、そのあいだに小説の続きを運び、絵の扉の向こうの土地から絵はがきを持ち帰ります。ホームに常駐して ひとこと話し、ブリーフィング(日報)を届けます。決まった台詞から状況に合うものを選ぶだけで、記録を外へ送ることはありません(会話だけは iPhone のショートカットへ文を渡します)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled, onchange: (e) => save({ ...b, enabled: e.target.checked }) }), el('span', 'アシスタントを出す')]),
+    el('h3.help-h', `キャラクター(${b.chars.length} / ${buddy.MAX_CHARS})`),
+    el('p.muted.small', 'キャラクターごとに 名前・口調と性格・絵 を決められます。選んだキャラクターが ホーム・日報・ふり返り に出ます(アシスタントのシートからも替えられます)。'),
+    charChips(b, (id) => save(buddy.selectChar(b, id)), b.chars.length < buddy.MAX_CHARS ? () => charSheet(b, save) : null),
     el('div.row.field', [el('span.label', '名前'), name]),
     el('h3.help-h', '口調と性格'),
     el('div.chips.small', [
-      ...[...buddy.TONES, ...b.custom.map((c) => c.id)].map((k) => el('button', { type: 'button', class: `chip sm2${k === b.tone ? ' on' : ''}`, 'aria-pressed': k === b.tone ? 'true' : 'false', onclick: () => save({ ...b, tone: k }) }, buddy.toneLabel(b, k))),
+      ...[...buddy.TONES, ...b.custom.map((c) => c.id)].map((k) => el('button', { type: 'button', class: `chip sm2${k === b.tone ? ' on' : ''}`, 'aria-pressed': k === b.tone ? 'true' : 'false', onclick: () => save(buddy.patchChar(b, b.cur, { tone: k })) }, buddy.toneLabel(b, k))),
       b.custom.length < buddy.MAX_CUSTOM ? el('button.chip.sm2.bd-addtone', { type: 'button', onclick: () => customSheet(b, null, save) }, '\uff0b 性格を足す') : null,
     ]),
     el('p.muted.small', `例: ${buddy.say('working', buddy.voiceOf(b), { n: 4 }, 0)}`),
@@ -490,9 +526,10 @@ export function sectionBuddy(rerender) {
     el('h3.help-h', `覚えた台詞(${b.lines.length})`),
     el('p.muted.small', '手帳の「台詞を増やす」で、AI に書いてもらった台詞です(場面ごと・口調ごと)。内蔵の台詞に混ざって出ます。要らないものは × で消せます。両方の端末で同じになります。'),
     b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.toneLabel(b, x.t)}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
-    el('h3.help-h', '絵(この端末だけ)'),
+    el('h3.help-h', `「${b.name}」の絵(この端末だけ)`),
     el('p.muted.small', '表情ごとに画像を選べます。「ふだん」だけ入れれば、ほかの表情にも使われます。正方形で、顔が中央にある絵が合います(丸く切り抜いて表示・長辺 512px に縮めて端末に保存)。入れていない表情は、内蔵の顔になります。'),
     el('div.bd-slots', buddy.MOODS.map(slot)),
-    el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('絵をぜんぶ外しますか?', 'この端末に入れたアシスタントの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
+    el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」の絵をぜんぶ外しますか?`, 'この端末に入れた このキャラクターの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
+    b.chars.length > 1 ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」を消しますか?`, 'このキャラクターと、この端末に入れた その絵を消します。足した性格と 覚えた台詞は残ります。', '消す', () => { const id = b.cur; save(buddy.removeChar(B(), id)); Promise.all(buddy.MOODS.map((m) => photos.delPhoto(imgId(m, id)))).then(() => urls.clear()).catch(() => {}); }, true) }, 'このキャラクターを消す')) : null,
   ].filter(Boolean));
 }

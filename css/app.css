@@ -1481,6 +1481,9 @@ button.a-thumb{cursor:pointer}
 .bd-custom{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;padding:12px;border:1px solid var(--line);border-radius:12px}
 .bd-custom>p{margin:0}
 .bd-addtone{border-style:dashed}
+/* v0.68: キャラクターのチップ(顔と名前) */
+.bd-charchip{display:inline-flex;align-items:center;gap:6px;padding-left:6px}
+.bd-sheet .bd-chars{justify-content:center;margin:2px 0 8px}
 .bd-plist{max-height:50vh;overflow-y:auto;margin:4px 0 10px}
 .bd-prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
 .bd-pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}

@@ -128,7 +128,7 @@ export const MOODS = Object.freeze(['base', 'happy', 'work', 'worry', 'night']);
 export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれしい', work: '作業中', worry: '気にかけている', night: 'おやすみ' });
 
 // ---- 自分で足す性格(v0.67・F24-16): 口調の 4 つ目以降。台詞は AI に書いてもらい(personaPrompt)、検査して custom[].set に持つ。無い場面は 土台(base)の内蔵の台詞 ----
-export const MAX_CUSTOM = 3, CUSTOM_PER = 4, LABEL_MAX = 12, HINT_MAX = 200, PLINE_MIN = 2, PLINE_MAX = 80;
+export const MAX_CUSTOM = 5, CUSTOM_PER = 4, LABEL_MAX = 12, HINT_MAX = 200, PLINE_MIN = 2, PLINE_MAX = 80;
 const isCustomId = (t) => typeof t === 'string' && /^c[0-9a-z]{1,10}$/.test(t);
 /** 口調の id。say などの tone には、内蔵の口調の文字列か、足した性格({ id, base, set, … }= voiceOf の戻り値)を渡せる */
 export const toneId = (tone) => (tone && typeof tone === 'object' ? tone.id : tone);
@@ -138,12 +138,48 @@ const ownLines = (tone, key) => (tone && typeof tone === 'object' && tone.set &&
 /** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone(内蔵の 3 つ か 足した性格の id), idle(ホームで声をかける・既定 true), lines(覚えた台詞・v0.63), custom(足した性格・v0.67) } */
 export function normalizeBuddy(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const name = typeof o.name === 'string' ? o.name.trim().slice(0, 12) : '';
   const custom = normalizeCustom(o.custom), ids = custom.map((c) => c.id);
+  const toneOk = (t) => TONES.includes(t) || ids.includes(t);
+  // v0.68・F24-17: キャラクター(名前・口調 / 性格)を複数。chars が無い古い形は、上の name / tone から 1 人目(main)を作る
+  const chars = normalizeChars(o.chars, toneOk, { id: MAIN_ID, name: cleanName(o.name) || DEFAULT_NAME, tone: toneOk(o.tone) ? o.tone : 'bright' });
+  const me = chars.find((c) => c.id === o.cur) || chars[0];
   return {
-    enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) || ids.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false,
-    lines: normalizeLines(o.lines).filter((x) => TONES.includes(x.t) || ids.includes(x.t)), custom,
+    enabled: o.enabled !== false, name: me.name, tone: me.tone, idle: o.idle !== false, // name / tone は いま選んでいるキャラクターのもの(読むだけ。直すときは patchChar)
+    lines: normalizeLines(o.lines).filter((x) => toneOk(x.t)), custom, chars, cur: me.id,
   };
+}
+// ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
+export const MAX_CHARS = 5, MAIN_ID = 'main';
+const isCharId = (t) => t === MAIN_ID || (typeof t === 'string' && /^k[0-9a-z]{1,10}$/.test(t));
+const cleanName = (x) => (typeof x === 'string' ? x.trim().slice(0, 12) : '');
+/** キャラクターの一覧を整える: [{ id, name(12 字まで), tone(内蔵の口調 か 足した性格の id) }](MAX_CHARS 人まで・1 人も無ければ fallback) */
+export function normalizeChars(raw, toneOk, fallback) {
+  const out = [];
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (!x || typeof x !== 'object' || !isCharId(x.id) || out.some((c) => c.id === x.id)) continue;
+    out.push({ id: x.id, name: cleanName(x.name) || DEFAULT_NAME, tone: toneOk(x.tone) ? x.tone : 'bright' });
+    if (out.length >= MAX_CHARS) break;
+  }
+  return out.length ? out : [fallback];
+}
+/** キャラクターを直す(patch = { name, tone } の一部) */
+export function patchChar(b, id, patch = {}) {
+  const cur = normalizeBuddy(b);
+  return normalizeBuddy({ ...cur, chars: cur.chars.map((c) => (c.id !== id ? c : { ...c, ...patch, id })) });
+}
+/** キャラクターを足して、そのキャラクターに替える。MAX_CHARS 人を超える・名前が空・id が不正なら null */
+export function addChar(b, id, name) {
+  const cur = normalizeBuddy(b);
+  if (cur.chars.length >= MAX_CHARS || !isCharId(id) || cur.chars.some((c) => c.id === id) || !cleanName(name)) return null;
+  return normalizeBuddy({ ...cur, chars: [...cur.chars, { id, name, tone: 'bright' }], cur: id });
+}
+/** キャラクターを替える */
+export function selectChar(b, id) { const cur = normalizeBuddy(b); return cur.chars.some((c) => c.id === id) ? normalizeBuddy({ ...cur, cur: id }) : cur; }
+/** キャラクターを消す(最後の 1 人は消せない。選んでいたキャラクターなら 先頭に替わる) */
+export function removeChar(b, id) {
+  const cur = normalizeBuddy(b);
+  if (cur.chars.length <= 1) return cur;
+  return normalizeBuddy({ ...cur, chars: cur.chars.filter((c) => c.id !== id) });
 }
 /** いまの口調を say に渡す形で: 内蔵なら文字列、足した性格なら その性格({ id, label, hint, base, set }) */
 export function voiceOf(b) { const c = b && Array.isArray(b.custom) ? b.custom.find((x) => x.id === b.tone) : null; return c || (b && TONES.includes(b.tone) ? b.tone : 'bright'); }
@@ -470,17 +506,17 @@ export function addCustom(b, id, { label, hint, base } = {}) {
   const cur = normalizeBuddy(b);
   if (cur.custom.length >= MAX_CUSTOM || cur.custom.some((c) => c.id === id)) return null;
   const custom = normalizeCustom([...cur.custom, { id, label, hint, base, set: {} }]);
-  return custom.length > cur.custom.length ? normalizeBuddy({ ...cur, custom, tone: id }) : null;
+  return custom.length > cur.custom.length ? normalizeBuddy({ ...cur, custom, chars: cur.chars.map((c) => (c.id === cur.cur ? { ...c, tone: id } : c)) }) : null; // 選んでいるキャラクターを その性格に
 }
 /** 足した性格を直す(patch = { label, hint, base, set } の一部)。set の中は 場面ごとに置き換え([] で その場面を消す) */
 export function patchCustom(b, id, patch = {}) {
   const cur = normalizeBuddy(b);
   return normalizeBuddy({ ...cur, custom: cur.custom.map((c) => (c.id !== id ? c : { ...c, ...patch, id, set: { ...c.set, ...(patch.set || {}) } })) });
 }
-/** 足した性格を消す(その性格で覚えた台詞も消え、口調は 土台に戻る) */
+/** 足した性格を消す(その性格で覚えた台詞も消え、その性格だったキャラクターの口調は 土台に戻る) */
 export function removeCustom(b, id) {
   const cur = normalizeBuddy(b), c = cur.custom.find((x) => x.id === id);
-  return normalizeBuddy({ ...cur, custom: cur.custom.filter((x) => x.id !== id), tone: cur.tone === id && c ? c.base : cur.tone });
+  return normalizeBuddy({ ...cur, custom: cur.custom.filter((x) => x.id !== id), chars: cur.chars.map((x) => (x.tone === id && c ? { ...x, tone: c.base } : x)) });
 }
 
 /**
