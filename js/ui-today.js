@@ -577,11 +577,13 @@ function nextCard(n, hero, rerender, ctx) {
   });
   const body = top ? [
     el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : 'つぎは これ'), tag(top)]),
-    el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
-      el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
-      el('span.nx-chev', { 'aria-hidden': 'true' }, '替える ▾'),
+    // v0.79.1(実機 FB「替える の表記を無くし、その場所に 始める を。いま知りたいこと が ひと画面に納まるように」): 名前の箱(タップで 選び直し)の右に「▶ 始める」。大きなボタンの段は無くす
+    el('div.nx-line', [
+      el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
+        el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
+      ]),
+      el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める'),
     ]),
-    el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める')),
     el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => startSheet({ categoryId: top.categoryId, taskId: top.taskId, after: rerender }) }, 'タイマーで始める ›') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
   ].filter(Boolean) : [
     el('div.nx-top', el('span.nx-k', 'つぎは')),

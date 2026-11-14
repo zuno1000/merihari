@@ -1650,7 +1650,12 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .nx-pick{display:flex;align-items:center;gap:10px;width:100%;border:0;background:var(--bg);color:var(--fg);font:inherit;text-align:left;border-radius:12px;padding:10px 12px;cursor:pointer}
 .nx-pick:active{background:var(--accent-bg)}
 .nx-pick .nx-main{flex:1}
-.nx-chev{flex:none;font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+/* v0.79.1: 名前の箱の右に「▶ 始める」(.nx-line)・「替える」の表記は無くす・下のリンクの段を詰める */
+.nx-line{display:flex;align-items:stretch;gap:8px}
+.nx-line .nx-pick{flex:1;min-width:0;width:auto}
+.nx-line .nx-start{flex:none;min-height:56px;font-size:16px;padding:0 16px;white-space:nowrap}
+.nx-line .nx-title{font-size:19px}
+.nx-card .nx-links{margin:-4px 0 -6px}
 .nx-row.on{background:var(--accent-bg)}
 .nx-cats{margin:0 0 12px}
 .focus-box .fx-card{margin:0;gap:10px}
