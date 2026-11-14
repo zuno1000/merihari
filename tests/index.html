@@ -1482,6 +1482,21 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(M.features.FEATURES.BUDDY === true && sw.includes(`'./js/buddy.js'`) && sw.includes(`'./js/ui-buddy.js'`) && Bd.LEVELS.length === 5 && Bd.LEVELS.every((l) => Bd.LABEL[l.key]), 'FEATURES.BUDDY・sw.js の ASSETS に buddy.js / ui-buddy.js・段ごとに札がある');
     }
 
+    // ---- v0.60: 期限切れのまま置く(F5-17)・AI に渡す材料(F11)----
+    log('\n# v0.60 期限切れのまま置く / AI の材料');
+    {
+      const P = M.plan;
+      const tk = (x = {}) => ({ id: 'a', name: 'A', kind: 'duty', deadline: '2026-11-12', repeat: null, doneAt: null, deletedAt: null, checks: [], ...x });
+      ok(P.overdueKept(tk({ overdueKeep: '2026-11-12' })) && !P.overdueKept(tk()) && !P.overdueKept(tk({ overdueKeep: '2026-11-11' })) && !P.overdueKept(tk({ deadline: '2026-11-12T17:00', overdueKeep: '2026-11-12' })) && P.overdueKept(tk({ deadline: '2026-11-12T17:00', overdueKeep: '2026-11-12T17:00' })) && !P.overdueKept(null) && !P.overdueKept(tk({ deadline: null, overdueKeep: null })), 'overdueKept: 印は そのときの期限・期限を変えたら効かない(また聞く)');
+      const kept = { a: tk({ overdueKeep: '2026-11-12' }) };
+      ok(P.overdueTasks(kept, '2026-11-14', {}).length === 1 && P.dueTasks(kept, '2026-11-14', {}).count === 1, '置いたタスクも 一覧の期限切れ と タブの数字 には残る');
+      ok(S.validateTask({ name: 'x', overdueKeep: '2026-11-12' }, 'i').overdueKeep === '2026-11-12' && S.validateTask({ name: 'x' }, 'i').overdueKeep === null && S.validateTask({ name: 'x', overdueKeep: 5 }, 'i').overdueKeep === null, 'validateTask: overdueKeep は文字列か null');
+      const Ai = M.ai;
+      const c1 = Ai.consultText({ question: '次は?', nowMin: 600, open: null, notes: ['時間帯: 午前がいちばん進む', '', 5, '進み: あと 3 分の作業で小説の続き'] }), c0 = Ai.consultText({ question: '次は?', nowMin: 600, open: null });
+      const s1 = Ai.summaryText({ date: '2026-11-14', agg: null, fb: null, gs: [], diary: null, categories: [], goals: {}, nowMin: 1440, dayDone: true, notes: Array.from({ length: 9 }, (_, i) => `札: 気づき${i}`) });
+      ok(c1.includes('【アプリが気づいたこと(記録から)】\n時間帯: 午前がいちばん進む\n進み: あと 3 分の作業で小説の続き\n\n【作業の進め方の相談】') && !c0.includes('アプリが気づいたこと') && s1.includes('札: 気づき5') && !s1.includes('札: 気づき6') && s1.indexOf('アプリが気づいたこと') < s1.indexOf('【お願い】') && s1.length <= Ai.MAX_CHARS, 'AI に渡す文: 気づきを材料に足す(6 行まで・文字列だけ・無ければ足さない・お願いの前)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

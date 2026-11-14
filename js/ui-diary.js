@@ -10,6 +10,7 @@ import { FEATURES } from './features.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
 import * as ai from './ai.js';
+import { buddyNotes, prime } from './ui-buddy.js'; // v0.60: AI に渡す材料
 import * as sync from './sync.js';
 import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
 import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js';
@@ -213,14 +214,15 @@ function aiCard(o) {
     location.href = url;
   };
   const copyOnly = async (text) => { try { await navigator.clipboard.writeText(text); toast('文をコピーしました(ショートカットに貼って使えます)'); } catch { toast('コピーできませんでした'); } };
-  const summary = () => ai.summaryText({ date: o.date, agg: o.agg, fb: o.fb, gs: o.gs, diary: o.draft, categories: S().categories, goals: S().goals, nowMin: o.nowMin, dayDone: o.dayDone });
+  prime(); // v0.60: 解読と絵の進みを先に読んでおく(送る文に入れる)
+  const summary = () => ai.summaryText({ date: o.date, agg: o.agg, fb: o.fb, gs: o.gs, diary: o.draft, categories: S().categories, goals: S().goals, nowMin: o.nowMin, dayDone: o.dayDone, notes: buddyNotes() }); // v0.60: アシスタントの気づきと 解読 / 絵 の進みを材料に
   const question = el('input.text', { type: 'text', placeholder: '相談', maxlength: 200, autocomplete: 'off' });
   const consult = () => {
     const open = log.openEntry(E());
     const openInfo = open ? { name: (open.taskId && T()[open.taskId]?.name) || (S().categories.find((c) => c.id === open.categoryId)?.name) || '記録', elapsedMin: log.elapsedMin(open, n.date, n.min) } : null;
     const workMin = log.totalsByRole(E(), n.date, n.min, (e) => store.entryRole(S(), e)).work; // v0.30: 記録の数え方を反映
     const near = Object.values(T()).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'wish' && !t.repeat && t.deadline && t.deadline.slice(0, 10) >= n.date && t.deadline.slice(0, 10) <= addDays(n.date, 3)).sort((a, b) => (a.deadline < b.deadline ? -1 : 1)).map((t) => ({ name: t.name, deadline: t.deadline.slice(0, 10) }));
-    return ai.consultText({ question: question.value, nowMin: n.min, open: openInfo, workMin, goals: S().goals, gs: plan.goals(T(), E(), n.date, n.min), near, mood: entryFor(n.date).mood });
+    return ai.consultText({ question: question.value, nowMin: n.min, open: openInfo, workMin, goals: S().goals, gs: plan.goals(T(), E(), n.date, n.min), near, mood: entryFor(n.date).mood, notes: buddyNotes() });
   };
   const chips = el('div.chips.small', ai.QUICK_QUESTIONS.map((q) => el('button.chip.sm2', { type: 'button', onclick: () => { question.value = q; send(consult()); } }, q)));
   // v0.29.4: 返事の貼り付けは「AI」の節(1 タップで欄へ)に移した。このカードは「相談」のシートと「頼む」の送り手

@@ -10,6 +10,20 @@ import { dateKey, minuteOfDay, effectiveDay, fmtMin } from './time.js';
 import { FEATURES } from './features.js';
 
 /**
+ * AI(F11・ショートカット)に渡す材料(v0.60): いま言える気づきを「札: 文」の行にして返す。解読と絵の進みは、先に prime() で読んでおいた分だけ入る(読めていなければ入らない)。
+ * FEATURES.BUDDY が false なら空。
+ */
+let primed = null;
+export function prime() { if (!FEATURES.BUDDY) return; Promise.all([questStatus(), artStatus()]).then(([quest, art]) => { primed = quest || art ? { quest, art } : null; }).catch(() => {}); }
+export function buddyNotes() {
+  if (!FEATURES.BUDDY || !store.state.data.meta.setupAt) return [];
+  const d = store.state.data, s = d.settings;
+  const n = effectiveDay(s, dateKey(), minuteOfDay());
+  const workMin = workByDay(d.entries, s, buddy.EPOCH, n.date, n.min).reduce((a, x) => a + x.min, 0);
+  return buddy.insights({ entries: d.entries, settings: s, today: n.date, workMin, progress: primed }).map((x) => `${x.label}: ${x.text}`);
+}
+
+/**
  * ブリーフィングの「アシスタント」の節: 段(Lv.)・開いた力のぶんの気づき(札+1 行)・次の力まで あと何時間。
  * 解読と絵の進みは、読み込めてから足す(読めなければ言わないだけ)。言えることが 1 つも無く、次の力も無ければ何も出さない。
  */

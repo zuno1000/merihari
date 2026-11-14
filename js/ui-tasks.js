@@ -71,12 +71,13 @@ function segRow(options, value, onpick) {
  */
 function quickAdd(today, rerender, preset = null) {
   const name = el('input.text', { type: 'text', placeholder: '何をする?', autocomplete: 'off', maxlength: 200 });
-  let type = preset || 'task', when = 'week', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily'; // v0.47: 既定はタスク
-  const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today, onchange: () => refresh() });
+  let type = preset || 'task', when = 'date', sizeMin = 60, cid = defaultCategory(), recur = false, habitRep = 'daily'; // v0.47: 既定はタスク
+  const dateIn = el('input.date', { type: 'date', value: whenOptions(today)[2].value, min: today, 'aria-label': '期限の日付', onchange: () => { if (!dateIn.value) dateIn.value = whenOptions(today)[2].value; setWhen('date'); } });
   const timeIn = timeField('', { label: '期限の時刻', emptyLabel: '時刻', allowEmpty: true, onchange: () => refresh() });
-  const dateLabel = el('span.label', '期限');
-  const dateRow = el('div.row.field', { hidden: true }, [dateLabel, dateIn, timeIn]); // v0.44: 日付… のときは日付+時刻、ほかの「いつまで」でも時刻だけ付けられる
-  const showDateRow = () => { dateRow.hidden = when === 'none'; dateIn.hidden = when !== 'date'; dateLabel.textContent = when === 'date' ? '期限' : '時刻'; };
+  // v0.60(ユーザー要望「いきなり期限の日付を選びたい。来週などのボタンは使わなかった」): いつまで の札とチップをやめ、期限の行(日付・時刻・なし)をそのまま出す。日付の欄は 1 タップで端末のカレンダーが開く。既定は今週の日曜(名前だけで Enter なら今週が期限)
+  const noneBtn = el('button', { type: 'button', class: 'chip sm2', 'aria-pressed': 'false', onclick: () => setWhen(when === 'none' ? 'date' : 'none') }, 'なし');
+  const dateRow = el('div.row.field.qwhen', [el('span.label', '期限'), dateIn, timeIn, noneBtn]);
+  const setWhen = (w) => { when = w; if (when === 'none') recur = false; noneBtn.classList.toggle('on', when === 'none'); noneBtn.setAttribute('aria-pressed', when === 'none' ? 'true' : 'false'); dateIn.disabled = when === 'none'; timeIn.disabled = when === 'none'; refresh(); };
   const memoHint = el('p.muted.small.qhint', 'メモは名前だけ。あとでタップして タスク / 習慣 / やりたいこと にできます。');
   // 札(v0.28.1): key → { pill, valueOf(), build(), show() }。開いている札の選択肢だけを detail に出す
   let open = null;
@@ -99,12 +100,11 @@ function quickAdd(today, rerender, preset = null) {
       if (open === k && !vis) { open = null; detail.hidden = true; clear(detail); }
     }
     memoHint.hidden = type !== 'memo';
+    dateRow.hidden = type !== 'task';
   };
   const toggle = (key) => { open = open === key ? null : key; clear(detail); if (open) detail.append(P[open].build()); detail.hidden = !open; refresh(); };
-  const whenText = () => `${when === 'date' ? fmtMD(dateIn.value || today) : whenOptions(today).find((o) => o.key === when).label}${when !== 'none' && timeIn.value ? ' ' + timeIn.value : ''}`;
   const sizeText = () => SIZES.find((o) => o.min === sizeMin)?.label || `${sizeMin}分`;
   const catText = () => catOf(cid).name;
-  pill('when', 'いつまで', whenText, () => { showDateRow(); return el('div.col', [chipRow(whenOptions(today), when, (o) => { when = o.key; if (o.value) dateIn.value = o.value; showDateRow(); if (when === 'none') recur = false; refresh(); }), dateRow]); }, () => type === 'task');
   pill('recur', '繰り返す', () => (recur ? '毎週' : 'なし'), () => chipRow([{ key: 'no', label: 'なし' }, { key: 'weekly', label: '毎週(同じ曜日)' }], recur ? 'weekly' : 'no', (o) => { recur = o.key === 'weekly'; refresh(); }), () => type === 'task' && when !== 'none');
   pill('habit', 'くりかえし', () => (habitRep === 'daily' ? '毎日' : '毎週'), () => chipRow([{ key: 'daily', label: '毎日' }, { key: 'weekly', label: '毎週' }], habitRep, (o) => { habitRep = o.key; refresh(); }), () => type === 'habit');
   pill('size', 'どれくらい', sizeText, () => chipRow(SIZES, sizeMin, (o) => { sizeMin = o.min; refresh(); }, (o) => o.min), () => type === 'habit' || (type === 'task' && FEATURES.TASK_ESTIMATE)); // v0.44: タスクの「どれくらい」は出さない
@@ -116,7 +116,7 @@ function quickAdd(today, rerender, preset = null) {
     refresh();
   };
   const typeSeg = segRow(TYPES, type, applyType);
-  const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, pills, detail]);
+  const more = el('div.qmore', { hidden: true }, [typeSeg, memoHint, dateRow, pills, detail]);
   applyType(type); // v0.26: 区分の画面ではその種類(習慣など)が選ばれた状態で始まる
   const reveal = () => { more.hidden = false; };
   name.addEventListener('focus', reveal);
@@ -157,7 +157,7 @@ export function overdueCheck(ctx, { force = false } = {}) {
   const today = effToday();
   const local = store.state.local;
   if (!force && local.overdueAsked === today) return false;
-  const list = plan.overdueTasks(T(), today, E());
+  const list = plan.overdueTasks(T(), today, E()).filter((t) => force || !plan.overdueKept(t)); // v0.60: 「期限切れのまま置く」にしたタスクは、朝は聞かない(「まとめて処理」からは出る)
   local.overdueAsked = today; store.saveLocal();
   if (!list.length) return false;
   const next = (i) => {
@@ -165,16 +165,18 @@ export function overdueCheck(ctx, { force = false } = {}) {
     if (!t) { ctx.go(ctx.current?.() || 'now'); return; }
     const k = t.deadline.slice(0, 10);
     const left = plan.remainingMin(t, E());
-    const plus = (half) => { if (!t.noTime) { t.remainingH = Math.max(0.25, Math.round((half ? left / 2 : left) / 15) * 15 / 60); t.remainingSetAt = store.nowISO(); } t.deadline = addDays(today, 7) + (t.deadline.length >= 16 ? t.deadline.slice(10) : ''); saveTask(t); };
+    const plus = (half, days = 7) => { if (!t.noTime) { t.remainingH = Math.max(0.25, Math.round((half ? left / 2 : left) / 15) * 15 / 60); t.remainingSetAt = store.nowISO(); } t.overdueKeep = null; t.deadline = addDays(today, days) + (t.deadline.length >= 16 ? t.deadline.slice(10) : ''); saveTask(t); };
     sheet((close) => [
       el('h2', `${t.name} は期限(${fmtMD(k)})を過ぎました`),
       !FEATURES.TASK_ESTIMATE ? null : t.noTime ? el('p.muted.small', '用事(時間なし)') : el('p.muted.small', `残り${fmtH(left)}`),
       el('div.col', [
-        el('button.btn.block.primary', { type: 'button', onclick: () => { close(); plus(false); next(i + 1); } }, '+1週'),
+        el('button.btn.block.primary', { type: 'button', onclick: () => { close(); plus(false, 1); next(i + 1); } }, '+1日(明日まで)'), // v0.60(ユーザー要望): 1 日だけ延ばす(時刻つきなら時刻はそのまま)
+        el('button.btn.block', { type: 'button', onclick: () => { close(); plus(false); next(i + 1); } }, '+1週'),
         t.noTime || !FEATURES.TASK_ESTIMATE ? null : el('button.btn.block', { type: 'button', onclick: () => { close(); plus(true); next(i + 1); } }, '残りを半分にして +1週'),
         el('button.btn.block', { type: 'button', onclick: () => { close(); t.doneAt = store.nowISO(); saveTask(t); next(i + 1); } }, t.recur ? '完了にする(来週の分が出ます)' : '完了にする'),
         el('button.btn.block.danger', { type: 'button', onclick: () => { close(); t.deletedAt = store.nowISO(); saveTask(t); next(i + 1); } }, '消す'),
-        el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); next(i + 1); } }, 'そのまま'),
+        el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); t.overdueKeep = t.deadline; saveTask(t); next(i + 1); } }, plan.overdueKept(t) ? '期限切れのまま置く(いまのまま)' : '期限切れのまま置く(もう聞かない)'), // v0.60(ユーザー要望): 放置できる。一覧の「期限切れ」とタブの数字には残る
+        el('button.btn.block.ghost', { type: 'button', onclick: () => { close(); next(i + 1); } }, 'あとで(明日また聞く)'),
       ]),
     ].filter(Boolean), () => {});
   };

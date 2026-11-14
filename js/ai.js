@@ -33,6 +33,12 @@ export function reframe(q) {
   return t.replace(/やる気が(出ない|でない|起きない|ない)/g, '手がつかない').replace(/つらい|しんどい|疲れた|だるい/g, '調子が上がらない').replace(/無理|限界/g, 'きつい');
 }
 
+/** アシスタント(F24)の気づきと 解読 / 絵 の進みを材料として足す(v0.60・o.notes = ['時間帯: …'])。6 行まで・1 行 120 字まで。無ければ何も足さない */
+function notesBlock(lines, notes) {
+  const xs = (Array.isArray(notes) ? notes : []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 6).map((x) => x.trim().slice(0, 120));
+  if (xs.length) lines.push('', '【アプリが気づいたこと(記録から)】', ...xs);
+}
+
 /**
  * きょうのふり返りを頼む文。
  * o = { date, agg(report.aggregate), fb(report.dayFeedback), gs(plan.goals), diary(その日の日記|null), categories, goals(settings.goals), nowMin, dayDone }
@@ -75,6 +81,7 @@ export function summaryText(o) {
     if (d.hard) lines.push(`ひっかかったこと: ${d.hard.trim()}`);
     if (d.tomorrow) lines.push(`明日は: ${d.tomorrow.trim()}`);
   }
+  notesBlock(lines, o.notes);
   lines.push('', '【お願い】', o.dayDone === false ? 'ここまでを3文でふり返り、きょうの残りの一歩を1つ。' : 'きょうを3文でふり返り、よかった点を1つと明日の一歩を1つ。');
   return clip(lines.join('\n'));
 }
@@ -96,6 +103,7 @@ export function consultText(o) {
   if (todo.length) lines.push(`残っている用事: ${todo.join('・')}`);
   if (o.near && o.near.length) lines.push(`期限が近いもの: ${o.near.slice(0, 4).map((t) => `${t.name}(${fmtMD(t.deadline)}まで)`).join('・')}`);
   if (o.mood) lines.push(`きょうの調子: ${MOOD_WORDS[o.mood] || ''}`);
+  notesBlock(lines, o.notes);
   lines.push('', '【作業の進め方の相談】', reframe(o.question));
   lines.push('', '【お願い】', '時間管理の助言として、上の状況に合わせて いま10分でできる作業の一歩を1つ。3文まで。');
   return clip(lines.join('\n'));

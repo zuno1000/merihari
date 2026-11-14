@@ -397,6 +397,9 @@ export function dueTasks(tasks, date, entries = {}, opts = {}) {
   return { overdue, today, tomorrow, count: overdue.length + today.length };
 }
 
+/** 「期限切れのまま置く」にしたタスクか(v0.60・F5-17): 印は そのときの期限(overdueKeep === deadline)。期限を変えれば印は効かなくなる(次に期限を過ぎたら また聞く)。純関数 */
+export function overdueKept(t) { return !!t && typeof t.overdueKeep === 'string' && t.overdueKeep.length >= 10 && t.overdueKeep === t.deadline; }
+
 /** 期限超過かつ残りがある義務タスク(F5-5)。期限順。残りは記録を自動で引いたもの(v0.12) */
 export function overdueTasks(tasks, today, entries = {}, opts = {}) {
   const noEst = !estimating(opts); // v0.44: 目安を使わないなら残りに関係なく、済んでいなければ期限切れ

@@ -321,7 +321,8 @@ export function validateTask(r, id) {
     minUnit: num(r.minUnit, 5, 600, 30), remainingSetAt: optStr(r.remainingSetAt, 40) || optStr(r.updatedAt, 40), categoryId: str(r.categoryId, 40, 'other'), starter: str(r.starter, 300), repeat: rep, note: str(r.note, 2000), doneAt: optStr(r.doneAt, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40),
     checks: Array.isArray(r.checks) ? r.checks.filter(isDate).slice(-400) : [], // v0.16: 習慣の「済んだ」の印(日付キー)
     noTime: r.noTime === true,                       // v0.17: 時間を計らないタスク(用事: 銀行・メール。チェックで済ませる)
-    recur: r.recur === 'weekly' ? 'weekly' : null }; // v0.17: 期限つきタスクの繰り返し(毎週の課題: 済んで期限を過ぎたら翌週の同じ曜日が期限になって戻る)
+    recur: r.recur === 'weekly' ? 'weekly' : null,
+    overdueKeep: optStr(r.overdueKeep, 20) }; // v0.60・F5-17: 「期限切れのまま置く」の印(そのときの期限。plan.overdueKept) // v0.17: 期限つきタスクの繰り返し(毎週の課題: 済んで期限を過ぎたら翌週の同じ曜日が期限になって戻る)
 }
 export function validatePlan(r, id) {
   if (!isObj(r) || !isDate(r.date || id)) return null;

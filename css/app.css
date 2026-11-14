@@ -1403,3 +1403,10 @@ button.a-thumb{cursor:pointer}
 /* v0.59・F24: アシスタント(ブリーフィングの中の 1 節) */
 .buddy-next{margin-top:6px!important}
 .buddy .brief-sug:empty{display:none}
+/* v0.60: タスクの追加の「期限」の行(日付・時刻・なし をそのまま出す) */
+.qwhen{gap:8px;margin:10px 0 2px;align-items:center}
+.qwhen[hidden]{display:none}
+.qwhen .label{flex:none}
+.qwhen input.date{flex:1;min-width:0}
+.qwhen input.date:disabled,.qwhen .tfield:disabled{opacity:.4}
+.qwhen .chip{flex:none}
