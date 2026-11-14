@@ -1400,3 +1400,6 @@ button.a-thumb{cursor:pointer}
 .a-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .a-thumb.on{border-color:var(--q-ac)}
 .a-thumb.cur{color:var(--q-ac);border-style:dashed;font-size:11px}
+/* v0.59・F24: アシスタント(ブリーフィングの中の 1 節) */
+.buddy-next{margin-top:6px!important}
+.buddy .brief-sug:empty{display:none}

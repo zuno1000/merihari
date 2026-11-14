@@ -23,4 +23,9 @@ export const FEATURES = Object.freeze({
    * 隔離した実装: js/art.js・js/ui-art.js・data/art.json・data/art/ と、ホームの 1 行(解読の行の横)・設定の 1 項目・settings.art だけ。false で どちらも出ない。
    */
   ART: true,
+  /**
+   * v0.59・F24(ユーザー要望「アシスタントを成長させる。実際の機能を育てる方針で」): アシスタント。作業の合計で段が上がり、ブリーフィングに出る気づきが増える。
+   * 隔離した実装: js/buddy.js・js/ui-buddy.js と、ブリーフィングのシートの中の 1 節(ui-brief)だけ。false で出ない。
+   */
+  BUDDY: true,
 });

@@ -1454,6 +1454,34 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(eq(S.defaultSettings().art, { enabled: true, since: null }) && eq(S.migrate({ schema: 1, settings: { art: { enabled: false, since: '2026-12-01' } } }).settings.art, { enabled: false, since: '2026-12-01' }) && eq(S.migrate({ schema: 1, settings: { art: 'x' } }).settings.art, { enabled: true, since: null }) && S.SCALAR_FIELDS.includes('art') && M.features.FEATURES.ART === true && sw.includes(`'./js/art.js'`) && sw.includes(`'./js/ui-art.js'`) && !/ASSETS = \[[^\]]*data\/art/.test(sw), 'settings.art(既定は有効・項目ごとに同期)・FEATURES.ART・sw.js の ASSETS に art.js / ui-art.js(画像は ASSETS に入れない)');
     }
 
+    // ---- v0.59・F24: アシスタント(buddy.js)----
+    log('\n# v0.59 アシスタント');
+    {
+      const Bd = M.buddy, d7 = S.defaultSettings();
+      const workId = d7.categories.find((c) => M.store.catRole(d7, c.id).work).id, driftId = d7.categories.find((c) => M.store.catRole(d7, c.id).drift).id;
+      const en = (id, date, start, end, categoryId = workId) => ({ id, date, start, end, categoryId, deletedAt: null });
+      const l0 = Bd.levelOf(0), l1 = Bd.levelOf(5 * 60), l5 = Bd.levelOf(99 * 60);
+      ok(l0.level === 1 && eq(l0.unlocked, ['progress']) && eq(l0.next, { name: '得意な時間帯', needMin: 300 }) && l1.level === 2 && l1.next.name === '先週との違い' && l1.next.needMin === 600 && l5.level === 5 && l5.next === null && Bd.levelOf(-5).level === 1, 'levelOf: 作業の合計で段が上がる(0 / 5 / 15 / 30 / 60 時間)・下がらない入力でも 1 から');
+      const T0 = '2026-11-30';
+      const E7 = {};
+      for (let i = 1; i <= 14; i++) { const dt = T.addDays(T0, -i); E7[`w${i}`] = en(`w${i}`, dt, '09:30', i <= 7 ? '11:30' : '10:30'); E7[`n${i}`] = en(`n${i}`, dt, '21:30', '22:00'); }
+      const bb = Bd.bestBand(E7, d7, T0);
+      ok(bb.name === '午前(9〜12 時)' && bb.min === 7 * 120 + 7 * 60 && Math.abs(bb.share - 1260 / 1680) < 1e-9 && Bd.bestBand({ a: en('a', T.addDays(T0, -1), '09:00', '10:00') }, d7, T0) === null && Bd.bestBand({ a: en('a', T0, '09:00', '15:00') }, d7, T0) === null, 'bestBand: 直近 14 日で作業がいちばん多い帯・2 時間に満たなければ言わない・きょうは数えない');
+      const wd = Bd.weekDelta(E7, d7, T0);
+      ok(eq(wd, { avg: 150, prev: 90, diff: 60 }) && Bd.weekDelta({ a: en('a', T.addDays(T0, -1), '09:00', '10:00') }, d7, T0) === null, 'weekDelta: 直近 7 日と その前の 7 日の 1 日平均・記録の少ない週は言わない');
+      const E8 = { ...E7 };
+      for (const i of [1, 8, 15, 22]) E8[`g${i}`] = en(`g${i}`, T.addDays(T0, -i), '13:00', '15:00', driftId); // T0 は月曜 → 1 日前は日曜
+      const dw = Bd.driftWeekday(E8, d7, T0), dw2 = Bd.driftWeekday(E8, d7, T.addDays(T0, -1));
+      ok(T.weekday(T0) === 1 && dw.day === 0 && dw.avg === 120 && dw.today === false && dw2.day === 0 && dw2.today === true && Bd.driftWeekday(E7, d7, T0) === null, 'driftWeekday: ダラダラの平均がいちばん長い曜日(2 日以上・60 分以上)・きょうがその曜日か');
+      const E9 = { a: en('a', T.addDays(T0, -3), '09:00', '09:50'), b: en('b', T.addDays(T0, -3), '09:54', '10:40'), c: en('c', T.addDays(T0, -3), '11:00', '11:20'), d: en('d', T0, '08:00', '08:45'), e: en('e', T0, '08:45', null) };
+      const lr = Bd.longestRun(E9, d7, T0);
+      ok(lr.best === 100 && lr.date === T.addDays(T0, -3) && lr.today === 45 && Bd.longestRun({ c: E9.c }, d7, T0) === null, 'longestRun: 5 分以内の間はつなぐ・30 分に満たなければ言わない・記録中は数えない');
+      const prog = { quest: { need: 3, unread: 0, done: false }, art: { need: 2, allDone: false, next: { label: '作者', pieces: 4 } } };
+      const in1 = Bd.insights({ entries: E8, settings: d7, today: T0, workMin: 10, progress: prog }), in5 = Bd.insights({ entries: E8, settings: d7, today: T0, workMin: 61 * 60, progress: prog }), in0 = Bd.insights({ entries: {}, settings: d7, today: T0, workMin: 61 * 60 });
+      ok(in1.length === 1 && in1[0].key === 'progress' && in1[0].text === 'あと 3 分の作業で小説の続き・あと 4 ピースで絵の「作者」' && eq(in5.map((x) => x.key), ['progress', 'band', 'week', 'weekday', 'run']) && in5.every((x) => x.label && x.text) && in5[2].text === 'この 7 日の作業は 1 日 2h30m。その前の 7 日より +1h' && in0.length === 0 && Bd.insights({ entries: {}, settings: d7, today: T0, workMin: 0, progress: { quest: { need: 0, unread: 2, done: false }, art: null } })[0].text === '小説の続きが 2 件 読めます', 'insights: 開いた段のぶんだけ・言えるものだけ・解読と絵の進みを 1 行に');
+      ok(M.features.FEATURES.BUDDY === true && sw.includes(`'./js/buddy.js'`) && sw.includes(`'./js/ui-buddy.js'`) && Bd.LEVELS.length === 5 && Bd.LEVELS.every((l) => Bd.LABEL[l.key]), 'FEATURES.BUDDY・sw.js の ASSETS に buddy.js / ui-buddy.js・段ごとに札がある');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

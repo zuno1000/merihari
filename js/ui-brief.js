@@ -9,6 +9,7 @@ import { catOf } from './ui-today.js';
 import { driftLabelOf } from './report.js';
 import { overdueCheck } from './ui-tasks.js';
 import { autoSync } from './sync.js';
+import { buddyBox } from './ui-buddy.js'; // v0.59・F24: アシスタントの節(FEATURES.BUDDY)
 
 const S = () => store.state.data.settings;
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
@@ -121,6 +122,7 @@ export function openBrief(ctx) {
       rows.length ? el('div.list', rows) : null,
       b.suggest.length ? el('h3', b.suggestTitle) : null,
       b.suggest.length ? el('div.brief-sug', b.suggest.map((x) => el('div.bs-row', { class: `bs-row${x.kind === 'switch' || x.kind === 'now' ? ' hot' : ''}` }, [el('span.bs-k', brief.SUGGEST_LABEL[x.kind] || ''), el('span.bs-t', x.text)]))) : null,
+      buddyBox(), // v0.59・F24: アシスタント(段・気づき・次の力まで)
       el('div.row.brief-act', [
         b.due.overdue.length ? el('button.btn', { type: 'button', onclick: () => { close(); overdueCheck(ctx, { force: true }); } }, '期限切れを処理') : null,
         el('button.btn', { type: 'button', onclick: () => { close(); ctx.go('tasks'); } }, 'タスクを開く'),

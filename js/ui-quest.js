@@ -148,6 +148,9 @@ export function openQuest(onClose = null) {
   }).catch(() => toast('本を読み込めませんでした(初回は通信が要ります)'));
 }
 
+/** いまの進み(アシスタント F24 が読む): { need, unread, done }。無効・読めないときは null */
+export function questStatus() { if (!questOn()) return Promise.resolve(null); return loadStory().then(() => { const s = snapshot(); return { need: s.p.need, unread: s.unread, done: s.p.done }; }).catch(() => null); }
+
 /** 設定の一覧の右側 */
 export function questSummary() { const q = Q(); return q.enabled ? `有効${story() ? `・${story().title}` : ''}${L().sound ? '・音あり' : ''}` : '使わない'; }
 

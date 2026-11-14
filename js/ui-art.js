@@ -124,6 +124,9 @@ export function openArt(onClose = null) {
   }).catch(() => toast('絵を読み込めませんでした(初回は通信が要ります)'));
 }
 
+/** いまの進み(アシスタント F24 が読む): { need, allDone, next: { label, pieces } | null }。無効・読めないときは null */
+export function artStatus() { if (!artOn()) return Promise.resolve(null); return loadWorks().then(() => { const p = snapshot().p; return { need: p.need, allDone: p.allDone, next: p.cur != null ? art.nextInfo(works[p.cur], p.pieces, p.n) : null }; }).catch(() => null); }
+
 /** 設定の一覧の右側 */
 export function artSummary() { return A().enabled ? '有効' : '使わない'; }
 
