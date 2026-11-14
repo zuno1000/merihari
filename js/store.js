@@ -112,7 +112,7 @@ export function defaultSettings() {
     bgm: { enabled: false, genres: [], app: true, strip: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
     feed: { enabled: false, genres: [], kw: {}, n: 5, off: [], img: true, repo: '', hue: {}, order: [] }, // v0.34・F17(v0.35: off=OFF にした取得元 id・v0.36: img=記事の画像・v0.39: kw={ '*':[共通の語], genre:[語] }・v0.41: repo=自分だけの取得元リポジトリ owner/repo・空なら公開のカタログ): キャッチアップ(任意)。ホームの折りたたみ・ジャンル(空=全部)・気になる語・1 回の件数。開いた / 読まない の印は data.feed
     train: { enabled: false, lines: [] }, // v0.50・F18: 次の電車(任意)。路線 [{ id, name, src:'odpt'|'manual', station, direction, railway, operator, tables?(手入力) }](5 つまで・同期する)。ODPT の時刻表の控えは local.trainCache(端末内・30 日)・トークンは local.odptKey(端末内)
-    quest: { enabled: true, since: null }, // v0.56・F22: 解読(作業の記録時間で物語の断片が開く)。since=数え始めの日(null なら quest.EPOCH)。進みは保存せず記録から計算する。読んだ印と音は local.quest(端末ごと)
+    quest: { enabled: true, since: null, book: 'haeotoko' }, // v0.56・F22: 解読(作業の記録時間で小説の続きが開く)。since=数え始めの日(null なら quest.EPOCH)。book=読んでいる本(data/books.json の id・v0.57)。進みは保存せず記録から計算する。読んだ印と音は local.quest(端末ごと)
     brief: { enabled: true }, // v0.55・F21: ブリーフィング(朝 / 昼 12 時以降 / 19 時以降 に初めて開いたときのシート)。見た印は local.briefSeen(端末ごと)・アイコンの数字は local.appBadge(端末ごと)
     weather: { enabled: false, regions: [] }, // v0.29・F15: 天気(任意)。地域 [{ id, name, lat, lon }](5 つまで・同期する)。取得した天気は local.weatherCache(端末内・1 時間)
     tiles: null,             // v0.26.1・F3-13: レポート「今日」の先頭のタイル(['kind:work','cat:research'…]・選んだ順)。null=既定(defaultTiles: 作業の種別+ダラダラの種別)
@@ -253,7 +253,7 @@ function normalizeSettings(raw) {
   s.bgm = normalizeBgm(raw.bgm); // v0.32・F16
   s.feed = normalizeFeed(raw.feed); // v0.34・F17
   s.train = normalizeTrain(raw.train); // v0.50・F18
-  s.quest = { enabled: !(isObj(raw.quest) && raw.quest.enabled === false), since: isObj(raw.quest) && typeof raw.quest.since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.quest.since) ? raw.quest.since : null }; // v0.56・F22: 解読(既定は有効・quest.normalizeQuest と同じ形)
+  s.quest = { enabled: !(isObj(raw.quest) && raw.quest.enabled === false), since: isObj(raw.quest) && typeof raw.quest.since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.quest.since) ? raw.quest.since : null, book: isObj(raw.quest) && typeof raw.quest.book === 'string' && /^[a-z0-9_-]{1,40}$/.test(raw.quest.book) ? raw.quest.book : 'haeotoko' }; // v0.56・F22: 解読(既定は有効・quest.normalizeQuest と同じ形。v0.57: book)
   s.brief = { enabled: !(isObj(raw.brief) && raw.brief.enabled === false) }; // v0.55・F21: ブリーフィング(既定は有効)
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);

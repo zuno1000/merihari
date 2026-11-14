@@ -1,9 +1,9 @@
-// merihari ─ quest.js: 解読(v0.56・F22)。すべて純関数。
+// merihari ─ quest.js: 解読(v0.56・F22。v0.57: 物語は青空文庫の作品に)。すべて純関数。
 // ユーザー要望「YouTube や SNS は自然とやりたくなるが、作業(研究・勉強)はすき間時間に自発的にやりたいと思えない。それを解消したい」。
-// 報酬(集める)ではなく「続きが気になる」を作る: 作業の記録時間が、伏せられた記録(物語の断片)の解読に変わる。
+// 報酬(集める)ではなく「続きが気になる」を作る: 作業の記録時間が、伏せられた小説の断片の解読に変わる。
 // 開くとすぐ次の断片が 20% 進んだ状態で出る(目標勾配)。作業しない日に減るものは無い(責めない)。
 // 進みは保存しない: 「始めた日からの作業時間」から毎回計算する(同期で壊れない・記録を直せば進みも直る)。
-// 物語は data/story.json(同梱・本文は UTF-8 の base64。うっかり先を読まないための符号化で、秘密ではない)。画面は ui-quest.js。
+// 本は data/books/<id>.json(tools/aozora_fetch.py が青空文庫の著作権の切れた作品から作る・「。」で切った断片)。本棚の一覧は data/books.json。画面は ui-quest.js。
 // 隔離: 既存の画面からは FEATURES.QUEST と ui-quest.js の入口(questStrip / sectionQuest / questSummary)だけを見る。
 import { hm } from './time.js';
 import { entryRole } from './store.js';
@@ -17,39 +17,32 @@ export const MAX_REVEAL = 0.55;
 /** 先読みに出す文字数 */
 export const PREVIEW_CHARS = 110;
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+/** 既定の本(本棚 data/books.json の id) */
+export const DEFAULT_BOOK = 'haeotoko';
+const isBook = (s) => typeof s === 'string' && /^[a-z0-9_-]{1,40}$/.test(s);
 
-/** settings.quest の正規化: { enabled(既定 true), since('YYYY-MM-DD' | null) } */
+/** settings.quest の正規化: { enabled(既定 true), since('YYYY-MM-DD' | null), book(本の id) } */
 export function normalizeQuest(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  return { enabled: o.enabled !== false, since: isDate(o.since) ? o.since : null };
+  return { enabled: o.enabled !== false, since: isDate(o.since) ? o.since : null, book: isBook(o.book) ? o.book : DEFAULT_BOOK };
 }
 export function sinceOf(q) { return q && isDate(q.since) ? q.since : EPOCH; }
 
-/** base64(UTF-8)→ 文字列。壊れていたら '' */
-export function decodeText(b64) {
-  try { return new TextDecoder().decode(Uint8Array.from(atob(String(b64 || '')), (c) => c.charCodeAt(0))); } catch { return ''; }
-}
-
 /**
- * data/story.json → { id, title, total, fragments:[{ n(0 始まり), ch(章の番号 1 始まり), chTitle, head, text, cost(分), released }] }。
- * 形が違えば null。cost は 0〜240 分。released(その断片が届いた日)より前の作業は、その断片には使わない(あとから足した続きが一度に開かないように)。
+ * data/books/<id>.json → { id, title, author, card, credit, total, fragments:[{ n(0 始まり), chTitle(直前の見出し), text, cost(分) }] }。
+ * 形が違えば null。最初の 1 件は作業なしで開く(cost 0)。ほかは本の cost(1〜240 分・既定 10)。
  */
 export function parseStory(raw) {
-  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.chapters)) return null;
-  const base = isDate(raw.released) ? raw.released : EPOCH;
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.fragments)) return null;
+  const cost = Number.isFinite(+raw.cost) && +raw.cost >= 1 ? Math.min(240, Math.round(+raw.cost)) : 10;
   const fragments = [];
-  raw.chapters.forEach((c, ci) => {
-    if (!c || !Array.isArray(c.fragments)) return;
-    const rel = isDate(c.released) ? c.released : base;
-    for (const f of c.fragments) {
-      const text = decodeText(f && f.text);
-      if (!text) continue;
-      const cost = Number.isFinite(+f.cost) ? Math.max(0, Math.min(240, Math.round(+f.cost))) : 20;
-      fragments.push({ n: fragments.length, ch: ci + 1, chTitle: String(c.title || '').slice(0, 40), head: decodeText(f.head).slice(0, 80), text, cost, released: rel });
-    }
-  });
+  for (const f of raw.fragments) {
+    if (!f || typeof f.t !== 'string' || !f.t.trim()) continue;
+    fragments.push({ n: fragments.length, chTitle: typeof f.h === 'string' ? f.h.trim().slice(0, 60) : '', text: f.t, cost: fragments.length ? cost : 0 });
+  }
   if (!fragments.length) return null;
-  return { id: String(raw.id || 'story').slice(0, 40), title: String(raw.title || '').slice(0, 40), total: fragments.length, fragments };
+  const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+  return { id: isBook(raw.id) ? raw.id : 'book', title: str(raw.title, 60), author: str(raw.author, 40), card: /^https:\/\/www\.aozora\.gr\.jp\//.test(raw.card || '') ? raw.card : '', credit: str(raw.credit, 2000), total: fragments.length, fragments };
 }
 
 /**
@@ -83,7 +76,7 @@ export function progress(days, story) {
   for (const day of days || []) {
     let m = day.min;
     workMin += m;
-    while (m > 0 && i < fr.length && fr[i].released <= day.date) {
+    while (m > 0 && i < fr.length) {
       const need = fr[i].cost - acc;
       if (m >= need) { m -= need; i++; acc = 0; free(); } else { acc += m; m = 0; }
     }
@@ -115,7 +108,7 @@ export function mask(text, pct, seed, limit = PREVIEW_CHARS) {
 
 /** ホームの 1 行の文。unread = まだ読んでいない開いた断片の数 */
 export function stripText(p, unread) {
-  if (unread > 0) return { label: unread > 1 ? `新しい記録が ${unread} 件 開きました` : '新しい記録が開きました', sub: '読む ›', hot: true };
-  if (p.done) return { label: '解読 完了', sub: '続きを待っています', hot: false };
-  return { label: `解読 ${pctLabel(p)}%`, sub: `あと ${p.need} 分の作業で次の記録`, hot: false };
+  if (unread > 0) return { label: `続きが ${unread} 件 読めます`, sub: '読む ›', hot: true };
+  if (p.done) return { label: '解読 完了', sub: '読み終えました', hot: false };
+  return { label: `解読 ${pctLabel(p)}%`, sub: `あと ${p.need} 分の作業で続き`, hot: false };
 }

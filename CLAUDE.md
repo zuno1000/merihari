@@ -15,7 +15,7 @@
 ## 技術
 - 素の HTML/CSS/JS(ES2020+)、ビルド無し、npm 依存ゼロ。`js/` は役割別(main/store/time/plan/log/report/brief/quest/ui-*/google/sync/bgm/feed)。
 - 同梱データ `data/bgm.json`(BGM のカタログ)と `data/feed.json`(キャッチアップの記事)は GitHub Actions(`.github/workflows/update-bgm.yml` 週次・`update-feed.yml` 毎朝)が `tools/*.py` で作り直す。SW の `DATA`(先読み+裏で更新)なので版は上げない。取得元は `data/feeds.json`(ユーザーが編集)。
-- 解読(F22・`FEATURES.QUEST` で隔離)の物語 `data/story.json` は本文が base64(先を読まないため)。直すときは `python tools/story.py decode` → 編集 → `encode`。読める原稿はリポジトリに置かない。SW の `ASSETS`(版と一緒に固定)。
+- 解読(F22・`FEATURES.QUEST` で隔離)の本 `data/books/<id>.json` と本棚 `data/books.json` は `python -I tools/aozora_fetch.py` が青空文庫の著作権の切れた作品から作る(「。」で区切る・ルビと注記は外す・底本の記載は credit に残す)。本を足すときはツールの `BOOKS` に足す。SW の ASSETS には入れない(大きいので、読んだ本だけ端末に残る)。
 - ユーザー文字列は textContent で描画。innerHTML にユーザー入力を入れない。
 - 純関数は `window.M` に載せ `tests/index.html`(iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件)で検証。
 - 版: `APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新(tests が一致を確認)。

@@ -1,0 +1,42 @@
+[
+ {
+  "id": "haeotoko",
+  "title": "蠅男",
+  "author": "海野十三",
+  "genre": "探偵小説・SF",
+  "total": 345,
+  "chars": 120078,
+  "cost": 10,
+  "card": "https://www.aozora.gr.jp/cards/000160/card1254.html"
+ },
+ {
+  "id": "kotou",
+  "title": "孤島の鬼",
+  "author": "江戸川乱歩",
+  "genre": "探偵小説",
+  "total": 523,
+  "chars": 183352,
+  "cost": 10,
+  "card": "https://www.aozora.gr.jp/cards/001779/card57849.html"
+ },
+ {
+  "id": "yureitou",
+  "title": "幽霊塔",
+  "author": "黒岩涙香",
+  "genre": "探偵小説",
+  "total": 485,
+  "chars": 258397,
+  "cost": 10,
+  "card": "https://www.aozora.gr.jp/cards/000179/card943.html"
+ },
+ {
+  "id": "kaseiheidan",
+  "title": "火星兵団",
+  "author": "海野十三",
+  "genre": "SF",
+  "total": 906,
+  "chars": 314147,
+  "cost": 10,
+  "card": "https://www.aozora.gr.jp/cards/000160/card3368.html"
+ }
+]

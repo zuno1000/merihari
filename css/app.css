@@ -1344,7 +1344,6 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .q-text{white-space:pre-wrap;overflow-wrap:anywhere}
 .q-frag{border-top:1px solid var(--q-line);padding-top:12px;min-height:120px}
 .q-frag.typing .q-text::after{content:"▍";color:var(--q-ac);animation:q-pulse .8s steps(2) infinite}
-.q-more{display:block;width:100%;margin-top:14px;border:1px solid var(--q-ac);background:none;color:var(--q-ac);border-radius:999px;min-height:46px;font:inherit;font-weight:600;cursor:pointer}
 .q-next{margin-top:16px;border:1px dashed var(--q-line);border-radius:12px;padding:12px}
 .q-mask{font-size:14px;line-height:1.9;color:var(--q-dim);overflow-wrap:anywhere}
 .q-mask i{font-style:normal;background:var(--q-line);border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
@@ -1355,10 +1354,18 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .q-need{font-size:13px;color:var(--q-fg);margin-top:4px!important}
 .q-next.active .q-need{color:var(--q-ac)}
 .q-end{margin-top:16px!important;font-size:13px;color:var(--q-dim)}
-.q-arch{margin-top:16px;border-top:1px solid var(--q-line);padding-top:10px;font-size:13px}
-.q-arch>summary{color:var(--q-dim);cursor:pointer;min-height:36px;display:flex;align-items:center}
-.q-ch{font-size:11px;color:var(--q-dim);letter-spacing:.1em;margin:10px 0 2px!important}
-.q-old>summary{cursor:pointer;padding:7px 0;color:var(--q-fg);display:flex;gap:8px;align-items:baseline;list-style:none}
-.q-old>summary::-webkit-details-marker{display:none}
-.q-old .q-text{font-size:14px;color:var(--q-fg);padding:2px 0 12px;border-bottom:1px solid var(--q-line)}
 .q-act{margin-top:12px;gap:10px;align-items:center}
+/* v0.57: 解読のシートの 前 / 続き と 出典 */
+.q-nav{display:flex;align-items:center;gap:10px;margin-top:14px}
+.q-step{border:1px solid var(--q-line);background:none;color:var(--q-fg);border-radius:999px;min-height:44px;padding:0 14px;font:inherit;font-size:14px;cursor:pointer}
+.q-step:disabled{opacity:.3;cursor:default}
+.q-step.fwd{flex:1;border-color:var(--q-ac);color:var(--q-ac);font-weight:600}
+.q-here{flex:1;text-align:right;font-size:12px;color:var(--q-dim)}
+.q-credit{margin-top:16px;border-top:1px solid var(--q-line);padding-top:8px;font-size:12px;color:var(--q-dim)}
+.q-credit>summary{cursor:pointer;min-height:32px;display:flex;align-items:center}
+.q-credit a{color:var(--q-ac)}
+.q-credit-t{white-space:pre-wrap;line-height:1.6;margin-top:6px!important}
+.q-frag .q-text{font-size:16px}
+.srow.on .slabel{font-weight:600;color:var(--accent)}
+.srow .slabel{flex:none;max-width:44%}
+.srow .sval{flex:1;text-align:right;color:var(--muted);font-size:12px;min-width:0}
