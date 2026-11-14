@@ -696,7 +696,7 @@ function sectionBrief(rerender, ctx) {
     el('h3.help-h', 'やり残しの数字'),
     el('p.muted.small', '期限切れと今日が期限のタスクが残っていると、タスクのタブに赤い数字が出ます(いつも)。下を有効にすると、ホーム画面のアプリのアイコンにも同じ数字を出します(この端末だけ・最後に開いたときの数・iPhone は通知の許可が要ります)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!local.appBadge, disabled: !appBadgeSupported(), onchange: async (e) => { if (e.target.checked) { const ok = await enableAppBadge(); if (!ok) e.target.checked = false; else toast('アイコンに数字を出します'); } else disableAppBadge(); } }), el('span', appBadgeSupported() ? 'アプリのアイコンにも数字を出す' : 'アプリのアイコンにも数字を出す(この端末 / ブラウザは未対応)')]),
-    el('p.muted.small', 'アプリを閉じている間に届く通知は、サーバーを持たないこのアプリからは出せません。決まった時刻に気づきたいときは、iPhone の「ショートカット」› オートメーション ›「時刻」で 12:00 や 19:00 に「App を開く: メリハリ」を置くと、その時刻にブリーフィングが開きます。'),
+    el('p.muted.small', 'アプリを閉じている間に届く通知は、サーバーを持たないこのアプリからは出せません。決まった時刻に気づきたいときは、iPhone の「ショートカット」› オートメーション ›「時刻」で 12:00 や 19:00 を選び、アクションに「通知を表示」(本文は「メリハリを開く」など)を置いて「すぐに実行」にします。通知が来たら、ホーム画面のメリハリのアイコンから開くと、その時間帯のブリーフィングが出ます(ホーム画面に追加したアプリは「App を開く」の候補に出ないので、自動では開けません。v0.61.1 で案内を直しました)。'),
   );
 }
 
