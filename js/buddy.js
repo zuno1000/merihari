@@ -136,6 +136,14 @@ const baseOf = (tone) => { const t = tone && typeof tone === 'object' ? tone.bas
 const ownLines = (tone, key) => (tone && typeof tone === 'object' && tone.set && Array.isArray(tone.set[key]) ? tone.set[key].filter((x) => typeof x === 'string' && x) : []);
 
 /** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone(内蔵の 3 つ か 足した性格の id), idle(ホームで声をかける・既定 true), lines(覚えた台詞・v0.63), custom(足した性格・v0.67) } */
+/**
+ * ホームの ひとことが替わる間隔(秒・v0.75・ユーザー要望「台詞が切り替わるタイミングを もう少し早く。自分で決められるように」)。
+ * 既定は 30 秒(v0.74 までは 言い回しが 10 分ごと)。settings.buddy.rotate は 既定と違うときだけ持つ(同期の形を増やさない)
+ */
+export const ROTATE_CHOICES = Object.freeze([10, 20, 30, 60, 180, 600]);
+export const ROTATE_DEFAULT = 30;
+export const rotateOf = (b) => (b && ROTATE_CHOICES.includes(b.rotate) ? b.rotate : ROTATE_DEFAULT);
+export const rotateLabel = (sec) => (sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
 export function normalizeBuddy(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const custom = normalizeCustom(o.custom), ids = custom.map((c) => c.id);
@@ -146,18 +154,38 @@ export function normalizeBuddy(raw) {
   return {
     enabled: o.enabled !== false, name: me.name, tone: me.tone, idle: o.idle !== false, // name / tone は いま選んでいるキャラクターのもの(読むだけ。直すときは patchChar)
     lines: normalizeLines(o.lines).filter((x) => toneOk(x.t)), custom, chars, cur: me.id,
+    ...(ROTATE_CHOICES.includes(o.rotate) && o.rotate !== ROTATE_DEFAULT ? { rotate: o.rotate } : {}),
   };
 }
 // ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
 export const MAX_CHARS = 5, MAIN_ID = 'main';
+export const SOURCE_MAX = 40, SAMPLE_MAX = 10, SAMPLE_LEN = 80;
+/** 台詞の例を整える: 文字列(1 行に 1 つ)か 配列 → 空でない行を SAMPLE_MAX 個まで・1 つ SAMPLE_LEN 字まで・頭の記号と かぎかっこは外す・重複は 1 つ */
+export function cleanSamples(raw) {
+  const rows = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
+  const out = [];
+  for (const r of rows) {
+    if (typeof r !== 'string') continue;
+    const s = r.replace(/\s+/g, ' ').trim().replace(/^[・\-*●◯○\d.)、]+\s*/, '').replace(/^[「『"]+|[」』"]+$/g, '').trim().slice(0, SAMPLE_LEN);
+    if (s && !out.includes(s)) out.push(s);
+    if (out.length >= SAMPLE_MAX) break;
+  }
+  return out;
+}
 export const DEFAULT_TITLE = '見習い司書', DEFAULT_WORLD = '大図書館。あなたの作業時間が 書庫の灯りになる', TITLE_MAX = 20, WORLD_MAX = 120;
 /** 選んでいるキャラクターの 肩書きと世界: { title, world, custom(どちらかを自分で決めている) } */
 export function roleOf(b) {
   const c = b && Array.isArray(b.chars) ? b.chars.find((x) => x.id === b.cur) : null;
-  const title = (c && c.title) || DEFAULT_TITLE, world = (c && c.world) || '';
-  return { title, world, custom: title !== DEFAULT_TITLE || !!world };
+  const source = (c && c.source) || '', samples = (c && Array.isArray(c.samples) ? c.samples : []);
+  const title = (c && c.title) || (source ? '' : DEFAULT_TITLE), world = (c && c.world) || ''; // 作品のキャラクターは 肩書きを決めなければ 肩書きなし(見習い司書にしない)
+  return { title, world, source, samples, custom: title !== DEFAULT_TITLE || !!world || !!source || samples.length > 0 };
 }
-const customRole = (role) => !!(role && typeof role === 'object' && (role.world || (role.title && role.title !== DEFAULT_TITLE)));
+const customRole = (role) => !!(role && typeof role === 'object' && (role.world || role.source || (Array.isArray(role.samples) && role.samples.length) || (role.title && role.title !== DEFAULT_TITLE)));
+/** 頼む文に入れる キャラクターの行(作品の名前・肩書き・舞台)と、台詞の例の段 */
+const whoLine = (role, name) => `${role.source ? `作品「${role.source}」の ` : ''}${role.title ? `${role.title}` : ''}「${name}」`;
+const sampleBlock = (role) => (role && Array.isArray(role.samples) && role.samples.length ? ['', 'このキャラクターの台詞の例(口調の手本):', ...role.samples.map((s) => `・${s}`)] : []);
+const sampleRule = (role) => (role && Array.isArray(role.samples) && role.samples.length ? ['・上の「台詞の例」の 一人称・語尾・口ぐせ・言葉の選び方を そのまま活かす。例の文を写すのではなく、場面に合わせて 新しく書く。'] : []);
+const sourceRule = (role) => (role && role.source ? [`・作品「${role.source}」の世界観と、その中での このキャラクターの性格・立場・ほかの人物との関係を踏まえる。作品に出てくる物や場所の言葉を 自然に使ってよい。`] : []);
 /**
  * v0.73(実機 FB「世界観を変えても 図書館の扉などが残る」): 世界を変えたキャラクターには 大図書館の言葉を出さない。
  * - LIBRARY_RE: 内蔵の台詞から 大図書館の言葉が入った文を見分ける(say が 世界を変えたキャラクターでは その文を選ばない)
@@ -167,7 +195,7 @@ const customRole = (role) => !!(role && typeof role === 'object' && (role.world 
 export const LIBRARY_RE = /書庫|図書館|司書|灯り|棚|しおり|扉|頁|ページ|蔵書|書架|閲覧/;
 const LIBRARY_WORDS = Object.freeze(['図書館', '書庫', '司書', '本棚', 'しおり', '灯り', '絵の扉']);
 export function libraryWords(role) {
-  const own = `${(role && role.title) || ''} ${(role && role.world) || ''}`;
+  const own = `${(role && role.title) || ''} ${(role && role.world) || ''} ${(role && role.source) || ''} ${(role && Array.isArray(role.samples) ? role.samples.join(' ') : '')}`;
   return LIBRARY_WORDS.filter((w) => !own.includes(w));
 }
 export function offWorld(text, role) {
@@ -203,6 +231,11 @@ export function normalizeChars(raw, toneOk, fallback) {
     const world = typeof x.world === 'string' ? x.world.replace(/\s+/g, ' ').trim().slice(0, WORLD_MAX) : '';
     if (title && title !== DEFAULT_TITLE) c.title = title;
     if (world) c.world = world;
+    // v0.75(ユーザー要望「既存のキャラクターを登録するとき、そのアニメやゲームの世界観と 台詞の例を プロンプトに組み込みやすく」): 作品の名前と 台詞の例(決めたときだけ持つ)
+    const source = typeof x.source === 'string' ? x.source.replace(/\s+/g, ' ').trim().slice(0, SOURCE_MAX) : '';
+    const samples = cleanSamples(x.samples);
+    if (source) c.source = source;
+    if (samples.length) c.samples = samples;
     out.push(c);
     if (out.length >= MAX_CHARS) break;
   }
@@ -295,6 +328,12 @@ const LINES = Object.freeze({
   wz_tomorrow: { bright: ['あしたの最初の一歩を、ひとつだけ決めておこう。'], polite: ['明日の最初の一歩を、ひとつだけ決めておきましょう。'], cool: ['あしたの一歩を、ひとつ決めろ。'] },
   wz_done: { bright: ['綴じておいたよ。おつかれさま!'], polite: ['綴じておきました。お疲れさまでした。'], cool: ['綴じた。おつかれ。'] },
   bye: { bright: ['じゃあ、いってらっしゃい!', '灯りを持って、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
+  // v0.75(ユーザー要望「切り替えを早めて 台詞が足りなくなるなら、日常的な台詞の枠を」): 日常の ひとこと(場面を選ばない・差し込みなし)。ホームの ひとことの 持ち回りに入る
+  chat: {
+    bright: ['きょうは どんな日になるかな。', '水分、ちゃんと取ってる?', 'いい姿勢で いこうね。', 'なんだか きょうは いい予感がするよ。', '肩、こってない? ぐるっと回してみて。', '小さく始めるのが いちばん強いんだよ。', 'きょうの自分に、ひとつ ごほうびを決めておこう。', '窓の外、見た? ちょっと目を休めよう。', 'ゆっくりでも、進んでれば えらいよ。', '書庫の窓から、いい風が入ってきたよ。'],
+    polite: ['きょうも ご一緒できて うれしいです。', 'お飲み物は 足りていますか。', '少し 背すじを伸ばしてみましょう。', '急がなくて大丈夫です。ひとつずつ まいりましょう。', '目が疲れたら、遠くを少し ご覧ください。', '小さな一歩も、立派な一歩です。', 'ご無理のない範囲で、まいりましょう。', 'きょうは 落ち着いた よい日ですね。', '深呼吸を ひとつ、いかがですか。', '書庫は きょうも 静かで よい具合です。'],
+    cool: ['水は飲んだか。', '姿勢を直せ。楽になる。', '急ぐな。ひとつずつでいい。', '目を休めろ。遠くを見ろ。', '悪くない日だ。', '小さく始めろ。それで足りる。', '無理はするな。続けるほうが大事だ。', '深く息を吸え。', '肩の力を抜け。', '書庫は静かだ。集中にはいい。'],
+  },
   // v0.73・F25: ポモドーロを終えたときの ねぎらい(確認のシートの頭)。{n}=終えたセットの数・{min}=作業した分
   pomo_done: {
     bright: ['おつかれさま! {n}セット、やりきったね。', '{min}分、よく集中してたね。えらい!', 'タイマー終了! いい時間だったね。ひと息つこう。'],
@@ -380,6 +419,7 @@ export const TEACH = Object.freeze({
   switch: { label: '区切り', when: '相手の息抜きが {min} 分続いたとき、やさしく区切りを提案する', vars: ['min'], hint: '{min} は「息抜きが続いた分」。入れなくてもよい' },
   rest: { label: '休憩', when: '相手が休憩を記録しているときの、ねぎらい', vars: [] },
   night: { label: '夜', when: '夜遅く、きょうをねぎらって おやすみを言う', vars: [] },
+  chat: { label: '日常', when: '作業の合間に かける、日常の何気ない ひとこと(雑談・ひとりごと・相手を気づかう言葉)。時間帯や状況を選ばず いつでも言える内容', vars: [] }, // v0.75
 });
 export const TEACH_KEYS = Object.freeze(Object.keys(TEACH));
 export const MAX_LINES = 300, LINE_MIN = 6, LINE_MAX = 60;
@@ -399,6 +439,7 @@ export function teachPrompt(key, name, tone, n = 8, role = null) {
     `・1 つは ${LINE_MAX} 字まで。言い回しは 1 つずつ変える。`,
     '・あとで何度も使い回すので、きょうの日付・時刻・タスクの名前・具体的な数字などの「その場だけの事実」は入れない(5 分だけ、のような誘いの数字はよい)。',
     customRole(role) ? worldRule(role) : '・書庫の灯り、棚、しおり、絵の扉 など、大図書館の世界の言葉を ときどき使う。',
+    ...sourceRule(role), ...sampleRule(role),
     '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     t.hint ? `・差し込み: ${t.hint}。` : '・{ } の差し込みは使わない。',
   ].join('\n');
@@ -448,7 +489,10 @@ export function learned(lines, key, tone) { const id = toneId(tone); return (Arr
 
 // ---- 性格を足す(v0.67・F24-16・ユーザー要望「性格を自分で追加・その口調のフレーズも自動で」)----
 /** 台詞の束: AI に 1 回で頼む単位(3 回に分ける・1 回の返事を 20 行ほどに)。per = 1 つの場面に頼む数 */
-export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 } });
+export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 }, daily: { label: '日常', per: 15 } }); // daily(v0.75): 日常の ひとことを まとめて 15 個
+/** 場面ごとの 台詞の上限(無ければ CUSTOM_PER)。日常の ひとことは 数が欲しいので多め */
+export const SCENE_CAP = Object.freeze({ chat: 30 });
+export const capOf = (k) => SCENE_CAP[k] || CUSTOM_PER;
 export const GROUP_KEYS = Object.freeze(Object.keys(GROUPS));
 const V_ART = Object.freeze({ n: '残りのピースの数', label: '開く情報の名前(作者・題名 など)', kind: '「絵」か「写真」' });
 const V_WEEK = Object.freeze({ avg: 'この7日の1日あたりの作業時間(例: 3時間20分)', diff: '前の7日との差の時間(例: 40分)' });
@@ -464,6 +508,7 @@ export const SCENES = Object.freeze({
   idle: { g: 'home', when: 'しばらく何も記録していない相手を、やさしく「5分だけ始めてみないか」と軽く誘う' },
   due: { g: 'home', when: 'きょうが期限のタスクが残っていると、やさしく知らせる', v: { n: '件数' }, need: ['n'] },
   night: { g: 'home', when: '夜遅く、きょうをねぎらって おやすみを言う' },
+  chat: { g: 'daily', when: '作業の合間に かける、日常の何気ない ひとこと(雑談・ひとりごと・相手の体や気分を気づかう言葉・キャラクターらしい つぶやき)。時間帯や状況を選ばず いつでも言える内容にする' },
   pomo_done: { g: 'home', when: 'タイマーで決めた作業を終えた相手を、ねぎらう', v: { n: '終えたセットの数(「{n}セット」のように使う)', min: '作業した分(「{min}分」のように使う)' } },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
@@ -517,7 +562,7 @@ const cleanSet = (raw) => {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}, out = {};
   for (const k of SCENE_KEYS) {
     const list = [];
-    for (const x of Array.isArray(o[k]) ? o[k] : []) { const s = cleanPersonaLine(x, k); if (s && !list.includes(s) && list.length < CUSTOM_PER) list.push(s); }
+    for (const x of Array.isArray(o[k]) ? o[k] : []) { const s = cleanPersonaLine(x, k); if (s && !list.includes(s) && list.length < capOf(k)) list.push(s); }
     if (list.length) out[k] = list;
   }
   return out;
@@ -548,7 +593,7 @@ export function personaPrompt(group, name, voice, role = null) {
   return [
     writerHead(name, voice, role),
     '',
-    `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} つずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
+    `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} 個ずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
     '',
     '書き方:',
     '・1 行に 1 つ。「場面の名前: 台詞」の形で書く(例: hello: やあ、待ってたよ。)。場面の名前は 下の英字をそのまま使う。',
@@ -558,6 +603,7 @@ export function personaPrompt(group, name, voice, role = null) {
     '・あとで何度も使い回すので、日付・時刻・タスクの名前などの「その場だけの事実」は入れない。',
     '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     customRole(role) ? worldRule(role) : '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
+    ...sourceRule(role), ...sampleRule(role),
     '',
     '場面:',
     ...keys.map((k) => {
@@ -573,7 +619,7 @@ export function parsePersona(text, group = null) {
     const m = /^[\s\-*・●>`#\d.)、]*([a-z][a-z_]*)`?\s*[:：=|｜]\s*(.+)$/.exec(row);
     if (!m || !SCENES[m[1]] || (group && SCENES[m[1]].g !== group)) continue;
     const s = cleanPersonaLine(m[2], m[1]), list = out[m[1]] || [];
-    if (s && !list.includes(s) && list.length < CUSTOM_PER) { list.push(s); out[m[1]] = list; }
+    if (s && !list.includes(s) && list.length < capOf(m[1])) { list.push(s); out[m[1]] = list; }
   }
   return out;
 }
@@ -649,6 +695,7 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });
   add('hello', 'base');
+  add('chat', 'base'); // v0.75: 日常の ひとこと(数が多いので、持ち回りのたびに 違う文になる)
   return out;
 }
 
@@ -699,15 +746,16 @@ export function writerHead(name, tone, role = null) {
   const how = tone && typeof tone === 'object' && !tone.builtin ? `「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}` : TONE_HINT[baseOf(tone)];
   return [
     '時間管理アプリの画面に出す、案内役のキャラクターの短い台詞を書く仕事です。',
-    customRole(role) ? `キャラクター: ${role.title || DEFAULT_TITLE}「${b.name}」。${role.world ? `舞台: ${role.world}` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
+    customRole(role) ? `キャラクター: ${whoLine(role, b.name)}。${role.world ? `舞台: ${role.world}` : ''}` // v0.69: 肩書きと世界を決めたキャラクター(v0.75: 作品の名前も)
       : `キャラクター: 大図書館の見習い司書「${b.name}」。利用者の作業時間が 書庫の灯りになる、という設定です。`,
     `話し方: ${how}`,
+    ...sampleBlock(role),
   ].join('\n');
 }
 /** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
 export function persona(name, tone, role = null) {
   const b = normalizeBuddy({ name });
-  const head = customRole(role) ? `あなたは${role.title || DEFAULT_TITLE}「${b.name}」です。${role.world ? `舞台は「${role.world}」です。` : ''}図書館や書庫の話は この舞台には出てきません。` // v0.69: 肩書きと世界を決めたキャラクター
+  const head = customRole(role) ? `あなたは${whoLine(role, b.name)}です。${role.world ? `舞台は「${role.world}」です。` : ''}図書館や書庫の話は この舞台には出てきません。${role.samples && role.samples.length ? `口調の手本は 次の台詞です: ${role.samples.slice(0, 5).map((s) => `「${s}」`).join('')}。` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
     : `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。`;
   if (tone && typeof tone === 'object' && !tone.builtin) return `${head}あなたの性格と口調は「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}です。この性格と口調で答えてください。`; // v0.67: 足した性格
   return `${head}${TONE_HINT[baseOf(tone)]}で答えてください。`;

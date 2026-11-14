@@ -126,10 +126,14 @@ export function buddyHead(ctx) {
   if (!buddyOn()) return null;
   const b = B();
   const text = el('span.bd-text'), av = el('span.bd-avwrap'), nameEl = el('span.bd-name', b.name);
-  let mood = null, turn = 0;
+  let mood = null, turn = 0, firstKey = null; // turn: 何番目の話題か(タップと、決めた間隔ごとに 進む・v0.75)
   const paint = () => {
     const b = B();
-    const list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
+    let list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
+    if (list[0].key !== firstKey) { // いちばん言いたいことが替わった(記録を始めた・続きが届いた など)→ それを先に言う
+      if (firstKey != null) { turn = 0; list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed(), b.lines); }
+      firstKey = list[0].key;
+    }
     const l = list[turn % list.length];
     if (nameEl.textContent !== b.name) nameEl.textContent = b.name;
     if (text.textContent !== l.text) text.textContent = l.text;
@@ -142,7 +146,8 @@ export function buddyHead(ctx) {
   ]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
-  const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } paint(); }, 30000);
+  // v0.75(ユーザー要望「台詞が切り替わるタイミングを もう少し早く・自分で決められるように」): 設定の間隔(既定 30 秒)ごとに 次の話題へ。画面を見ていない間は進めない
+  const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } if (document.visibilityState !== 'visible' || document.querySelector('.overlay')) return; turn++; paint(); }, buddy.rotateOf(b) * 1000);
   return node;
 }
 /** ホームの下の 3 つ(日報 / ふり返る / 話す)。止めていれば null */
@@ -481,7 +486,7 @@ function customBox(b, c, save, rerender) {
   return el('div.bd-custom', [
     el('p.bd-h', `「${c.label}」の台詞`),
     c.hint ? el('p.muted.small', c.hint) : null,
-    el('p.muted.small', todo.length ? `①束のボタンを押すと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : 'どの場面にも台詞があります。頼み直すと、その束の場面は 新しい台詞に置き換わります。'),
+    el('p.muted.small', todo.length ? `①束のボタンを押すと、台詞を頼む文がコピーされます。②好きな AI に貼って送ります。③返事をコピーして戻り「返事を貼り付けて覚える」を押します。「日常」は 何気ない ひとことを 15 個ずつ(頼み直すと 入れ替わります)。まだ無い場面は「${buddy.TONE_LABEL[c.base]}」で話します。` : 'どの場面にも台詞があります。頼み直すと、その束の場面は 新しい台詞に置き換わります。'),
     el('div.chips.small', buddy.GROUP_KEYS.map((g) => el('button', { type: 'button', class: `chip sm2${cov[g].have >= cov[g].total ? ' on' : ''}`, onclick: () => ask(g) }, `${buddy.GROUPS[g].label}(${cov[g].have} / ${cov[g].total})`))),
     el('div.row', [el('button', { type: 'button', class: `btn sm${pending ? ' primary' : ''}`, onclick: learn }, '返事を貼り付けて覚える'), pending ? el('span.muted.small', `「${buddy.GROUPS[pending.group].label}」の文をコピー済み`) : null]),
     all.length ? el('details.bd-lines', [el('summary', `台詞の一覧を開く(${all.length})`), ...all.map((x) => el('div.bd-prow', [el('div.bd-pmain', [el('span.bd-pwhen', buddy.SCENES[x.k].when), el('span.bd-linetext', sample(x.s))]), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save(buddy.patchCustom(b, c.id, { set: { [x.k]: c.set[x.k].filter((_, j) => j !== x.i) } })) }, '×')]))]) : null,
@@ -516,15 +521,22 @@ function charSheet(b, save) {
     const name = el('input.text', { type: 'text', maxlength: 12, placeholder: '例: ノア', autocomplete: 'off', 'aria-label': 'キャラクターの名前' });
     const ok = () => {
       if (!name.value.trim()) { toast('名前を入れてください'); return; }
-      const next = buddy.addChar(b, `k${Date.now().toString(36)}`, name.value);
+      const id = `k${Date.now().toString(36)}`;
+      const next = buddy.addChar(b, id, name.value);
       if (!next) { toast(`キャラクターは ${buddy.MAX_CHARS} 人までです`); return; }
-      close(); save(next);
+      close(); save(source.value.trim() || samples.value.trim() ? buddy.patchChar(next, id, { source: source.value, samples: samples.value }) : next);
     };
     name.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+    const source = el('input.text', { type: 'text', maxlength: buddy.SOURCE_MAX, placeholder: '例: 作品の名前(アニメ・ゲーム・小説)', autocomplete: 'off', 'aria-label': '作品の名前' });
+    const samples = el('textarea.text.bd-ta', { rows: 4, placeholder: 'そのキャラクターの台詞を 1 行に 1 つ(口調の手本になります)', 'aria-label': '台詞の例' });
     return [
       el('h2', 'キャラクターを足す'),
       el('p.muted.small', '名前を決めると、そのキャラクターに替わります。口調と性格・絵は、このあと 設定の画面で決められます。'),
       el('div.row.field', [el('span.label', '名前'), name]),
+      el('p.bd-h', '作品のキャラクターなら(任意)'),
+      el('p.muted.small', '作品の名前と 台詞の例を入れておくと、台詞を頼む文に その世界観と 口調の手本として入ります。あとから 設定でも直せます。'),
+      el('div.row.field', [el('span.label', '作品'), source]),
+      samples,
       el('div.row', [el('button.btn', { type: 'button', onclick: close }, 'やめる'), el('button.btn.primary.grow', { type: 'button', onclick: ok }, '足す')]),
     ];
   });
@@ -620,12 +632,16 @@ export function sectionBuddy(rerender) {
   };
   const me = b.chars.find((c) => c.id === b.cur) || {};
   const title = el('input.text', { type: 'text', value: me.title || '', maxlength: buddy.TITLE_MAX, placeholder: buddy.DEFAULT_TITLE, autocomplete: 'off', 'aria-label': '肩書き', onchange: () => save(buddy.patchChar(b, b.cur, { title: title.value })) });
+  const source = el('input.text', { type: 'text', value: me.source || '', maxlength: buddy.SOURCE_MAX, placeholder: '例: 作品の名前(アニメ・ゲーム・小説)', autocomplete: 'off', 'aria-label': '作品の名前', onchange: () => save(buddy.patchChar(b, b.cur, { source: source.value })) });
+  const samples = el('textarea.text.bd-ta', { rows: 4, placeholder: 'そのキャラクターの台詞を 1 行に 1 つ', 'aria-label': '台詞の例', onchange: () => save(buddy.patchChar(b, b.cur, { samples: samples.value })) }, (me.samples || []).join('\n'));
   const world = el('textarea.text.bd-ta', { rows: 2, maxlength: buddy.WORLD_MAX, placeholder: '例: 星を渡る貨物船。作業時間が 船の燃料になる', 'aria-label': '世界', onchange: () => save(buddy.patchChar(b, b.cur, { world: world.value })) }, me.world || '');
   return el('section.card', [
     el('h2', 'アシスタント'),
     el('p.muted.small', 'ホームに常駐して ひとこと話し、日報を届ける案内役です。決まった台詞から 状況に合うものを選ぶだけで、記録を外へ送ることはありません(「話す」だけは iPhone のショートカットへ文を渡します)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled, onchange: (e) => save({ ...b, enabled: e.target.checked }) }), el('span', 'アシスタントを出す')]),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.idle, onchange: (e) => save({ ...b, idle: e.target.checked }) }), el('span', 'ホームで声をかける(45 分 何も記録していない・ダラダラが 20 分)')]),
+    el('div.field', [el('span.label', 'ホームの ひとことが替わる間隔'), el('div.chips.small', { role: 'group', 'aria-label': 'ひとことが替わる間隔' }, buddy.ROTATE_CHOICES.map((sec) => el('button.chip.sm2', { type: 'button', class: `chip sm2${sec === buddy.rotateOf(b) ? ' on' : ''}`, 'aria-pressed': sec === buddy.rotateOf(b) ? 'true' : 'false', onclick: () => save({ ...b, rotate: sec }) }, buddy.rotateLabel(sec))))]),
+    el('p.muted.small', '吹き出しは この間隔で 次の話題に進みます(タップでも進みます)。台詞が少なく感じたら、下の「日常」の束と 手帳の「台詞を増やす › 日常」で増やせます。'),
     el('h3.help-h', `キャラクター(${b.chars.length} / ${buddy.MAX_CHARS})`),
     el('p.muted.small', 'チップで替えます(アシスタントのシートの上からも)。下の枠は 選んでいるキャラクターの設定です。'),
     charChips(b, (id) => save(buddy.selectChar(b, id)), b.chars.length < buddy.MAX_CHARS ? () => charSheet(b, save) : null),
@@ -633,8 +649,11 @@ export function sectionBuddy(rerender) {
     el('p.bd-h', `「${b.name}」の設定`),
     el('div.row.field', [el('span.label', '名前'), name]),
     el('div.row.field', [el('span.label', '肩書き'), title]),
+    el('div.row.field', [el('span.label', '作品'), source]),
     el('p.bd-h', '世界(どんな所の、どんな役か)'), world,
-    el('p.muted.small', buddy.roleOf(b).custom ? '肩書きと世界は、会話と 台詞を頼む文に入ります。世界を決めたキャラクターは、内蔵の台詞のうち 大図書館の言葉(書庫・灯り・扉 など)が入ったものを 話しません。その世界の言葉で話させるには「\uff0b 性格を足す」で 台詞を作ります。' : '空のままなら 大図書館の見習い司書です。変えると、会話と 台詞を頼む文に その肩書きと世界が入ります。'),
+    el('p.bd-h', `台詞の例(${(me.samples || []).length} / ${buddy.SAMPLE_MAX}・1 行に 1 つ)`), samples,
+    el('p.muted.small', '既にあるキャラクターを登録するときは、「作品」に その名前、「台詞の例」に そのキャラクターらしい台詞を 数個 入れてください。台詞を頼む文に、作品の世界観を踏まえることと、例の 一人称・語尾・口ぐせを活かすことが入ります(例の文そのものは 画面には出しません)。'),
+    el('p.muted.small', buddy.roleOf(b).custom ? '肩書きと世界は、会話と 台詞を頼む文に入ります。世界を決めたキャラクターは、内蔵の台詞のうち 大図書館の言葉(書庫・灯り・扉 など)が入ったものを 話しません。その世界の言葉で話させるには「\uff0b 性格を足す」で 台詞を作ります。' : '肩書き・作品・世界・台詞の例が どれも空なら 大図書館の見習い司書です。決めると、会話と 台詞を頼む文に入ります。'),
     (() => { const n = buddy.lineCount(b, b.tone); return buddy.roleOf(b).custom && (n.made || n.learned) ? el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => renew(b, b.tone, save) }, '台詞を一新する'), el('span.muted.small', `世界を変える前の台詞が残っていたら、ここで消して 頼み直せます(いま ${n.made + n.learned} 個)`)]) : null; })(),
     el('h3.help-h', '口調と性格'),
     el('div.chips.small', [
