@@ -59,7 +59,7 @@ export function summarize(diary, from, to) {
  * 月のカレンダー(v0.20・F9-6): 月曜始まりの週で 'YYYY-MM' の日を並べる。各セル { key, inMonth, mood|null, written, future }。
  * today より後は future(書けない)。戻り値 { weeks: [[cell×7]…], days: 書いた日数, moodDays: 気分のある日数 }
  */
-/** 「あのころのきょう」(v0.24・Day One の On This Day に倣う): 1週間前・1か月前・1年前に書いた日記。純関数。戻り値 [{ label, key, d }] */
+/** 「あのころの今日」(v0.24・Day One の On This Day に倣う): 1週間前・1か月前・1年前に書いた日記。純関数。戻り値 [{ label, key, d }] */
 export function memories(diary, date) {
   const out = [];
   for (const [days, label] of [[7, '1週間前'], [30, '1か月前'], [365, '1年前']]) { const k = addDays(date, -days); const d = diary?.[k]; if (isWritten(d)) out.push({ label, key: k, d }); }
@@ -100,7 +100,7 @@ export function excerpt(d, max = 60) {
 }
 
 /**
- * きょうの材料(Apple ジャーナル風・ルールベース): タップすると欄に入る短い文。
+ * 今日の材料(Apple ジャーナル風・ルールベース): タップすると欄に入る短い文。
  * agg = report.aggregate の結果、fb = report.dayFeedback の結果、gs = plan.goals の行、prev = 前日の日記。
  * 戻り値 [{ field:'good'|'hard'|'tomorrow', text, src }](最大8件・同じ文は1回)
  */
@@ -121,7 +121,7 @@ export function seeds({ agg = null, fb = null, gs = [], prev = null, categories 
     const doneNames = gs.filter((g) => g.done).map((g) => g.name);
     for (const t of (fb.good || []).filter((t) => !/^作業は合計/.test(t) && !doneNames.some((n) => t.startsWith(n))).slice(0, 2)) push('good', t, 'fb'); // 作業の合計・済ませたものは上で言っている
     if (fb.better) push('hard', fb.better, 'fb');
-    if (fb.next && !fb.next.startsWith('きょうはあと')) push('tomorrow', fb.next.replace(/^明日は\s*/, ''), 'fb');
+    if (fb.next && !/^(今日|きょう)はあと/.test(fb.next)) push('tomorrow', fb.next.replace(/^明日は\s*/, ''), 'fb');
   }
   for (const g of gs) if (!g.done && g.kind === 'deadline' && g.targetMin) push('tomorrow', `${g.name}を${fmtMinJa(g.targetMin)}`, 'task');
   for (const g of gs) if (!g.done && g.kind === 'todo') push('tomorrow', `${g.name}を済ませる`, 'task');

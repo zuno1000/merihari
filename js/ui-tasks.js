@@ -1,7 +1,7 @@
 // merihari ─ ui-tasks.js: 「タスク」画面(仕様書 §4.2・F5-1)。かんたん追加(名前1行+種類/いつまで/どれくらい/カテゴリのチップ)と一覧。
 // v0.15: 理想スケジュールは無いので、タスクは「目安」(期限から逆算した今日の量・毎日 ◯分・毎週 ◯時間・やりたいこと)を持つだけ。
 // v0.22: 既定は「メモ」(名前だけで Enter・分類はあとで。F5-11)。習慣・やりたいことは ▶ で「区切り」つきに始め、続いた日数を出す(F5-12)。
-// v0.26: 画面は 期限切れ / きょう だけ。メモ / 期限までに / 習慣 / やりたいこと / 完了 は「リスト」のタイルから 1 画面はさんで開く(F5-13)。▶ は FEATURES.TASK_START(features.js)で非表示。
+// v0.26: 画面は 期限切れ / 今日 だけ。メモ / 期限までに / 習慣 / やりたいこと / 完了 は「リスト」のタイルから 1 画面はさんで開く(F5-13)。▶ は FEATURES.TASK_START(features.js)で非表示。
 // v0.44(F5-2 廃止・FEATURES.TASK_ESTIMATE=false): タスクは「どれくらい」を持たず、期限(日付+時刻・いつまで のどれでも時刻を付けられる)だけ。画面は 期限切れ / 今日が期限 / 1週間以内が期限(v0.47.2・ユーザー要望。v0.44〜v0.47.1 は「今週」=日曜まで)→ リスト。
 // v0.47(ユーザー要望): かんたん追加の種類の並びは タスク / 習慣 / やりたいこと / メモ で、既定は「タスク」(メモは最後・区分の画面はその種類のまま)。見出しは「今日が期限」。
 //   1週間以内が期限のうち 明日が期限 の行は薄い色で目立たせ(.trow.due-tmr)、今日が期限 の行はそれより強く(.trow.due-today)。今日 > 明日 > それ以外 の順に目立つ。
@@ -195,7 +195,7 @@ export function toggleDone(t, rerender) {
 /** 区分(v0.26・F5-13): タスク画面の「リスト」のタイル。タップで 1 画面はさんで開く(‹ で戻る)。preset は先頭の追加欄の種類 */
 export const LISTS = Object.freeze([
   { key: 'memo', title: 'メモ', preset: 'memo', empty: '上の欄に書くと、ここに新しい順で並びます。' },
-  { key: 'duties', title: '期限までに', preset: 'task', empty: FEATURES.TASK_ESTIMATE ? '期限のあるタスクで、きょうやる分がまだ無いものがここに並びます。' : '期限が 1 週間より先のタスクと、期限の無いタスクがここに並びます。' },
+  { key: 'duties', title: '期限までに', preset: 'task', empty: FEATURES.TASK_ESTIMATE ? '期限のあるタスクで、今日やる分がまだ無いものがここに並びます。' : '期限が 1 週間より先のタスクと、期限の無いタスクがここに並びます。' },
   { key: 'habits', title: '習慣', preset: 'habit', empty: '毎日・毎週の習慣がここに並びます。' },
   { key: 'wishes', title: 'やりたいこと', preset: 'wish', empty: '時間ができたらやりたいことがここに並びます。' },
   { key: 'done', title: '完了', preset: null, empty: '完了したタスクはまだありません。' },
@@ -213,7 +213,7 @@ export function renderTasks(view, ctx, listKey = null) {
   const goalOf = Object.fromEntries(gs.map((g) => [g.taskId, g]));
   const overdue = plan.overdueTasks(T(), today, E());
   const overdueIds = new Set(overdue.map((t) => t.id));
-  // v0.44(目安の廃止): きょうが期限 / 1週間以内が期限(きょうを除く・きょうから 7 日後まで)。目安を使うなら従来どおり goals の deadline / todo
+  // v0.44(目安の廃止): 今日が期限 / 1週間以内が期限(今日を除く・今日から 7 日後まで)。目安を使うなら従来どおり goals の deadline / todo
   // v0.47.2(ユーザー要望): 「今週が期限」(日曜まで)だと週末に近いほど一覧が短くなり、来週の頭の期限が見えなかった → 常に 7 日先まで。「いつまで」の 今週(日曜)は変えない
   const isDuty = (t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && !overdueIds.has(t.id);
   const weekEnd = addDays(today, 7); // v0.47.2: 1 週間後まで(「いつまで」の 今週 とは別)
@@ -240,7 +240,7 @@ export function renderTasks(view, ctx, listKey = null) {
     const meta = [];
     const recurTag = t.recur === 'weekly' && t.deadline ? `毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜` : null;
     if (t.kind === 'memo') meta.push(t.note ? t.note : 'メモ・タップして種類を決める');
-    else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日${fmtMinJa(t.repeat.min)}`, `きょう${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
+    else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日${fmtMinJa(t.repeat.min)}`, `今日${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
     else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週${t.repeat.hours}h`, `今週${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
     else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)}日ぶり)` : ''}` : 'まだ手つかず', `この7日${fmtH(g?.doneMin || 0)}`, FEATURES.TASK_START ? '▶ で15分だけ' : null);
     else {
@@ -250,15 +250,15 @@ export function renderTasks(view, ctx, listKey = null) {
       else if (t.noTime) meta.push('用事');
       else {
         meta.push(`残り${fmtH(plan.remainingMin(t, E()))}`); // 記録した分を自動で引いた残り(v0.12)
-        if (g && g.kind === 'deadline') meta.push(`きょう${fmtH(g.targetMin)}${g.doneMin ? `(済${fmtH(g.doneMin)})` : ''}`);
+        if (g && g.kind === 'deadline') meta.push(`今日${fmtH(g.targetMin)}${g.doneMin ? `(済${fmtH(g.doneMin)})` : ''}`);
       }
     }
     const over = !t.doneAt && !t.repeat && t.deadline && t.deadline.slice(0, 10) < today;
     const recording = open && open.taskId === t.id;
-    // 習慣(毎日/毎週)のチェックは「きょう(今週)は済んだ」の印(v0.16・F5-8): 明日にはまた出る。完了にはしない(やめるときは編集から削除)
+    // 習慣(毎日/毎週)のチェックは「今日(今週)は済んだ」の印(v0.16・F5-8): 明日にはまた出る。完了にはしない(やめるときは編集から削除)
     const habit = !!t.repeat && !t.doneAt;
     const checked = habit ? plan.isChecked(t, today) : !!t.doneAt;
-    const span = t.repeat?.type === 'weekly' ? '今週' : 'きょう';
+    const span = t.repeat?.type === 'weekly' ? '今週' : '今日';
     const onCheck = habit
       ? () => { t.checks = plan.toggleCheck(t, today); saveTask(t); toast(plan.isChecked(t, today) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); }
       : () => toggleDone(t, rerender);
@@ -288,12 +288,12 @@ export function renderTasks(view, ctx, listKey = null) {
     return;
   }
 
-  // 画面は きょうの分(期限切れ・きょうやる分)だけ。ほかは「リスト」のタイル(件数つき)
+  // 画面は 今日の分(期限切れ・今日やる分)だけ。ほかは「リスト」のタイル(件数つき)
   const habitsDone = repeats.filter((t) => goalOf[t.id]?.done).length;
   const nextDuty = duties.find((t) => t.deadline);
   const tile = (l) => {
     const n = l.key === 'shopping' ? shoppingOpen() : groups[l.key].length; // v0.52: 買い物は まだ買っていないものの数
-    const sub = l.key === 'habits' && n ? `きょう${habitsDone}/${n}済` : l.key === 'duties' && nextDuty ? `次の期限${fmtMD(nextDuty.deadline.slice(0, 10))}` : null;
+    const sub = l.key === 'habits' && n ? `今日${habitsDone}/${n}済` : l.key === 'duties' && nextDuty ? `次の期限${fmtMD(nextDuty.deadline.slice(0, 10))}` : null;
     return el('button.ltile', { type: 'button', 'aria-label': `${l.title}(${n}件)を開く`, onclick: () => ctx.go('tasks', l.key) }, [
       el('span.lt-main', [el('span.lt-name', l.title), sub ? el('span.lt-sub', sub) : null]), el('b.lt-n', String(n)), el('span.chev', '›'),
     ]);
@@ -302,7 +302,7 @@ export function renderTasks(view, ctx, listKey = null) {
     el('h1', 'タスク'),
     quickAdd(today, rerender),
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
-    FEATURES.TASK_ESTIMATE ? section('きょう', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、きょうやる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
+    FEATURES.TASK_ESTIMATE ? section('今日', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、今日やる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
       : section('今日が期限', todayList, tasks.some((t) => !t.doneAt) ? '今日が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
     FEATURES.TASK_ESTIMATE ? null : section('1週間以内が期限', weekList, `1週間以内(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
     el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),

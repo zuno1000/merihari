@@ -72,9 +72,9 @@ export function chunkOf(settings) { const v = +(settings?.goals?.chunkMin); retu
 /**
  * 今日の目安(v0.15・§6.4改): 期限つきの義務タスクごとに 残り ÷ 期限までの日数(今日を含む)= 均等割(rawMin)。5分丸め・15分未満は0(期限当日は残り全部)。
  * 残りは前日までの記録を引いたもの(今日の記録は doneMin 側で見る)。期限のない・繰り返しのタスクは含めない。期限順。
- * v0.31.3(F5-2 改・実機 FB「15 分 × 4 のように細かく分かれる」): 均等割の合計(きょうの量)は変えず、塊(CHUNK_MIN=30 分)にまとめる。
- * 期限順(同じなら均等割の大きい順)に、1 つずつ max(均等割, 30 分)(残り以下)を割り当て、合計がきょうの量に届いたら残りのタスクは別の日へ(todayMin 0・deferred)。
- * 期限当日(残り全部)と、きょうすでに記録したタスクは必ず入れる。opts.chunk で塊の大きさを変えられる(0 なら均等割のまま・v0.31.4: 設定 › 1日の目標 の chunkMin を chunkOf(settings) で渡す)。
+ * v0.31.3(F5-2 改・実機 FB「15 分 × 4 のように細かく分かれる」): 均等割の合計(今日の量)は変えず、塊(CHUNK_MIN=30 分)にまとめる。
+ * 期限順(同じなら均等割の大きい順)に、1 つずつ max(均等割, 30 分)(残り以下)を割り当て、合計が今日の量に届いたら残りのタスクは別の日へ(todayMin 0・deferred)。
+ * 期限当日(残り全部)と、今日すでに記録したタスクは必ず入れる。opts.chunk で塊の大きさを変えられる(0 なら均等割のまま・v0.31.4: 設定 › 1日の目標 の chunkMin を chunkOf(settings) で渡す)。
  * 戻り値 [{ taskId, todayMin, rawMin, deferred, remainingMin, deadline, daysLeft }]
  */
 export function todayShare(tasks, date, entries = {}, opts = {}) {
@@ -161,7 +161,7 @@ export function lastLoggedDate(entries, taskId) {
 }
 
 /**
- * 「きょうの目安」(v0.15): ホームとタスク画面に出す行。種類ごとに 目安(targetMin)と済み(doneMin)。
+ * 「今日の目安」(v0.15): ホームとタスク画面に出す行。種類ごとに 目安(targetMin)と済み(doneMin)。
  * - deadline: 今日の目安(todayShare)と今日の記録。目安0の期限つきは出さない
  * - daily: 毎日 ◯分と今日の記録
  * - weekly: 毎週 ◯時間と今週(weekRange)の記録
@@ -257,8 +257,8 @@ export function habitMetOn(t, entries, d) {
 }
 /**
  * 習慣のまとめ(v0.49・F5-15・ユーザー要望「習慣をよりサポート(何日連続などの表示)」): 1 つの習慣について
- * streak=続いている日数(habitStreak)・best=これまでの最長(きょうから 400 日 / 週さかのぼった中)・today=きょう(今週)は届いたか・
- * week=今週(月曜〜きょう)の 届いた日数 / 日数(毎日型だけ・毎週型は null)・broke=昨日で途切れた(一昨日まで 2 日以上続いていて昨日が未達。毎週型は先週)・weekly=毎週型か。
+ * streak=続いている日数(habitStreak)・best=これまでの最長(今日から 400 日 / 週さかのぼった中)・today=今日(今週)は届いたか・
+ * week=今週(月曜〜今日)の 届いた日数 / 日数(毎日型だけ・毎週型は null)・broke=昨日で途切れた(一昨日まで 2 日以上続いていて昨日が未達。毎週型は先週)・weekly=毎週型か。
  * 習慣でなければ null。純関数
  */
 export function habitStats(t, entries, date) {
@@ -284,17 +284,17 @@ export function habitStats(t, entries, date) {
   return { streak, best, today, week, broke, weekly };
 }
 /**
- * 続けやすい声かけ(v0.49・F5-15): ホームの「きょうの習慣」の上に 1 行だけ。責めない語だけ。毎日型だけを見る(毎週型は週の途中で急かさない)。
- * 優先: ①昨日で途切れた → 「◯ は昨日ひと休み。きょうからまた 1 日目です。」(きょう済んでいれば「きょうからまた 1 日目です。」)
- *       ②ぜんぶ済み → 「きょうの習慣はぜんぶ済みです。」(2 日以上続くものがあれば「(◯ は ◯ 日目)」)
+ * 続けやすい声かけ(v0.49・F5-15): ホームの「今日の習慣」の上に 1 行だけ。責めない語だけ。毎日型だけを見る(毎週型は週の途中で急かさない)。
+ * 優先: ①昨日で途切れた → 「◯ は昨日ひと休み。今日からまた 1 日目です。」(今日済んでいれば「今日からまた 1 日目です。」)
+ *       ②ぜんぶ済み → 「今日の習慣はぜんぶ済みです。」(2 日以上続くものがあれば「(◯ は ◯ 日目)」)
  *       ③夜(19 時以降か、作業時間帯の終わりの 2 時間前から)で まだの習慣がある → 続いていれば「◯ はまだです。◯日続いています。少しだけでも。」、無ければ「◯ はまだです。5 分だけでも。」(いちばん長く続いているもの 1 つ)
  * それ以外(昼のうち・まだがある)は null(急かさない)。list=[{ task, stats }]。純関数
  */
 export function habitNudge(list, nowMin, windowEnd = null) {
   const x = habitNudgeInfo(list, nowMin, windowEnd);
   if (!x) return null;
-  if (x.kind === 'back') return x.today ? `${x.name} はきょうからまた 1 日目です。` : `${x.name} は昨日ひと休み。きょうからまた 1 日目です。`;
-  if (x.kind === 'done') return `きょうの習慣はぜんぶ済みです${x.streak >= 2 ? `(${x.name} は ${x.streak} 日目)` : ''}。`;
+  if (x.kind === 'back') return x.today ? `${x.name} は今日からまた 1 日目です。` : `${x.name} は昨日ひと休み。今日からまた 1 日目です。`;
+  if (x.kind === 'done') return `今日の習慣はぜんぶ済みです${x.streak >= 2 ? `(${x.name} は ${x.streak} 日目)` : ''}。`;
   return x.streak >= 2 ? `${x.name} はまだです。${x.streak}日続いています。少しだけでも。` : `${x.name} はまだです。5 分だけでも。`;
 }
 /**
@@ -393,7 +393,7 @@ export function rollWeekly(tasks, entries, today, ctx) {
 }
 
 /**
- * きょうまでに済ませるタスク(v0.55・F5-16 / F21・ユーザー要望「今日が期限のタスクのやり残しを無くしたい」): 済んでいない期限つきのタスク(習慣・やりたいこと・メモは除く)を
+ * 今日までに済ませるタスク(v0.55・F5-16 / F21・ユーザー要望「今日が期限のタスクのやり残しを無くしたい」): 済んでいない期限つきのタスク(習慣・やりたいこと・メモは除く)を
  * overdue(期限切れ・overdueTasks と同じ)/ today(今日が期限)/ tomorrow(明日が期限)に分ける。count = overdue + today(タスクのタブの数字・アイコンの数字)。
  * 並び: 時刻つきを時刻順に先・時刻なしは名前順(期限切れは期限の古い順)。純関数
  */

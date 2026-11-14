@@ -1,5 +1,5 @@
 // merihari ─ brief.js: ブリーフィング(v0.55・F21)。すべて純関数。
-// ユーザー要望「定例ブリーフィングのように、これまでを振り返りつつ次に何をやるかを提案してほしい。朝 初めて開いたとき=昨日+きょうのタスク /
+// ユーザー要望「定例ブリーフィングのように、これまでを振り返りつつ次に何をやるかを提案してほしい。朝 初めて開いたとき=昨日+今日のタスク /
 // 昼 12 時以降に初めて開いたとき=午前+残りのタスク / 19 時以降に初めて開いたとき=午後+残りの時間でやること。
 // 目的は ①午前にゲームやダラダラが続いた日でも切り替えるきっかけ ②タスクの解消し忘れを無くす」。
 // ルールベース(§2-7)・責めない(事実+小さな一歩)。画面は ui-brief.js。
@@ -28,13 +28,13 @@ export function slotOf(min, bedMin = null) { return bedMin != null && min >= bed
 
 /**
  * ふり返りの範囲(v0.76・ユーザー要望「午後の分だけでなく 1 日全体を・全体 / 午前 / 午後 / 夜 を簡単に切り替えたい」)。
- * day = きょうの ここまで・am = 〜12:00・pm = 12:00〜19:00・night = 19:00〜・yday = 昨日
+ * day = 今日の ここまで・am = 〜12:00・pm = 12:00〜19:00・night = 19:00〜・yday = 昨日
  */
 export const VIEWS = Object.freeze(['day', 'am', 'pm', 'night', 'yday']);
 export const VIEW_LABEL = Object.freeze({ day: '全体', am: '午前', pm: '午後', night: '夜', yday: '昨日' });
 /** いま選べる範囲(まだ始まっていない時間帯は出さない) */
 export function viewsAt(nowMin) { return VIEWS.filter((v) => (v === 'pm' ? nowMin >= NOON_MIN : v === 'night' ? nowMin >= EVENING_MIN : true)); }
-/** 最初に見せる範囲: 自分で開いたとき(manual)は 全体(朝で きょうの記録がまだ無ければ 昨日)。自動の枠は 朝=昨日 / 昼=午前(14 時以降は 全体)/ 夜=午後 / 寝る前=全体 */
+/** 最初に見せる範囲: 自分で開いたとき(manual)は 全体(朝で 今日の記録がまだ無ければ 昨日)。自動の枠は 朝=昨日 / 昼=午前(14 時以降は 全体)/ 夜=午後 / 寝る前=全体 */
 export function defaultView(slot, nowMin, manual = false, hasToday = true) {
   if (slot === 'morning') return manual && hasToday ? 'day' : 'yday';
   if (manual || slot === 'bed') return 'day';
@@ -98,14 +98,14 @@ export const SUGGEST_LABEL = Object.freeze({ now: 'いま', switch: '切り替�
 
 /**
  * ブリーフィングの中身。opts = { slot, date(実効の日), nowMin(実効の分), entries, tasks, settings, planBlocks }
- * - morning: 昨日 → きょうのタスク → きょうは(最初の一歩・予定・習慣・目標)
+ * - morning: 昨日 → 今日のタスク → 今日は(最初の一歩・予定・習慣・目標)
  * - noon:    午前(〜12:00。14:00 以降に初めて開いたら「ここまで」)→ 残りのタスク → このあとは(切り替え・時刻つきの期限・習慣)
  * - evening: 午後(12:00〜いま)→ 残りのタスク(明日が期限も)→ 残りの時間で(切り替え・時刻つきの期限・習慣・作業時間帯の残り)
  * v0.55.1(実機 FB「文字が多すぎる。特に昨日のふり返りが文字列すぎる」): ふり返りは文ではなく数字で返す(画面がタイル・帯・凡例にする)。
  *   stats = { head(判定の見出し・朝だけ・「でした。」抜き)|null, work, drift, logged, baseWork(先週平均・朝だけ)|null, top:[{ id, name, role, min }](多い順), longest(longestDrift)|null } / 記録が無ければ null(empty の 1 行)
- *   progress = { workMin(きょうの作業), targetMin(目標。無ければ 4 時間), goal:bool }(昼・夜だけ)
+ *   progress = { workMin(今日の作業), targetMin(目標。無ければ 4 時間), goal:bool }(昼・夜だけ)
  *   suggest = [{ kind, text(短い 1 行) }](4 つまで)
- * v0.76: slot に bed(寝る前: きょう 1 日 → 残りのタスクと 明日が期限 → あしたへ)。view(VIEWS)を渡すと ふり返りの範囲だけを それに替える(提案と タスクは 枠のまま)。
+ * v0.76: slot に bed(寝る前: 今日 1 日 → 残りのタスクと 明日が期限 → あしたへ)。view(VIEWS)を渡すと ふり返りの範囲だけを それに替える(提案と タスクは 枠のまま)。
  *   remain = { startMin, endMin, leftMin, rate(0〜1) }(作業時間帯の残り。時間帯の外・寝る前は null)= 画面が「残りの時間」の帯にする
  * 戻り値 { slot, view, title, reviewTitle, stats, empty, progress, remain, taskTitle, taskLine, due:{ overdue, today, tomorrow, count }, suggestTitle, suggest, first:最初の一歩の名前|null, switch:bool }
  */
@@ -135,7 +135,7 @@ export function build({ slot, date, nowMin, entries = {}, tasks = {}, settings =
       stats.baseWork = agg.baselineWorkMin != null && agg.baselineDays >= 3 ? agg.baselineWorkMin : null;
     } else empty = '昨日は記録がありませんでした。';
   };
-  const range = (title, from, to) => { // きょうの from〜to(いままで)
+  const range = (title, from, to) => { // 今日の from〜to(いままで)
     reviewTitle = title;
     const t = Math.min(to, nowMin);
     const rt = rangeTotals(entries, date, from, t, nowMin, settings);
@@ -148,19 +148,19 @@ export function build({ slot, date, nowMin, entries = {}, tasks = {}, settings =
     else if (vw === 'am') range('午前', 0, NOON_MIN);
     else if (vw === 'pm') range('午後', NOON_MIN, EVENING_MIN);
     else if (vw === 'night') range('夜', EVENING_MIN, Infinity);
-    else range('きょう', 0, Infinity);
+    else range('今日', 0, Infinity);
   };
 
   if (sl === 'morning') {
-    taskTitle = 'きょうのタスク'; suggestTitle = 'きょうは';
+    taskTitle = '今日のタスク'; suggestTitle = '今日は';
     yesterday();
     if (first) sug.push({ pri: 1, kind: 'first', text: `「${first}」を 5 分だけ` });
     const pb = planBlocksOf(planBlocks, date);
     if (pb.length) sug.push({ pri: 3, kind: 'plan', text: `${pb.length}件・最初は ${pb[0].start} ${nameOf(pb[0].categoryId)}` });
     if (goalWork != null) sug.push({ pri: 4, kind: 'goal', text: `作業 ${fmtMinJa(goalWork)}` });
-  } else if (sl === 'bed') { // 寝る前(v0.76): きょう 1 日 → 残りのタスク(明日が期限も)→ あしたへ。急かす提案(切り替え・最初の一歩)は出さない
+  } else if (sl === 'bed') { // 寝る前(v0.76): 今日 1 日 → 残りのタスク(明日が期限も)→ あしたへ。急かす提案(切り替え・最初の一歩)は出さない
     taskTitle = '残りのタスク'; suggestTitle = 'あしたへ';
-    range('きょう', 0, Infinity);
+    range('今日', 0, Infinity);
     const day = rangeTotals(entries, date, 0, nowMin, nowMin, settings);
     progress = { workMin: day.work, targetMin: goalWork != null ? goalWork : SOLID_WORK_MIN, goal: goalWork != null };
     if (due.tomorrow.length) sug.push({ pri: 2, kind: 'tmr', text: `明日が期限 ${due.tomorrow.length}件・最初は「${due.tomorrow[0].name}」` });
@@ -189,7 +189,7 @@ export function build({ slot, date, nowMin, entries = {}, tasks = {}, settings =
   const Wd = windowFor(settings, date);
   const remain = sl !== 'bed' && Wd && Wd.end > Wd.start && nowMin < Wd.end && Wd.end - nowMin >= 15
     ? { startMin: Wd.start, endMin: Wd.end, leftMin: Wd.end - Math.max(nowMin, Wd.start), rate: Math.max(0, Math.min(1, (nowMin - Wd.start) / (Wd.end - Wd.start))) } : null;
-  // 時刻つきの期限(きょう): いちばん近いもの 1 つ
+  // 時刻つきの期限(今日): いちばん近いもの 1 つ
   const timed = due.today.filter((t) => deadlineMin(t) != null)[0];
   if (timed) { const m = deadlineMin(timed); sug.push({ pri: 2, kind: 'due', text: m > nowMin ? `${timed.name} は ${mm(m)} まで(あと${fmtMinJa(m - nowMin)})` : `${timed.name} は ${mm(m)} を過ぎています` }); }
   // 習慣(毎日): まだのもの。夜は続いている日数を添える

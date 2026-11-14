@@ -171,7 +171,7 @@ export function finishSheet(run, stopMs, after) {
 }
 
 /**
- * タイマーのカード(ホームの「つぎは これ」の中): 残りの輪と数字・「作業 2 / 4 セット」・名前・「17:40 まで・つぎは 休憩 5 分」・♪(BGM の 1 曲)・終わる。
+ * タイマーのカード(ホームの「次はこれ」の中): 残りの輪と数字・「作業 2 / 4 セット」・名前・「17:40 まで・次は 休憩 5 分」・♪(BGM の 1 曲)・終わる。
  * 全セットが済んでいて まだ確かめていないときは「タイマー終了」と「記録を決める」。act = { rerender(), ctx }。走っていなければ null
  */
 export function pomoCard(act) {
@@ -197,7 +197,7 @@ export function pomoCard(act) {
     if (key !== last && ph.kind !== 'done') {
       last = key;
       phase.textContent = ph.kind === 'rest' ? `休憩(${ph.set} / ${ph.sets} セット おわり)` : `作業 ${ph.set} / ${ph.sets} セット`;
-      sub.textContent = `${fmt(ph.endMs).hm} まで・つぎは ${ph.next === 'rest' ? `休憩 ${run.rest} 分` : ph.next === 'work' ? `作業 ${run.work} 分` : 'おわり'}`;
+      sub.textContent = `${fmt(ph.endMs).hm} まで・次は ${ph.next === 'rest' ? `休憩 ${run.rest} 分` : ph.next === 'work' ? `作業 ${run.work} 分` : 'おわり'}`;
       node.classList.toggle('rest', ph.kind === 'rest');
     }
     return ph;

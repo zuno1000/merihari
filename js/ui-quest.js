@@ -42,7 +42,7 @@ function snapshot() {
 const bar = (pct) => el('span.q-bar', { 'aria-hidden': 'true' }, el('i', { style: { width: `${Math.round(Math.max(0, Math.min(1, pct)) * 100)}%` } }));
 
 /**
- * ホームの 1 行(内訳の下・きょうだけ): 「解読 68% ─ あと 4 分の作業で続き」。読んでいない断片があれば「続きが 3 件 読めます・読む ›」。
+ * ホームの 1 行(内訳の下・今日だけ): 「解読 68% ─ あと 4 分の作業で続き」。読んでいない断片があれば「続きが 3 件 読めます・読む ›」。
  * タップでシート。記録中は 20 秒ごとに文字と棒だけ更新する(画面から外れたら止まる)。
  */
 export function questStrip() {

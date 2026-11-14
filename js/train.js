@@ -98,7 +98,7 @@ export function nextDepartures(times, nowMin, n = 4) {
   const from = nowMin < 180 ? nowMin + 1440 : nowMin; // 深夜 1:30 は前日の 25:30 として終電を探す
   const pick = (base) => list.filter((x) => x.min >= base).slice(0, n).map((x) => ({ ...x, wait: x.min - base }));
   let out = pick(from);
-  if (!out.length && from !== nowMin) out = pick(nowMin); // 25:30 以降が無ければ、きょうの始発から
+  if (!out.length && from !== nowMin) out = pick(nowMin); // 25:30 以降が無ければ、今日の始発から
   return out;
 }
 /** 次の電車の文(ホームの印用): あと 0 分 → 'いま'、それ以外 '◯分'。無ければ null */

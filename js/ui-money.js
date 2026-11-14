@@ -54,9 +54,9 @@ export function renderMoney(view, ctx, dateArg = null) {
     right: [drinksButton(ctx), el('button.btn.sm.ghost.gear.recur', { type: 'button', 'aria-label': '定期(サブスク・給料日)', title: '定期', onclick: () => recurringSheet(today, rerender) }, RECUR_ICON()), piggy], // v0.47: 定期は貯金箱の左。v0.51: 飲んだもの(カップ)はその左
   });
 
-  // その日(F10-9): 支出(大きく)・収入(あれば)・予算の残り(きょうだけ)。下に 2 タップ入力と、その日の一覧
+  // その日(F10-9): 支出(大きく)・収入(あれば)・予算の残り(今日だけ)。下に 2 タップ入力と、その日の一覧
   const dayCard = el('section.card.mcard.mdaycard', [
-    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', isToday ? 'きょうの支出' : 'この日の支出'), el('b.kpi-value.big.yen', money.fmtYen(day.out)), day.in ? el('span.muted.small', `収入 ${money.fmtYen(day.in)}`) : null]),
+    el('div.row', { style: { alignItems: 'baseline', gap: '10px' } }, [el('span.kpi-label', isToday ? '今日の支出' : 'この日の支出'), el('b.kpi-value.big.yen', money.fmtYen(day.out)), day.in ? el('span.muted.small', `収入 ${money.fmtYen(day.in)}`) : null]),
     el('p.muted.small.mnet', bs
       ? (bs.over ? `今月は予算を ${money.fmtYen(-bs.remaining)} 超えています` : `今月の残り ${money.fmtYen(bs.remaining)}${bs.perDay != null && isToday ? `・1日 ${money.fmtYen(bs.perDay)} まで(あと${bs.daysLeft}日)` : ''}`)
       : `今月の支出 ${money.fmtYen(sum.out)}${sum.count ? `・1日平均 ${money.fmtYen(avg)}` : ''}`),
@@ -68,8 +68,8 @@ export function renderMoney(view, ctx, dateArg = null) {
     el('span.mname', [mcatOf(x.categoryId).name, x.note ? el('span.muted.small', ` ${x.note}`) : null, entryName(x.entryId) ? el('span.mlink.muted.small', ` · ${entryName(x.entryId)}の最中`) : null]),
     el('span.myen', { class: `myen${x.type === 'in' ? ' in' : ''}` }, (x.type === 'in' ? '+' : '') + money.fmtYen(x.amount)),
   ]);
-  const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? 'きょうはまだ記録がありません。' : 'この日の記録はありません。');
-  // v0.47(F10-10): その日が支払日 / 給料日の定期で、まだ記録していないもの → 1 タップで記録(時刻は きょうなら いま・過去の日は なし)
+  const dayList = day.items.length ? el('div.list.mday', day.items.map(row)) : el('p.muted.small.pad', isToday ? '今日はまだ記録がありません。' : 'この日の記録はありません。');
+  // v0.47(F10-10): その日が支払日 / 給料日の定期で、まだ記録していないもの → 1 タップで記録(時刻は 今日なら いま・過去の日は なし)
   const due = money.recurringDue(R(), M(), date);
   const recordDue = (r, yen) => {
     const t = isToday ? mm(minuteOfDay()) : null;
@@ -97,7 +97,7 @@ export function renderMoney(view, ctx, dateArg = null) {
     }, [el('span.dot', { style: { background: mcatOf(r.categoryId).color }, 'aria-hidden': 'true' }), `${r.name} ${r.type === 'in' ? '+' : ''}${money.fmtYen(r.amount)} を記録`]);
   };
   const dueBox = due.length ? el('section.card.mcard.rdue', [
-    el('p.muted.small.rdue-h', `${isToday ? 'きょう' : 'この日'}が支払日 / 給料日・長押しで金額を直して記録`),
+    el('p.muted.small.rdue-h', `${isToday ? '今日' : 'この日'}が支払日 / 給料日・長押しで金額を直して記録`),
     el('div.chips', due.map(dueChip)),
   ]) : null;
 
@@ -244,7 +244,7 @@ function editWantSheet(w, today, rerender) {
       el('button.btn.danger', { type: 'button', onclick: () => confirmSheet('消しますか?', w.name, '消す', () => { w.deletedAt = store.nowISO(); saveWant(w); close(); rerender(); }, true) }, '消す'),
       w.doneAt ? el('button.btn', { type: 'button', onclick: () => { if (!apply()) return; w.doneAt = null; saveWant(w); close(); rerender(); toast('ほしいものに戻しました'); } }, '戻す')
         : el('button.btn', { type: 'button', onclick: () => { if (!apply()) return; w.doneAt = store.nowISO(); saveWant(w); const yen = w.price; close();
-          if (yen > 0) confirmSheet(`${money.fmtYen(yen)}を支出に記録しますか?`, `${mcatOf(cid).name}・きょう・いま`, '記録する', () => { saveItem({ id: store.uid(), date: today, time: mm(minuteOfDay()), amount: yen, type: 'out', categoryId: cid, note: w.name, entryId: money.linkEntry(E(), today, mm(minuteOfDay()), minuteOfDay()), updatedAt: null, deletedAt: null }); toast(`${w.name}${money.fmtYen(yen)}を記録しました`); rerender(); });
+          if (yen > 0) confirmSheet(`${money.fmtYen(yen)}を支出に記録しますか?`, `${mcatOf(cid).name}・今日・いま`, '記録する', () => { saveItem({ id: store.uid(), date: today, time: mm(minuteOfDay()), amount: yen, type: 'out', categoryId: cid, note: w.name, entryId: money.linkEntry(E(), today, mm(minuteOfDay()), minuteOfDay()), updatedAt: null, deletedAt: null }); toast(`${w.name}${money.fmtYen(yen)}を記録しました`); rerender(); });
           rerender(); } }, '買った'),
       el('span.grow'),
       el('button.btn.primary', { type: 'button', onclick: () => { if (!apply()) return; saveWant(w); close(); rerender(); toast('保存しました'); } }, '保存'),
@@ -336,13 +336,13 @@ function editRecurringSheet(r, today, rerender) {
 }
 
 /**
- * 金額 → カテゴリの2タップ入力(v0.30: 見ている日に登録)。きょうなら時刻は「いま」(保存時の現在時刻)、過去の日は「時刻なし」が既定。時刻のボタンで変えられる。
+ * 金額 → カテゴリの2タップ入力(v0.30: 見ている日に登録)。今日なら時刻は「いま」(保存時の現在時刻)、過去の日は「時刻なし」が既定。時刻のボタンで変えられる。
  * 長押しは無し(お金は後からの修正が少ない)
  */
 function quickInput(date, today, rerender) {
   const isToday = date === today;
   let time = isToday ? mm(minuteOfDay()) : null;
-  let auto = isToday; // 時刻を触っていなければ保存時の「いま」(きょうだけ)
+  let auto = isToday; // 時刻を触っていなければ保存時の「いま」(今日だけ)
   const amount = el('input.yenin', { type: 'text', inputmode: 'numeric', placeholder: '0', autocomplete: 'off', 'aria-label': '金額(円)', maxlength: 11 });
   const note = el('input.text.mnote', { type: 'text', placeholder: 'メモ', maxlength: 60, autocomplete: 'off' });
   const whenBtn = el('button.btn.sm.ghost.mwhen', { type: 'button', 'aria-label': '時刻を変える' }, '');
@@ -368,13 +368,13 @@ function quickInput(date, today, rerender) {
   const expand = (v) => { more.hidden = !v; box.classList.toggle('open', v); };
   amount.addEventListener('focus', () => expand(true));
   amount.addEventListener('input', () => expand(true));
-  amount.placeholder = isToday ? '0 ─ きょうの支出を足す' : `0 ─ ${fmtMD(date)} に足す`;
+  amount.placeholder = isToday ? '0 ─ 今日の支出を足す' : `0 ─ ${fmtMD(date)} に足す`;
   const outside = (e) => { if (!box.isConnected) { document.removeEventListener('pointerdown', outside); return; } if (!box.contains(e.target) && !amount.value.trim() && !note.value.trim()) expand(false); };
   document.addEventListener('pointerdown', outside);
   return box;
 }
 
-/** 時刻のシート(v0.30): いま(きょうだけ)/ なし / 時計。日付は上段の ‹ › とカレンダーで選ぶ */
+/** 時刻のシート(v0.30): いま(今日だけ)/ なし / 時計。日付は上段の ‹ › とカレンダーで選ぶ */
 function timeSheet({ time, isToday }, onpick) {
   let t = time, auto = false;
   const tf = timeField(t || '', { label: '時刻', emptyLabel: 'なし', allowEmpty: true, onchange: (v) => { t = v || null; auto = false; } });

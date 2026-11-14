@@ -130,7 +130,7 @@ function sectionGoals() {
     el('div.row.field', [el('span.label', `${drift}の上限`), select(opts(driftList), s.goals.driftMax == null ? '' : String(s.goals.driftMax), (v) => { s.goals.driftMax = v === '' ? null : +v; store.touchSettings(); })]),
     el('p.muted.small', '「ダラダラとして数える」種別(SNS・動画など)の1日の合計がこれ以内なら、ふり返りで「上限の中」と言います。'),
     !FEATURES.TASK_ESTIMATE ? null : el('div.row.field', [el('span.label', '目安の 1 回の大きさ'), select(Object.fromEntries(chunkList.map((m) => [String(m), label(m)])), String(s.goals.chunkMin || 30), (v) => { s.goals.chunkMin = +v; store.touchSettings(); })]),
-    !FEATURES.TASK_ESTIMATE ? null : el('p.muted.small', '期限つきのタスクの きょうの目安 は、合計はそのままで この大きさ以上の塊にまとめます(30 分なら 15 分 × 4 ではなく 30 分 × 2)。入らなかったタスクは別の日へ。期限の近いものと きょう記録したものは必ず入ります。'));
+    !FEATURES.TASK_ESTIMATE ? null : el('p.muted.small', '期限つきのタスクの 今日の目安 は、合計はそのままで この大きさ以上の塊にまとめます(30 分なら 15 分 × 4 ではなく 30 分 × 2)。入らなかったタスクは別の日へ。期限の近いものと 今日記録したものは必ず入ります。'));
 }
 /** レポートのタイル(v0.26.1・F3-13・ユーザー FB「目立たせるカテゴリを自分で変えたい」): 種別かカテゴリを 6 つまで・選んだ順。null=既定(作業の種別+ダラダラ) */
 function sectionTiles(rerender) {
@@ -493,14 +493,14 @@ function sectionBgm(rerender) {
     el('p.muted.small', '選んだジャンルを多めに。何も選ばなければ全部から。流したあとの「好き / ちがう」も次の選び方に効きます(好きと言った曲に近いジャンルやムードを多めに、ちがうと言った曲のチャンネルは控えめに)。時間帯でも変わります(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.app !== false, onchange: (e) => { b.app = e.target.checked; save(); } }), el('span', 'YouTube アプリで開く')]),
     el('p.muted.small', 'iPhone / Android で YouTube アプリを開きます。iPhone は最初に「"YouTube"で開きますか?」と聞かれることがあるので「開く」を。アプリが無い・開かないときは この設定を外すとブラウザで開きます(自動でブラウザに切り替えることはしません)。'),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: b.strip !== false, onchange: (e) => { b.strip = e.target.checked; save(); } }), el('span', 'ホームに きょうの曲を出す')]),
-    el('p.muted.small', '流した日だけ、記録中のカードの下に 1 行(題名・好き / ちがう)。行の × でその日だけ消せます。外すと出しません(ふり返りの「きょうの BGM」には残ります)。'),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.strip !== false, onchange: (e) => { b.strip = e.target.checked; save(); } }), el('span', 'ホームに 今日の曲を出す')]),
+    el('p.muted.small', '流した日だけ、記録中のカードの下に 1 行(題名・好き / ちがう)。行の × でその日だけ消せます。外すと出しません(ふり返りの「今日の BGM」には残ります)。'),
     b.enabled ? el('div.row', { style: { marginTop: '10px' } }, [el('button.btn', { type: 'button', onclick: () => playBgm(rerender) }, '1 曲ためす')]) : null,
     el('h3.help-h', `聞いた曲(${st.heard} / ${st.total || '…'})`),
     rows || el('p.muted.small', 'まだありません。ホームの ♪ をタップすると ここに残ります。'),
     rows ? el('p.muted.small', '題名をタップで もう一度開く。') : null,
     el('p.muted.small', `曲の一覧は todaybgm(同じ作者)のカタログを同梱したもので、毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直します(曲が変わった週だけ)。アプリは次に開いたときに新しい一覧を使います(版の更新は要りません)。${st.updated ? `いまの一覧は ${st.updated} 時点。` : ''}`),
-    el('p.muted.small', `安全について: このアプリからの通信は 同じサイトの曲の一覧(data/bgm.json)と、ふり返りの「きょうの BGM」のサムネイル(i.ytimg.com・YouTube の画像)だけです(todaybgm.pages.dev と同じ作者のカタログ)。♪ のタップで YouTube を開くだけで、YouTube 側の再生や広告はこのアプリの外です。聞いた曲と 好き / ちがう は記録として同期します。`));
+    el('p.muted.small', `安全について: このアプリからの通信は 同じサイトの曲の一覧(data/bgm.json)と、ふり返りの「今日の BGM」のサムネイル(i.ytimg.com・YouTube の画像)だけです(todaybgm.pages.dev と同じ作者のカタログ)。♪ のタップで YouTube を開くだけで、YouTube 側の再生や広告はこのアプリの外です。聞いた曲と 好き / ちがう は記録として同期します。`));
 }
 
 /**
@@ -616,7 +616,7 @@ function sectionAI(rerender) {
       el('li', '「ショートカットの入力を受け取る」を追加(種類は テキスト)。'),
       el('li', '「モデルを使用」を追加。モデルは「端末上」(文が外に出ない)。プロンプトに「ショートカットの入力」を入れる(指示文はアプリが文の中に書いて渡すので、それだけでいい)。'),
       el('li', '「クリップボードにコピー」を追加(入力は モデルの応答)。続けて「結果を表示」を追加すると、その場で読める。'),
-      el('li', 'メリハリの日記で「きょうのふり返りを頼む」か「相談」→ ショートカットが開いて返事が出る → メリハリに戻って「返事を貼り付け」。'),
+      el('li', 'メリハリの日記で「今日のふり返りを頼む」か「相談」→ ショートカットが開いて返事が出る → メリハリに戻って「返事を貼り付け」。'),
     ]),
     el('div.row.wrap', { style: { marginTop: '10px' } }, [
       el('button.btn', { type: 'button', onclick: test }, 'ショートカットを開いて試す'),
@@ -634,9 +634,9 @@ function sectionBrief(rerender, ctx) {
   const s = S();
   const b = s.brief || (s.brief = { enabled: true });
   const local = store.state.local;
-  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りときょうのタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること、寝る前は きょう 1 日のまとめ。ふり返りは 上のチップで 全体 / 午前 / 午後 / 夜 / 昨日 に替えられます(自分で開いたときは 全体から)。タスクはその場で ✓ にできます。',
+  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りと今日のタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること、寝る前は 今日 1 日のまとめ。ふり返りは 上のチップで 全体 / 午前 / 午後 / 夜 / 昨日 に替えられます(自分で開いたときは 全体から)。タスクはその場で ✓ にできます。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled !== false, onchange: (e) => { b.enabled = e.target.checked; store.touchSettings(); sync.autoSync(); rerender(); } }), el('span', '開いたときにブリーフィングを出す')]),
-    el('h3.help-h', '寝る前の日報(きょう 1 日のまとめ と あしたのこと)'),
+    el('h3.help-h', '寝る前の日報(今日 1 日のまとめ と あしたのこと)'),
     el('div.chips.small', { role: 'group', 'aria-label': '寝る前の日報の時刻' }, [[0, '出さない'], ...brief.BED_CHOICES.filter((m) => m < 1440 || dayCut(s, dateKey()) > 0).map((m) => [m, `${m / 60}:00 から`])].map(([m, label]) => {
       const on = (brief.bedOf(s) || 0) === m;
       return el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { if (m === brief.BED_DEFAULT) delete b.bed; else b.bed = m; store.touchSettings(); sync.autoSync(); rerender(); } }, label);

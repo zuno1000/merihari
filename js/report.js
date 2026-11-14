@@ -183,7 +183,7 @@ export const driftLabelOf = (settings) => (Array.isArray(settings?.kinds) && set
 const r5 = (m) => Math.max(5, Math.round(m / 5) * 5);
 
 /**
- * きょうの「ここをこうしたら」(v0.31.3・F3-9 改・実機 FB「どれだけダラダラしても改善が促されない」)。
+ * 今日の「ここをこうしたら」(v0.31.3・F3-9 改・実機 FB「どれだけダラダラしても改善が促されない」)。
  * その日の記録の並びだけから、時刻つきの事実 1 つ+小さな試し 1 つを文にする(純関数・先週平均や目標は要らない)。
  * 材料: 同じ役割(作業 / ダラダラ / 休憩)の記録が 10 分以内の間で続いたものを 1 つの「続き」にまとめ、
  *  A) ダラダラの続き: 2 回以上で合計 60 分以上(回数・合計・いちばん長い続き)/ 1 回でも 45 分以上(その続き)。作業時間帯のあとなら「終わりの時刻を決めてから」
@@ -226,7 +226,7 @@ export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDon
   if (W && firstWork) {
     const before = list.filter((x) => x.role === 'drift').reduce((a, x) => a + Math.max(0, Math.min(x.end, firstWork.start) - Math.max(x.start, W.start)), 0);
     if (before >= 30) out.push({ key: 'late-start', d: before, text: `最初の作業(${mm(firstWork.start % 1440)})の前に ${drift} が${fmtMinJa(before)}ありました。次は 5 分だけ先に始めてみてください。` });
-  } else if (!firstWork && dayDone && total >= 30) out.push({ key: 'no-work', d: total, text: `きょうは作業の記録が無く、${drift}は${fmtMinJa(total)}でした。明日は最初の 1 つを 5 分だけ始めてみてください。` });
+  } else if (!firstWork && dayDone && total >= 30) out.push({ key: 'no-work', d: total, text: `今日は作業の記録が無く、${drift}は${fmtMinJa(total)}でした。明日は最初の 1 つを 5 分だけ始めてみてください。` });
   // C) 休憩を挟まない作業の続き
   const longWork = runs.filter((r) => r.role === 'work' && r.min >= 150).sort((a, b) => b.min - a.min)[0];
   if (longWork) out.push({ key: 'no-break', d: Math.round(longWork.min / 3), text: `${span(longWork)} は ${longWork.name} が${fmtMinJa(longWork.min)}続きました。間に休憩を 1 つ置くと、後半が軽くなります。` });
@@ -238,7 +238,7 @@ export function lookBack(entries, date, settings = null, nowMin = 1440, { dayDon
 }
 
 /**
- * きょうのふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
+ * 今日のふり返り(v0.16・F3-9)。「どんな日だったか」を、自分の先週平均と自分で決めた目安だけから言う(他人の基準や理想は使わない)。
  * 判定の材料: 作業の合計 vs 先週平均(±15分かつ ±10%)/ ダラダラ vs 先週平均(−15 / +30分)/ 毎日の目安に届いたか(済んだの印も可)。
  * v0.48: 作業の合計の絶対の段(4 時間以上 しっかり +1・6 時間以上 十分 +2。v0.48.1 で 6 / 8 から下げた)。この段に入る日は 作業とダラダラのマイナスを付けない(長い日の息抜きは責めない)。先週平均や目標が無くてもこの段だけで判定する。
  * 材料が無いとき(先週の記録が3日未満で目安も無い・記録が作業時間帯の半分以下・まだ1日の途中)は判定しない(judged=false)。
@@ -314,13 +314,13 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     if (fit) better = `${drift}${fmtMinJa(agg.driftMin)}のうち${fmtMinJa(r5(fit.targetMin - fit.doneMin))}を ${fit.name} に回せば、目安に届いていました。`;
     else if (shortWork > 0 && spare >= 30 && shortWork <= spare) better = `${drift}${fmtMinJa(agg.driftMin)}のうち${fmtMinJa(r5(shortWork))}を作業に回せば、目標の${fmtMinJa(goalWork)}に届いていました。`;
     else if (agg.unloggedMin >= 60 && agg.coverage < 0.8) better = `未記録が${fmtMinJa(agg.unloggedMin)}あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。`;
-    else { const z = unmet.find((g) => g.kind === 'deadline' && g.doneMin === 0); if (z) better = `${z.name}はきょう手つかずでした(きょうの目安${fmtMinJa(z.targetMin)})。残りは明日からの日数で割り直します。`; }
+    else { const z = unmet.find((g) => g.kind === 'deadline' && g.doneMin === 0); if (z) better = `${z.name}は今日手つかずでした(今日の目安${fmtMinJa(z.targetMin)})。残りは明日からの日数で割り直します。`; }
   }
-  // 明日は(途中なら「きょうはあと」): 期限つきの明日の分 → 届かなかった毎日 → 今週の残り(毎週)→ 近い期限の未着手 / ふれていないやりたいこと
+  // 明日は(途中なら「今日はあと」): 期限つきの明日の分 → 届かなかった毎日 → 今週の残り(毎週)→ 近い期限の未着手 / ふれていないやりたいこと
   let next = null;
   if (!agg.dayDone) {
     const g = gs.find((x) => x.targetMin && !x.done && (x.kind === 'deadline' || x.kind === 'daily'));
-    if (g) next = `きょうはあと ${g.name} を${fmtMinJa(g.targetMin - g.doneMin)}。`;
+    if (g) next = `今日はあと ${g.name} を${fmtMinJa(g.targetMin - g.doneMin)}。`;
   } else {
     const tomorrow = addDays(day, 1);
     const sh = todayShare(tasks, tomorrow, entries, { chunk: chunkOf(settings), estimate }).filter((s) => s.todayMin > 0).sort((a, b) => b.todayMin - a.todayMin)[0];
@@ -329,10 +329,10 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     const dueTmr = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.slice(0, 10) === tomorrow).sort((a, b) => (a.deadline < b.deadline ? -1 : 1)); // v0.44: 目安が無いので「明日が期限」を言う
     if (sh) next = `明日は ${tasks[sh.taskId].name} を${fmtMinJa(sh.todayMin)}(残り${fmtMinJa(sh.remainingMin)}を${sh.daysLeft}日で)。`;
     else if (dueTmr.length) next = `明日は ${dueTmr.map((t) => t.name).slice(0, 2).join('・')} が期限です${dueTmr.length > 2 ? `(ほか${dueTmr.length - 2}件)` : ''}。`;
-    else if (dl) next = `明日は ${dl.name}(毎日${fmtMinJa(dl.targetMin)})を。きょうは${fmtMinJa(dl.doneMin)}でした。`;
+    else if (dl) next = `明日は ${dl.name}(毎日${fmtMinJa(dl.targetMin)})を。今日は${fmtMinJa(dl.doneMin)}でした。`;
     else if (wk) { const left = daysBetween(day, wk.to); next = `${wk.name}は今週あと${fmtMinJa(wk.targetMin - wk.doneMin)}(残り${left}日・1日${fmtMinJa(r5((wk.targetMin - wk.doneMin) / left))})。`; }
     else if (lines.tomorrow) next = lines.tomorrow;
-    else if (goalWork != null && agg.workMin < goalWork) next = `明日は作業${fmtMinJa(goalWork)}を(きょうは${fmtMinJa(agg.workMin)})。`;
+    else if (goalWork != null && agg.workMin < goalWork) next = `明日は作業${fmtMinJa(goalWork)}を(今日は${fmtMinJa(agg.workMin)})。`;
   }
   // ここをこうしたら(v0.31.3): 時刻つきの事実+小さな試し。途中でも出す(いまの時点まで)。2 つまで
   const lb = lookBack(entries, day, settings, agg.dayDone ? 1440 : nowMin, { dayDone: agg.dayDone }).slice(0, 2).map((x) => x.text);
@@ -363,7 +363,7 @@ export function buildReport(opts) {
   const byCategory = {};
   for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: pc?.byCategory[id]?.planned || 0, actual: r.actual, baseline: r.baseline };
   if (pc) for (const [id, v] of Object.entries(pc.byCategory)) if (!byCategory[id]) byCategory[id] = { planned: v.planned, actual: 0, baseline: null };
-  return { date: opts.date, byCategory, byKind: agg.byKind, workMin: agg.workMin, plannedWorkMin: 0, // byKind: v0.43.2(確定スナップショットにも種別ごとの合計。無いと「きょうはどうだった」のタイルが asKind を無視してカテゴリの主の種別に戻る) driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
+  return { date: opts.date, byCategory, byKind: agg.byKind, workMin: agg.workMin, plannedWorkMin: 0, // byKind: v0.43.2(確定スナップショットにも種別ごとの合計。無いと「今日はどうだった」のタイルが asKind を無視してカテゴリの主の種別に戻る) driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, feedback, finalizedAt: opts.finalizedAt || null };
 }
 
@@ -436,7 +436,7 @@ export function goalsSummary(tasks, entries, from, to, { nowDate = null, nowMin 
       out.push({ taskId: t.id, name: t.name, categoryId: t.categoryId || 'other', kind: 'weekly', targetMin: target, weeks, metWeeks: weeks.filter((w) => w.done).length, doneMin: weeks.reduce((a, w) => a + w.doneMin, 0), dayList: dayLogged(t) });
     }
   }
-  for (const g of out) if (g.kind !== 'wish') g.stats = habitStats(tasks[g.taskId], entries, nowDate || to); // v0.49・F5-15: 連続・最長・今週(きょう基準。過去の期間でも「いま」の連続)
+  for (const g of out) if (g.kind !== 'wish') g.stats = habitStats(tasks[g.taskId], entries, nowDate || to); // v0.49・F5-15: 連続・最長・今週(今日基準。過去の期間でも「いま」の連続)
   return out.sort((a, b) => ({ daily: 0, weekly: 1, wish: 2 })[a.kind] - ({ daily: 0, weekly: 1, wish: 2 })[b.kind]);
 }
 

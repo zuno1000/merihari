@@ -112,7 +112,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
 }
 
 /**
- * ふり返りタブの「きょうはどうだった」(v0.27.1・案 A・F9-7): レポート「今日」の見出し・理由・タイルだけを 1 枚のカードに。
+ * ふり返りタブの「今日はどうだった」(v0.27.1・案 A・F9-7): レポート「今日」の見出し・理由・タイルだけを 1 枚のカードに。
  * 「レポートをすべて見る ›」で従来のシート(円・予定と実際・ふり返り・くわしく)。記録が無く見出しも無い日は出さない。
  */
 export function dayTop(date, nowMin) {
@@ -506,7 +506,7 @@ function planFigure(date, nowMin, r) {
     ...rows.map(([id, v]) => el('div.plan-cat', [el('span.plan-cat-name', [el('i.dot', { style: { background: catOf(id).color } }), catOf(id).name]), bar('予定', v.planned, 'var(--deemph)'), bar('実際', v.actual, catOf(id).color)]))])]);
 }
 
-// ---- ふり返り(v0.16・F3-9): よかったこと / 良くするには / 明日は(途中なら きょうはあと) ----
+// ---- ふり返り(v0.16・F3-9): よかったこと / 良くするには / 明日は(途中なら 今日はあと) ----
 function feedbackBox(fb, leadIsFirstGood) {
   const good = leadIsFirstGood ? fb.good.slice(1) : fb.good;
   const better = [...(fb.better ? [fb.better] : []), ...(fb.lookBack || [])]; // v0.31.3: 「ここをこうしたら」(時刻つき・2 つまで)を 良くするには に続けて
@@ -515,7 +515,7 @@ function feedbackBox(fb, leadIsFirstGood) {
   return el('section.report-lines.fb', [
     block('よかったこと', good),
     block('良くするには', better, 'muted'),
-    block(fb.next && fb.next.startsWith('きょうはあと') ? 'このあと' : '明日は', fb.next ? [fb.next] : [], 'tomorrow'),
+    block(fb.next && fb.next.startsWith('今日はあと') ? 'このあと' : '明日は', fb.next ? [fb.next] : [], 'tomorrow'),
   ]);
 }
 

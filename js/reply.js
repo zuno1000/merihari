@@ -7,9 +7,9 @@ import { deadlineMin } from './plan.js';
 
 /** 答えられる種類(上にあるものほど先に当てる) */
 export const INTENTS = Object.freeze(['shopping', 'tomorrow', 'near', 'tasks', 'habits', 'plan', 'progress', 'next']);
-export const INTENT_LABEL = Object.freeze({ shopping: '買い物', tomorrow: 'あしたのタスク', near: 'この先の期限', tasks: 'きょうのタスク', habits: '習慣', plan: 'きょうの予定', progress: 'きょうの進み', next: 'つぎにやること' });
+export const INTENT_LABEL = Object.freeze({ shopping: '買い物', tomorrow: 'あしたのタスク', near: 'この先の期限', tasks: '今日のタスク', habits: '習慣', plan: '今日の予定', progress: '今日の進み', next: 'つぎにやること' });
 /** ワンタップで聞ける質問(入力欄の下のチップ) */
-export const ASK_CHIPS = Object.freeze(['きょうのタスクは?', '買うものは?', '次に何をやるといい?', 'きょうの進みは?', '今週の期限は?']);
+export const ASK_CHIPS = Object.freeze(['今日のタスクは?', '買うものは?', '次に何をやるといい?', '今日の進みは?', '今週の期限は?']);
 
 const TODAY = /今日|きょう|本日|いま|今から/;
 const RULES = [
@@ -36,17 +36,17 @@ const clock = (t) => (deadlineMin(t) != null ? ` ${mm(deadlineMin(t))}` : '');
 
 /**
  * 答え。d = { due: plan.dueTasks の戻り値, near: [task](この先 7 日が期限・近い順), shopping: [{ name, qty }](まだ買っていないもの),
- *   habits: [{ name, done:bool, weekly:bool, streak }], plan: [{ start, end, name }](きょうの予定), progress: { workMin, targetMin, goal }, next: [{ title, reason }](next.candidates) }
+ *   habits: [{ name, done:bool, weekly:bool, streak }], plan: [{ start, end, name }](今日の予定), progress: { workMin, targetMin, goal }, next: [{ title, reason }](next.candidates) }
  * 戻り値 { intent, title(1 行の答え), lines(箇条書き・無ければ空), empty:bool } / 知らない種類は null
  */
 export function answer(intent, d = {}) {
   const due = d.due || { overdue: [], today: [], tomorrow: [], count: 0 };
   const out = (title, lines = [], empty = false) => ({ intent, title, lines, empty });
   if (intent === 'tasks') {
-    const lines = [...rows(due.today, (t) => `${t.name}(きょう${clock(t)} まで)`), ...rows(due.overdue, (t) => `${t.name}(${fmtMD(t.deadline.slice(0, 10))} が期限でした)`)];
+    const lines = [...rows(due.today, (t) => `${t.name}(今日${clock(t)} まで)`), ...rows(due.overdue, (t) => `${t.name}(${fmtMD(t.deadline.slice(0, 10))} が期限でした)`)];
     const tmr = due.tomorrow.length ? [`明日が期限: ${due.tomorrow.slice(0, 5).map((t) => t.name).join('・')}`] : [];
-    if (!lines.length) return out('きょうが期限のタスクは ありません。', tmr, true);
-    return out(`きょうまでのタスクは ${due.today.length + due.overdue.length} 件です。`, [...lines, ...tmr]);
+    if (!lines.length) return out('今日が期限のタスクは ありません。', tmr, true);
+    return out(`今日までのタスクは ${due.today.length + due.overdue.length} 件です。`, [...lines, ...tmr]);
   }
   if (intent === 'tomorrow') {
     if (!due.tomorrow.length) return out('明日が期限のタスクは ありません。', [], true);
@@ -66,27 +66,27 @@ export function answer(intent, d = {}) {
     const hs = d.habits || [];
     if (!hs.length) return out('習慣は まだ登録されていません。', [], true);
     const left = hs.filter((h) => !h.done);
-    return out(left.length ? `まだの習慣は ${left.length} つです。` : 'きょうの習慣は ぜんぶ済んでいます。',
-      rows(hs, (h) => `${h.name}(${h.weekly ? '今週' : 'きょう'}は ${h.done ? '済み' : 'まだ'}${h.streak >= 2 ? `・${h.streak}${h.weekly ? '週' : '日'}続いています` : ''})`));
+    return out(left.length ? `まだの習慣は ${left.length} つです。` : '今日の習慣は ぜんぶ済んでいます。',
+      rows(hs, (h) => `${h.name}(${h.weekly ? '今週' : '今日'}は ${h.done ? '済み' : 'まだ'}${h.streak >= 2 ? `・${h.streak}${h.weekly ? '週' : '日'}続いています` : ''})`));
   }
   if (intent === 'plan') {
     const pb = d.plan || [];
-    if (!pb.length) return out('きょうの予定は 置いていません。', [], true);
-    return out(`きょうの予定は ${pb.length} 件です。`, rows(pb, (b) => `${b.start}〜${b.end} ${b.name}`));
+    if (!pb.length) return out('今日の予定は 置いていません。', [], true);
+    return out(`今日の予定は ${pb.length} 件です。`, rows(pb, (b) => `${b.start}〜${b.end} ${b.name}`));
   }
   if (intent === 'progress') {
     const p = d.progress || { workMin: 0, targetMin: 0, goal: false };
     const left = p.targetMin - p.workMin;
     const lines = [];
     if (p.targetMin > 0) lines.push(left > 0 ? `${p.goal ? '目標' : '目安'}の ${fmtMinJa(p.targetMin)} まで あと ${fmtMinJa(left)}` : `${p.goal ? '目標' : '目安'}の ${fmtMinJa(p.targetMin)} に届いています`);
-    if (due.count) lines.push(`きょうまでのタスクは 残り ${due.count} 件`);
-    return out(`きょうの作業は ${fmtMinJa(p.workMin)} です。`, lines);
+    if (due.count) lines.push(`今日までのタスクは 残り ${due.count} 件`);
+    return out(`今日の作業は ${fmtMinJa(p.workMin)} です。`, lines);
   }
   if (intent === 'next') {
     const nx = d.next || [];
     if (!nx.length) return out('いま すすめられるものは ありません。好きな作業からどうぞ。', [], true);
     const rest = nx.slice(1, 4);
-    return out(`つぎは「${nx[0].title}」が おすすめです(${nx[0].reason})。`, rest.length ? ['ほかの候補:', ...rest.map((c) => `・${c.title}(${c.reason})`)] : []);
+    return out(`次は「${nx[0].title}」が おすすめです(${nx[0].reason})。`, rest.length ? ['ほかの候補:', ...rest.map((c) => `・${c.title}(${c.reason})`)] : []);
   }
   return null;
 }

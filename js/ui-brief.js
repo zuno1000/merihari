@@ -17,7 +17,7 @@ const S = () => store.state.data.settings;
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
 export const briefEnabled = () => S().brief?.enabled !== false;
 
-/** きょうまでに済ませるタスクの数(期限切れ+今日が期限)。未設定なら 0 */
+/** 今日までに済ませるタスクの数(期限切れ+今日が期限)。未設定なら 0 */
 export function dueCount() {
   const d = store.state.data;
   if (!d.meta.setupAt) return 0;
@@ -60,7 +60,7 @@ export function disableAppBadge() { store.state.local.appBadge = false; store.sa
 
 /**
  * ふり返りの箱(v0.55.1・実機 FB「文字が多すぎる。特に昨日のふり返りが文字列すぎる」): 文ではなく
- * 判定の見出し(朝だけ)→ 作業 / ダラダラ のタイル(大きな数字)→ カテゴリの色の帯(その範囲の内訳)→ 凡例(上位 3 つ)→ いちばん長いダラダラ(1 行)→ きょうの作業の進み(昼・夜)。
+ * 判定の見出し(朝だけ)→ 作業 / ダラダラ のタイル(大きな数字)→ カテゴリの色の帯(その範囲の内訳)→ 凡例(上位 3 つ)→ いちばん長いダラダラ(1 行)→ 今日の作業の進み(昼・夜)。
  */
 function reviewBox(b) {
   const st = b.stats;
@@ -79,7 +79,7 @@ function reviewBox(b) {
     el('div.br-legend', st.top.slice(0, 3).map((x) => el('span', [el('i.dot', { style: { background: col(x) }, 'aria-hidden': 'true' }), `${x.name} `, el('b', fmtMin(x.min)), ` ${Math.round((x.min / total) * 100)}%`]))),
     st.longest ? el('p.br-long', [el('span.bs-k', `最長の${driftLabelOf(S())}`), `${mm(st.longest.start % 1440)}–${mm(st.longest.end % 1440)} ${st.longest.name} `, el('b', fmtMin(st.longest.min))]) : null,
     pg ? el('div.br-prog', [
-      el('span.br-pk', [`きょうの作業 `, el('b', fmtMin(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`]),
+      el('span.br-pk', [`今日の作業 `, el('b', fmtMin(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`]),
       el('div.br-track', el('i', { style: { width: `${Math.min(100, Math.round((pg.workMin / pg.targetMin) * 100))}%` } })),
     ]) : null,
   ]);
@@ -87,7 +87,7 @@ function reviewBox(b) {
 
 /**
  * 「残りの時間で」の図(v0.76・実機 FB「残りの時間で のページを もう少し視覚的に」): 残りの時間(大きな数字)→ 作業時間帯の帯(済んだ分は灰・残りは色・いま の印)→
- * 作業の残り と きょうまでのタスク のタイル。b.remain / b.progress が無ければ その段は出さない
+ * 作業の残り と 今日までのタスク のタイル。b.remain / b.progress が無ければ その段は出さない
  */
 function remainBox(b) {
   const r = b.remain, pg = b.progress;
@@ -99,9 +99,9 @@ function remainBox(b) {
     r ? el('div.brm-bar', { role: 'img', 'aria-label': `作業時間帯 ${mm(r.startMin % 1440)}〜${mm(r.endMin % 1440)} の ${pct}% が過ぎました` }, el('i', { style: { width: `${pct}%` } })) : null,
     r ? el('div.brm-ax', [el('span', pct < 22 ? '' : mm(r.startMin % 1440)), el('span.brm-nowl', { style: { left: `${Math.max(8, Math.min(92, pct))}%` } }, '▲ いま'), el('span', pct > 78 ? '' : mm(r.endMin % 1440))]) : null, // いま の印と重なる側の時刻は出さない
     el('div.br-tiles', [
-      // v0.79(実機 FB): 作業の残りは 寝る前の「あしたへ」には出さない(きょうの作業の目安は あしたへ引き継がない)
+      // v0.79(実機 FB): 作業の残りは 寝る前の「あしたへ」には出さない(今日の作業の目安は あしたへ引き継がない)
       pg && b.slot !== 'bed' ? tile('作業の残り', left > 0 ? fmtMin(left) : '達成', `${fmtMin(pg.workMin)} / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`) : null,
-      tile('きょうまでのタスク', `${b.due.count}件`, b.due.overdue.length ? `うち期限切れ ${b.due.overdue.length}件` : b.due.count ? null : 'ぜんぶ済み', b.due.overdue.length ? ' warn' : ''),
+      tile('今日までのタスク', `${b.due.count}件`, b.due.overdue.length ? `うち期限切れ ${b.due.overdue.length}件` : b.due.count ? null : 'ぜんぶ済み', b.due.overdue.length ? ' warn' : ''),
     ].filter(Boolean)),
   ].filter(Boolean));
 }
@@ -121,7 +121,7 @@ export function maybeBrief(ctx) {
 
 /**
  * ブリーフィング(v0.62: アシスタントからの日報)のシート。3 ページに分ける(ユーザー要望「情報量が増えるので見づらくならないように。複数ページでも」):
- *  1 ふり返り(吹き出しの あいさつ+図)→ 2 タスク(✓ でその場で完了・このあとは)→ 3 おすすめ(天気・作業用 BGM・記事・きょうの気づき。時間帯で順と数が変わる・ui-buddy.recoPage)。
+ *  1 ふり返り(吹き出しの あいさつ+図)→ 2 タスク(✓ でその場で完了・このあとは)→ 3 おすすめ(天気・作業用 BGM・記事・今日の気づき。時間帯で順と数が変わる・ui-buddy.recoPage)。
  * 下に ‹ 戻る・ページの点・次へ ›(最後は 閉じる)。おすすめに出すものが無ければ 2 ページ。アシスタントを止めていれば吹き出しは出ない。閉じたら いまの画面を描き直す
  */
 export function openBrief(ctx, { manual = false } = {}) {

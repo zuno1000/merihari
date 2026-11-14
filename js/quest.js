@@ -47,7 +47,7 @@ export function parseStory(raw) {
 
 /**
  * 始めた日(since)からの作業の記録(分)を日ごとに。作業=種別が「作業として数える」もの(記録の asKind を反映・entryRole)。
- * 記録中の作業は きょうの分だけ nowMin まで。戻り値 [{ date, min }](日付順・0 分の日は無い)
+ * 記録中の作業は 今日の分だけ nowMin まで。戻り値 [{ date, min }](日付順・0 分の日は無い)
  */
 export function workByDay(entries, settings, since, today, nowMin) {
   const by = {};

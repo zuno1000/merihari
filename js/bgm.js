@@ -21,13 +21,13 @@ export function timeSlotMood(hour) {
   if (hour >= 17 && hour < 22) return 'calm';
   return 'night';
 }
-/** 設定 settings.bgm を正規化(純関数): enabled は true だけ・genres は存在するジャンルだけ(重複なし)・app(YouTube アプリで開く)と strip(ホームに きょうの曲の行)は既定 true */
+/** 設定 settings.bgm を正規化(純関数): enabled は true だけ・genres は存在するジャンルだけ(重複なし)・app(YouTube アプリで開く)と strip(ホームに 今日の曲の行)は既定 true */
 export function normalizeBgm(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GENRES.includes(g)))].slice(0, MAX_GENRES);
   return { enabled: o.enabled === true, genres, app: o.app !== false, strip: o.strip !== false };
 }
-/** その日に流した曲(古い順・消したものは除く)。ふり返りの「きょうの BGM」とホームの 1 行(末尾が最新)に */
+/** その日に流した曲(古い順・消したものは除く)。ふり返りの「今日の BGM」とホームの 1 行(末尾が最新)に */
 export function playsOf(plays, date) {
   return Object.values(plays || {}).filter((p) => p && !p.deletedAt && p.date === date).sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
 }
@@ -137,7 +137,7 @@ export function stats(plays, catalog) {
   return { heard: n, total: songs.length, up, down, updated: typeof catalog?.updated === 'string' ? catalog.updated : null };
 }
 export const watchUrl = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-/** サムネイル(v0.32.2・ふり返りの「きょうの BGM」だけ。16:9・黒帯なし。CSP の img-src に i.ytimg.com) */
+/** サムネイル(v0.32.2・ふり返りの「今日の BGM」だけ。16:9・黒帯なし。CSP の img-src に i.ytimg.com) */
 export const thumbUrl = (id) => `https://i.ytimg.com/vi/${encodeURIComponent(id)}/mqdefault.jpg`;
 /** iPhone / iPad: YouTube アプリの URL スキーム。Android: intent(アプリが無ければブラウザへ) */
 export const appUrl = (id) => `youtube://www.youtube.com/watch?v=${encodeURIComponent(id)}`;

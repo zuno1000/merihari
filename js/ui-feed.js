@@ -42,7 +42,7 @@ export function toggleSave(x, rerender = null) {
   else { markItem(x.id, 'save', { t: x.t, tj: x.tj, u: x.u, s: x.s, g: x.g }); toast('★ ブックマークしました(「ぜんぶ見る」の ★ に)'); }
   if (rerender) rerender();
 }
-const whenOf = (x) => { const ago = feed.daysAgo(x.d, dateKey()); return x.d ? (ago === 0 ? 'きょう' : ago === 1 ? 'きのう' : fmtMD(x.d)) : ''; };
+const whenOf = (x) => { const ago = feed.daysAgo(x.d, dateKey()); return x.d ? (ago === 0 ? '今日' : ago === 1 ? 'きのう' : fmtMD(x.d)) : ''; };
 const showImg = () => S().feed.img !== false;
 /** サムネイル(v0.36): og:image を遅延・参照元なしで読む。無い / 読めない / 設定で切っているときはジャンルの色の地に札 */
 export function thumb(x, f, { cls = 'feed-thumb' } = {}) {

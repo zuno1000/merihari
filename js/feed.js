@@ -106,7 +106,7 @@ export function daysAgo(d, today) {
   const a = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)), b = Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
   return Math.round((a - b) / 86400000);
 }
-/** 点: 気になる語の一致 × 3.0 + 新しさ(きょう 2.0 → 14 日で 0) */
+/** 点: 気になる語の一致 × 3.0 + 新しさ(今日 2.0 → 14 日で 0) */
 export function score(x, { today, keywords = [] } = {}) {
   const ago = daysAgo(x.d, today);
   const fresh = ago == null ? 0.5 : Math.max(0, 1 - Math.max(0, ago) / FRESH_DAYS);

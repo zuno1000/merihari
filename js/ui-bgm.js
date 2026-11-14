@@ -1,4 +1,4 @@
-// merihari ─ ui-bgm.js: 作業用 BGM の画面部品(v0.32・F16・任意)。ホーム右上の ♪(bgmButton)・きょうの BGM の 1 行(bgmStrip)・好き / ちがう のチップ(rateChips)・流す(playBgm)。
+// merihari ─ ui-bgm.js: 作業用 BGM の画面部品(v0.32・F16・任意)。ホーム右上の ♪(bgmButton)・今日の BGM の 1 行(bgmStrip)・好き / ちがう のチップ(rateChips)・流す(playBgm)。
 // ui-today と ui-settings の両方から使う(ui-settings → ui-today の循環 import を避けるため別ファイル)。純関数は js/bgm.js。
 import { el, toast, svg } from './ui.js';
 import * as store from './store.js';
@@ -46,7 +46,7 @@ export function playBgm(rerender = null, { opener = null, nav = null } = {}) {
   if (cat) return run(cat);
   return bgm.loadCatalog().then(run).catch(() => { toast('曲のカタログを読めませんでした'); return null; });
 }
-/** 聞いた曲をもう一度開く(きょうの 1 行のタップ・設定の一覧) */
+/** 聞いた曲をもう一度開く(今日の 1 行のタップ・設定の一覧) */
 export function reopen(id, { opener = null, nav = null } = {}) {
   return bgm.openSong(id, { app: S().bgm?.app !== false, opener, nav, onStay });
 }
@@ -67,7 +67,7 @@ export function rateChips(p, rerender) {
   const b = (v, label) => el('button.chip.sm2', { type: 'button', class: `chip sm2${p.rating === v ? ' on' : ''}`, 'aria-pressed': p.rating === v ? 'true' : 'false', 'aria-label': `${label}(${v === 1 ? 'こういう曲を多めに' : '控えめに'})`, onclick: () => rate(p.id, v, rerender) }, label);
   return el('div.chips.small.bgm-rate', { role: 'group', 'aria-label': '好み' }, [b(1, '好き'), b(-1, 'ちがう')]);
 }
-/** ホームの「いま知りたいこと」のタイル(v0.71): ♪・「流す」・きょう流した曲があれば その題名。タップで 1 曲 流す。使っていなければ null */
+/** ホームの「いま知りたいこと」のタイル(v0.71): ♪・「流す」・今日流した曲があれば その題名。タップで 1 曲 流す。使っていなければ null */
 export function bgmTile(rerender) {
   if (!bgmOn()) return null;
   bgm.loadCatalog().catch(() => {});
@@ -81,7 +81,7 @@ export function playOf(date) {
   const l = bgm.playsOf(P(), date);
   return l.length ? l[l.length - 1] : null;
 }
-/** ホームの 1 行を その日だけ消す(× ・端末内・同期しない)。設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出さない(v0.32.1) */
+/** ホームの 1 行を その日だけ消す(× ・端末内・同期しない)。設定 › 作業用 BGM「ホームに 今日の曲を出す」を外せば いつも出さない(v0.32.1) */
 export function hideStrip(date) { store.state.local.bgmStripHidden = date; store.saveLocal(); }
 export const stripHidden = (date) => store.state.local.bgmStripHidden === date;
 /** その日の BGM の 1 行: ♪ 題名(タップでもう一度開く)・好き / ちがう・×(その日だけ消す)。流していない日は出さない(ホームは円と棒だけ、の約束) */
@@ -91,16 +91,16 @@ export function bgmStrip(date, rerender) {
   if (!p) return null;
   const cat = bgm.catalogNow();
   const song = cat ? cat.songs.find((s) => s.id === p.id) : null;
-  const title = el('span.bgm-title', song ? song.t : 'きょうの BGM');
+  const title = el('span.bgm-title', song ? song.t : '今日の BGM');
   if (!cat) bgm.loadCatalog().then((c) => { const s2 = c.songs.find((s) => s.id === p.id); if (s2 && title.isConnected) title.textContent = s2.t; }).catch(() => {});
   return el('div.bgm-strip', [
     el('button.bgm-open', { type: 'button', 'aria-label': 'この曲をもう一度 YouTube で開く', onclick: () => reopen(p.id) }, [NOTE_ICON('bgm-ico'), title]),
     rateChips(p, rerender),
-    el('button.bgm-x', { type: 'button', 'aria-label': 'この行を消す(きょうだけ。いつも出さないなら設定 › 作業用 BGM)', title: '消す', onclick: () => { hideStrip(date); toast('きょうは出しません。いつも出さないなら 設定 › 作業用 BGM'); if (rerender) rerender(); } }, '×'),
+    el('button.bgm-x', { type: 'button', 'aria-label': 'この行を消す(今日だけ。いつも出さないなら設定 › 作業用 BGM)', title: '消す', onclick: () => { hideStrip(date); toast('今日は出しません。いつも出さないなら 設定 › 作業用 BGM'); if (rerender) rerender(); } }, '×'),
   ]);
 }
 /**
- * ふり返りの「きょうの BGM」(v0.32.1): その日に流した曲を時刻順に。1 曲 1 行(サムネイル・題名・「流した時刻・ジャンル」/ 好き・ちがう の小さな印)。タップでもう一度開く・印をタップで切替。流していない日は出さない。
+ * ふり返りの「今日の BGM」(v0.32.1): その日に流した曲を時刻順に。1 曲 1 行(サムネイル・題名・「流した時刻・ジャンル」/ 好き・ちがう の小さな印)。タップでもう一度開く・印をタップで切替。流していない日は出さない。
  * v0.32.2(実機 FB): 左はサムネイル(i.ytimg.com・読めなければ ♪ の印)、時刻は下の行の先頭(再生時間と取り違えないよう「流した時刻」の順に)
  */
 export function bgmRecap(date, rerender, { isToday = true } = {}) {
@@ -114,12 +114,12 @@ export function bgmRecap(date, rerender, { isToday = true } = {}) {
     return el('div.bgm-rrow', [
       el('button.bgm-ropen', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [
         thumb(p.id),
-        el('span.bgm-rmain', [el('span.bgm-title', song ? song.t : 'きょうの BGM'), el('span.bgm-rsub.muted', [el('span.bgm-rtime', bgm.clockOf(p.at)), song && song.g.length ? el('span', song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・')) : null])]),
+        el('span.bgm-rmain', [el('span.bgm-title', song ? song.t : '今日の BGM'), el('span.bgm-rsub.muted', [el('span.bgm-rtime', bgm.clockOf(p.at)), song && song.g.length ? el('span', song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・')) : null])]),
       ]),
       el('span.bgm-marks', [mark(1, '好き', HEART()), mark(-1, 'ちがう', MINUS())]),
     ]);
   });
-  return el('section.group.bgm-recap', [el('h2', isToday ? 'きょうの BGM' : 'この日の BGM'), el('section.card.bgm-rcard', rows)]);
+  return el('section.group.bgm-recap', [el('h2', isToday ? '今日の BGM' : 'この日の BGM'), el('section.card.bgm-rcard', rows)]);
 }
 /** サムネイル(16:9・読めなければ ♪ の印に差し替え・オフラインでも崩れない) */
 function thumb(id) {

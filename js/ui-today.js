@@ -1,5 +1,5 @@
 // merihari ─ ui-today.js: 「ホーム」と「カレンダー」(v0.27・案 A: 週の帯 / 月の升目 + その日のタイムライン。タブの id は 'timeline' のまま)の画面と、記録の共通操作。
-// v0.15: 理想スケジュール(時間割)を廃止。ホーム=きょうの内訳(円)+「何をしていた?」+ きょうの目安。タイムライン=実績1レーン(カレンダーの予定は背景)。
+// v0.15: 理想スケジュール(時間割)を廃止。ホーム=今日の内訳(円)+「何をしていた?」+ 今日の目安。タイムライン=実績1レーン(カレンダーの予定は背景)。
 // 記録の入口は右下の「＋」(既定は「時刻を決めて」= 最後の記録の終わり〜いま をカテゴリのタップで記録。「いまから」はタイマー)。
 import { el, clear, toast, sheet, confirmSheet, timeField, clockSheet, svg, DAY_JA } from './ui.js';
 import * as store from './store.js';
@@ -20,7 +20,7 @@ import { buddyHead, buddyActs, buddyOn, buddyName, bubble } from './ui-buddy.js'
 import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
-import * as next from './next.js'; // v0.71: つぎは これ(候補の順位・純関数)
+import * as next from './next.js'; // v0.71: 次はこれ(候補の順位・純関数)
 import { pomoOn, pomoCard, startSheet } from './ui-pomo.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
@@ -437,7 +437,7 @@ export function weatherSheet(ctx) {
     };
     load();
     return [
-      el('h2.wx-h', 'きょうの天気'),
+      el('h2.wx-h', '今日の天気'),
       regions.length ? cards : el('p.muted.small', '地域がありません。設定 › 天気と服装 で登録します。'),
       el('div.row.wx-actions', [foot, el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: () => load(true) }, '更新'), el('button.btn.sm.ghost', { type: 'button', onclick: () => { close(); ctx.go('settings', 'weather'); } }, '地域 ›')]),
       el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
@@ -471,9 +471,9 @@ const stripRow = (strips) => { const xs = strips.filter(Boolean); return xs.leng
 
 // ================= ホーム =================
 /**
- * ホーム(v0.71・ユーザー要望「開けば 次に何をやるか分かる画面に」): きょうは ①つぎは これ(nextCard)②きょうがんばること(focusBox・habitsBox)③いま知りたいこと(quickRow)④小説と図録・日報 / ふり返る / 話す。過去の日は 円と内訳(breakdown)。
- * 以下は v0.28 のときの説明(過去の日のホームに残る): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → きょうの内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
- * v0.28 で外したもの: 気合のカード(FEATURES.KIAI)・きょうのタスク・きょうの予定・「きょうをふり返る」・同期と書き出しの 1 行(→ 歯車の赤い点と 設定 の先頭)。
+ * ホーム(v0.71・ユーザー要望「開けば 次に何をやるか分かる画面に」): 今日は ①次はこれ(nextCard)②今日がんばること(focusBox・habitsBox)③いま知りたいこと(quickRow)④小説と図録・日報 / ふり返る / 話す。過去の日は 円と内訳(breakdown)。
+ * 以下は v0.28 のときの説明(過去の日のホームに残る): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → 今日の内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
+ * v0.28 で外したもの: 気合のカード(FEATURES.KIAI)・今日のタスク・今日の予定・「今日をふり返る」・同期と書き出しの 1 行(→ 歯車の赤い点と 設定 の先頭)。
  * 秒の更新は textContent だけ、状態が変わったら描き直す。
  */
 export function renderNow(view, ctx, dateArg = null) {
@@ -506,12 +506,12 @@ export function renderNow(view, ctx, dateArg = null) {
     if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) goDate(addDays(date, -1)); else if (!isToday) goDate(addDays(date, 1)); } // 左へスワイプ=前の日・右へ=次の日
   } }, [
     head,
-    // v0.71(ユーザー要望「開けば 次に何をやるか分かり、すぐ取りかかりたくなる画面に」): きょうは ①つぎは これ(アシスタントの顔と吹き出し・記録中は そのカード)→ ②きょうがんばること(作業の進み・期限のタスク・習慣)
-    //   → ③いま知りたいこと(電車・天気・BGM・記事 のタイル)→ ④小説と図録の進み・日報 / ふり返る / 話す。円と内訳・キャッチアップの折りたたみ・BGM の 1 行は きょうのホームから外した(過去の日は これまでどおり 円と内訳)
+    // v0.71(ユーザー要望「開けば 次に何をやるか分かり、すぐ取りかかりたくなる画面に」): 今日は ①次はこれ(アシスタントの顔と吹き出し・記録中は そのカード)→ ②今日がんばること(作業の進み・期限のタスク・習慣)
+    //   → ③いま知りたいこと(電車・天気・BGM・記事 のタイル)→ ④小説と図録の進み・日報 / ふり返る / 話す。円と内訳・キャッチアップの折りたたみ・BGM の 1 行は 今日のホームから外した(過去の日は これまでどおり 円と内訳)
     ...(isToday ? [
       nextCard(e, hero, rerender, ctx),
       FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
-      focusBox(e, rerender, ctx), // v0.73: 作業の進み・期限のタスク・きょうの習慣(F5-15)を 1 枚に
+      focusBox(e, rerender, ctx), // v0.73: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
       quickRow(ctx, rerender),
       stripRow([questStrip(), artStrip()]), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
       buddyActs(ctx),
@@ -533,9 +533,9 @@ export function renderNow(view, ctx, dateArg = null) {
   });
 }
 /**
- * ① つぎは これ(v0.71・F24-20): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
+ * ① 次はこれ(v0.71・F24-20): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
  * 記録中 / タイマー中なら そのカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 始める」(v0.79: ポモドーロは 下の「タイマーで始める ›」から)。
- * v0.73(ユーザー要望「ほかの候補のボタンではなく、つぎは これ として出ているものをタップして 作業するものを替えられるように」): 名前の所をタップ →「なにをやる?」のシート
+ * v0.73(ユーザー要望「ほかの候補のボタンではなく、次はこれ として出ているものをタップして 作業するものを替えられるように」): 名前の所をタップ →「なにをやる?」のシート
  * (候補+ほかの作業のカテゴリ)。選ぶと カードの中身が替わり(その日のあいだ覚える・nextPick)、始めるのは そのあと。作業いがいの記録は「ほかのことを記録」。
  */
 let nextPick = null; // { date, key }(自分で選んだもの。key = t:<タスク> / c:<カテゴリ>)
@@ -566,7 +566,7 @@ function nextCard(n, hero, rerender, ctx) {
     const others = next.workCategories(S()).filter((c) => !used.has(`c:${c.id}`));
     return [
       el('h2', 'なにをやる?'),
-      el('p.muted.small', 'タップで「つぎは これ」を替えます(始めるのは そのあと)。'),
+      el('p.muted.small', 'タップで「次はこれ」を替えます(始めるのは そのあと)。'),
       list.length ? el('div.list.nx-list', list.map((c, i) => el('button.nx-row', { type: 'button', class: `nx-row${top && pickKey(c) === pickKey(top) ? ' on' : ''}`, 'aria-pressed': top && pickKey(c) === pickKey(top) ? 'true' : 'false', 'aria-label': `${c.title} にする`, onclick: () => pick(i === 0 ? null : pickKey(c)) }, [
         el('span.nx-rmain', [el('span.nx-rt', [dot(c), c.title]), el('span.nx-rr', i === 0 ? `${c.reason}・おすすめ` : c.reason)]), tag(c),
       ]))) : null,
@@ -576,7 +576,7 @@ function nextCard(n, hero, rerender, ctx) {
     ];
   });
   const body = top ? [
-    el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : 'つぎは これ'), tag(top)]),
+    el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : '次はこれ'), tag(top)]),
     // v0.79.1(実機 FB「替える の表記を無くし、その場所に 始める を。いま知りたいこと が ひと画面に納まるように」): 名前の箱(タップで 選び直し)の右に「▶ 始める」。大きなボタンの段は無くす
     el('div.nx-line', [
       el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
@@ -586,14 +586,14 @@ function nextCard(n, hero, rerender, ctx) {
     ]),
     el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => startSheet({ categoryId: top.categoryId, taskId: top.taskId, after: rerender }) }, 'タイマーで始める ›') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
   ].filter(Boolean) : [
-    el('div.nx-top', el('span.nx-k', 'つぎは')),
+    el('div.nx-top', el('span.nx-k', '次は')),
     el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', onclick: other }, '記録する')),
   ];
   return el('section.nx-card', [head, ...body].filter(Boolean));
 }
 /**
- * ② きょうがんばること(v0.71。v0.73 ユーザー要望「がんばること・タスク・習慣が とっ散らかっているので 統合を」): 1 枚のカードに
- * きょうの作業の進み(目標。無ければ 4 時間・タップで その日のレポート = 円と内訳・7 日 / 30 日 への入口)→ やること(きょうが期限 / 期限切れ のタスク 5 件まで+きょうの習慣。
+ * ② 今日がんばること(v0.71。v0.73 ユーザー要望「がんばること・タスク・習慣が とっ散らかっているので 統合を」): 1 枚のカードに
+ * 今日の作業の進み(目標。無ければ 4 時間・タップで その日のレポート = 円と内訳・7 日 / 30 日 への入口)→ やること(今日が期限 / 期限切れ のタスク 5 件まで+今日の習慣。
  * どれも 左の ✓ で済ませる・右に札・名前のタップで タスク)→ 習慣の声かけ(plan.habitNudge)→ 未記録の 1 行(30 分以上・「何をしていた?」)。
  */
 function focusBox(n, rerender, ctx) {
@@ -604,8 +604,8 @@ function focusBox(n, rerender, ctx) {
   const from = W && n.min >= W.start && n.min < W.end ? (last != null && n.min - last <= 360 ? last : Math.max(W.start, n.min - 360)) : null;
   const ask = un.unloggedMin >= 30 && from != null && n.min - from >= 5
     ? el('button.fx-un', { type: 'button', onclick: () => entrySheet({ date: n.date, start: from, end: n.min, title: '何をしていた?' }, rerender) }, [el('span', `未記録 ${fmtMin(un.unloggedMin)}`), el('span.ask', `${mm(from % 1440)} から何をしていた? ›`)]) : null;
-  const prog = el('button.fx-prog', { type: 'button', 'aria-label': `きょうの作業 ${fmtMinJa(pg.workMin)}(レポートを開く)`, onclick: () => reportSheet(n.date, 'day') }, [
-    el('span.fx-pk', [el('span', ['きょうの作業 ', el('b', fmtMinJa(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMinJa(pg.targetMin)}`]), el('span.fx-more', 'レポート ›')]),
+  const prog = el('button.fx-prog', { type: 'button', 'aria-label': `今日の作業 ${fmtMinJa(pg.workMin)}(レポートを開く)`, onclick: () => reportSheet(n.date, 'day') }, [
+    el('span.fx-pk', [el('span', ['今日の作業 ', el('b', fmtMinJa(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMinJa(pg.targetMin)}`]), el('span.fx-more', 'レポート ›')]),
     el('div.br-track', el('i', { style: { width: `${Math.round(pg.rate * 100)}%` } })),
   ]);
   const line = ({ cls = '', on = false, checkLabel, onCheck, name, color = null, meta, metaCls = '', tag, hot = false, open }) => el('div.fx-row', { class: `fx-row${cls}` }, [
@@ -613,21 +613,21 @@ function focusBox(n, rerender, ctx) {
     el('button.fx-t', { type: 'button', 'aria-label': `${name}(タスクを開く)`, onclick: open }, [el('span.tname', [color ? el('i.dot', { style: { background: color }, 'aria-hidden': 'true' }) : null, name].filter(Boolean)), el('span.tmeta', { class: `tmeta${metaCls}` }, meta)]),
     el('span.nx-tag', { class: `nx-tag${hot ? ' hot' : ''}` }, tag),
   ]);
-  // タスク: きょうが期限 → 期限切れ
+  // タスク: 今日が期限 → 期限切れ
   const due = plan.dueTasks(T(), n.date, E());
   const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
   const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
   const rows = all.slice(0, 5).map(([t, over]) => {
     const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
-    return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `きょう${tm} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
+    return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `今日${tm} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
   });
   if (all.length > 5) rows.push(el('button.fx-rest', { type: 'button', onclick: () => ctx.go('tasks') }, `タスクは ほか ${all.length - 5} 件 ›`));
-  // 習慣(v0.49・F5-15): ✓=済んだの印(明日はまた出る)・きょう(今週)の分 / 目安・◯日続いてる・今週 m/n 日
+  // 習慣(v0.49・F5-15): ✓=済んだの印(明日はまた出る)・今日(今週)の分 / 目安・◯日続いてる・今週 m/n 日
   const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && T()[g.taskId]);
   const habits = gs.map((g) => ({ g, task: T()[g.taskId], stats: plan.habitStats(T()[g.taskId], E(), n.date) }));
   const nudge = habits.length && !buddyOn() ? plan.habitNudge(habits, n.min, windowEndOf(n.date)) : null; // v0.76: 声かけは アシスタントが言う(ui-buddy.homeState の habit)。止めているときだけ ここに 1 行
   for (const { g, task: t, stats: st } of habits) {
-    const span = g.kind === 'weekly' ? '今週' : 'きょう', unit = g.kind === 'weekly' ? '週' : '日';
+    const span = g.kind === 'weekly' ? '今週' : '今日', unit = g.kind === 'weekly' ? '週' : '日';
     const meta = [
       g.targetMin == null ? `${span}は${g.checked ? '済' : 'まだ'}` : `${span}${fmtMinJa(g.doneMin)} / ${fmtMinJa(g.targetMin)}${g.checked ? '・済' : ''}`,
       st && st.streak >= 2 ? `${st.streak}${unit}続いてる` : null,
@@ -637,10 +637,10 @@ function focusBox(n, rerender, ctx) {
     rows.push(line({ cls: g.done ? ' done' : '', on: g.checked || g.done, checkLabel: `${t.name} を${g.checked ? `${span}の済みから外す` : `${span}は済んだことにする`}`, onCheck, name: t.name, color: catOf(g.categoryId).color, meta, tag: g.kind === 'weekly' ? '毎週' : '習慣', open: () => ctx.go('tasks', 'habits') }));
   }
   return el('section.group.focus-box', [
-    el('h2', 'きょうがんばること'),
+    el('h2', '今日がんばること'),
     el('section.card.fx-card', [
       prog,
-      rows.length ? el('div.fx-rows', rows) : el('p.muted.small.fx-none', 'きょうが期限のタスクも 習慣も ありません。'),
+      rows.length ? el('div.fx-rows', rows) : el('p.muted.small.fx-none', '今日が期限のタスクも 習慣も ありません。'),
       nudge ? el('p.fx-nudge', nudge) : null,
       ask,
     ].filter(Boolean)),
@@ -689,7 +689,7 @@ export function pressKiai({ rerender = null, openSheet = true } = {}) {
   store.state.data.kiai = r.kiai;
   if (!r.dup) { store.save(); sync.autoSync(); }
   const count = kiai.listOf(r.kiai, n.date).length;
-  toast(r.dup ? '気合、入ってます' : `気合、入った(きょう${count}回目)`);
+  toast(r.dup ? '気合、入ってます' : `気合、入った(今日${count}回目)`);
   litKiai();
   if (rerender) rerender();
   if (openSheet) kiaiTagSheet(r.rec, rerender || (() => {}), { fresh: !r.dup });
@@ -700,7 +700,7 @@ let kiaiLitUntil = 0;
 function litKiai() { kiaiLitUntil = performance.now() + 1200; }
 const KIAI_BOLT = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })]);
 /**
- * ホームの気合のカード(v0.25.1): 上=大きな押し場(丸い稲妻+「気合を入れる」+ひと言)。下=きょうの回数と、1 回ごとの小さな札(時刻+タグ)。
+ * ホームの気合のカード(v0.25.1): 上=大きな押し場(丸い稲妻+「気合を入れる」+ひと言)。下=今日の回数と、1 回ごとの小さな札(時刻+タグ)。
  * 札をタップで タグ・メモ を直す。回数をタップで一覧。前の日は下の段だけ(無ければ出さない)。
  */
 function kiaiBox(n, rerender, isToday) {
@@ -719,7 +719,7 @@ function kiaiBox(n, rerender, isToday) {
   ].filter(Boolean));
   const pills = el('div.kiai-pills', list.map(pill));
   const foot = list.length ? el('div.kiai-foot', [
-    el('button.kiai-count', { type: 'button', 'aria-label': `${isToday ? 'きょう' : 'この日'}の気合の一覧`, onclick: () => kiaiSheet(n, rerender) }, [el('b', String(list.length)), el('span', `回${isToday ? '' : '(この日)'}`)]),
+    el('button.kiai-count', { type: 'button', 'aria-label': `${isToday ? '今日' : 'この日'}の気合の一覧`, onclick: () => kiaiSheet(n, rerender) }, [el('b', String(list.length)), el('span', `回${isToday ? '' : '(この日)'}`)]),
     pills,
   ]) : null;
   if (isToday && list.length > 2) setTimeout(() => { pills.scrollLeft = pills.scrollWidth; }, 0); // いちばん新しい札が見えるように右端へ
@@ -759,7 +759,7 @@ function kiaiSheet(n, rerender) {
   sheet((close) => {
     const list = kiai.listOf(store.state.data.kiai, n.date);
     return [
-      el('h2', `${n.date === effNow().date ? 'きょう' : md(n.date)}の気合 ${list.length}回`),
+      el('h2', `${n.date === effNow().date ? '今日' : md(n.date)}の気合 ${list.length}回`),
       el('div.list.kiai-list', list.map((r) => el('button.krow', { type: 'button', onclick: () => { close(); kiaiTagSheet(r, rerender, { fresh: false }); } }, [
         el('time', r.time.replace(/^0/, '')),
         el('span.ktag', r.categoryId ? [el('i.dot', { style: { background: catOf(r.categoryId).color } }), catOf(r.categoryId).name] : [el('span.muted', 'タグなし')]),
@@ -805,7 +805,7 @@ function defaultStart(date, nowMin) {
   return Math.max(0, Math.max(w ? w.start : 0, nowMin - 60));
 }
 
-/** きょうの内訳: 1日の円(中央はきょうの記録の合計)+ カテゴリ別の一覧(棒つき・未記録も)。行のタップで そのカテゴリを後から記録 */
+/** 今日の内訳: 1日の円(中央は今日の記録の合計)+ カテゴリ別の一覧(棒つき・未記録も)。行のタップで そのカテゴリを後から記録 */
 function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
   const W = windowFor(S(), n.date);
   const totals = log.totalsByCategory(E(), n.date, n.min);
@@ -813,7 +813,7 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
   const roles = log.totalsByRole(E(), n.date, n.min, (e) => store.entryRole(S(), e)); // v0.30: 記録の「数え方」(asKind)を反映
   const work = roles.work;
   const un = report.unlogged(E(), n.date, W, n.min);
-  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? (isToday ? 'きょうの記録' : 'この日の記録') : (isToday ? 'まだ記録なし' : '記録なし'))]); // v0.28: 「レポート ›」の文字は出さない(円のタップで開くのはそのまま)
+  const center = el('div.pie-center', [el('b', fmtMin(total) || '0m'), el('span.muted.small', total ? (isToday ? '今日の記録' : 'この日の記録') : (isToday ? 'まだ記録なし' : '記録なし'))]); // v0.28: 「レポート ›」の文字は出さない(円のタップで開くのはそのまま)
   const pie = pieFigure(E(), n.date, W, n.min, { workMin: work }, { size: 220, stroke: 34, center });
   const rows = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, min]) => ({ id, min, c: catOf(id) }));
   const max = Math.max(1, ...rows.map((r) => r.min)); // 棒はカテゴリの最大を100%に(未記録が大きい日でもカテゴリの差が見える)
@@ -956,7 +956,7 @@ function catChipPicker(initial, onPick) {
   return node;
 }
 
-// ---- 予定(v0.23・F12): 朝に自分で置く。同じレーンに枠線だけ。入口は タイムラインの未来の空き(ここに予定)・ホームの「きょうの予定」・明日以降はタイムラインの › ----
+// ---- 予定(v0.23・F12): 朝に自分で置く。同じレーンに枠線だけ。入口は タイムラインの未来の空き(ここに予定)・ホームの「今日の予定」・明日以降はタイムラインの › ----
 const PB = () => (store.state.data.planBlocks = store.state.data.planBlocks || {});
 function savePlanBlocks() { store.save(); sync.autoSync(); }
 /** 予定を置く / 直す(F12-1): カテゴリ(かタスク)と時間だけ。o = { date, id?(直す), start?, end?(分) } */

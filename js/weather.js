@@ -112,7 +112,7 @@ export async function fetchForecast(lat, lon) {
   const u = new URL(FORECAST_URL);
   u.searchParams.set('latitude', String(lat)); u.searchParams.set('longitude', String(lon));
   u.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max');
-  u.searchParams.set('timezone', 'auto'); u.searchParams.set('forecast_days', '2'); // v0.29.2: きょうと あす
+  u.searchParams.set('timezone', 'auto'); u.searchParams.set('forecast_days', '2'); // v0.29.2: 今日と あす
   return parseForecast(await getJSON(u.toString()));
 }
 /** 地名で検索(設定 › 天気)。候補は parsePlaces で正規化したものだけ */

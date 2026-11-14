@@ -1,6 +1,6 @@
 // merihari ─ money.js: お金(v0.19・F10)の純関数。v0.47(F10-10): 定期(サブスクの支払い・給料日)の純関数 recurringOn / recurringInMonth / recurringDue / recurringMonthly も。支出/収入1件 = { id, date, time|null, amount(円・正の整数), type:'out'|'in', categoryId, note, entryId|null, updatedAt, deletedAt }。
 // 設計(参考: おカネレコの「金額 → カテゴリをタップで完了」、Zaim の月予算と「あといくら / 1日あたり」、家計簿が続かない理由の1位「カテゴリ分類」→ カテゴリは少なく・自由に増減):
-// - 入力は2タップ(金額 → カテゴリ)。日付と時刻は「きょう・いま」が既定で、タイムラインの記録に自動で紐づく(その時間に何をしていたか)。
+// - 入力は2タップ(金額 → カテゴリ)。日付と時刻は「今日・いま」が既定で、タイムラインの記録に自動で紐づく(その時間に何をしていたか)。
 // - 月の予算は任意。あれば「残り ◯円 / 1日 ◯円」。無ければ1日平均だけ。責めない。
 import { addDays, hm } from './time.js';
 

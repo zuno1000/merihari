@@ -12,9 +12,9 @@ import * as diary from './diary.js';
 import * as ai from './ai.js';
 import { buddyNotes, buddyPersona, prime, buddyOn, buddyName, bubble, dayGuide, buddyLine } from './ui-buddy.js'; // v0.60: AI に渡す材料
 import * as sync from './sync.js';
-import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
+import { dayTop } from './ui-report.js'; // v0.27.1: ①「今日はどうだった」(循環 import だが呼ぶのは描画時だけ)
 import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js';
-import { bgmRecap } from './ui-bgm.js'; // v0.32.1: きょうの BGM(F16-6) // v0.28: 上の 1 行と月のカレンダーはホームと共通(循環 import だが呼ぶのは描画時だけ)
+import { bgmRecap } from './ui-bgm.js'; // v0.32.1: 今日の BGM(F16-6) // v0.28: 上の 1 行と月のカレンダーはホームと共通(循環 import だが呼ぶのは描画時だけ)
 import { dateKey, minuteOfDay, windowFor, fmtMD, fmtMin, addDays, effectiveDay, dayCut, DAY_JA, weekday } from './time.js';
 
 const S = () => store.state.data.settings;
@@ -111,8 +111,8 @@ export function renderDiary(view, ctx, dateArg = null) {
     vline(buddyOn() ? `${buddyName()}の返事` : 'AI の返事', entry.ai),
     el('div.row', el('button.btn.sm', { type: 'button', onclick: () => openWizard(1) }, '書き足す・直す')),
   ].filter(Boolean) : [
-    el('p.muted.small', isToday ? 'きょうは まだ書いていません。' : 'この日は書いていません。'),
-    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => openWizard(0) }, isToday ? 'きょうを一緒にふり返る' : 'この日をふり返る')),
+    el('p.muted.small', isToday ? '今日は まだ書いていません。' : 'この日は書いていません。'),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => openWizard(0) }, isToday ? '今日を一緒にふり返る' : 'この日をふり返る')),
   ]);
 
   // 続いた日数と最近の一覧
@@ -129,7 +129,7 @@ export function renderDiary(view, ctx, dateArg = null) {
       rows.push(el('button.srow.drow', { type: 'button', class: `srow drow${k === date ? ' cur' : ''}`, onclick: () => { commit(); goDate(k); } }, [
         el('span.ddate', [el('b', `${+k.slice(8, 10)}`), el('span.muted.small', `${DAY_JA[weekday(k)]}`)]),
         el('i.mdot', { class: `mdot${w && d.mood ? ` m${d.mood}` : ''}`, 'aria-hidden': 'true' }),
-        el('span.dx', w ? (diary.excerpt(d) || diary.scalesText(d)) : (k === e.date ? 'きょうはまだ' : '')),
+        el('span.dx', w ? (diary.excerpt(d) || diary.scalesText(d)) : (k === e.date ? '今日はまだ' : '')),
         el('span.chev', '›'),
       ]));
     }
@@ -137,14 +137,14 @@ export function renderDiary(view, ctx, dateArg = null) {
   }
   refreshList();
 
-  // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
+  // v0.24: あのころの今日(1週間前・1か月前・1年前の日記)
   const mems = diary.memories(Dy(), date);
-  const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
-  // v0.27.1・案 A・F9-7: ふり返りの流れ=①きょうはどうだった(レポートの見出しとタイル)→ ②気持ちを残す(日記・明日は を含む)→ AI(有効なら)→ 期限が近いタスク(きょうだけ)
+  const memBox = mems.length ? el('section.group', [el('h2', 'あのころの今日'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
+  // v0.27.1・案 A・F9-7: ふり返りの流れ=①今日はどうだった(レポートの見出しとタイル)→ ②気持ちを残す(日記・明日は を含む)→ AI(有効なら)→ 期限が近いタスク(今日だけ)
   // v0.30(実機 FB): 「材料」と「明日の予定」の札を廃止、「明日は」を ひっかかったこと の下へ、AI とタスクの順を入れ替え
   const top = dayTop(date, nowMin);
   const guide = dayGuide({ isToday, hasRecords: !!top, written, fb });
-  const topSec = top ? el('section.group', [el('h2', isToday ? 'きょうはどうだった' : 'この日はどうだった'), top]) : null;
+  const topSec = top ? el('section.group', [el('h2', isToday ? '今日はどうだった' : 'この日はどうだった'), top]) : null;
   const cardSec = el('section.group', [el('h2', written ? '残した気持ち' : '気持ちを残す'), card]);
   let taskSec = null;
   if (isToday) {
@@ -161,7 +161,7 @@ export function renderDiary(view, ctx, dateArg = null) {
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
-  view.append(...[el('h1', 'ふり返り'), head, guide, cardSec, topSec, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): きょうの BGM は 期限が近いタスク と 最近 の間
+  view.append(...[el('h1', 'ふり返り'), head, guide, cardSec, topSec, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): 今日の BGM は 期限が近いタスク と 最近 の間
   if (pendingReflect) { pendingReflect = false; if (isToday) openWizard(0); } // ホームの「ふり返る」から来たとき
 }
 
@@ -172,7 +172,7 @@ export function requestReflect() { pendingReflect = true; }
 /**
  * 一緒にふり返る(v0.66・ユーザー要望「今日を振り返るボタンを用意して、ブリーフィングのように複数ページで、今日を一緒に振り返る(記入する)」):
  * 5 ページのシート。どのページも アシスタントの吹き出しは 1 つだけ(止めていれば無し)。入力は 0.5 秒後と ページを替えるとき・閉じるときに保存。
- *  1 きょうの記録(判定の ひとこと+レポートの見出しとタイル)→ 2 気分(気分・元気)→ 3 よかったこと(レポートの「よかったこと」をチップで足せる)
+ *  1 今日の記録(判定の ひとこと+レポートの見出しとタイル)→ 2 気分(気分・元気)→ 3 よかったこと(レポートの「よかったこと」をチップで足せる)
  *  → 4 ひっかかったこと(「ここをこうしたら」をチップで)→ 5 あした(明日は・メモ・AI が有効なら「まとめを頼む / 返事を貼り付け」)。最後は「綴じる」。
  * o = { date, isToday, nowMin, agg, fb, gs, dayDone, page }
  */
@@ -203,7 +203,7 @@ function reflectSheet(o, onClose) {
     const headText = fb.head || (fb.good && fb.good[0]) || '';
     const first = !o.isToday ? bubble('review_past', {}, 'base') : !top ? bubble('review_none', {}, 'worry') : headText && fb.judged ? bubble('review_head', { text: String(headText).replace(/[。.]$/, '') }, 'happy') : bubble('review_mid', {}, 'base');
     const pages = [
-      { name: 'きょうの記録', nodes: () => [first, top || el('p.muted', 'この日の記録はありません。')] },
+      { name: '今日の記録', nodes: () => [first, top || el('p.muted', 'この日の記録はありません。')] },
       { name: '気分', nodes: () => [bubble('wz_scales', {}, 'base'), el('section.card.dcard', el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))))] },
       { name: 'よかったこと', nodes: () => { const ta = area('good', 'ひとつだけでも'); return [bubble('diary_ask', {}, 'happy'), el('section.card.dcard', ta), hints('good', fb.good, ta)]; } },
       { name: 'ひっかかったこと', nodes: () => { const ta = area('hard', '気づき。なければ空でいい'); return [bubble('wz_hard', {}, 'base'), el('section.card.dcard', ta), hints('hard', [...(fb.lookBack || []), fb.better], ta)]; } },
@@ -227,7 +227,7 @@ function reflectSheet(o, onClose) {
     const go = (p) => { commit(); page = p; draw(); if (body.parentNode) body.parentNode.scrollTop = 0; };
     clear(body);
     body.append(...[
-      el('div.brief-top', [el('h2', o.isToday ? 'きょうをふり返る' : `${md(o.date)}をふり返る`), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
+      el('div.brief-top', [el('h2', o.isToday ? '今日をふり返る' : `${md(o.date)}をふり返る`), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
       ...pages[page].nodes(),
       el('div.row.brief-nav', [
         el('button.btn.ghost', { type: 'button', disabled: page === 0, 'aria-label': '前のページ', onclick: () => go(page - 1) }, '‹ 戻る'),
@@ -241,7 +241,7 @@ function reflectSheet(o, onClose) {
 }
 
 /**
- * AI に頼む(v0.21・F11): 「きょうのふり返りを頼む」と「相談」(定型のチップ+自由入力)。文は ai.js の純関数で作り、ショートカット(端末内モデル)へ。
+ * AI に頼む(v0.21・F11): 「今日のふり返りを頼む」と「相談」(定型のチップ+自由入力)。文は ai.js の純関数で作り、ショートカット(端末内モデル)へ。
  * v0.29.4: 返事は「AI」の節の「返事を貼り付け」(1 タップ)で「AI の返事」の欄へ(F11-6)。PC など開けない環境のために「文をコピー」も。戻り値 { node, send }
  */
 function aiCard(o) {

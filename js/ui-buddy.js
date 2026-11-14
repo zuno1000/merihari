@@ -115,7 +115,7 @@ function homeState() {
   const run = !o ? runNow() : null; // v0.73・F25: ポモドーロの間は 記録が無くても 作業中 / 休憩中
   if (run) { const ph = pomo.phaseAt(run, Date.now()); if (ph.kind !== 'done') { open = { role: ph.kind === 'rest' ? 'rest' : 'work', min: Math.max(0, Math.floor((Date.now() - run.startMs) / 60000)) }; idleMin = null; } }
   const a = primed && primed.art, q = primed && primed.quest;
-  // v0.76: 習慣の声かけ(昨日ひと休み / ぜんぶ済み / 夜に まだ)は ここから アシスタントが言う(ホームの「きょうがんばること」の 1 行は やめた)
+  // v0.76: 習慣の声かけ(昨日ひと休み / ぜんぶ済み / 夜に まだ)は ここから アシスタントが言う(ホームの「今日がんばること」の 1 行は やめた)
   const hs = plan.goals(d.tasks, d.entries, n.date, n.min, { chunk: plan.chunkOf(s) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && d.tasks[g.taskId]).map((g) => ({ task: d.tasks[g.taskId], stats: plan.habitStats(d.tasks[g.taskId], d.entries, n.date) }));
   const habit = hs.length ? plan.habitNudgeInfo(hs, n.min, windowFor(s, n.date)?.end ?? null) : null;
   return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle };
@@ -249,7 +249,7 @@ function teachBox(redraw) {
  * - 会話は 高さの決まった枠の中で スクロール(新しい発言が いちばん下・開くと 下まで送る)。入力欄は その下、ワンタップの質問は 入力欄の下に 横 1 行。
  * - タスク・買い物・予定・習慣・進み・つぎにやること は、アプリの中のデータから その場で答える(reply.js・AI は使わない)。答えの下の
  *   「◯◯の口調で言い直してもらう」で、中身を変えずに 口調だけ AI に頼める(ai.rephraseText・ショートカット か コピー)。
- * - それ以外の相談は これまでどおり AI へ(ai.consultText。聞かれたことに まず答えるように頼み、きょうのタスクと進みを 材料に添える。小説と図録の進みは 渡さない)。
+ * - それ以外の相談は これまでどおり AI へ(ai.consultText。聞かれたことに まず答えるように頼み、今日のタスクと進みを 材料に添える。小説と図録の進みは 渡さない)。
  * - 「新しい会話」で いまの会話を しまって 空から(しまった会話は 5 つまで・「前の会話」で 開き直す / 消す)。控えは この端末だけ(local.buddy.chat / old)。
  */
 const CHAT_MAX = 60, OLD_MAX = 5;
@@ -337,7 +337,7 @@ function talk(ctx, redraw) {
       el('div.bd-msg.ai', m.text),
       m.who === 'app' ? el('button.bd-re', { type: 'button', onclick: () => rephrase(m) }, `${b.name}の口調で言い直してもらう ›`) : null,
     ].filter(Boolean))]));
-  const hint = `タスク・買うもの・予定・習慣・きょうの進み は、アプリの記録から その場で答えます。それ以外の相談は ${viaShortcut ? 'ショートカット(端末の AI)へ送ります' : '聞く文をコピーするので、好きな AI に貼ってください'}。返事は「返事を貼り付け」で ここに残せます。`;
+  const hint = `タスク・買うもの・予定・習慣・今日の進み は、アプリの記録から その場で答えます。それ以外の相談は ${viaShortcut ? 'ショートカット(端末の AI)へ送ります' : '聞く文をコピーするので、好きな AI に貼ってください'}。返事は「返事を貼り付け」で ここに残せます。`;
   const logBox = el('div.bd-log', { role: 'log', 'aria-label': `${b.name}との会話` }, chat.length ? chat.map(msg) : [el('p.bd-empty.muted.small', hint)]);
   const toEnd = () => { if (logBox.isConnected) logBox.scrollTop = logBox.scrollHeight; }; // 新しい発言が見えるように いちばん下へ(描いた直後と 次の描画の前)
   setTimeout(toEnd, 0); requestAnimationFrame(toEnd);
@@ -368,7 +368,7 @@ export function openBuddy(ctx, onClose = null) {
     body.append(...[
       el('div.bd-top', [avatar(l.mood, 64), el('div.bd-bubble.big', [el('span.bd-name', b.name), el('span.bd-text', l.text)])]),
       b.chars.length > 1 ? charChips(b, (id) => { S().buddy = buddy.selectChar(b, id); store.touchSettings(); autoSync(); draw(); }) : null,
-      el('div.row.bd-acts', [ctx && ctx.openBrief && S().brief?.enabled !== false ? el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.openBrief(); } }, 'きょうの日報を開く') : null]),
+      el('div.row.bd-acts', [ctx && ctx.openBrief && S().brief?.enabled !== false ? el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.openBrief(); } }, '今日の日報を開く') : null]),
       el('div.seg', [['talk', '話す'], ['note', '手帳']].map(([k, t]) => el('button', { type: 'button', class: k === tab ? 'active' : '', onclick: () => { tab = k; draw(); } }, t))),
       tab === 'talk' ? talk(ctx, draw) : notebook(draw),
       el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
@@ -431,7 +431,7 @@ export const buddyLine = (key, vars = {}) => (buddyOn() ? buddy.say(key, V(), va
  * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 気づきの吹き出し → 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す
  * (v0.76・実機 FB: 順は いつも 天気 → BGM → 記事。朝は 記事 1 つ・昼からは 2 つ・夜と 寝る前は あすの天気)。有効にしている機能のぶんだけ。
  * v0.65(実機 FB): 天気は 天気のシートと同じ札(絵・気温・傘・降水・服装)、BGM は 選んだ 1 曲のサムネイル・題名・ジャンル・長さ を見せてから流す。
- * きょうの気づきの文字だけの箱は やめ、吹き出しに統合。戻り値は節の配列(何も無ければ空)。
+ * 今日の気づきの文字だけの箱は やめ、吹き出しに統合。戻り値は節の配列(何も無ければ空)。
  */
 export function recoPage(slot, redraw) {
   const s = S(), local = store.state.local, tone = V(), on = buddyOn();
@@ -541,7 +541,7 @@ function researchBox(getName, getSource, onProfile, okLabel = 'この内容で�
 function profileToast(r, name) {
   toast(r.persona === 'full' ? `「${name}」の設定を入れました。性格は ${buddy.MAX_CUSTOM} つまでなので、使わない性格を消してから もう一度 貼り付けてください`
     : r.persona === 'none' ? `「${name}」の設定を入れました`
-      : `「${name}」の設定と性格を入れました。つぎは 下の「ぜんぶ まとめて」で 台詞を頼んでください`);
+      : `「${name}」の設定と性格を入れました。次は 下の「ぜんぶ まとめて」で 台詞を頼んでください`);
 }
 
 /** 性格を足す / 直す シート: 名前(必須)・性格と口調の説明・土台にする内蔵の口調 */

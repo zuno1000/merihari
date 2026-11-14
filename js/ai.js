@@ -40,7 +40,7 @@ function notesBlock(lines, notes) {
 }
 
 /**
- * きょうのふり返りを頼む文。
+ * 今日のふり返りを頼む文。
  * o = { date, agg(report.aggregate), fb(report.dayFeedback), gs(plan.goals), diary(その日の日記|null), categories, goals(settings.goals), nowMin, dayDone }
  */
 export function summaryText(o) {
@@ -82,7 +82,7 @@ export function summaryText(o) {
     if (d.tomorrow) lines.push(`明日は: ${d.tomorrow.trim()}`);
   }
   notesBlock(lines, o.notes);
-  lines.push('', '【お願い】', o.dayDone === false ? 'ここまでを3文でふり返り、きょうの残りの一歩を1つ。' : 'きょうを3文でふり返り、よかった点を1つと明日の一歩を1つ。');
+  lines.push('', '【お願い】', o.dayDone === false ? 'ここまでを3文でふり返り、今日の残りの一歩を1つ。' : '今日を3文でふり返り、よかった点を1つと明日の一歩を1つ。');
   return clip(lines.join('\n'));
 }
 
@@ -95,14 +95,14 @@ export function consultText(o) {
   if (o.nowMin != null) lines.push(`時刻${mm(o.nowMin % 1440)}`);
   if (o.open) lines.push(`記録中: ${o.open.name}(${fmtMinJa(o.open.elapsedMin)})`);
   else lines.push('いまは何も記録していない');
-  if (o.workMin != null) lines.push(`きょうの作業${fmtMinJa(o.workMin)}${o.goals?.workMin ? `(目標${fmtMinJa(o.goals.workMin)})` : ''}`);
+  if (o.workMin != null) lines.push(`今日の作業${fmtMinJa(o.workMin)}${o.goals?.workMin ? `(目標${fmtMinJa(o.goals.workMin)})` : ''}`);
   const gs = o.gs || [];
   const left = gs.filter((g) => !g.done && g.targetMin).map((g) => `${g.name}(あと${fmtMinJa(Math.max(0, g.targetMin - g.doneMin))})`).slice(0, 5);
-  if (left.length) lines.push(`きょうの目安の残り: ${left.join('・')}`);
+  if (left.length) lines.push(`今日の目安の残り: ${left.join('・')}`);
   const todo = gs.filter((g) => !g.done && g.kind === 'todo').map((g) => g.name).slice(0, 4);
   if (todo.length) lines.push(`残っている用事: ${todo.join('・')}`);
   if (o.near && o.near.length) lines.push(`期限が近いもの: ${o.near.slice(0, 4).map((t) => `${t.name}(${fmtMD(t.deadline)}まで)`).join('・')}`);
-  if (o.mood) lines.push(`きょうの調子: ${MOOD_WORDS[o.mood] || ''}`);
+  if (o.mood) lines.push(`今日の調子: ${MOOD_WORDS[o.mood] || ''}`);
   notesBlock(lines, o.notes);
   // v0.76(実機 FB「今日のタスクを聞いても 小説や図録の話が返ってくる」): 聞かれたことに まず答えてもらう。関係のない材料の話は出さない、と はっきり頼む
   const facts = (Array.isArray(o.facts) ? o.facts : []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 20).map((x) => x.trim().slice(0, 120));
@@ -129,4 +129,4 @@ export function rephraseText(o) {
 }
 
 /** 相談の定型(チップ) */
-export const QUICK_QUESTIONS = ['手がつかない。最初の5分は何をする?', '次に何をやるといい?', '集中が切れた。切り替えの一手は?', 'きょうはここまでにしていい?', '明日の最初の一歩は?'];
+export const QUICK_QUESTIONS = ['手がつかない。最初の5分は何をする?', '次に何をやるといい?', '集中が切れた。切り替えの一手は?', '今日はここまでにしていい?', '明日の最初の一歩は?'];
