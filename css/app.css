@@ -1481,6 +1481,42 @@ button.a-thumb{cursor:pointer}
 .bd-custom{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;padding:12px;border:1px solid var(--line);border-radius:12px}
 .bd-custom>p{margin:0}
 .bd-addtone{border-style:dashed}
+/* v0.70: アシスタントの設定で、選んでいるキャラクターの分を 1 つの枠に */
+.bd-charbox{display:flex;flex-direction:column;gap:6px;margin:8px 0 14px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.bd-charbox>p{margin:0}
+.bd-charbox .bd-custom{background:var(--card)}
+/* v0.70: 使い方(目次+テーマごとのページ) */
+.help2{display:flex;flex-direction:column;gap:12px}
+.help2 .card{margin:0}
+.hp-h{font-size:13px;color:var(--muted);margin:6px 2px 0}
+.hp-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.hp-tab{display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;padding:8px 2px;border-radius:12px;background:var(--bg);min-width:0}
+.hp-tab b{font-size:11px}
+.hp-tab span:last-child{font-size:10px;line-height:1.35;color:var(--muted)}
+.hp-tabico{display:flex;width:24px;height:24px;color:var(--accent)}
+.hp-tabico svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.hp-title{margin:0;font-size:16px;font-weight:700;line-height:1.4}
+.hp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hp-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer;min-height:96px}
+.hp-card b{font-size:15px}
+.hp-card>span:last-child{font-size:12px;line-height:1.4;color:var(--muted)}
+.hp-ico{flex:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--accent-bg);color:var(--accent)}
+.hp-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hp-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.hp-head p{margin:2px 0 0}
+.hp-steps{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}
+.hp-steps li{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.hp-steps li:first-child{border-top:0}
+.hp-num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}
+.hp-body{flex:1;min-width:0}
+.hp-body b{display:block;font-size:15px;line-height:1.4}
+.hp-body p{margin:3px 0 0;font-size:14px;line-height:1.7;color:var(--fg)}
+.hp-key{display:inline-block;margin:0 2px;padding:0 8px;border:1px solid var(--line);border-bottom-width:2px;border-radius:8px;background:var(--bg);font-size:12px;font-weight:600;line-height:1.7;white-space:nowrap}
+.hp-tips{margin:10px 0 0;padding:10px 12px 10px 28px;border-radius:12px;background:var(--bg);font-size:13px;line-height:1.7;color:var(--muted)}
+.hp-more>summary{cursor:pointer;min-height:40px;display:flex;align-items:center;font-size:13px;color:var(--muted)}
+.hp-more .help-ul{margin:0;padding-left:1.3em}
+.hp-more .help-ul li{font-size:13px;line-height:1.7;margin:6px 0;color:var(--muted)}
+.hp-nav{display:flex;justify-content:space-between;gap:10px}
 /* v0.69: 絵の切り抜き(丸い枠・引っ張る・スライダー) */
 .bd-crop{position:relative;width:264px;height:264px;max-width:100%;margin:6px auto 10px;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px var(--line)}
 .bd-cropcv{display:block;width:100%;height:100%;touch-action:none;cursor:grab}

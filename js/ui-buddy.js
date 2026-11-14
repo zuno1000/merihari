@@ -580,14 +580,17 @@ export function sectionBuddy(rerender) {
   };
   const me = b.chars.find((c) => c.id === b.cur) || {};
   const title = el('input.text', { type: 'text', value: me.title || '', maxlength: buddy.TITLE_MAX, placeholder: buddy.DEFAULT_TITLE, autocomplete: 'off', 'aria-label': '肩書き', onchange: () => save(buddy.patchChar(b, b.cur, { title: title.value })) });
-  const world = el('textarea.text.bd-ta', { rows: 2, maxlength: buddy.WORLD_MAX, placeholder: `例: 星を渡る貨物船。あなたの作業時間が 船の燃料になる(空なら: ${buddy.DEFAULT_WORLD})`, 'aria-label': '世界', onchange: () => save(buddy.patchChar(b, b.cur, { world: world.value })) }, me.world || '');
+  const world = el('textarea.text.bd-ta', { rows: 2, maxlength: buddy.WORLD_MAX, placeholder: '例: 星を渡る貨物船。作業時間が 船の燃料になる', 'aria-label': '世界', onchange: () => save(buddy.patchChar(b, b.cur, { world: world.value })) }, me.world || '');
   return el('section.card', [
     el('h2', 'アシスタント'),
-    el('p.muted.small', '大図書館の見習い司書です。あなたの作業時間が書庫の灯りになり、そのあいだに小説の続きを運び、絵の扉の向こうの土地から絵はがきを持ち帰ります。ホームに常駐して ひとこと話し、ブリーフィング(日報)を届けます。決まった台詞から状況に合うものを選ぶだけで、記録を外へ送ることはありません(会話だけは iPhone のショートカットへ文を渡します)。'),
+    el('p.muted.small', 'ホームに常駐して ひとこと話し、日報を届ける案内役です。決まった台詞から 状況に合うものを選ぶだけで、記録を外へ送ることはありません(「話す」だけは iPhone のショートカットへ文を渡します)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled, onchange: (e) => save({ ...b, enabled: e.target.checked }) }), el('span', 'アシスタントを出す')]),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.idle, onchange: (e) => save({ ...b, idle: e.target.checked }) }), el('span', 'ホームで声をかける(45 分 何も記録していない・ダラダラが 20 分)')]),
     el('h3.help-h', `キャラクター(${b.chars.length} / ${buddy.MAX_CHARS})`),
-    el('p.muted.small', 'キャラクターごとに 名前・口調と性格・絵 を決められます。選んだキャラクターが ホーム・日報・ふり返り に出ます(アシスタントのシートからも替えられます)。'),
+    el('p.muted.small', 'チップで替えます(アシスタントのシートの上からも)。下の枠は 選んでいるキャラクターの設定です。'),
     charChips(b, (id) => save(buddy.selectChar(b, id)), b.chars.length < buddy.MAX_CHARS ? () => charSheet(b, save) : null),
+    el('div.bd-charbox', [
+    el('p.bd-h', `「${b.name}」の設定`),
     el('div.row.field', [el('span.label', '名前'), name]),
     el('div.row.field', [el('span.label', '肩書き'), title]),
     el('p.bd-h', '世界(どんな所の、どんな役か)'), world,
@@ -599,14 +602,14 @@ export function sectionBuddy(rerender) {
     ]),
     el('p.muted.small', `例: ${buddy.say('working', buddy.voiceOf(b), { n: 4 }, 0)}`),
     cur ? customBox(b, cur, save, rerender) : null,
-    el('label.row.field', [el('input', { type: 'checkbox', checked: b.idle, onchange: (e) => save({ ...b, idle: e.target.checked }) }), el('span', 'ホームで声をかける(45 分 何も記録していない・ダラダラが 20 分)')]),
-    el('h3.help-h', `覚えた台詞(${b.lines.length})`),
-    el('p.muted.small', '手帳の「台詞を増やす」で、AI に書いてもらった台詞です(場面ごと・口調ごと)。内蔵の台詞に混ざって出ます。要らないものは × で消せます。両方の端末で同じになります。'),
-    b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.toneLabel(b, x.t)}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
     el('h3.help-h', `「${b.name}」の絵(この端末だけ)`),
-    el('p.muted.small', '表情ごとに画像を選べます。「ふだん」だけ入れれば、ほかの表情にも使われます。画像を選ぶと、どの部分を顔にするか(位置・大きさ・角度)を決められます。入れたあとも「調整」で直せます(丸く切り抜いて表示・512px の正方形にして端末に保存。元の画像は残しません)。入れていない表情は、内蔵の顔になります。'),
+    el('p.muted.small', '「ふだん」だけ入れれば、ほかの表情にも使われます。画像を選ぶと、どの部分を顔にするかを決められます(この端末に 512px で保存・元の画像は残しません)。'),
     el('div.bd-slots', buddy.MOODS.map(slot)),
     el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」の絵をぜんぶ外しますか?`, 'この端末に入れた このキャラクターの画像を消し、内蔵の顔に戻します。', '外す', async () => { for (const m of buddy.MOODS) await photos.delPhoto(imgId(m)); urls.clear(); rerender(); }, true) }, '絵をぜんぶ外す')),
     b.chars.length > 1 ? el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet(`「${b.name}」を消しますか?`, 'このキャラクターと、この端末に入れた その絵を消します。足した性格と 覚えた台詞は残ります。', '消す', () => { const id = b.cur; save(buddy.removeChar(B(), id)); Promise.all(buddy.MOODS.map((m) => photos.delPhoto(imgId(m, id)))).then(() => urls.clear()).catch(() => {}); }, true) }, 'このキャラクターを消す')) : null,
+    ].filter(Boolean)),
+    b.lines.length ? el('h3.help-h', `手帳で覚えた台詞(${b.lines.length})`) : null,
+    b.lines.length ? el('p.muted.small', '手帳の「台詞を増やす」で覚えた台詞です(場面ごと・口調ごと)。\u00d7 で消せます。') : null,
+    b.lines.length ? el('details.bd-lines', [el('summary', '一覧を開く'), ...b.lines.map((x, i) => el('div.bd-linerow', [el('span.bs-k', `${buddy.TEACH[x.k].label}・${buddy.toneLabel(b, x.t)}`), el('span.bd-linetext', x.s), el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この台詞を消す', onclick: () => save({ ...b, lines: b.lines.filter((_, k) => k !== i) }) }, '×')]))]) : null,
   ].filter(Boolean));
 }
