@@ -31,12 +31,14 @@ import * as drinks from './drinks.js';
 import * as shopping from './shopping.js';
 import * as brief from './brief.js';
 import * as next from './next.js'; // v0.71: つぎは これ
+import * as pomo from './pomo.js'; // v0.72・F25: ポモドーロ
+import { settle as pomoSettle } from './ui-pomo.js';
 import * as quest from './quest.js';
 import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.71.0';
+export const APP_VERSION = '0.72.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -132,7 +134,7 @@ function handleParams() {
 const firstRun = !store.state.data.meta.setupAt;
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
-if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)
+if (!firstRun) { pomoSettle(); if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)
 
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
@@ -143,11 +145,12 @@ if (!firstRun) sync.autoSyncOnOpen();
 document.addEventListener('click', () => { sync.autoSyncOnGesture(); setTimeout(() => refreshTaskBadge(tabs), 0); }, { capture: true }); // v0.55: タスクを済ませた / 足した直後にタブの数字を合わせる
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
-setInterval(() => { try { if (redrawPending && !uiBusy()) { redraw(); return; } if (tickFn) tickFn(); refreshAddButton(); refreshTaskBadge(tabs); } catch (e) { console.error(e); } }, 15000);
+setInterval(() => { try { if (redrawPending && !uiBusy()) { redraw(); return; } pomoSettle(); /* v0.72: ポモドーロの区切りを記録に反映(ホーム以外の画面でも) */ if (tickFn) tickFn(); refreshAddButton(); refreshTaskBadge(tabs); } catch (e) { console.error(e); } }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();
   if (!store.state.data.meta.setupAt) return;
+  pomoSettle(); // v0.72: 閉じていた間に越えた ポモドーロの区切りを 先に記録へ(止め忘れの確認より前)
   finalizePending();
   const asked = checkOpenEntry(ctx);
   if (!asked && (current === 'now' || current === 'timeline')) redraw();
@@ -195,7 +198,8 @@ if (ui.DEV) window.M = {
   drinks, // v0.51・F19
   shopping, // v0.52・F20
   brief, // v0.55・F21
-  next, // v0.71・F2-9
+  next, // v0.71・F24-20
+  pomo, // v0.72・F25
   quest, // v0.56・F22
   art, // v0.58・F23
   buddy, // v0.59・F24

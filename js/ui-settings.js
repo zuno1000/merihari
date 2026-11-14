@@ -17,6 +17,8 @@ import { sectionTrain } from './ui-train.js';
 import { sectionQuest, questSummary } from './ui-quest.js'; // v0.56・F22
 import { sectionArt, artSummary } from './ui-art.js'; // v0.58・F23
 import { sectionBuddy, buddySummary } from './ui-buddy.js'; // v0.62・F24
+import * as pomo from './pomo.js'; // v0.72・F25
+import { notifyUrl } from './ui-pomo.js';
 import { sectionHelp, resetHelp } from './ui-help.js'; // v0.70: 使い方は 目次+テーマごとのページ
 import { appBadgeSupported, enableAppBadge, disableAppBadge } from './ui-brief.js'; // v0.55・F21
 import * as train from './train.js';
@@ -641,7 +643,51 @@ function sectionBrief(rerender, ctx) {
   );
 }
 
+/**
+ * ポモドーロ(v0.72・F25): 作業と休憩の長さ・いつものセット数・音・画面を消さない・ショートカットで通知。settings.pomo(同期)。
+ * 閉じている間の通知は アプリからは出せない(§2-8)ので、始めるときに 区切りの時刻をまとめて iPhone の「ショートカット」へ渡し、そちらで リマインダー(かアラーム)を作る。
+ */
+function sectionPomo(rerender) {
+  const s = S();
+  const p = pomo.normalizePomo(s.pomo);
+  const set = (patch) => { s.pomo = pomo.normalizePomo({ ...p, ...patch }); store.touchSettings(); sync.autoSync(); rerender(); };
+  const chips = (label, list, cur, key, unit) => el('div.field', [el('span.label', label), el('div.chips.small', { role: 'group', 'aria-label': label }, [...new Set([...list, cur])].sort((a, b) => a - b).map((v) => el('button.chip.sm2', { type: 'button', class: `chip sm2${v === cur ? ' on' : ''}`, 'aria-pressed': v === cur ? 'true' : 'false', onclick: () => set({ [key]: v }) }, `${v}${unit}`)))]);
+  const check = (label, key) => el('label.row.field', [el('input', { type: 'checkbox', checked: !!p[key], onchange: (e) => set({ [key]: e.target.checked }) }), el('span', label)]);
+  const name = textInput(p.shortcut, (v) => set({ shortcut: v }), { 'aria-label': 'ショートカットの名前', maxlength: 60 });
+  const test = () => { const url = notifyUrl({ startMs: Date.now(), work: 1, rest: 1, sets: 1 }); if (url) location.href = url; };
+  return card('ポモドーロ', 'ホームの「▶ 始める」が、作業と休憩を 決めたセット数だけ くり返すタイマーになります。作業と休憩は 自動で記録します(休憩は 種別が休憩の 先頭のカテゴリ)。アプリを閉じていても 時刻から計算するので、開き直せば 記録は合います。',
+    check('ポモドーロを使う(外すと「▶ 始める」は 時間を決めない記録)', 'enabled'),
+    chips('作業', pomo.WORK_CHOICES, p.work, 'work', '分'),
+    chips('休憩', pomo.REST_CHOICES, p.rest, 'rest', '分'),
+    chips('いつものセット数', [1, 2, 3, 4, 5, 6, 7, 8], p.sets, 'sets', ''),
+    el('p.muted.small', `いまの設定: ${p.work} 分 × ${p.sets} セット・休憩 ${p.rest} 分 = 計 ${pomo.totalMin(p)} 分。セット数は ホームでも その場で変えられます。最後のセットのあとの休憩は ありません。`),
+    check('区切りで 音を鳴らす(アプリを開いている間だけ)', 'sound'),
+    check('タイマーの間は 画面を消さない(ホームを開いている間・できる端末だけ)', 'awake'),
+    el('h3.help-h', '閉じていても 通知を鳴らす(ショートカット)'),
+    el('p.muted.small', 'アプリを閉じている間の通知は、サーバーを持たないこのアプリからは出せません。下を有効にすると、始めるときに 全セットの区切りの時刻を iPhone の「ショートカット」に渡します。ショートカットが その時刻のリマインダーを作り、iPhone が 時刻どおりに通知します。'),
+    check('始めるときに ショートカットへ 区切りの時刻を渡す', 'notify'),
+    el('div.row.field', [el('span.label', 'ショートカットの名前'), name]),
+    el('h3.help-h', 'ショートカットの作り方(1 回だけ)'),
+    el('ol.help-ul', [
+      el('li', `ショートカット アプリで「＋」→ 名前を「${p.shortcut}」にする。`),
+      el('li', '「ショートカットの入力を受け取る」(種類は テキスト)。'),
+      el('li', '「テキストを分割」を追加(入力は ショートカットの入力・区切りは 改行)。'),
+      el('li', '「各項目を繰り返す」を追加(入力は 分割したテキスト)。以下は その中に置く。'),
+      el('li', '「テキストを分割」(入力は 繰り返し項目・区切りは カスタム「|」)。'),
+      el('li', '「リストから項目を取得」を 2 つ: 最初の項目(= 日時)と 最後の項目(= 通知の文)。'),
+      el('li', '「新規リマインダーを追加」: 名前に 最後の項目・「通知」を カスタムにして 最初の項目(日時)。リストは「メリハリ」などを作っておくと 片づけやすい。'),
+    ]),
+    el('p.muted.small', '渡す文は 1 行に 1 つ「2026/11/14 17:40|メリハリ: 1 / 4 セット おわり。休憩 5 分」の形です。リマインダーの代わりに「アラームを作成」を置けば、消音モードでも鳴ります(アラームは 時計アプリに残るので、ときどき消してください)。'),
+    el('div.row.wrap', { style: { marginTop: '10px' } }, [
+      el('button.btn', { type: 'button', onclick: test }, '1 分後の通知を試す'),
+      el('button.btn.ghost', { type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(pomo.notifyText({ startMs: Date.now(), work: 25, rest: 5, sets: 2 }, (ms) => { const d = new Date(ms); const z = (n) => String(n).padStart(2, '0'); return { ymd: `${d.getFullYear()}/${z(d.getMonth() + 1)}/${z(d.getDate())}`, hm: `${z(d.getHours())}:${z(d.getMinutes())}` }; })); toast('渡す文の例をコピーしました'); } catch { toast('コピーできませんでした'); } } }, '渡す文の例をコピー'),
+    ]),
+    el('p.muted.small', '制約: 始めるたびに ショートカットが開くので、メリハリには 手で戻ります(通知の予約は その 1 回で 全セットぶん)。途中でやめても 予約した通知は残ります(リマインダーのリストから消してください)。通知は 分単位です。この端末で ショートカットが どう動くかは、上の「試す」で確かめてください。'),
+  );
+}
+
 const SECTIONS = {
+  ...(FEATURES.POMO ? { pomo: { title: 'ポモドーロ', build: (re) => sectionPomo(re) } } : {}), // v0.72・F25
   window: { title: '作業時間帯', build: () => sectionWindow() },
   help: { title: '使い方', build: (re) => sectionHelp(re) },
   categories: { title: 'カテゴリ', build: (re) => sectionCategories(re) },
@@ -775,6 +821,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('作業時間帯', summary.window(), open('window')),
       srow('1日の目標', summary.goals(), open('goals')),
       srow('すき間', summary.logging(), open('logging')),
+      FEATURES.POMO ? srow('ポモドーロ', (() => { const p = pomo.normalizePomo(S().pomo); return p.enabled ? `${p.work} 分 × ${p.sets} セット・休憩 ${p.rest} 分${p.notify ? '・通知' : ''}` : '使わない'; })(), open('pomo')) : null,
     ]),
     group('カテゴリと色', [
       srow('カテゴリ', summary.categories(), open('categories')),

@@ -1672,6 +1672,25 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(eq(p1, { workMin: 120, targetMin: 240, goal: true, rate: 0.5 }) && p2.goal === false && p2.targetMin === 240 && p2.rate === 1 && sw.includes(`'./js/next.js'`), 'progress: きょうの作業 / 目標(無ければ fallback)・1 を超えない・sw.js の ASSETS に next.js');
     }
 
+    // ---- v0.72・F25: ポモドーロ(pomo.js)----
+    log('\n# v0.72 ポモドーロ');
+    {
+      const P = M.pomo, t0 = Date.UTC(2026, 10, 14, 8, 3, 20), MIN = 60000;
+      ok(eq(P.normalizePomo(null), { enabled: true, work: 25, rest: 5, sets: 4, sound: true, awake: true, notify: false, shortcut: P.DEFAULT_SHORTCUT }) && eq(P.normalizePomo({ enabled: false, work: 50, rest: 10, sets: 2, sound: false, awake: false, notify: true, shortcut: '  たいまー ' }), { enabled: false, work: 50, rest: 10, sets: 2, sound: false, awake: false, notify: true, shortcut: 'たいまー' }) && eq([P.normalizePomo({ work: 0 }).work, P.normalizePomo({ rest: 99 }).rest, P.normalizePomo({ sets: 20 }).sets, P.normalizePomo({ sets: 'x' }).sets, P.normalizePomo({ shortcut: '' }).shortcut], [25, 5, 4, 4, P.DEFAULT_SHORTCUT]), 'normalizePomo: 既定は 25 分・5 分・4 セット・通知は切。範囲の外は既定に・名前は空白を落とす');
+      ok(eq(S.defaultSettings().pomo, P.normalizePomo(null)) && S.SCALAR_FIELDS.includes('pomo') && S.migrate({ schema: 1, settings: { pomo: { work: 45, sets: 3 } } }).settings.pomo.work === 45 && S.migrate({ schema: 1, settings: { pomo: 'x' } }).settings.pomo.sets === 4 && S.migrate({ schema: 1, settings: {} }).settings.pomo.work === 25 && M.features.FEATURES.POMO === true && sw.includes(`'./js/pomo.js'`) && sw.includes(`'./js/ui-pomo.js'`), 'settings.pomo: 既定・正規化・項目ごとの同期(SCALAR_FIELDS)・sw.js の ASSETS');
+      const run = P.normalizeRun({ startMs: t0, work: 25, rest: 5, sets: 3, categoryId: 'research', taskId: 'a', entryId: 'e1' });
+      const segs = P.schedule(run);
+      ok(eq(segs.map((s) => [s.kind, s.set, (s.startMs - t0) / MIN, (s.endMs - t0) / MIN]), [['work', 1, 0, 25], ['rest', 1, 25, 30], ['work', 2, 30, 55], ['rest', 2, 55, 60], ['work', 3, 60, 85]]) && P.totalMin(run) === 85 && P.schedule({ ...run, sets: 1 }).length === 1, 'schedule: 作業 → 休憩 → … → 最後の作業(最後のあとの休憩は無い)・計 85 分');
+      const at = (m, sec = 0) => P.phaseAt(run, t0 + m * MIN + sec * 1000);
+      ok(eq([at(0).kind, at(0).set, at(0).leftSec, at(0).rate, at(0).next], ['work', 1, 1500, 0, 'rest']) && eq([at(24, 59).leftSec, at(25).kind, at(25).leftSec, at(25).index, at(25).next], [1, 'rest', 300, 1, 'work']) && eq([at(30).kind, at(30).set, at(60).set, at(60).next], ['work', 2, 3, null]) && eq([at(85).kind, at(85).index, at(85).leftSec, at(500).kind], ['done', 5, 0, 'done']) && at(-3).index === 0 && at(-3).leftSec === 1500 && at(12, 30).rate === 0.5 && at(85).endMs === t0 + 85 * MIN, 'phaseAt: 時刻から いまの区間(作業 / 休憩 / done)・残りの秒・進み・始める前は 最初の区間の頭');
+      ok(eq([P.clock(1500), P.clock(1499), P.clock(61), P.clock(0), P.clock(-5), P.clock(3665)], ['25:00', '24:59', '01:01', '00:00', '00:00', '61:05']), 'clock: 残りの表示');
+      const al = P.alerts(run);
+      ok(al.length === 5 && al.every((a) => a.atMs % MIN === 0) && al[0].atMs === t0 + 25 * MIN - 20000 && al[0].text === '1 / 3 セット おわり。休憩 5 分' && al[1].text === '休憩 おわり。2 / 3 セット目を始める' && al[4].text === '3 セット おわり。おつかれさま' && P.alerts(run, t0 + 56 * MIN).length === 2 && P.alerts({ ...run, startMs: t0 + 20000 })[0].atMs === t0 + 26 * MIN - 20000, 'alerts: 区切りごとに 1 つ・分に丸める(30 秒以上は 次の分)・過ぎた区切りは出さない');
+      const nt = P.notifyText({ ...run, sets: 2 }, (ms) => ({ ymd: '2026/11/14', hm: `17:${String(((ms - t0 + 20000) / MIN) % 60).padStart(2, '0')}` }));
+      ok(eq(nt.split('\n'), ['2026/11/14 17:25|メリハリ: 1 / 2 セット おわり。休憩 5 分', '2026/11/14 17:30|メリハリ: 休憩 おわり。2 / 2 セット目を始める', '2026/11/14 17:55|メリハリ: 2 セット おわり。おつかれさま']), 'notifyText: ショートカットに渡す文は 1 行に 1 つ「日時|文」');
+      ok(P.normalizeRun(null) === null && P.normalizeRun({ startMs: t0 }) === null && P.normalizeRun({ startMs: 'x', categoryId: 'a' }) === null && eq(run, { startMs: t0, work: 25, rest: 5, sets: 3, categoryId: 'research', taskId: 'a', restId: null, entryId: 'e1', seg: 0 }) && P.normalizeRun({ ...run, seg: 3, restId: 'rest', entryId: null }).seg === 3 && P.normalizeRun({ ...run, entryId: null }).entryId === null, 'normalizeRun: 走っている回の形(足りなければ null・記録していない休憩は entryId が null)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

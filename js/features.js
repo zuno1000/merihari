@@ -28,4 +28,9 @@ export const FEATURES = Object.freeze({
    * 隔離した実装: js/buddy.js・js/ui-buddy.js と、ブリーフィングのシートの中の 1 節(ui-brief)だけ。false で出ない。
    */
   BUDDY: true,
+  /**
+   * v0.72・F25(ユーザー要望「ポモドーロタイマーを実装し、それを用いて作業できるように」): ポモドーロ。ホームの「▶ 25 分 始める」と タイマーのカード・設定の 1 項目。
+   * 隔離した実装: js/pomo.js・js/ui-pomo.js と、ホームのカード(ui-today.nextCard)・設定の 1 項目・settings.pomo・local.pomo だけ。false で「▶ 始める」(時間を決めない記録)に戻る。
+   */
+  POMO: true,
 });

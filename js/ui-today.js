@@ -21,6 +21,8 @@ import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホ�
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: つぎは これ(候補の順位・純関数)
+import * as pomo from './pomo.js'; // v0.72・F25: ポモドーロ
+import { pomoOn, pomoCard, startPomo, settle as pomoSettle } from './ui-pomo.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -197,18 +199,18 @@ export function startCategory(categoryId, startMin = null, extra = {}) {
   commit(started, `${taskName(extra.taskId, categoryId)} の記録開始`); // v0.12: 直前の記録との数分のすき間は次の記録に含める(v0.24: 時計で決めた開始はそのまま)
   refreshAddButton();
   const nm = taskName(extra.taskId, categoryId);
-  toast((startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`) + lastSleepFill);
+  if (!extra.quiet) toast((startMin == null ? `${nm} を開始` : `${mm(startMin)}から ${nm}`) + lastSleepFill); // quiet(v0.72): ポモドーロが 区切りごとに置く記録は 黙って
   sync.autoSync();
   return r;
 }
 /** 「終わる」。シートは出さない(直すのはタイムライン) */
-export function stopRecording(at = null) {
+export function stopRecording(at = null, { quiet = false } = {}) {
   const n = effNow();
   const r = log.stop(E(), { date: n.date, nowMin: n.min, at, windowEndOf }, LCTX);
-  if (!r.closed) { toast('記録中のものはありません'); return r; }
+  if (!r.closed) { if (!quiet) toast('記録中のものはありません'); return r; }
   commit(r.entries, `${catOf(r.closed.categoryId).name} の終了`);
   refreshAddButton();
-  toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
+  if (!quiet) toast(r.dropped ? '短すぎたので捨てました' : `${catOf(r.closed.categoryId).name} ${r.closed.start}〜${r.closed.end} を記録`);
   sync.autoSync();
   return r;
 }
@@ -436,8 +438,10 @@ export function renderNow(view, ctx, dateArg = null) {
   const v = isToday ? e : { date, min: 1440 + dayCut(S(), date) }; // 過去の日は1日ぜんぶ(切れ目まで)
   const rerender = () => renderNow(view, ctx, isToday ? null : date);
   const goDate = (d) => ctx.go('now', d >= e.date ? undefined : d);
+  if (isToday) pomoSettle(); // v0.72・F25: ポモドーロの区切りを越えていたら 先に記録へ
   const o = isToday ? log.openEntry(E()) : null;
-  const hero = o ? recordingCard(o, e, rerender) : null;
+  // v0.72: ポモドーロが走っていれば タイマーのカード(記録していない休憩の間も)、そうでなければ ふつうの記録中のカード
+  const hero = isToday ? (pomoCard(o, { edit: () => { if (o) editEntrySheet(o.id, e, rerender); }, other: () => chipsSheet(effNow(), rerender, 'now'), rerender }) || (o ? recordingCard(o, e, rerender) : null)) : null;
   // v0.18: 設定はタブから外し、ホーム右上の歯車に(タブは 日記 に)
   const gear = el('button.btn.sm.ghost.gear', { type: 'button', 'aria-label': '設定', title: '設定', onclick: () => ctx.go('settings') }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]));
   if (attentionItems().length) { gear.append(el('i.badge', { 'aria-hidden': 'true' })); gear.setAttribute('aria-label', '設定(お知らせあり)'); } // v0.28: 未同期・予定が古い・控えの書き出し → 赤い点(中身は設定の先頭)
@@ -494,11 +498,26 @@ function nextCard(n, hero, rerender, ctx) {
   const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
   const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
   const begin = (c) => { startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
+  // v0.72・F25: ポモドーロを使うなら「▶ 25 分 始める」が主役(セット数は その下のチップ・選んだ数は 設定に覚える)。時間を決めない記録は 小さなボタンへ
+  const pm = pomoOn() ? pomo.normalizePomo(S().pomo) : null;
+  const beginPomo = (c) => { startPomo({ categoryId: c.categoryId, taskId: c.taskId, sets: pomo.normalizePomo(S().pomo).sets }); rerender(); };
+  const setRow = () => {
+    const total = el('span.pm-total');
+    const row = el('div.pm-sets', { role: 'group', 'aria-label': 'セット数' });
+    const draw = () => {
+      const p = pomo.normalizePomo(S().pomo);
+      const ns = [1, 2, 3, 4, ...(p.sets > 4 ? [p.sets] : [])];
+      row.replaceChildren(el('span.pm-sk', 'セット'), ...ns.map((k) => el('button.chip.sm2', { type: 'button', class: `chip sm2${k === p.sets ? ' on' : ''}`, 'aria-pressed': k === p.sets ? 'true' : 'false', 'aria-label': `${k} セット`, onclick: () => { S().pomo = { ...p, sets: k }; store.touchSettings(); sync.autoSync(); draw(); } }, String(k))), total);
+      total.textContent = `計 ${fmtMinJa(pomo.totalMin({ work: p.work, rest: p.rest, sets: p.sets }))}`;
+    };
+    draw();
+    return row;
+  };
   const other = () => chipsSheet(effNow(), rerender);
   const more = () => sheet((close) => [
     el('h2', 'ほかの候補'),
-    el('p.muted.small', 'タップで その記録を始めます。'),
-    el('div.list.nx-list', list.map((c) => el('button.nx-row', { type: 'button', 'aria-label': `${c.title} を始める`, onclick: () => { close(); begin(c); } }, [
+    el('p.muted.small', pm ? `タップで ${pm.work} 分 × ${pm.sets} セット を始めます。` : 'タップで その記録を始めます。'),
+    el('div.list.nx-list', list.map((c) => el('button.nx-row', { type: 'button', 'aria-label': `${c.title} を始める`, onclick: () => { close(); if (pm) beginPomo(c); else begin(c); } }, [
       el('span.nx-rmain', [el('span.nx-rt', [dot(c), c.title]), el('span.nx-rr', c.reason)]), tag(c),
     ]))),
     el('div.row', [el('button.btn.grow', { type: 'button', onclick: () => { close(); other(); } }, 'ほかのことを記録'), el('button.btn.ghost', { type: 'button', onclick: () => close() }, '閉じる')]),
@@ -507,11 +526,12 @@ function nextCard(n, hero, rerender, ctx) {
     el('div.nx-top', [el('span.nx-k', 'つぎは これ'), tag(top)]),
     el('div.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
     el('div.row.nx-btns', [
-      el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める'),
+      el('button.btn.primary.nx-start', { type: 'button', 'aria-label': pm ? `${top.title} を ${pm.work} 分 始める` : `${top.title} を始める`, onclick: () => (pm ? beginPomo(top) : begin(top)) }, pm ? `▶ ${pm.work} 分 始める` : '▶ 始める'),
       list.length > 1 ? el('button.btn.nx-more', { type: 'button', onclick: more }, `ほかの候補 ${list.length - 1}`) : null,
     ]),
-    el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›'),
-  ] : [
+    pm ? setRow() : null,
+    el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => begin(top) }, '時間を決めずに始める') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
+  ].filter(Boolean) : [
     el('div.nx-top', el('span.nx-k', 'つぎは')),
     el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', onclick: other }, '記録する')),
   ];
