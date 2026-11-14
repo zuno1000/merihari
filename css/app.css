@@ -1642,6 +1642,9 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .pm-sets .chip.sm2{min-width:40px;min-height:36px;justify-content:center}
 .pm-total{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
 .nx-links{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
+/* v0.79: ポモドーロを始める前のシート(.pm-go・ui-pomo.startSheet) */
+.pm-go-name{display:flex;align-items:center;justify-content:center;gap:8px;margin:0;font-size:17px;overflow-wrap:anywhere}
+.pm-go-name .dot{width:11px;height:11px;flex:none}
 
 /* v0.73: つぎは これ の選び直し(.nx-pick)・きょう がんばること を 1 枚に(.fx-rows / .fx-row)・タイルの色(--tc)・ポモドーロの確認のシート(.pm-fin) */
 .nx-pick{display:flex;align-items:center;gap:10px;width:100%;border:0;background:var(--bg);color:var(--fg);font:inherit;text-align:left;border-radius:12px;padding:10px 12px;cursor:pointer}

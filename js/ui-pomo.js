@@ -7,6 +7,7 @@
 import { el, toast, svg, sheet } from './ui.js';
 import * as store from './store.js';
 import * as pomo from './pomo.js';
+import * as sync from './sync.js';
 import * as bgm from './bgm.js';
 import { bgmOn, suggestBgm, playSuggested, playBgm, NOTE_ICON } from './ui-bgm.js';
 import { addSpans, catOf } from './ui-today.js';
@@ -65,7 +66,7 @@ export function notifyUrl(run, fromMs = 0) {
 }
 
 /**
- * 始める(ホームの「▶ 25 分 始める」)。走っている回を置くだけ(記録は まだ置かない)。notify が有効なら 全セットの区切りを ショートカットへ渡す(アプリを離れる)。
+ * 始める(v0.79: ホームの「タイマーで始める ›」→ startSheet の「▶ 25 分 × 2 セット 始める」)。走っている回を置くだけ(記録は まだ置かない)。notify が有効なら 全セットの区切りを ショートカットへ渡す(アプリを離れる)。
  * opts = { categoryId, taskId, sets, nav(テスト用: URL を受け取る関数) }。戻り値は 走っている回
  */
 export function startPomo({ categoryId, taskId = null, sets = null, nav = null }) {
@@ -78,6 +79,37 @@ export function startPomo({ categoryId, taskId = null, sets = null, nav = null }
   toast(`${p.work} 分 × ${run.sets} セット を開始`);
   if (p.notify) { const url = notifyUrl(run); if (url) { if (nav) nav(url); else location.href = url; } }
   return run;
+}
+/**
+ * 始める前の ワンクッション(v0.79・ユーザー要望「ポモドーロは メインでは使わないので、始めるまでに ワンクッション置いてよい」): ホームの「タイマーで始める ›」から。
+ * やること → 作業 / 休憩 / 合計 のタイル → セット数のチップ(選んだ数は 設定に覚える)→ 終わる時刻 →「▶ 25 分 × 2 セット 始める」。after = 始めたあとに呼ぶ(描き直し)
+ */
+export function startSheet({ categoryId, taskId = null, after = null }) {
+  const name = nameOf({ categoryId, taskId });
+  const body = el('div.pm-fin.pm-go');
+  let close = () => {};
+  const tile = (k, v) => el('div.pm-tile', [el('span.pm-tk', k), el('b.pm-tv', v)]);
+  const draw = () => {
+    const p = P();
+    const ns = [1, 2, 3, 4, ...(p.sets > 4 ? [p.sets] : [])];
+    const total = pomo.totalMin({ work: p.work, rest: p.rest, sets: p.sets });
+    body.replaceChildren(
+      el('h2.pm-fin-h', 'タイマーで始める'),
+      el('p.pm-go-name', [el('i.dot', { style: { background: catOf(categoryId).color }, 'aria-hidden': 'true' }), el('b', name)]),
+      el('div.pm-tiles', [tile('作業', `${p.work} 分`), tile('休憩', `${p.rest} 分`), tile('合計', fmtMinJa(total))]),
+      el('h3.help-h', 'セット数'),
+      el('div.pm-sets', { role: 'group', 'aria-label': 'セット数' }, [
+        ...ns.map((k) => el('button.chip.sm2', { type: 'button', class: `chip sm2${k === p.sets ? ' on' : ''}`, 'aria-pressed': k === p.sets ? 'true' : 'false', 'aria-label': `${k} セット`, onclick: () => { S().pomo = { ...p, sets: k }; store.touchSettings(); sync.autoSync(); draw(); } }, String(k))),
+        el('span.pm-total', `${fmt(Date.now() + total * 60000).hm} ごろ まで`),
+      ]),
+      el('p.muted.small', '終わったら、できた分を確かめてから 記録します。作業と休憩の長さは 設定 › ポモドーロ で変えられます。'),
+      el('div.row.pm-fin-btns', [
+        el('button.btn', { type: 'button', onclick: () => close() }, 'やめる'),
+        el('button.btn.primary.grow', { type: 'button', 'aria-label': `${name} を ${p.work} 分 × ${p.sets} セット 始める`, onclick: () => { close(); startPomo({ categoryId, taskId, sets: p.sets }); if (after) after(); } }, `▶ ${p.work} 分 × ${p.sets} セット 始める`),
+      ]),
+    );
+  };
+  close = sheet((c) => { close = c; draw(); return [body]; });
 }
 /** その回を片づける(記録には触らない) */
 export function clearPomo() { if (store.state.local.pomo) setRun(null); keepAwake(false); }

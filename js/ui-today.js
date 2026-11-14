@@ -21,8 +21,7 @@ import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホ�
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: つぎは これ(候補の順位・純関数)
-import * as pomo from './pomo.js'; // v0.72・F25: ポモドーロ
-import { pomoOn, pomoCard, startPomo } from './ui-pomo.js';
+import { pomoOn, pomoCard, startSheet } from './ui-pomo.js';
 import { attentionItems } from './ui-settings.js';
 export { reportSheet };
 import { dateKey, minuteOfDay, windowFor, mm, hm, fmtMin, fmtMinJa, fmtMD, addDays, weekday, dayCut, effectiveDay, compressY, subtractIntervals } from './time.js';
@@ -535,7 +534,7 @@ export function renderNow(view, ctx, dateArg = null) {
 }
 /**
  * ① つぎは これ(v0.71・F24-20): ホームのいちばん上のカード。アシスタントの顔と吹き出し(絵は ここだけ・止めていれば無し)の下に、
- * 記録中 / タイマー中なら そのカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 25 分 始める」。
+ * 記録中 / タイマー中なら そのカード、そうでなければ next.candidates のいちばん上(札・名前・理由)と「▶ 始める」(v0.79: ポモドーロは 下の「タイマーで始める ›」から)。
  * v0.73(ユーザー要望「ほかの候補のボタンではなく、つぎは これ として出ているものをタップして 作業するものを替えられるように」): 名前の所をタップ →「なにをやる?」のシート
  * (候補+ほかの作業のカテゴリ)。選ぶと カードの中身が替わり(その日のあいだ覚える・nextPick)、始めるのは そのあと。作業いがいの記録は「ほかのことを記録」。
  */
@@ -557,21 +556,9 @@ function nextCard(n, hero, rerender, ctx) {
   const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
   const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
   const begin = (c) => { startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
-  // v0.72・F25: ポモドーロを使うなら「▶ 25 分 始める」が主役(セット数は その下のチップ・選んだ数は 設定に覚える)。時間を決めない記録は 小さなボタンへ
-  const pm = pomoOn() ? pomo.normalizePomo(S().pomo) : null;
-  const beginPomo = (c) => { startPomo({ categoryId: c.categoryId, taskId: c.taskId, sets: pomo.normalizePomo(S().pomo).sets }); rerender(); };
-  const setRow = () => {
-    const total = el('span.pm-total');
-    const row = el('div.pm-sets', { role: 'group', 'aria-label': 'セット数' });
-    const draw = () => {
-      const p = pomo.normalizePomo(S().pomo);
-      const ns = [1, 2, 3, 4, ...(p.sets > 4 ? [p.sets] : [])];
-      row.replaceChildren(el('span.pm-sk', 'セット'), ...ns.map((k) => el('button.chip.sm2', { type: 'button', class: `chip sm2${k === p.sets ? ' on' : ''}`, 'aria-pressed': k === p.sets ? 'true' : 'false', 'aria-label': `${k} セット`, onclick: () => { S().pomo = { ...p, sets: k }; store.touchSettings(); sync.autoSync(); draw(); } }, String(k))), total);
-      total.textContent = `計 ${fmtMinJa(pomo.totalMin({ work: p.work, rest: p.rest, sets: p.sets }))}`;
-    };
-    draw();
-    return row;
-  };
+  // v0.79(ユーザー要望「ポモドーロは そこまで メインでは使わないので、いちばん目立つ所に 導線は要らない。始めるまでに ワンクッション置いてよい」):
+  //   主役は「▶ 始める」(ワンタップで 記録が始まる・終わるときに 確認のシート)。ポモドーロは 下の「タイマーで始める ›」→ ui-pomo.startSheet(セット数と 終わる時刻を見てから 始める)
+  const pm = pomoOn();
   const other = () => chipsSheet(effNow(), rerender);
   const choose = () => sheet((close) => {
     const pick = (key) => { nextPick = key ? { date: n.date, key } : null; close(); rerender(); };
@@ -594,9 +581,8 @@ function nextCard(n, hero, rerender, ctx) {
       el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
       el('span.nx-chev', { 'aria-hidden': 'true' }, '替える ▾'),
     ]),
-    el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', 'aria-label': pm ? `${top.title} を ${pm.work} 分 始める` : `${top.title} を始める`, onclick: () => (pm ? beginPomo(top) : begin(top)) }, pm ? `▶ ${pm.work} 分 始める` : '▶ 始める')),
-    pm ? setRow() : null,
-    el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => begin(top) }, '時間を決めずに始める') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
+    el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める')),
+    el('div.nx-links', [pm ? el('button.nx-other', { type: 'button', onclick: () => startSheet({ categoryId: top.categoryId, taskId: top.taskId, after: rerender }) }, 'タイマーで始める ›') : null, el('button.nx-other', { type: 'button', onclick: other }, 'ほかのことを記録 ›')].filter(Boolean)),
   ].filter(Boolean) : [
     el('div.nx-top', el('span.nx-k', 'つぎは')),
     el('div.row.nx-btns', el('button.btn.primary.nx-start', { type: 'button', onclick: other }, '記録する')),

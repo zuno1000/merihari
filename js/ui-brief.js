@@ -99,7 +99,8 @@ function remainBox(b) {
     r ? el('div.brm-bar', { role: 'img', 'aria-label': `作業時間帯 ${mm(r.startMin % 1440)}〜${mm(r.endMin % 1440)} の ${pct}% が過ぎました` }, el('i', { style: { width: `${pct}%` } })) : null,
     r ? el('div.brm-ax', [el('span', pct < 22 ? '' : mm(r.startMin % 1440)), el('span.brm-nowl', { style: { left: `${Math.max(8, Math.min(92, pct))}%` } }, '▲ いま'), el('span', pct > 78 ? '' : mm(r.endMin % 1440))]) : null, // いま の印と重なる側の時刻は出さない
     el('div.br-tiles', [
-      pg ? tile('作業の残り', left > 0 ? fmtMin(left) : '達成', `${fmtMin(pg.workMin)} / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`) : null,
+      // v0.79(実機 FB): 作業の残りは 寝る前の「あしたへ」には出さない(きょうの作業の目安は あしたへ引き継がない)
+      pg && b.slot !== 'bed' ? tile('作業の残り', left > 0 ? fmtMin(left) : '達成', `${fmtMin(pg.workMin)} / ${pg.goal ? '目標 ' : ''}${fmtMin(pg.targetMin)}`) : null,
       tile('きょうまでのタスク', `${b.due.count}件`, b.due.overdue.length ? `うち期限切れ ${b.due.overdue.length}件` : b.due.count ? null : 'ぜんぶ済み', b.due.overdue.length ? ' warn' : ''),
     ].filter(Boolean)),
   ].filter(Boolean));
