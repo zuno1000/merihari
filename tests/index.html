@@ -1425,7 +1425,7 @@ document.getElementById('app').addEventListener('load', async () => {
       const tx = 'あいうえおかきくけこ、さしすせそ。たちつてとなにぬねのはひふへほ', vis = (segs) => segs.filter((x) => !x.hidden).map((x) => x.t).join('').length;
       const mLow = Q.mask(tx, 0.2, 7), mHigh = Q.mask(tx, 0.99, 7), flat = (segs) => segs.map((x) => (x.hidden ? '□'.repeat(x.t.length) : x.t)).join('');
       ok(Array.from(flat(mLow)).length === Array.from(tx).length && mLow.every((x) => !x.hidden || /^　+$/.test(x.t)) && vis(mLow) <= vis(mHigh) && Array.from(flat(mLow)).every((ch, i) => ch === '□' || Array.from(flat(mHigh))[i] === ch) && vis(Q.mask(tx, 1, 7)) < Array.from(tx).length && flat(Q.mask(tx, 0, 7)).includes('、') && eq(Q.mask(tx, 0.5, 7), Q.mask(tx, 0.5, 7)) && Array.from(flat(Q.mask(tx, 0.5, 7, 5))).length === 5, 'mask: 伏せた所に本文を入れない・進むと読める文字は増えるだけ・100% でも読み切れない・句読点は残す・同じ入力は同じ結果');
-      ok(eq(Q.stripText(p1, 0), { label: '解読 60%', sub: 'あと 5 分', hot: false }) && Q.stripText(p1, 1).hot && Q.stripText(p1, 2).label === '続き 2 件' && Q.stripText(p5, 0).label === '解読 完了', 'stripText: ホームの 1 行(あと何分・開いたら知らせる)');
+      ok(eq(Q.stripText(p1, 0), { label: '小説 60%', sub: 'あと 5 分', hot: false }) && Q.stripText(p1, 1).hot && Q.stripText(p1, 2).label === '続き 2 件' && Q.stripText(p5, 0).label === '小説 読了', 'stripText: ホームの 1 行(あと何分・開いたら知らせる)');
       const shelf = await (await fetch('../data/books.json', { cache: 'no-store' })).json();
       const bk = Q.parseStory(await (await fetch(`../data/books/${Q.DEFAULT_BOOK}.json`, { cache: 'no-store' })).json());
       const endsOk = (t) => /。[」』)）〕］]*$/.test(t);
@@ -1437,7 +1437,7 @@ document.getElementById('app').addEventListener('load', async () => {
     log('\n# v0.58 名画のピース');
     {
       const A = M.art;
-      ok(eq(A.normalizeArt(null), { enabled: true, since: null }) && eq(A.normalizeArt({ enabled: false, since: '2026-12-01' }), { enabled: false, since: '2026-12-01' }) && A.sinceOf(null) === A.EPOCH && A.sinceOf({ since: '2026-12-01' }) === '2026-12-01', 'normalizeArt / sinceOf: 既定は有効・始まりは EPOCH');
+      ok(eq(A.normalizeArt(null), { enabled: true, since: null, set: 'all' }) && eq(A.normalizeArt({ enabled: false, since: '2026-12-01', set: 'photo' }), { enabled: false, since: '2026-12-01', set: 'photo' }) && A.normalizeArt({ set: 'x' }).set === 'all' && A.sinceOf(null) === A.EPOCH && A.sinceOf({ since: '2026-12-01' }) === '2026-12-01', 'normalizeArt / sinceOf: 既定は有効・始まりは EPOCH');
       const rawA = [{ id: 'a', img: 'data/art/a.jpg', w: 600, h: 400, title: '題', artist: '作者', country: '国', year: '年', medium: '油彩', size: '', tech: '技', museum: '館(国)', story: '背', look: '見', page: 'https://example.org/a', license: 'PD' }, { id: 'b', img: 'data/art/b.jpg', w: 400, h: 600, title: '題2' }, { id: 'c', img: 'https://evil.example/x.jpg', w: 1, h: 1 }, { id: '../d', img: 'data/art/d.jpg', w: 1, h: 1 }, { id: 'e', img: 'data/art/e.jpg', w: 0, h: 1 }, null];
       const ws = A.parseList(rawA);
       ok(ws.length === 2 && ws[0].title === '題' && ws[0].page === 'https://example.org/a' && ws[1].artist === '' && ws[1].page === '' && eq(A.parseList('x'), []) && eq(A.gridOf(ws[0]), { cols: 8, rows: 6, n: 48 }) && eq(A.gridOf(ws[1]), { cols: 6, rows: 8, n: 48 }), 'parseList / gridOf: 同梱の画像だけ・形の合わないものは捨てる・横長 8×6 / 縦長 6×8');
@@ -1447,11 +1447,11 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(o1.length === 48 && new Set(o1).size === 48 && eq(o1, A.order(48, 0)) && !eq(o1, o2) && !eq(o1, Array.from({ length: 48 }, (_, i) => i)), 'order: ピースの開く順は 絵ごとに決まった並べ替え(同じ絵なら同じ順)');
       const i0 = A.info(ws[0], 0), i5 = A.info(ws[0], 0.55), i10 = A.info(ws[0], 1);
       ok(i0.every((x) => x.value === null) && !i0.some((x) => x.key === 'size') && i5.find((x) => x.key === 'artist').value === '作者' && i5.find((x) => x.key === 'title').value === null && i5.find((x) => x.key === 'country').value === '国' && i10.every((x) => x.value) && i10[i10.length - 1].key === 'look' && eq(A.nextInfo(ws[0], 0, 48), { label: '国', pieces: 5 }) && eq(A.nextInfo(ws[0], 27, 48), { label: '題名', pieces: 7 }) && A.nextInfo(ws[0], 48, 48) === null && A.info(ws[0], 5 / 48).find((x) => x.key === 'country').value === '国', 'info / nextInfo: 進みに応じて 国 → … → 作者 → 題名 → … → 見どころ の順に開く・値の無い項目は出さない');
-      ok(eq(A.stripText(g1, 0), { label: '絵 2 / 48', sub: 'あと 3 分', hot: false }) && A.stripText(g2, 1).hot && A.stripText(g4, 0).label === '絵 2 枚', 'stripText: ホームの 1 行(ピース数・あと何分・完成したら知らせる)');
+      ok(eq(A.stripText(g1, 0, ws[0]), { label: '絵 2 / 48', sub: 'あと 3 分', hot: false }) && A.stripText(g1, 0, { kind: 'photo' }).label === '写真 2 / 48' && A.stripText(g2, 1).hot && A.stripText(g4, 0).label === '図録 2 枚', 'stripText: ホームの 1 行(ピース数・あと何分・完成したら知らせる)');
       const bundledArt = A.parseList(await (await fetch('../data/art.json', { cache: 'no-store' })).json());
       const heads = await Promise.all(bundledArt.map((x) => fetch(`../${x.img}`, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok)));
       ok(bundledArt.length >= 15 && new Set(bundledArt.map((x) => x.id)).size === bundledArt.length && bundledArt.every((x) => x.title && x.artist && x.country && x.year && x.medium && x.tech && x.museum && x.story.length >= 40 && x.look.length >= 40 && /^https:\/\//.test(x.page) && A.info(x, 1).length >= 9) && heads.every(Boolean), '同梱の絵(data/art.json): 15 点以上・解説がそろっている・画像がある・美術館のページつき');
-      ok(eq(S.defaultSettings().art, { enabled: true, since: null }) && eq(S.migrate({ schema: 1, settings: { art: { enabled: false, since: '2026-12-01' } } }).settings.art, { enabled: false, since: '2026-12-01' }) && eq(S.migrate({ schema: 1, settings: { art: 'x' } }).settings.art, { enabled: true, since: null }) && S.SCALAR_FIELDS.includes('art') && M.features.FEATURES.ART === true && sw.includes(`'./js/art.js'`) && sw.includes(`'./js/ui-art.js'`) && !/ASSETS = \[[^\]]*data\/art/.test(sw), 'settings.art(既定は有効・項目ごとに同期)・FEATURES.ART・sw.js の ASSETS に art.js / ui-art.js(画像は ASSETS に入れない)');
+      ok(eq(S.defaultSettings().art, { enabled: true, since: null, set: 'all' }) && eq(S.migrate({ schema: 1, settings: { art: { enabled: false, since: '2026-12-01', set: 'art' } } }).settings.art, { enabled: false, since: '2026-12-01', set: 'art' }) && eq(S.migrate({ schema: 1, settings: { art: 'x' } }).settings.art, { enabled: true, since: null, set: 'all' }) && S.SCALAR_FIELDS.includes('art') && M.features.FEATURES.ART === true && sw.includes(`'./js/art.js'`) && sw.includes(`'./js/ui-art.js'`) && !/ASSETS = \[[^\]]*data\/art/.test(sw), 'settings.art(既定は有効・項目ごとに同期)・FEATURES.ART・sw.js の ASSETS に art.js / ui-art.js(画像は ASSETS に入れない)');
     }
 
     // ---- v0.59・F24: アシスタント(buddy.js)----
@@ -1495,6 +1495,20 @@ document.getElementById('app').addEventListener('load', async () => {
       const c1 = Ai.consultText({ question: '次は?', nowMin: 600, open: null, notes: ['時間帯: 午前がいちばん進む', '', 5, '進み: あと 3 分の作業で小説の続き'] }), c0 = Ai.consultText({ question: '次は?', nowMin: 600, open: null });
       const s1 = Ai.summaryText({ date: '2026-11-14', agg: null, fb: null, gs: [], diary: null, categories: [], goals: {}, nowMin: 1440, dayDone: true, notes: Array.from({ length: 9 }, (_, i) => `札: 気づき${i}`) });
       ok(c1.includes('【アプリが気づいたこと(記録から)】\n時間帯: 午前がいちばん進む\n進み: あと 3 分の作業で小説の続き\n\n【作業の進め方の相談】') && !c0.includes('アプリが気づいたこと') && s1.includes('札: 気づき5') && !s1.includes('札: 気づき6') && s1.indexOf('アプリが気づいたこと') < s1.indexOf('【お願い】') && s1.length <= Ai.MAX_CHARS, 'AI に渡す文: 気づきを材料に足す(6 行まで・文字列だけ・無ければ足さない・お願いの前)');
+    }
+
+    // ---- v0.61・F23: 風景の写真(art.js の mix / 写真の段)----
+    log('\n# v0.61 風景の写真');
+    {
+      const A = M.art;
+      const a = (id) => ({ id, kind: 'art', w: 3, h: 2 }), ph = (id) => ({ id, kind: 'photo', w: 3, h: 2 });
+      ok(eq(A.mix([a('a1'), a('a2'), a('a3')], [ph('p1')], 'all').map((x) => x.id), ['a1', 'p1', 'a2', 'a3']) && eq(A.mix([a('a1')], [ph('p1'), ph('p2')], 'all').map((x) => x.id), ['a1', 'p1', 'p2']) && eq(A.mix([a('a1')], [ph('p1')], 'art').map((x) => x.id), ['a1']) && eq(A.mix([a('a1')], [ph('p1')], 'photo').map((x) => x.id), ['p1']) && eq(A.mix(null, null), []) && eq(A.SETS, ['all', 'art', 'photo']) && A.SETS.every((k) => A.SET_LABEL[k]), 'mix: 名画と写真を交互に(片方が尽きたら残りを続ける)・名画だけ / 写真だけ');
+      const pw = A.parseList([{ id: 'p', kind: 'photo', img: 'data/photo/p.jpg', w: 960, h: 640, title: '場所', artist: '撮影者', country: '国', region: '地域', year: '2020 年', story: '背', look: '見', page: 'https://commons.wikimedia.org/wiki/File:x.jpg', license: 'CC BY-SA 4.0', credit: '写真: 撮影者' }, { id: 'q', img: 'data/other/q.jpg', w: 1, h: 1 }])[0];
+      const pi = A.info(pw, 0.6), pall = A.info(pw, 1);
+      ok(pw.kind === 'photo' && pw.credit === '写真: 撮影者' && eq(pall.map((x) => x.label), ['国', '撮影', '地域', '場所', '背景', '見どころ']) && pi.find((x) => x.key === 'title').value === '場所' && pi.find((x) => x.key === 'story').value === null && !pall.some((x) => x.key === 'artist') && eq(A.nextInfo(pw, 0, 48), { label: '国', pieces: 5 }) && A.kindName(pw) === '写真' && A.kindName({ kind: 'art' }) === '絵', '写真の段: 国 → 撮影 → 地域 → 場所 → 背景 → 見どころ(撮影者は段に入れず いつも出す)');
+      const photos = A.parseList(await (await fetch('../data/photos.json', { cache: 'no-store' })).json());
+      const heads = await Promise.all(photos.map((x) => fetch(`../${x.img}`, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok)));
+      ok(photos.length >= 12 && new Set(photos.map((x) => x.id)).size === photos.length && photos.every((x) => x.kind === 'photo' && x.title && x.country && x.region && x.artist && x.story.length >= 40 && x.look.length >= 40 && /^(CC0|Public domain|CC BY(-SA)? \d)/.test(x.license) && x.credit.includes(x.artist) && x.credit.includes(x.license) && /^https:\/\/commons\.wikimedia\.org\//.test(x.page)) && heads.every(Boolean), '同梱の写真(data/photos.json): 12 枚以上・自由なライセンスだけ・撮影者とライセンスの表示つき・画像がある');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');

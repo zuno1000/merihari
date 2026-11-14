@@ -1,4 +1,4 @@
-// merihari ─ quest.js: 解読(v0.56・F22。v0.57: 物語は青空文庫の作品に)。すべて純関数。
+// merihari ─ quest.js: 連載小説(v0.56・F22。v0.57: 青空文庫の作品に。v0.61: 名前を「解読」から「連載小説」に・ファイル名と設定のキー quest はそのまま)。すべて純関数。
 // ユーザー要望「YouTube や SNS は自然とやりたくなるが、作業(研究・勉強)はすき間時間に自発的にやりたいと思えない。それを解消したい」。
 // 報酬(集める)ではなく「続きが気になる」を作る: 作業の記録時間が、伏せられた小説の断片の解読に変わる。
 // 開くとすぐ次の断片が 20% 進んだ状態で出る(目標勾配)。作業しない日に減るものは無い(責めない)。
@@ -109,6 +109,6 @@ export function mask(text, pct, seed, limit = PREVIEW_CHARS) {
 /** ホームの 1 行の文。unread = まだ読んでいない開いた断片の数 */
 export function stripText(p, unread) {
   if (unread > 0) return { label: `続き ${unread} 件`, sub: '読む ›', hot: true };
-  if (p.done) return { label: '解読 完了', sub: '読了', hot: false };
-  return { label: `解読 ${pctLabel(p)}%`, sub: `あと ${p.need} 分`, hot: false };
+  if (p.done) return { label: '小説 読了', sub: '本を選ぶ ›', hot: false };
+  return { label: `小説 ${pctLabel(p)}%`, sub: `あと ${p.need} 分`, hot: false };
 }

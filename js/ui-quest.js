@@ -1,4 +1,4 @@
-// merihari ─ ui-quest.js: 解読(v0.56・F22。v0.57: 青空文庫の作品を読む)の画面。計算は quest.js(純関数)。
+// merihari ─ ui-quest.js: 連載小説(v0.56・F22。v0.57: 青空文庫の作品を読む。v0.61: 名前を「解読」から変え、紙の本のような明るい見た目に)の画面。計算は quest.js(純関数)。
 // 入口は 3 つだけ: questStrip(ホームの 1 行)・sectionQuest(設定の項目)・questSummary(設定の一覧の右側)。どれも FEATURES.QUEST が false なら何も出さない。
 // 新しい操作は足さない: いつものワンタップ記録(作業)がそのまま解読になる。読んだ印と音は端末ごと(local.quest = { seen, sound }・同期しない)。
 import { el, clear, sheet, toast, confirmSheet } from './ui.js';
@@ -104,10 +104,10 @@ function nextView(st, s) {
   const f = s.p.next;
   const segs = quest.mask(f.text, s.p.pct, f.n);
   return el('div.q-next', { class: `q-next${s.active ? ' active' : ''}` }, [
-    el('p.q-head', [el('span.q-no', `${f.n + 1} / ${st.total}`), f.chTitle, el('span.q-lock', '未解読')]),
-    el('p.q-mask', { 'aria-label': '未解読の続き(一部だけ読めます)' }, [...segs.map((x) => (x.hidden ? el('i', x.t) : x.t)), ' …']),
+    el('p.q-head', [el('span.q-no', `${f.n + 1} / ${st.total}`), f.chTitle, el('span.q-lock', 'このあと')]),
+    el('p.q-mask', { 'aria-label': 'このあとの文(一部だけ読めます)' }, [...segs.map((x) => (x.hidden ? el('i', x.t) : x.t)), ' …']),
     el('div.q-prog', [bar(s.p.pct), el('span.q-pct', `${quest.pctLabel(s.p)}%`)]),
-    el('p.q-need', s.active ? `いま解読中。あと ${s.p.need} 分で開きます` : `あと ${s.p.need} 分の作業で開きます`),
+    el('p.q-need', s.active ? `いま作業中。あと ${s.p.need} 分で読めます` : `あと ${s.p.need} 分の作業で読めます`),
   ]);
 }
 
@@ -132,19 +132,20 @@ export function openQuest(onClose = null) {
       const go = (d) => { pos += d; animate = false; draw(); panel.parentNode.scrollTop = 0; };
       clear(panel);
       panel.append(...[
-        el('p.q-title', st.title),
-        el('p.q-meta', `${st.author}・解読済み ${s.p.opened} / ${s.p.total}`),
+        el('p.q-kicker', '連載小説'),
+        el('h2.q-book', st.title),
+        el('p.q-meta', `${st.author}・${s.p.opened} / ${s.p.total} まで届いています`),
         fragmentView(st, f, animate),
         el('div.q-nav', [
           el('button.q-step', { type: 'button', disabled: pos <= 0, 'aria-label': '前の断片', onclick: () => go(-1) }, '‹ 前'),
           last ? el('span.q-here', '最新') : el('button.q-step.fwd', { type: 'button', onclick: () => go(1) }, `続きを読む(あと ${left} 件)›`),
         ]),
-        !last ? null : s.p.next ? nextView(st, s) : el('p.q-end', '最後まで解読しました。設定 › 解読 で次の本を選べます。'),
+        !last ? null : s.p.next ? nextView(st, s) : el('p.q-end', '最後まで読みました。設定 › 連載小説 で次の本を選べます。'),
         el('details.q-credit', [el('summary', '出典'), el('p', [`${st.author}『${st.title}』`, st.card ? el('a', { href: st.card, target: '_blank', rel: 'noopener noreferrer' }, ' 青空文庫の図書カード') : ' 青空文庫']), st.credit ? el('p.q-credit-t', st.credit) : null]),
       ].filter(Boolean));
       animate = false;
     };
-    close = sheet((c) => { close = c; draw(); return [panel, el('div.row.q-act', [el('span.muted.small.grow', `作業の記録 ${fmtMin(first.p.workMin)} を解読に使いました`), el('button.btn.primary', { type: 'button', onclick: () => close() }, '閉じる')])]; }, () => { if (onClose) onClose(); }, { cls: 'q-sheet' });
+    close = sheet((c) => { close = c; draw(); return [panel, el('div.row.q-act', [el('span.muted.small.grow', `作業の記録 ${fmtMin(first.p.workMin)} ぶん読み進めました`), el('button.btn.primary', { type: 'button', onclick: () => close() }, '閉じる')])]; }, () => { if (onClose) onClose(); }, { cls: 'q-sheet' });
   }).catch(() => toast('本を読み込めませんでした(初回は通信が要ります)'));
 }
 
@@ -162,7 +163,7 @@ export function sectionQuest(rerender) {
   const today = () => effectiveDay(s, dateKey(), minuteOfDay()).date;
   const restart = (book) => { L().seen = 0; store.saveLocal(); save({ ...q, book, since: today() }); };
   const state = el('p.muted.small', '');
-  loadStory().then((st) => { if (!state.isConnected) return; const x = snapshot(); state.textContent = `いま: ${st.author}『${st.title}』 解読済み ${x.p.opened} / ${x.p.total}・${quest.sinceOf(q)} からの作業 ${fmtMin(x.p.workMin)}${x.p.next ? `・続きまで あと ${x.p.need} 分` : ''}`; }).catch(() => { state.textContent = '本を読み込めませんでした(初回は通信が要ります)。'; });
+  loadStory().then((st) => { if (!state.isConnected) return; const x = snapshot(); state.textContent = `いま: ${st.author}『${st.title}』 ${x.p.opened} / ${x.p.total} まで・${quest.sinceOf(q)} からの作業 ${fmtMin(x.p.workMin)}${x.p.next ? `・続きまで あと ${x.p.need} 分` : ''}`; }).catch(() => { state.textContent = '本を読み込めませんでした(初回は通信が要ります)。'; });
   const list = el('div.list');
   loadShelf().then((bs) => {
     if (!list.isConnected) return;
@@ -175,14 +176,14 @@ export function sectionQuest(rerender) {
     }
   }).catch(() => { list.append(el('p.muted.small', '本棚を読み込めませんでした。')); });
   return el('section.card', [
-    el('h2', '解読'),
-    el('p.muted.small', '作業として記録した時間が、伏せられた小説の続きの解読に変わります。いつもの記録のほかに操作は要りません。10 分ぶんの作業で 1 つ(300〜400 字)開き、開くとすぐ次が 20% 進んだ状態で現れます。作業しない日に減るものはありません。ホームの内訳の下に 1 行だけ出ます。'),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: q.enabled, onchange: (e) => save({ ...q, enabled: e.target.checked }) }), el('span', 'ホームに解読の 1 行を出す')]),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!L().sound, onchange: (e) => { L().sound = e.target.checked; store.saveLocal(); if (e.target.checked) chime(); } }), el('span', '続きが開いたときに音を鳴らす(この端末だけ)')]),
+    el('h2', '連載小説'),
+    el('p.muted.small', '作業として記録した時間のぶんだけ、小説の続きが届きます。いつもの記録のほかに操作は要りません。10 分ぶんの作業で 1 回分(300〜400 字)が届き、その次の回は 20% 進んだ状態から始まります。作業しない日に減るものはありません。ピースの図録とは作業時間を分け合いません(同じ 1 分が両方に数えられます)。'),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: q.enabled, onchange: (e) => save({ ...q, enabled: e.target.checked }) }), el('span', 'ホームに小説の 1 行を出す')]),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!L().sound, onchange: (e) => { L().sound = e.target.checked; store.saveLocal(); if (e.target.checked) chime(); } }), el('span', '続きが届いたときに音を鳴らす(この端末だけ)')]),
     state,
     el('div.row', [
       el('button.btn.sm', { type: 'button', onclick: () => openQuest() }, 'いまの続きを開く'),
-      el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('最初からやり直しますか?', '解読の進みを 0 に戻し、今日からの作業で数え直します(記録そのものは変わりません・両方の端末に効きます)。', 'やり直す', () => { restart(q.book); toast('最初からにしました'); }) }, '最初からやり直す'),
+      el('button.btn.sm.ghost', { type: 'button', onclick: () => confirmSheet('最初からやり直しますか?', '小説を最初の回に戻し、今日からの作業で数え直します(記録そのものは変わりません・両方の端末に効きます)。', 'やり直す', () => { restart(q.book); toast('最初からにしました'); }) }, '最初からやり直す'),
     ]),
     el('h3.help-h', '本を選ぶ'),
     el('p.muted.small', '青空文庫の、著作権の切れた作品です。文の終わり(。)で機械的に区切っています。古い作品なので、いまの感覚では不適切な表現が残っていることがあります(原文のまま)。'),

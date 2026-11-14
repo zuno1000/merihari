@@ -101,7 +101,7 @@ export function insights({ entries, settings, today, workMin, progress = null })
   if (progress) {
     const q = progress.quest, a = progress.art, parts = [];
     if (q && !q.done) parts.push(q.unread > 0 ? `小説の続きが ${q.unread} 件 読めます` : `あと ${q.need} 分の作業で小説の続き`);
-    if (a && !a.allDone) parts.push(a.next ? `あと ${a.next.pieces} ピースで絵の「${a.next.label}」` : `あと ${a.need} 分で絵の次のピース`);
+    if (a && !a.allDone) parts.push(a.next ? `あと ${a.next.pieces} ピースで${a.name || '絵'}の「${a.next.label}」` : `あと ${a.need} 分で${a.name || '絵'}の次のピース`);
     add('progress', parts.join('・'));
   }
   const b = bestBand(entries, settings, today);

@@ -15,8 +15,8 @@
 ## 技術
 - 素の HTML/CSS/JS(ES2020+)、ビルド無し、npm 依存ゼロ。`js/` は役割別(main/store/time/plan/log/report/brief/quest/art/buddy/ui-*/google/sync/bgm/feed)。
 - 同梱データ `data/bgm.json`(BGM のカタログ)と `data/feed.json`(キャッチアップの記事)は GitHub Actions(`.github/workflows/update-bgm.yml` 週次・`update-feed.yml` 毎朝)が `tools/*.py` で作り直す。SW の `DATA`(先読み+裏で更新)なので版は上げない。取得元は `data/feeds.json`(ユーザーが編集)。
-- 解読(F22・`FEATURES.QUEST` で隔離)の本 `data/books/<id>.json` と本棚 `data/books.json` は `python -I tools/aozora_fetch.py` が青空文庫の著作権の切れた作品から作る(「。」で区切る・ルビと注記は外す・底本の記載は credit に残す)。本を足すときはツールの `BOOKS` に足す。SW の ASSETS には入れない(大きいので、読んだ本だけ端末に残る)。
-- 名画のピース(F23・`FEATURES.ART` で隔離)の絵 `data/art/*.jpg` と `data/art.json` は `python -I tools/art_fetch.py` が メトロポリタン美術館 / クリーブランド美術館のオープンアクセス(CC0 の印を確かめる)から作る。絵を足すときはツールの `WORKS` に日本語の題名と解説を書く。SW の ASSETS には入れない。
+- 連載小説(F22・画面の名前。コードは quest・`FEATURES.QUEST` で隔離)の本 `data/books/<id>.json` と本棚 `data/books.json` は `python -I tools/aozora_fetch.py` が青空文庫の著作権の切れた作品から作る(「。」で区切る・ルビと注記は外す・底本の記載は credit に残す)。本を足すときはツールの `BOOKS` に足す。SW の ASSETS には入れない(大きいので、読んだ本だけ端末に残る)。
+- ピースの図録(F23・`FEATURES.ART` で隔離)の名画 `data/art/*.jpg`・`data/art.json` は `python -I tools/art_fetch.py`(メトロポリタン美術館 / クリーブランド美術館のオープンアクセス・CC0 の印を確かめる)、風景の写真 `data/photo/*.jpg`・`data/photos.json` は `python -I tools/photo_fetch.py`(Wikimedia Commons・CC BY / CC BY-SA まで・撮影者とライセンスを credit に)が作る。足すときは各ツールの `WORKS` に日本語の題名と解説を書く。SW の ASSETS には入れない。
 - ユーザー文字列は textContent で描画。innerHTML にユーザー入力を入れない。
 - 純関数は `window.M` に載せ `tests/index.html`(iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件)で検証。
 - 版: `APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新(tests が一致を確認)。
