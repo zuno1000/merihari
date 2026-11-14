@@ -13,6 +13,7 @@ import { workByDay } from './quest.js';
 import { questStatus } from './ui-quest.js';
 import { artStatus } from './ui-art.js';
 import { loadWeather, weatherCard } from './ui-today.js';
+import { requestReflect } from './ui-diary.js'; // v0.66: ホームの「ふり返る」
 import { bgmOn, suggestBgm, playSuggested } from './ui-bgm.js';
 import * as bgm from './bgm.js';
 import { feedOn, feedRow, ensureSource } from './ui-feed.js';
@@ -112,23 +113,34 @@ export function bubble(key, vars = {}, mood = 'base') {
 }
 
 /**
- * ホームに常駐する 1 行(内訳の下): 顔+吹き出し。状況に合わせて ひとこと(届いた続き・絵はがき・作業中の進み・ダラダラが 20 分・45 分 何も記録していない・夜)。
- * 30 秒ごとに文字と表情だけ更新。タップで アシスタントのシート(話す / 手帳 / 日報)。
+ * ホームのアシスタント(v0.66・ユーザー要望「ホームも含めて アシスタントを中心に配置を再設計」): ホームのいちばん上のカード。
+ * 顔(タップで 話す / 手帳)+吹き出し(タップで ほかのコメント)→ 小説とピースの進み(strips: ui-quest / ui-art の行をそのまま中に)→ 日報 / ふり返る / 話す。
+ * 状況に合わせて ひとこと(届いた続き・絵はがき・作業中の進み・ダラダラが 20 分・45 分 何も記録していない・夜)。30 秒ごとに文字と表情だけ更新。
  */
-export function buddyHome(ctx) {
+export function buddyHome(ctx, strips = []) {
   if (!buddyOn()) return null;
   const b = B();
   const text = el('span.bd-text'), av = el('span.bd-avwrap');
-  let mood = null, turn = 0; // turn: 吹き出しをタップした回数(v0.64: タップで ほかのコメント)
+  let mood = null, turn = 0; // turn: 吹き出しをタップした回数(タップで ほかのコメント)
   const paint = () => {
     const list = buddy.homeLines(homeState(), b.tone, seed() + turn, b.lines);
     const l = list[turn % list.length];
     if (text.textContent !== l.text) text.textContent = l.text;
-    if (l.mood !== mood) { mood = l.mood; clear(av); av.append(avatar(mood, 44)); }
+    if (l.mood !== mood) { mood = l.mood; clear(av); av.append(avatar(mood, 60)); }
   };
-  const node = el('div.bd-home', [
-    el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
-    el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [el('span.bd-name', b.name), text]),
+  const rows = strips.filter(Boolean);
+  const act = (label, fn) => el('button.bd-act', { type: 'button', onclick: fn }, label);
+  const node = el('section.bd-homecard', [
+    el('div.bd-home', [
+      el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
+      el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [el('span.bd-name', b.name), text]),
+    ]),
+    rows.length ? el('div.q-row', rows) : null,
+    el('div.bd-quick', [
+      ctx && ctx.openBrief && S().brief?.enabled !== false ? act('日報', () => ctx.openBrief()) : null,
+      act('ふり返る', () => { requestReflect(); ctx.go('diary'); }),
+      act('話す', () => openBuddy(ctx, paint)),
+    ]),
   ]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
@@ -241,27 +253,53 @@ export function openBuddy(ctx, onClose = null) {
 }
 
 /**
- * 気づきの吹き出し(v0.65): 日報の おすすめ のページの頭。きょうの気づき(小説とピースの進み・得意な時間帯・先週との違い・崩れやすい曜日・最長の集中)を
- * アシスタントの台詞で 1 つずつ言う。吹き出しをタップで次へ(名前の横に 1 / 4)。言えることが無ければ 見送りの ひとこと。止めていれば null
+ * ひとりで話す吹き出し(v0.66): 顔+吹き出し 1 つ。items() = [{ key, vars, mood }] を タップのたびに 1 つずつ話す(名前の横に 1 / 4)。
+ * 一巡すると言い回しが変わる。何も無ければ empty の場面。日報の おすすめ(気づき)と ふり返りタブ(その日のこと)で使う。止めていれば null
  */
-function insightBubble() {
+function talker(items, { empty = 'hello', label = 'ほかの話を聞く', size = 44 } = {}) {
   if (!buddyOn()) return null;
-  const b = B(), d = store.state.data;
+  const b = B();
   const name = el('span.bd-name'), text = el('span.bd-text'), av = el('span.bd-avwrap');
   let turn = 0, mood = null;
   const paint = () => {
-    const list = buddy.facts({ entries: d.entries, settings: S(), today: now().date, workMin: totalWork(), progress: primed });
-    const all = list.length ? list : [{ key: 'bye', vars: {}, mood: 'happy' }];
+    const list = items() || [];
+    const all = list.length ? list : [{ key: empty, vars: {}, mood: 'base' }];
     const x = all[turn % all.length];
     name.textContent = all.length > 1 ? `${b.name}・${(turn % all.length) + 1} / ${all.length}` : b.name;
-    text.textContent = buddy.say(x.key, b.tone, x.vars, seed() + Math.floor(turn / all.length), ex(x.key));
-    if (x.mood !== mood) { mood = x.mood; clear(av); av.append(avatar(mood, 44)); }
+    text.textContent = buddy.say(x.key, b.tone, x.vars || {}, seed() + Math.floor(turn / all.length), ex(x.key));
+    const m = x.mood || 'base';
+    if (m !== mood) { mood = m; clear(av); av.append(avatar(mood, size)); }
   };
-  const node = el('div.bd-say', [av, el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかの気づきを聞く', onclick: () => { turn++; paint(); } }, [name, text])]);
+  const node = el('div.bd-say', [av, el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': label, onclick: () => { turn++; paint(); } }, [name, text])]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
   return node;
 }
+/** 気づきの吹き出し(日報の おすすめ のページの頭・v0.65) */
+function insightBubble() {
+  const d = store.state.data;
+  return talker(() => buddy.facts({ entries: d.entries, settings: S(), today: now().date, workMin: totalWork(), progress: primed }), { empty: 'bye', label: 'ほかの気づきを聞く' });
+}
+/**
+ * ふり返りタブの案内(v0.66・ユーザー要望「アシスタントが一か所にいて 色々教えてくれる」): その日について言えることを 1 つの吹き出しで順に話す。
+ * o = { isToday, hasRecords, written, fb(report.dayFeedback) }。判定の ひとこと → 日記の様子 → よかったこと → ここをこうしたら → 次の一歩。止めていれば null
+ */
+export function dayGuide(o) {
+  return talker(() => {
+    const fb = o.fb || {}, out = [];
+    const head = fb.head || (fb.good && fb.good[0]) || '';
+    out.push(!o.isToday ? { key: 'review_past', mood: 'base' } : !o.hasRecords ? { key: 'review_none', mood: 'worry' } : head && fb.judged ? { key: 'review_head', vars: { text: String(head).replace(/[。.]$/, '') }, mood: 'happy' } : { key: 'review_mid', mood: 'base' });
+    out.push(o.written ? { key: 'diary_done', mood: 'happy' } : { key: o.isToday ? 'diary_ask' : 'diary_past', mood: 'base' });
+    const tell = (t, mood) => { if (typeof t === 'string' && t.trim() && !out.some((x) => x.vars && x.vars.text === t)) out.push({ key: 'tell', vars: { text: t.trim() }, mood }); };
+    for (const t of fb.good || []) tell(t, 'happy');
+    for (const t of fb.lookBack || []) tell(t, 'base');
+    tell(fb.better, 'base');
+    tell(fb.next, 'base');
+    return out;
+  }, { label: 'この日のことを もっと聞く', size: 56 });
+}
+/** アシスタントの 1 行(止めていれば '')。トーストなどに */
+export const buddyLine = (key, vars = {}) => (buddyOn() ? buddy.say(key, B().tone, vars, seed(), ex(key)) : '');
 
 /**
  * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 気づきの吹き出し → 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す

@@ -1576,6 +1576,13 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(f5.every((x) => Bd.TONES.every((t) => { const s = Bd.say(x.key, t, x.vars, 0); return s.length > 0 && !/[ 　{}]/.test(s); })) && Bd.say('ins_band', 'bright', f5[2].vars, 0) === '作業がいちばん進むのは午前(9〜12時)みたい。この2週間の75%が、そこだったよ。' && Bd.say('ins_week_up', 'cool', f5[3].vars, 0) === 'この7日は1日2h30m。前より1h多い。' && Bd.say('ins_week_down', 'bright', { avg: '2h', diff: '30m' }, 0).includes('波はあるものだよ'), '気づきの台詞: どの口調でも言える・空白が入らない・減った週も責めない');
     }
 
+    // ---- v0.66・F24-15: 一緒にふり返る・アシスタントを中心に ----
+    log('\n# v0.66 一緒にふり返る');
+    {
+      const Bd = M.buddy;
+      ok(['tell', 'diary_done', 'wz_scales', 'wz_hard', 'wz_tomorrow', 'wz_done'].every((k) => Bd.LINE_KEYS.includes(k) && Bd.TONES.every((t) => Bd.say(k, t, { text: '作業は合計 4 時間 30 分です。' }, 0).length > 0)) && Bd.say('tell', 'bright', { text: '作業は合計 4 時間 30 分です。' }, 0) === '作業は合計4時間30分です。' && Bd.say('tell', 'cool', { text: 'x y' }, 3) === 'x y', '一緒にふり返る の台詞(気分・ひっかかったこと・あした・綴じた)と、記録の文をそのまま伝える tell(空白は詰める)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

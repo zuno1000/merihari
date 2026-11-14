@@ -10,7 +10,7 @@ import { FEATURES } from './features.js';
 import * as report from './report.js';
 import * as diary from './diary.js';
 import * as ai from './ai.js';
-import { buddyNotes, buddyPersona, prime, lead, buddyOn, buddyName } from './ui-buddy.js'; // v0.60: AI に渡す材料
+import { buddyNotes, buddyPersona, prime, buddyOn, buddyName, bubble, dayGuide, buddyLine } from './ui-buddy.js'; // v0.60: AI に渡す材料
 import * as sync from './sync.js';
 import { dayTop } from './ui-report.js'; // v0.27.1: ①「きょうはどうだった」(循環 import だが呼ぶのは描画時だけ)
 import { headBar, dateNav, calButton, calendarSheet } from './ui-today.js';
@@ -84,43 +84,35 @@ export function renderDiary(view, ctx, dateArg = null) {
   const goDate = (d) => ctx.go('diary', d >= e.date ? undefined : d);
   const rerender = () => renderDiary(view, ctx, isToday ? null : date);
   const draft = { ...entryFor(date) };
-  let timer = null;
-  const status = el('span.dsave.muted.small', draft.updatedAt ? '保存ずみ' : '');
-  const commit = () => { clearTimeout(timer); saveEntry(draft); status.textContent = '保存しました'; refreshList(); };
-  const queue = () => { status.textContent = '…'; clearTimeout(timer); timer = setTimeout(commit, 500); };
-  window.addEventListener('pagehide', commit, { once: true });
+  const commit = () => {}; // v0.66: この画面は 見るだけ(記入は reflectSheet が自分で保存する)。日付を移る前に保存するものは無い
 
   // v0.20: 右上のカレンダー(月のカレンダーでさかのぼる)。v0.28: ホーム・カレンダータブと同じ升目(ui-today.calendarSheet)・日付は中央(headBar)
   const head = headBar({
     // v0.28.3(実機 FB): ホーム・カレンダータブと同じく カレンダーの印は左上(今日 はその右)。保存の印(保存ずみ / … / 保存しました)は右端へ
     left: [calButton(() => { commit(); calendarSheet(date, e.date, (k) => goDate(k)); }), isToday ? null : el('button.btn.sm', { type: 'button', onclick: () => { commit(); goDate(e.date); } }, '今日')],
     center: dateNav(date, { prev: () => { commit(); goDate(addDays(date, -1)); }, next: isToday ? null : () => { commit(); goDate(addDays(date, 1)); } }),
-    right: [status],
+    right: [],
   });
 
   // その日の集計・ふり返り・目安(AI に渡す文のため。v0.30: 「材料」のチップは廃止 ─ 実機 FB「使っていない」)
   const agg = report.aggregate({ entries: E(), date, nowMin, settings: S() });
   const fb = report.dayFeedback(agg, { tasks: T(), entries: E(), date, settings: S(), nowMin, planBlocks: store.state.data.planBlocks });
   const gs = plan.goals(T(), E(), date, nowMin, { chunk: plan.chunkOf(S()) });
-  const fields = {};
-  const field = (key, label, placeholder) => {
-    const ta = growArea(draft[key], placeholder, (v) => { draft[key] = v; queue(); });
-    fields[key] = ta;
-    return el('label.dfield', [el('span.dlabel', label), ta]);
-  };
-
-  // v0.26: 状態(満足 / 気分 / 疲れ)を 1 行ずつ → 3 行 → メモ(空なら「＋ メモ」に畳む)。v0.30: 「明日は」は ひっかかったこと の下・メモの上(きょうも同じカードの中)
-  const noteField = field('note', 'メモ', '自由に');
-  const tomorrowField = field('tomorrow', isToday ? '明日は' : '次の日は', 'ひとつだけ');
-  const noteBtn = el('button.btn.sm.ghost.dmore', { type: 'button', onclick: () => revealNote(true) }, '＋ メモ');
-  const revealNote = (focus = false) => { noteField.hidden = false; noteBtn.hidden = true; if (focus) fields.note.focus(); };
-  if (draft.note && draft.note.trim()) revealNote(); else noteField.hidden = true;
-  const card = el('section.card.dcard', [
-    el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))),
-    field('good', 'よかったこと', isToday ? 'きょう、よかったこと' : 'よかったこと'),
-    field('hard', 'ひっかかったこと', '気づき。なければ空でいい'),
-    tomorrowField,
-    noteField, noteBtn,
+  // v0.66(ユーザー要望「今日を振り返るボタン → 複数ページで一緒にふり返る。そのあとは これまでのように見られて、アシスタントは一か所に」):
+  // 記入は reflectSheet(5 ページ)。この画面は その日を 見る 画面で、アシスタントは いちばん上の 1 か所(dayGuide: タップで その日のことを順に話す)。
+  const dayDone = !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false);
+  const openWizard = (page = 0) => reflectSheet({ date, isToday, nowMin, agg, fb, gs, dayDone, page }, rerender);
+  const entry = entryFor(date);
+  const written = diary.isWritten(entry);
+  const vline = (label, v) => (v && v.trim() ? el('div.dv-row', [el('span.dlabel', label), el('p.dv-text', v.trim())]) : null);
+  const card = el('section.card.dcard.dview', written ? [
+    diary.scalesText(entry) ? el('p.dv-scales', diary.scalesText(entry)) : null,
+    vline('よかったこと', entry.good), vline('ひっかかったこと', entry.hard), vline(isToday ? '明日は' : '次の日は', entry.tomorrow), vline('メモ', entry.note),
+    vline(buddyOn() ? `${buddyName()}の返事` : 'AI の返事', entry.ai),
+    el('div.row', el('button.btn.sm', { type: 'button', onclick: () => openWizard(1) }, '書き足す・直す')),
+  ].filter(Boolean) : [
+    el('p.muted.small', isToday ? 'きょうは まだ書いていません。' : 'この日は書いていません。'),
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => openWizard(0) }, isToday ? 'きょうを一緒にふり返る' : 'この日をふり返る')),
   ]);
 
   // 続いた日数と最近の一覧
@@ -145,44 +137,15 @@ export function renderDiary(view, ctx, dateArg = null) {
   }
   refreshList();
 
-  // AI(v0.21・F11): 設定 › AI で有効にした人だけ。文をショートカットへ渡し、返事はクリップボードから貼り付ける(アプリ内に AI は無い)
-  // v0.26: カードではなく 1 行。タップでシート(中身は aiCard のまま)
-  const aiOpts = { date, isToday, nowMin, agg, fb, gs, draft, fields, queue, revealNote, dayDone: !isToday || (windowFor(S(), date) ? nowMin >= windowFor(S(), date).end : false) };
-  // v0.29.4(実機 FB・F11-6): 「AI」の節 ─ 返事の欄(メモとは別・自動保存)+「頼む」「返事を貼り付け」(1 タップでクリップボードから欄へ)「相談 ›」(シート)
-  const aiOn = !!store.state.local.ai?.enabled;
-  let aiBox = null;
-  if (aiOn || (draft.ai && draft.ai.trim())) {
-    const aiField = field('ai', buddyOn() ? `${buddyName()}の返事` : 'AI の返事', aiOn ? '「返事を貼り付け」で入ります' : '');
-    aiOpts.aiField = fields.ai;
-    const pasteInto = async () => {
-      let text = '';
-      try { text = (await navigator.clipboard.readText()) || ''; } catch { toast('貼り付けの許可が要ります。欄を長押しして「ペースト」でも入ります'); fields.ai.focus(); return; }
-      text = text.trim();
-      if (!text) { toast('クリップボードが空です'); return; }
-      const cur = (fields.ai.value || '').trim();
-      if (cur === text) { toast('同じ返事がもう入っています'); return; }
-      fields.ai.value = cur ? `${cur}\n\n${text}` : text; draft.ai = fields.ai.value; fields.ai.fit(); queue(); toast('返事を貼り付けました');
-    };
-    aiBox = el('section.group', [lead('ai_offer', {}, 'base', 'AI'), el('section.card.dcard.aisec', [
-      aiField,
-      aiOn ? el('div.row.wrap.airow', [
-        el('button.btn.sm', { type: 'button', onclick: () => aiCard(aiOpts).send?.() }, isToday ? 'きょうのふり返りを頼む' : 'この日のふり返りを頼む'),
-        el('button.btn.sm.primary', { type: 'button', onclick: pasteInto }, '返事を貼り付け'),
-        isToday ? el('button.btn.sm.ghost', { type: 'button', onclick: () => sheet(() => [aiCard(aiOpts).node]) }, '相談 ›') : null,
-      ].filter(Boolean)) : null,
-    ].filter(Boolean))]);
-  }
   // v0.24: あのころのきょう(1週間前・1か月前・1年前の日記)
   const mems = diary.memories(Dy(), date);
   const memBox = mems.length ? el('section.group', [el('h2', 'あのころのきょう'), el('div.list', mems.map((m) => el('button.srow.drow', { type: 'button', onclick: () => { commit(); goDate(m.key); } }, [el('span.ddate.wide', [el('b', m.label), el('span.muted.small', fmtMD(m.key))]), el('i.mdot', { class: `mdot${m.d.mood ? ` m${m.d.mood}` : ''}`, 'aria-hidden': 'true' }), el('span.dx', diary.excerpt(m.d) || diary.moodLabel(m.d.mood)), el('span.chev', '›')])))]) : null;
   // v0.27.1・案 A・F9-7: ふり返りの流れ=①きょうはどうだった(レポートの見出しとタイル)→ ②気持ちを残す(日記・明日は を含む)→ AI(有効なら)→ 期限が近いタスク(きょうだけ)
   // v0.30(実機 FB): 「材料」と「明日の予定」の札を廃止、「明日は」を ひっかかったこと の下へ、AI とタスクの順を入れ替え
   const top = dayTop(date, nowMin);
-  // v0.64(ユーザー要望「ふり返りタブも アシスタントが中心に」): 節の見出しを アシスタントの吹き出しに(止めていれば 従来の見出し)。記録が無い日も ひとこと出す
-  const headText = fb.head || (fb.good && fb.good[0]) || '';
-  const topLead = !isToday ? lead('review_past', {}, 'base', 'この日はどうだった') : !top ? lead('review_none', {}, 'worry', null) : headText && fb.judged ? lead('review_head', { text: String(headText).replace(/[。.]$/, '') }, 'happy', 'きょうはどうだった') : lead('review_mid', {}, 'base', 'きょうはどうだった');
-  const topSec = top || topLead ? el('section.group', [topLead, top].filter(Boolean)) : null;
-  const cardSec = el('section.group', [lead(isToday ? 'diary_ask' : 'diary_past', {}, 'base', '気持ちを残す'), card]);
+  const guide = dayGuide({ isToday, hasRecords: !!top, written, fb });
+  const topSec = top ? el('section.group', [el('h2', isToday ? 'きょうはどうだった' : 'この日はどうだった'), top]) : null;
+  const cardSec = el('section.group', [el('h2', written ? '残した気持ち' : '気持ちを残す'), card]);
   let taskSec = null;
   if (isToday) {
     const tmr = addDays(date, 1);
@@ -192,14 +155,89 @@ export function renderDiary(view, ctx, dateArg = null) {
     const catOf = (id) => S().categories.find((c) => c.id === id) || null;
     const dlText = (t) => { const k = t.deadline.slice(0, 10); const dd = plan.daysBetween(date, k); return k === tmr ? '明日が期限' : `${fmtMD(k)}が期限(あと${dd}日)`; };
     taskSec = el('section.group', [
-      lead('near', {}, 'base', '期限が近いタスク'),
+      el('h2', '期限が近いタスク'),
       el('div.list', near.length ? near.map((t) => { const c = catOf(t.categoryId); return el('button.srow.goal.dlrow', { type: 'button', 'aria-label': `${t.name} をタスク画面で見る`, onclick: () => { commit(); ctx.go('tasks'); } }, [
         el('span.gmain', [el('span.gname', [c ? el('i.dot', { style: { background: c.color }, 'aria-hidden': 'true' }) : null, t.name]), el('span.gmeta', `${dlText(t)}${!FEATURES.TASK_ESTIMATE ? (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '') : t.noTime ? '・用事' : `・残り ${fmtMin(plan.remainingMin(t, E()))}`}`)]),
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
-  view.append(...[el('h1', 'ふり返り'), head, topSec, cardSec, aiBox, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): きょうの BGM は 期限が近いタスク と 最近 の間
-  if (isToday) setTimeout(() => { if (!draft.mood && !draft.good) fields.good?.focus?.(); }, 0);
+  view.append(...[el('h1', 'ふり返り'), head, guide, cardSec, topSec, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): きょうの BGM は 期限が近いタスク と 最近 の間
+  if (pendingReflect) { pendingReflect = false; if (isToday) openWizard(0); } // ホームの「ふり返る」から来たとき
+}
+
+/** ホーム(アシスタントの「ふり返る」)から来たとき: ふり返りタブを開いたら すぐ「一緒にふり返る」のシートを出す */
+let pendingReflect = false;
+export function requestReflect() { pendingReflect = true; }
+
+/**
+ * 一緒にふり返る(v0.66・ユーザー要望「今日を振り返るボタンを用意して、ブリーフィングのように複数ページで、今日を一緒に振り返る(記入する)」):
+ * 5 ページのシート。どのページも アシスタントの吹き出しは 1 つだけ(止めていれば無し)。入力は 0.5 秒後と ページを替えるとき・閉じるときに保存。
+ *  1 きょうの記録(判定の ひとこと+レポートの見出しとタイル)→ 2 気分(気分・元気)→ 3 よかったこと(レポートの「よかったこと」をチップで足せる)
+ *  → 4 ひっかかったこと(「ここをこうしたら」をチップで)→ 5 あした(明日は・メモ・AI が有効なら「まとめを頼む / 返事を貼り付け」)。最後は「綴じる」。
+ * o = { date, isToday, nowMin, agg, fb, gs, dayDone, page }
+ */
+function reflectSheet(o, onClose) {
+  const draft = { ...entryFor(o.date) };
+  let timer = null, page = o.page || 0, close = () => {};
+  const commit = () => { clearTimeout(timer); saveEntry(draft); };
+  const queue = () => { clearTimeout(timer); timer = setTimeout(commit, 500); };
+  const body = el('div.brief.reflect');
+  const aiOn = !!store.state.local.ai?.enabled;
+  const fb = o.fb || {};
+  const area = (key, placeholder) => growArea(draft[key], placeholder, (v) => { draft[key] = v; queue(); });
+  const hints = (key, texts, ta) => {
+    const list = (texts || []).filter((t) => typeof t === 'string' && t.trim()).slice(0, 3);
+    if (!list.length) return null;
+    return el('div.rf-hints', [el('span.bd-kick', '記録から(タップで足す)'), ...list.map((t) => el('button.rf-hint', { type: 'button', onclick: () => { const cur = (ta.value || '').trim(); if (cur.includes(t)) return; ta.value = cur ? `${cur}\n${t}` : t; draft[key] = ta.value; ta.fit(); queue(); } }, t))]);
+  };
+  const paste = async (ta) => {
+    let text = '';
+    try { text = ((await navigator.clipboard.readText()) || '').trim(); } catch { toast('貼り付けの許可が要ります。欄を長押しして「ペースト」でも入ります'); ta.focus(); return; }
+    if (!text) { toast('クリップボードが空です'); return; }
+    const cur = (ta.value || '').trim();
+    if (cur === text) { toast('同じ返事がもう入っています'); return; }
+    ta.value = cur ? `${cur}\n\n${text}` : text; draft.ai = ta.value; ta.fit(); queue(); toast('返事を貼り付けました');
+  };
+  const draw = () => {
+    const top = dayTop(o.date, o.nowMin);
+    const headText = fb.head || (fb.good && fb.good[0]) || '';
+    const first = !o.isToday ? bubble('review_past', {}, 'base') : !top ? bubble('review_none', {}, 'worry') : headText && fb.judged ? bubble('review_head', { text: String(headText).replace(/[。.]$/, '') }, 'happy') : bubble('review_mid', {}, 'base');
+    const pages = [
+      { name: 'きょうの記録', nodes: () => [first, top || el('p.muted', 'この日の記録はありません。')] },
+      { name: '気分', nodes: () => [bubble('wz_scales', {}, 'base'), el('section.card.dcard', el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))))] },
+      { name: 'よかったこと', nodes: () => { const ta = area('good', 'ひとつだけでも'); return [bubble('diary_ask', {}, 'happy'), el('section.card.dcard', ta), hints('good', fb.good, ta)]; } },
+      { name: 'ひっかかったこと', nodes: () => { const ta = area('hard', '気づき。なければ空でいい'); return [bubble('wz_hard', {}, 'base'), el('section.card.dcard', ta), hints('hard', [...(fb.lookBack || []), fb.better], ta)]; } },
+      { name: 'あした', nodes: () => {
+        const ta = area('tomorrow', 'ひとつだけ'), note = area('note', '自由に');
+        const aiTa = aiOn || (draft.ai && draft.ai.trim()) ? area('ai', aiOn ? '「返事を貼り付け」で入ります' : '') : null;
+        return [bubble('wz_tomorrow', {}, 'base'),
+          el('section.card.dcard', [el('label.dfield', [el('span.dlabel', o.isToday ? '明日は' : '次の日は'), ta]), el('label.dfield', [el('span.dlabel', 'メモ'), note])]),
+          hints('tomorrow', [fb.next], ta),
+          aiTa ? el('section.card.dcard.aisec', [
+            el('label.dfield', [el('span.dlabel', buddyOn() ? `${buddyName()}の返事` : 'AI の返事'), aiTa]),
+            aiOn ? el('div.row.wrap.airow', [
+              el('button.btn.sm', { type: 'button', onclick: () => { commit(); aiCard({ ...o, draft }).send(); } }, 'まとめを頼む'),
+              el('button.btn.sm.primary', { type: 'button', onclick: () => paste(aiTa) }, '返事を貼り付け'),
+            ]) : null,
+          ].filter(Boolean)) : null];
+      } },
+    ];
+    page = Math.max(0, Math.min(page, pages.length - 1));
+    const last = page === pages.length - 1;
+    const go = (p) => { commit(); page = p; draw(); if (body.parentNode) body.parentNode.scrollTop = 0; };
+    clear(body);
+    body.append(...[
+      el('div.brief-top', [el('h2', o.isToday ? 'きょうをふり返る' : `${md(o.date)}をふり返る`), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
+      ...pages[page].nodes(),
+      el('div.row.brief-nav', [
+        el('button.btn.ghost', { type: 'button', disabled: page === 0, 'aria-label': '前のページ', onclick: () => go(page - 1) }, '‹ 戻る'),
+        el('span.brief-dots', { 'aria-hidden': 'true' }, pages.map((_, i) => el('i', { class: i === page ? 'on' : '' }))),
+        last ? el('button.btn.primary', { type: 'button', onclick: () => { commit(); close(); toast(diary.isWritten(draft) ? (buddyLine('wz_done') || '保存しました') : '何も書かなかったので、そのままにしました'); } }, '綴じる')
+          : el('button.btn.primary', { type: 'button', onclick: () => go(page + 1) }, `${pages[page + 1].name} ›`),
+      ]),
+    ].filter(Boolean));
+  };
+  close = sheet((c) => { close = c; draw(); return [body]; }, () => { commit(); if (onClose) onClose(); });
 }
 
 /**

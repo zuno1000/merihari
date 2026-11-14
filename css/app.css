@@ -1496,3 +1496,24 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .bd-tag{border-radius:999px;padding:1px 8px;background:var(--accent-bg);color:var(--accent);font-weight:600}
 .bd-songact{gap:8px}
 .brief .bd-say{margin-bottom:12px}
+/* v0.66・F24-15: アシスタントを中心に ─ ホームのカード(.bd-homecard)・ふり返りタブの 見るカード(.dview)・一緒にふり返るシート(.reflect) */
+.bd-homecard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin:0 0 14px;display:flex;flex-direction:column;gap:10px}
+.bd-homecard .bd-home{margin:0}
+.bd-homecard .bd-bubble{background:var(--bg);border-color:transparent}
+.bd-homecard .bd-bubble::before{background:var(--bg);border-color:transparent}
+.bd-homecard .q-row{margin:0}
+.bd-homecard .q-strip{background:var(--bg);border-color:transparent}
+.bd-quick{display:flex;gap:8px}
+.bd-act{flex:1;min-height:40px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.bd-act:active{background:var(--accent-bg)}
+#view>.bd-say{margin:0 0 14px}
+#view>.bd-say .bd-text{font-size:15px}
+.dview{display:flex;flex-direction:column;gap:10px}
+.dv-scales{margin:0;font-size:13px;color:var(--muted)}
+.dv-row{display:flex;flex-direction:column;gap:2px}
+.dv-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.reflect .dcard{margin:0 0 10px}
+.reflect .rtop{margin:0 0 10px}
+.rf-hints{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.rf-hint{border:1px dashed var(--line);background:none;color:var(--fg);border-radius:12px;padding:8px 12px;font:inherit;font-size:13px;line-height:1.5;text-align:left;cursor:pointer}
+.rf-hint:active{background:var(--accent-bg)}
