@@ -2,7 +2,8 @@
 // 設定画面は「一覧(ラベル+いまの値)→ 行をタップで項目ごとの編集画面」。編集部品はウィザードと共有する。
 import { el, clear, toast, confirmSheet, sheet, DAY_JA, timeField, DEV, sortable } from './ui.js';
 import * as store from './store.js';
-import { hm, dayStartMin, mm, dateKey, minuteOfDay, effectiveDay, windowFor } from './time.js';
+import { hm, dayStartMin, mm, dateKey, minuteOfDay, effectiveDay, windowFor, dayCut } from './time.js';
+import * as brief from './brief.js'; // v0.76: 寝る前の日報の時刻
 import { EXTRA_COLORS, PALETTES } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
@@ -633,8 +634,13 @@ function sectionBrief(rerender, ctx) {
   const s = S();
   const b = s.brief || (s.brief = { enabled: true });
   const local = store.state.local;
-  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りときょうのタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること。タスクはその場で ✓ にできます。',
+  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りときょうのタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること、寝る前は きょう 1 日のまとめ。ふり返りは 上のチップで 全体 / 午前 / 午後 / 夜 / 昨日 に替えられます(自分で開いたときは 全体から)。タスクはその場で ✓ にできます。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled !== false, onchange: (e) => { b.enabled = e.target.checked; store.touchSettings(); sync.autoSync(); rerender(); } }), el('span', '開いたときにブリーフィングを出す')]),
+    el('h3.help-h', '寝る前の日報(きょう 1 日のまとめ と あしたのこと)'),
+    el('div.chips.small', { role: 'group', 'aria-label': '寝る前の日報の時刻' }, [[0, '出さない'], ...brief.BED_CHOICES.filter((m) => m < 1440 || dayCut(s, dateKey()) > 0).map((m) => [m, `${m / 60}:00 から`])].map(([m, label]) => {
+      const on = (brief.bedOf(s) || 0) === m;
+      return el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { if (m === brief.BED_DEFAULT) delete b.bed; else b.bed = m; store.touchSettings(); sync.autoSync(); rerender(); } }, label);
+    })),
     el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => ctx.openBrief() }, 'いまのブリーフィングを見る')]),
     el('h3.help-h', 'やり残しの数字'),
     el('p.muted.small', '期限切れと今日が期限のタスクが残っていると、タスクのタブに赤い数字が出ます(いつも)。下を有効にすると、ホーム画面のアプリのアイコンにも同じ数字を出します(この端末だけ・最後に開いたときの数・iPhone は通知の許可が要ります)。'),
@@ -830,7 +836,7 @@ export function renderSettings(view, ctx, section = null) {
     ]),
     group('ふり返り', [
       srow('レポートのタイル', summary.tiles(), open('tiles')),
-      srow('日報(ブリーフィング)', `${S().brief?.enabled === false ? '出さない' : '朝・昼・夜の初回'}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
+      srow('日報(ブリーフィング)', `${S().brief?.enabled === false ? '出さない' : `朝・昼・夜${brief.bedOf(S()) ? '・寝る前' : ''}の初回`}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
     ]),
     group('アシスタントと ごほうび', [
       FEATURES.BUDDY ? srow('アシスタント', buddySummary(), open('buddy')) : null,

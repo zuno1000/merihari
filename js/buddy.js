@@ -274,6 +274,11 @@ export function toneLabel(b, id) { const c = b && Array.isArray(b.custom) ? b.cu
 const LINES = Object.freeze({
   hello_morning: { bright: ['おはよう! 書庫の灯り、つけておいたよ。', 'おはよう! きのうの記録をまとめておいたよ。', 'おはよう。朝の書庫は 紙のいい匂いがするよ。'], polite: ['おはようございます。昨日の記録をまとめておきました。', 'おはようございます。書庫の窓を開けておきました。'], cool: ['おはよう。昨日のぶんは まとめてある。', '朝だ。昨日の記録を置いておく。'] },
   hello_noon: { bright: ['おつかれさま! 午前のぶんを見てみよう。', 'お昼だね。午前の灯り、ちゃんと数えておいたよ。'], polite: ['お疲れさまです。午前の記録をまとめました。', 'お昼になりました。午前のぶんをお持ちします。'], cool: ['昼だ。午前のぶんを置いておく。', '午前の記録だ。見ておけ。'] },
+  hello_bed: { bright: ['きょうも おつかれさま! 寝る前に、きょう 1 日を まとめたよ。', 'そろそろ おやすみの時間だね。きょうのぶん、まとめておいたよ。'], polite: ['今日もお疲れさまでした。お休みの前に、1 日の記録をまとめました。', 'そろそろ お休みの時間です。今日 1 日のぶんをお持ちします。'], cool: ['寝る前だ。きょう 1 日のぶんを まとめた。', 'きょうのぶんだ。見たら寝ろ。'] },
+  work_done: { bright: ['{min}分、おつかれさま! ひと息 入れよう。', 'おつかれさま! {min}分も がんばったね。', '{min}分 やりきったね。えらい!'], polite: ['{min}分の作業、お疲れさまでした。少し休みましょう。', 'お疲れさまでした。{min}分、よく続きましたね。'], cool: ['{min}分か。よくやった。少し休め。', '{min}分。上出来だ。'] },
+  habit_left: { bright: ['「{name}」が まだみたい。ちょっとだけ、やっておく?', 'そういえば「{name}」、きょうは まだだよ。少しでも やれば 続くよ!'], polite: ['「{name}」が まだのようです。少しだけでも、いかがですか。', '「{name}」が 今日は まだです。短い時間でも 続きになります。'], cool: ['「{name}」が まだだ。少しでいい、やっておけ。', '「{name}」が残っている。短くていい。'] },
+  habit_back: { bright: ['「{name}」は きのう ひと休みだったね。きょうから また 1 日目、いこう!', '「{name}」、きょうから また 1 日目だよ。ゆっくりでいいからね。'], polite: ['「{name}」は 昨日お休みでしたね。今日から また 1 日目です。'], cool: ['「{name}」は 昨日休んだな。きょうから また 1 日目だ。'] },
+  habit_done: { bright: ['きょうの習慣、ぜんぶ済んでるよ。さすが!', '習慣は ぜんぶ おしまい。きょうも続いたね!'], polite: ['今日の習慣は すべて済んでいます。お見事です。'], cool: ['習慣は ぜんぶ済んだ。上出来だ。'] },
   hello_evening: { bright: ['こんばんは! きょうも あと少しだね。', 'こんばんは。午後の灯りも、ちゃんと届いてたよ。'], polite: ['こんばんは。午後の記録をまとめました。', 'お疲れさまでした。午後のぶんをお持ちします。'], cool: ['夜だ。午後のぶんを まとめた。', '午後の記録だ。'] },
   hello: {
     bright: ['やあ! 書庫で待ってたよ。', 'きょうは どの扉をくぐろうか。', 'おかえり! 灯りの準備はできてるよ。', '書庫は きょうも静かだよ。いい日になりそう。', 'あ、来た来た。きょうの本、棚から出しておくね。', '絵の扉、きょうは どこにつながるかな。'],
@@ -510,11 +515,16 @@ export const SCENES = Object.freeze({
   night: { g: 'home', when: '夜遅く、きょうをねぎらって おやすみを言う' },
   chat: { g: 'daily', when: '作業の合間に かける、日常の何気ない ひとこと(雑談・ひとりごと・相手の体や気分を気づかう言葉・キャラクターらしい つぶやき)。時間帯や状況を選ばず いつでも言える内容にする' },
   pomo_done: { g: 'home', when: 'タイマーで決めた作業を終えた相手を、ねぎらう', v: { n: '終えたセットの数(「{n}セット」のように使う)', min: '作業した分(「{min}分」のように使う)' } },
+  work_done: { g: 'home', when: '時間を決めずに始めた作業を終えた相手を、ねぎらう', v: { min: '作業した分(「{min}分」のように使う)' } },
+  habit_left: { g: 'home', when: '夜になっても まだ済んでいない習慣があると、やさしく知らせて 少しだけでもと誘う', v: { name: '習慣の名前(「{name}」のように かぎかっこで囲む)' }, need: ['name'] },
+  habit_back: { g: 'home', when: '昨日は休んだ習慣が、きょうから また 1 日目だと 明るく伝える', v: { name: '習慣の名前(「{name}」のように かぎかっこで囲む)' }, need: ['name'] },
+  habit_done: { g: 'home', when: 'きょうの習慣が ぜんぶ済んだと伝えて、ほめる' },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
   hello_morning: { g: 'brief', when: '朝の日報の冒頭。あいさつして、昨日の記録をまとめたと伝える' },
   hello_noon: { g: 'brief', when: '昼の日報の冒頭。午前の記録をまとめたと伝える' },
   hello_evening: { g: 'brief', when: '夜の日報の冒頭。午後の記録をまとめたと伝える' },
+  hello_bed: { g: 'brief', when: '寝る前の日報の冒頭。きょうをねぎらい、1 日の記録をまとめたと伝える' },
   tasks_none: { g: 'brief', when: 'きょうが期限のタスクは無いと伝える' },
   tasks_some: { g: 'brief', when: 'きょうまでのタスクが残っていて、この画面で済ませられると伝える', v: { n: '件数' }, need: ['n'] },
   weather: { g: 'brief', when: 'きょうの天気を伝える', v: { text: '天気の言葉(例: 晴れのちくもり)' }, need: ['text'] },
@@ -656,7 +666,7 @@ export function removeCustom(b, id) {
 
 /**
  * ホームでのひとこと(状況から 1 つ・上にあるものほど優先)。
- * st = { min(実効の分), slot, open: { role: 'work' | 'drift' | 'rest' | 'other', min } | null, idleMin(作業時間帯の中で 何も記録していない分 | null), due(きょうまでのタスクの数),
+ * st = { min(実効の分), slot, open: { role: 'work' | 'drift' | 'rest' | 'other', min } | null, idleMin(作業時間帯の中で 何も記録していない分 | null), due(きょうまでのタスクの数), habit(plan.habitNudgeInfo | null・v0.76),
  *        quest: { need, unread, done } | null, art: { need, next, name, allDone } | null, postcard: { place } | null, idleOn(声かけの設定) }
  * 戻り値 { key, text, mood }
  */
@@ -691,6 +701,8 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   const out = [first];
   const add = (key, mood, vars = {}) => { if (!out.some((x) => x.key === key)) out.push({ key, mood, text: say(key, tone, vars, seed, learned(lines, key, tone)) }); };
   if (first.key === 'night') return out; // 夜は おやすみ だけ
+  // v0.76(ユーザー要望「◯◯はまだです。5分だけでも。のような システムの文は アシスタントに集約」): 習慣の声かけは 2 番目の話題に
+  if (s.habit && s.habit.name) add(s.habit.kind === 'back' ? 'habit_back' : s.habit.kind === 'done' ? 'habit_done' : 'habit_left', s.habit.kind === 'done' ? 'happy' : s.habit.kind === 'left' ? 'worry' : 'base', { name: s.habit.name });
   if (s.quest && !s.quest.done && !(s.quest.unread > 0) && first.key !== 'working') add('quest_wait', 'base', { n: s.quest.need });
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });

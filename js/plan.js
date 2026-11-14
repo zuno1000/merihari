@@ -291,17 +291,28 @@ export function habitStats(t, entries, date) {
  * それ以外(昼のうち・まだがある)は null(急かさない)。list=[{ task, stats }]。純関数
  */
 export function habitNudge(list, nowMin, windowEnd = null) {
+  const x = habitNudgeInfo(list, nowMin, windowEnd);
+  if (!x) return null;
+  if (x.kind === 'back') return x.today ? `${x.name} はきょうからまた 1 日目です。` : `${x.name} は昨日ひと休み。きょうからまた 1 日目です。`;
+  if (x.kind === 'done') return `きょうの習慣はぜんぶ済みです${x.streak >= 2 ? `(${x.name} は ${x.streak} 日目)` : ''}。`;
+  return x.streak >= 2 ? `${x.name} はまだです。${x.streak}日続いています。少しだけでも。` : `${x.name} はまだです。5 分だけでも。`;
+}
+/**
+ * 声かけの中身(v0.76・ユーザー要望「システムの文で言っていたことは アシスタントに集約」): habitNudge と同じ判定を、文ではなく
+ * { kind: 'back'(昨日で途切れた)| 'done'(ぜんぶ済み)| 'left'(夜に まだ), name, streak, today } で返す(アシスタントの台詞の場面 habit_back / habit_done / habit_left に渡す)。無ければ null
+ */
+export function habitNudgeInfo(list, nowMin, windowEnd = null) {
   const daily = (list || []).filter((x) => x && x.task && x.stats && !x.stats.weekly);
   if (!daily.length) return null;
   const byStreak = (a, b) => b.stats.streak - a.stats.streak || (a.task.name || '').localeCompare(b.task.name || '');
   const broke = daily.filter((x) => x.stats.broke).sort(byStreak)[0];
-  if (broke) return broke.stats.today ? `${broke.task.name} はきょうからまた 1 日目です。` : `${broke.task.name} は昨日ひと休み。きょうからまた 1 日目です。`;
+  if (broke) return { kind: 'back', name: broke.task.name, streak: broke.stats.streak, today: !!broke.stats.today };
   const left = daily.filter((x) => !x.stats.today).sort(byStreak);
-  if (!left.length) { const top = daily.slice().sort(byStreak)[0]; return `きょうの習慣はぜんぶ済みです${top.stats.streak >= 2 ? `(${top.task.name} は ${top.stats.streak} 日目)` : ''}。`; }
+  if (!left.length) { const top = daily.slice().sort(byStreak)[0]; return { kind: 'done', name: top.task.name, streak: top.stats.streak, today: true }; }
   const evening = nowMin >= 1140 || (windowEnd != null && nowMin >= windowEnd - 120);
   if (!evening) return null;
   const s = left[0];
-  return s.stats.streak >= 2 ? `${s.task.name} はまだです。${s.stats.streak}日続いています。少しだけでも。` : `${s.task.name} はまだです。5 分だけでも。`;
+  return { kind: 'left', name: s.task.name, streak: s.stats.streak, today: false };
 }
 
 // ---- 予定(v0.23・F12): 朝に自分で置く予定ブロック。自動生成はしない。planBlocks[id] = { id, date, start:'HH:MM', end:'HH:MM', categoryId, taskId, note, updatedAt, deletedAt } ----

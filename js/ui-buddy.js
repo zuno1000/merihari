@@ -17,7 +17,11 @@ import { requestReflect } from './ui-diary.js'; // v0.66: ホームの「ふり�
 import { bgmOn, suggestBgm, playSuggested } from './ui-bgm.js';
 import * as bgm from './bgm.js';
 import { feedOn, feedRow, ensureSource } from './ui-feed.js';
-import { dateKey, minuteOfDay, effectiveDay, fmtMin, hm, windowFor } from './time.js';
+import { dateKey, minuteOfDay, effectiveDay, fmtMin, fmtMD, addDays, hm, windowFor } from './time.js';
+import * as reply from './reply.js'; // v0.76・F24-23: 「話す」の答えを アプリの中のデータから
+import * as next from './next.js';
+import * as shopping from './shopping.js';
+import { SOLID_WORK_MIN } from './report.js';
 import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
 import * as pomo from './pomo.js';
@@ -28,7 +32,12 @@ const B = () => buddy.normalizeBuddy(S().buddy);
 const L = () => { const l = store.state.local; return l.buddy && typeof l.buddy === 'object' ? l.buddy : (l.buddy = { chat: [] }); };
 export const buddyOn = () => FEATURES.BUDDY && !!store.state.data.meta.setupAt && B().enabled;
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
-const seed = () => Math.floor(Date.now() / 600000); // 言い回しは 10 分ごとに変わる(v0.63: 台詞が増えたので 1 時間 → 10 分)
+// v0.76(実機 FB「アプリを開いたときに 毎回 同じ台詞を言っている」): 開くたび(起動・復帰)に さいころを振り直し、言い回し(salt)と ホームで最初に話す話題(turn0)を変える
+let salt = 0, turn0 = 0;
+const reroll = () => { salt = Math.floor(Math.random() * 100000); turn0 = Math.floor(Math.random() * 1000); };
+reroll();
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reroll(); });
+const seed = () => Math.floor(Date.now() / 600000) + salt; // 言い回しは 10 分ごと と 開くたびに変わる(v0.63: 台詞が増えたので 1 時間 → 10 分)
 const V = () => buddy.voiceOf(B()); // いまの口調(内蔵の文字列 か 足した性格・v0.67)
 const ex = (key) => buddy.learned(B().lines, key, B().tone); // その場面で覚えた台詞
 const totalWork = () => { const d = store.state.data, n = now(); return workByDay(d.entries, S(), buddy.EPOCH, n.date, n.min).reduce((a, x) => a + x.min, 0); };
@@ -50,7 +59,7 @@ export const buddyName = () => B().name;
 /** 吹き出し、止めていれば 見出し(h2)。ふり返りタブとレポートの節の頭に使う(v0.64) */
 export function lead(key, vars, mood, title) { return bubble(key, vars, mood) || (title ? el('h2', title) : null); }
 /** 日報の題(止めていれば null): 「リブの日報・昼」 */
-export const reportTitle = (slot) => (buddyOn() ? `${B().name}の日報・${{ morning: '朝', noon: '昼', evening: '夜' }[slot] || ''}` : null);
+export const reportTitle = (slot) => { const k = { morning: '朝', noon: '昼', evening: '夜', bed: '寝る前' }[slot]; return buddyOn() ? `${B().name}の日報${k ? `・${k}` : ''}` : null; }; // v0.76: 自分で開いたとき(枠なし)は「リブの日報」
 /** AI に渡す人格の一文(止めていれば '') */
 export const buddyPersona = () => (buddyOn() ? buddy.persona(B().name, V(), buddy.roleOf(B())) : '');
 
@@ -106,7 +115,10 @@ function homeState() {
   const run = !o ? runNow() : null; // v0.73・F25: ポモドーロの間は 記録が無くても 作業中 / 休憩中
   if (run) { const ph = pomo.phaseAt(run, Date.now()); if (ph.kind !== 'done') { open = { role: ph.kind === 'rest' ? 'rest' : 'work', min: Math.max(0, Math.floor((Date.now() - run.startMs) / 60000)) }; idleMin = null; } }
   const a = primed && primed.art, q = primed && primed.quest;
-  return { min: n.min, open, idleMin, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle };
+  // v0.76: 習慣の声かけ(昨日ひと休み / ぜんぶ済み / 夜に まだ)は ここから アシスタントが言う(ホームの「きょうがんばること」の 1 行は やめた)
+  const hs = plan.goals(d.tasks, d.entries, n.date, n.min, { chunk: plan.chunkOf(s) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && d.tasks[g.taskId]).map((g) => ({ task: d.tasks[g.taskId], stats: plan.habitStats(d.tasks[g.taskId], d.entries, n.date) }));
+  const habit = hs.length ? plan.habitNudgeInfo(hs, n.min, windowFor(s, n.date)?.end ?? null) : null;
+  return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle };
 }
 
 /** 吹き出し(顔+名前+1 行)。ブリーフィング(日報)の各ページの先頭にも使う。止めていれば null */
@@ -132,6 +144,7 @@ export function buddyHead(ctx) {
     let list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
     if (list[0].key !== firstKey) { // いちばん言いたいことが替わった(記録を始めた・続きが届いた など)→ それを先に言う
       if (firstKey != null) { turn = 0; list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed(), b.lines); }
+      else if (list[0].key === 'hello') turn = turn0 % list.length; // v0.76: とくに言いたいことが無いとき(あいさつ)は、開くたびに ちがう話題から
       firstKey = list[0].key;
     }
     const l = list[turn % list.length];
@@ -229,44 +242,117 @@ function teachBox(redraw) {
 }
 
 /**
- * 話す: iPhone のショートカット(端末の AI)へ文を送り、返事を貼り付ける(F11 と同じ道)。控えは この端末に 20 件まで。
- * v0.74: ショートカットを使っていない / 端末の AI に断られる ときのために、文をコピーして 好きな AI に聞く道(コピーで聞く)。返事は 同じ「返事を貼り付け」で
+ * 話す(v0.76 で作り替え・F24-23。実機 FB「チャット風にするなら UI を。候補のボタンが 3 つ並んでチャットらしくない・会話が長引くと崩れる・
+ * 今日のタスクを聞いても 関係ない返事が返ってくる」):
+ * - 会話は 高さの決まった枠の中で スクロール(新しい発言が いちばん下・開くと 下まで送る)。入力欄は その下、ワンタップの質問は 入力欄の下に 横 1 行。
+ * - タスク・買い物・予定・習慣・進み・つぎにやること は、アプリの中のデータから その場で答える(reply.js・AI は使わない)。答えの下の
+ *   「◯◯の口調で言い直してもらう」で、中身を変えずに 口調だけ AI に頼める(ai.rephraseText・ショートカット か コピー)。
+ * - それ以外の相談は これまでどおり AI へ(ai.consultText。聞かれたことに まず答えるように頼み、きょうのタスクと進みを 材料に添える。小説と図録の進みは 渡さない)。
+ * - 「新しい会話」で いまの会話を しまって 空から(しまった会話は 5 つまで・「前の会話」で 開き直す / 消す)。控えは この端末だけ(local.buddy.chat / old)。
  */
-function talk(ctx, redraw, closeSheet) {
-  const local = store.state.local;
+const CHAT_MAX = 60, OLD_MAX = 5;
+function replyData() {
+  const d = store.state.data, s = S(), n = now();
+  const lim = addDays(n.date, 7);
+  const gs = plan.goals(d.tasks, d.entries, n.date, n.min, { chunk: plan.chunkOf(s) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && d.tasks[g.taskId]);
+  const catName = (id) => s.categories.find((c) => c.id === id)?.name || '予定';
+  return {
+    due: plan.dueTasks(d.tasks, n.date, d.entries),
+    near: plan.linkable(d.tasks).filter((t) => typeof t.deadline === 'string' && t.deadline.slice(0, 10) >= n.date && t.deadline.slice(0, 10) <= lim),
+    shopping: shopping.listOpen(d.shopping),
+    habits: gs.map((g) => ({ name: g.name, done: !!(g.checked || g.done), weekly: g.kind === 'weekly', streak: plan.habitStats(d.tasks[g.taskId], d.entries, n.date)?.streak || 0 })),
+    plan: plan.planBlocksOf(d.planBlocks, n.date).map((b) => ({ start: b.start, end: b.end, name: (b.taskId && d.tasks[b.taskId] && !d.tasks[b.taskId].deletedAt ? d.tasks[b.taskId].name : b.note) || catName(b.categoryId) })),
+    progress: next.progress({ date: n.date, nowMin: n.min, entries: d.entries, settings: s, fallback: SOLID_WORK_MIN }),
+    next: next.candidates({ date: n.date, nowMin: n.min, entries: d.entries, tasks: d.tasks, settings: s, planBlocks: d.planBlocks }),
+  };
+}
+function talk(ctx, redraw) {
+  const local = store.state.local, loc = L();
   const viaShortcut = !!local.ai?.enabled;
   const b = B(), d = store.state.data, n = now();
-  const chat = Array.isArray(L().chat) ? L().chat : (L().chat = []);
-  const push = (who, text) => { chat.push({ who, text: String(text).slice(0, 600), at: Date.now() }); while (chat.length > 20) chat.shift(); store.saveLocal(); };
-  const send = async (q, copy = !viaShortcut) => {
-    const question = String(q || '').trim();
-    if (!question) { toast('話しかける文を入れてください'); return; }
-    const o = log.openEntry(d.entries);
-    const open = o ? { name: S().categories.find((c) => c.id === o.categoryId)?.name || '記録', elapsedMin: log.elapsedMin(o, n.date, n.min) } : null;
-    const workMin = log.totalsByRole(d.entries, n.date, n.min, (e) => store.entryRole(S(), e)).work;
-    const text = ai.consultText({ question, nowMin: n.min, open, workMin, goals: S().goals, gs: [], near: [], mood: null, notes: buddyNotes(), persona: buddyPersona() });
-    if (copy) { // 好きな AI に貼る
+  const chat = Array.isArray(loc.chat) ? loc.chat : (loc.chat = []);
+  const old = Array.isArray(loc.old) ? loc.old : (loc.old = []);
+  const push = (who, text, extra = {}) => { chat.push({ who, text: String(text).slice(0, 800), at: Date.now(), ...extra }); while (chat.length > CHAT_MAX) chat.shift(); store.saveLocal(); };
+  // AI へ渡す: コピー(好きな AI に貼る)か、ショートカット(端末の AI)。before = 渡せると決まったあと・画面を離れる前に呼ぶ
+  const deliver = async (text, copy, before = null) => {
+    if (copy) {
       try { await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
-      push('me', question);
-      toast('聞く文をコピーしました。AI に貼り、返事をコピーして戻ってください');
+      if (before) before();
+      toast('文をコピーしました。AI に貼り、返事をコピーして戻って「返事を貼り付け」を押してください');
       redraw();
       return;
     }
     const { url, viaClipboard } = ai.shortcutURL(local.ai?.shortcutName || ai.DEFAULT_SHORTCUT, text);
     try { if (viaClipboard) await navigator.clipboard.writeText(text); } catch { toast('コピーできませんでした'); return; }
-    push('me', question);
+    if (before) before();
     local.aiLastSentAt = Date.now(); store.saveLocal();
     location.href = url;
+  };
+  const send = async (q, copy = !viaShortcut) => {
+    const question = String(q || '').trim();
+    if (!question) { toast('話しかける文を入れてください'); return; }
+    const data = replyData();
+    const intent = reply.detect(question);
+    if (intent) { // アプリの中のデータで その場で答える
+      push('me', question);
+      push('app', reply.textOf(reply.answer(intent, data)), { q: question });
+      redraw();
+      return;
+    }
+    const o = log.openEntry(d.entries);
+    const open = o ? { name: S().categories.find((c) => c.id === o.categoryId)?.name || '記録', elapsedMin: log.elapsedMin(o, n.date, n.min) } : null;
+    const workMin = log.totalsByRole(d.entries, n.date, n.min, (e) => store.entryRole(S(), e)).work;
+    const facts = [...reply.textOf(reply.answer('tasks', data)).split('\n'), ...reply.textOf(reply.answer('progress', data)).split('\n').slice(0, 2)];
+    const notes = buddyNotes().filter((x) => !x.startsWith(`${buddy.LABEL.progress}:`)); // 小説と図録の進みは 相談の材料にしない(関係のない返事の もとだった)
+    const text = ai.consultText({ question, nowMin: n.min, open, workMin, goals: S().goals, gs: [], near: [], mood: null, notes, facts, persona: buddyPersona() });
+    await deliver(text, copy, () => push('me', question));
+  };
+  const rephrase = (m) => {
+    const [title, ...lines] = String(m.text).split('\n');
+    deliver(ai.rephraseText({ persona: buddyPersona(), question: m.q || '', title, lines }), !viaShortcut);
   };
   const paste = async () => {
     try { const t = (await navigator.clipboard.readText()).trim(); if (!t) { toast('クリップボードが空です'); return; } push('ai', t); redraw(); } catch { toast('貼り付けられませんでした(ペーストを許可してください)'); }
   };
-  const input = el('input.text', { type: 'text', placeholder: `${b.name}に話しかける`, maxlength: 200, autocomplete: 'off', onkeydown: (e) => { if (e.key === 'Enter') send(input.value); } });
+  const stash = () => { if (chat.length) { old.unshift({ at: chat[0].at, msgs: chat.slice() }); old.length = Math.min(old.length, OLD_MAX); } };
+  const fresh = () => { stash(); loc.chat = []; store.saveLocal(); redraw(); };
+  const history = () => sheet((close) => {
+    const title = (x) => String((x.msgs.find((m) => m.who === 'me') || x.msgs[0] || {}).text || '').split('\n')[0].slice(0, 28) || '(空の会話)';
+    const open = (i) => { const pick = old.splice(i, 1)[0]; stash(); loc.chat = pick.msgs; store.saveLocal(); close(); redraw(); };
+    const drop = (i) => { old.splice(i, 1); store.saveLocal(); close(); redraw(); if (old.length) history(); };
+    return [
+      el('h2', '前の会話'),
+      el('p.muted.small', `しまった会話は ${OLD_MAX} つまで この端末に残ります。タップで 開き直します(いまの会話は しまいます)。`),
+      el('div.list', old.map((x, i) => el('div.bd-hrow', [
+        el('button.bd-hopen', { type: 'button', onclick: () => open(i) }, [el('span.bd-ht', title(x)), el('span.bd-hm', `${fmtMD(dateKey(new Date(x.at)))}・${x.msgs.length} 件`)]),
+        el('button.btn.sm.ghost', { type: 'button', 'aria-label': 'この会話を消す', onclick: () => drop(i) }, '消す'),
+      ]))),
+      el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+    ];
+  });
+  const msg = (m) => (m.who === 'me' ? el('div.bd-mrow.me', el('div.bd-msg.me', m.text))
+    : el('div.bd-mrow.ai', [avatar('base', 28), el('div.bd-mcol', [
+      el('div.bd-msg.ai', m.text),
+      m.who === 'app' ? el('button.bd-re', { type: 'button', onclick: () => rephrase(m) }, `${b.name}の口調で言い直してもらう ›`) : null,
+    ].filter(Boolean))]));
+  const hint = `タスク・買うもの・予定・習慣・きょうの進み は、アプリの記録から その場で答えます。それ以外の相談は ${viaShortcut ? 'ショートカット(端末の AI)へ送ります' : '聞く文をコピーするので、好きな AI に貼ってください'}。返事は「返事を貼り付け」で ここに残せます。`;
+  const logBox = el('div.bd-log', { role: 'log', 'aria-label': `${b.name}との会話` }, chat.length ? chat.map(msg) : [el('p.bd-empty.muted.small', hint)]);
+  const toEnd = () => { if (logBox.isConnected) logBox.scrollTop = logBox.scrollHeight; }; // 新しい発言が見えるように いちばん下へ(描いた直後と 次の描画の前)
+  setTimeout(toEnd, 0); requestAnimationFrame(toEnd);
+  const input = el('input.text', { type: 'text', placeholder: `${b.name}に話しかける`, maxlength: 200, autocomplete: 'off', enterkeyhint: 'send', onkeydown: (e) => { if (e.key === 'Enter' && !e.isComposing) send(input.value); } });
+  const tool = (label, fn, cls = '') => el('button.btn.sm', { type: 'button', class: `btn sm${cls}`, onclick: fn }, label);
   return el('div.bd-talk', [
-    chat.length ? el('div.bd-log', chat.slice(-6).map((m) => el('div', { class: `bd-msg ${m.who === 'me' ? 'me' : 'ai'}` }, m.text))) : el('p.muted.small', viaShortcut ? '話しかけると、ショートカットが開いて返事が出ます。戻ってきたら「返事を貼り付け」を押してください。「コピーで聞く」なら 好きな AI に貼れます。' : '話しかけると、聞く文がコピーされます。好きな AI に貼り、返事をコピーして戻って「返事を貼り付け」を押してください(設定 › AI(ショートカット)を有効にすると、iPhone のショートカットへ 直接送れます)。'),
-    el('div.chips.small', ai.QUICK_QUESTIONS.slice(0, 3).map((q) => el('button.chip.sm2', { type: 'button', onclick: () => send(q) }, q))),
-    el('div.row', [input, el('button.btn.primary', { type: 'button', onclick: () => send(input.value) }, viaShortcut ? '送る' : 'コピー')]),
-    el('div.row', [el('button.btn.sm', { type: 'button', onclick: paste }, '返事を貼り付け'), viaShortcut ? el('button.btn.sm', { type: 'button', onclick: () => send(input.value, true) }, 'コピーで聞く') : null, chat.length ? el('button.btn.sm.ghost', { type: 'button', onclick: () => { L().chat = []; store.saveLocal(); redraw(); } }, '控えを消す') : null]),
+    logBox,
+    el('div.bd-compose', [
+      el('div.row.bd-inrow', [input, el('button.btn.primary', { type: 'button', 'aria-label': '送る', onclick: () => send(input.value) }, '送る')]),
+      el('div.bd-sugg', { role: 'group', 'aria-label': 'ワンタップで聞く' }, [...reply.ASK_CHIPS, ai.QUICK_QUESTIONS[0], ai.QUICK_QUESTIONS[2]].map((q) => el('button.chip.sm2', { type: 'button', onclick: () => send(q) }, q))),
+    ]),
+    el('div.bd-tools', [
+      tool('返事を貼り付け', paste),
+      viaShortcut ? tool('コピーで聞く', () => send(input.value, true)) : null,
+      chat.length ? tool('新しい会話', fresh, ' ghost') : null,
+      old.length ? tool(`前の会話(${old.length})`, history, ' ghost') : null,
+    ].filter(Boolean)),
   ]);
 }
 
@@ -278,11 +364,11 @@ export function openBuddy(ctx, onClose = null) {
     const b = B(), l = buddy.homeLine(homeState(), buddy.voiceOf(b), seed(), b.lines);
     clear(body);
     body.append(...[
-      el('div.bd-top', [avatar(l.mood, 84), el('div.bd-bubble.big', [el('span.bd-name', b.name), el('span.bd-text', l.text)])]),
+      el('div.bd-top', [avatar(l.mood, 64), el('div.bd-bubble.big', [el('span.bd-name', b.name), el('span.bd-text', l.text)])]),
       b.chars.length > 1 ? charChips(b, (id) => { S().buddy = buddy.selectChar(b, id); store.touchSettings(); autoSync(); draw(); }) : null,
       el('div.row.bd-acts', [ctx && ctx.openBrief && S().brief?.enabled !== false ? el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.openBrief(); } }, 'きょうの日報を開く') : null]),
       el('div.seg', [['talk', '話す'], ['note', '手帳']].map(([k, t]) => el('button', { type: 'button', class: k === tab ? 'active' : '', onclick: () => { tab = k; draw(); } }, t))),
-      tab === 'talk' ? talk(ctx, draw, () => close()) : notebook(draw),
+      tab === 'talk' ? talk(ctx, draw) : notebook(draw),
       el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
     ].filter(Boolean));
   };
@@ -341,7 +427,7 @@ export const buddyLine = (key, vars = {}) => (buddyOn() ? buddy.say(key, V(), va
 
 /**
  * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 気づきの吹き出し → 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す
- * (朝=天気 → BGM → 記事 1 / 昼=BGM → 記事 2 → 天気 / 夜=記事 2 → あすの天気 → BGM)。有効にしている機能のぶんだけ。
+ * (v0.76・実機 FB: 順は いつも 天気 → BGM → 記事。朝は 記事 1 つ・昼からは 2 つ・夜と 寝る前は あすの天気)。有効にしている機能のぶんだけ。
  * v0.65(実機 FB): 天気は 天気のシートと同じ札(絵・気温・傘・降水・服装)、BGM は 選んだ 1 曲のサムネイル・題名・ジャンル・長さ を見せてから流す。
  * きょうの気づきの文字だけの箱は やめ、吹き出しに統合。戻り値は節の配列(何も無ければ空)。
  */
@@ -354,7 +440,7 @@ export function recoPage(slot, redraw) {
   if (r) {
     const d = (local.weatherCache || {})[r.id]?.data || null;
     loadWeather(r, () => redraw());
-    const tmr = slot === 'evening' && d && d.tomorrow;
+    const tmr = (slot === 'evening' || slot === 'bed') && d && d.tomorrow;
     if (d) parts.weather = el('div.bd-wx', [weatherCard(tmr ? { ...r, name: `${r.name}・あす` } : r, tmr ? { ...d.tomorrow, tomorrow: null } : d, 'ok')]);
   }
   if (bgmOn()) {
@@ -380,7 +466,7 @@ export function recoPage(slot, redraw) {
       if (list.length) parts.article = card('記事', line('article'), el('div.bd-feed', list.map((x) => feedRow(x, f, redraw))));
     }
   }
-  const order = slot === 'morning' ? ['weather', 'bgm', 'article'] : slot === 'noon' ? ['bgm', 'article', 'weather'] : ['article', 'weather', 'bgm'];
+  const order = ['weather', 'bgm', 'article']; // v0.76(実機 FB「天気 → BGM → 記事 の順に」): 時間帯で順を変えるのを やめた
   const out = order.map((k) => parts[k]).filter(Boolean);
   const say = insightBubble();
   return say ? [say, ...out] : out;

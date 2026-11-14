@@ -104,8 +104,27 @@ export function consultText(o) {
   if (o.near && o.near.length) lines.push(`期限が近いもの: ${o.near.slice(0, 4).map((t) => `${t.name}(${fmtMD(t.deadline)}まで)`).join('・')}`);
   if (o.mood) lines.push(`きょうの調子: ${MOOD_WORDS[o.mood] || ''}`);
   notesBlock(lines, o.notes);
+  // v0.76(実機 FB「今日のタスクを聞いても 小説や図録の話が返ってくる」): 聞かれたことに まず答えてもらう。関係のない材料の話は出さない、と はっきり頼む
+  const facts = (Array.isArray(o.facts) ? o.facts : []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 20).map((x) => x.trim().slice(0, 120));
+  if (facts.length) lines.push('', '【アプリのデータ(聞かれたことに関係するもの)】', ...facts);
   lines.push('', '【作業の進め方の相談】', reframe(o.question));
-  lines.push('', '【お願い】', '時間管理の助言として、上の状況に合わせて いま10分でできる作業の一歩を1つ。3文まで。');
+  lines.push('', '【お願い】', '上の相談に まず答えてください。答えには この文に書いてあることだけを使い、相談と関係のない話題は出さない。3文まで。進め方の相談なら、いま10分でできる作業の一歩を1つ。');
+  return clip(lines.join('\n'));
+}
+
+/**
+ * アプリが調べた答えを、口調だけ変えて言い直してもらう文(v0.76・F24-23)。o = { persona, question, title, lines }。
+ * 中身(名前・数・時刻)は アプリの中のデータなので、AI には 変えない・足さない・省かない と頼む
+ */
+export function rephraseText(o) {
+  const body = [o.title, ...(Array.isArray(o.lines) ? o.lines : [])].filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 160));
+  const lines = [
+    '時間管理アプリ「メリハリ」の案内役として、下の【答え】を 相手に伝える文に言い直してください。',
+    ...(o.persona ? [String(o.persona).slice(0, 300)] : []),
+    '【答え】は アプリが記録から調べた 正しい内容です。名前・数・時刻は 1 つも変えず、項目を足さず、省かないでください。変えてよいのは 口調と つなぎの言葉だけです。前置きと締めは 1 文ずつまで。',
+    '', '【聞かれたこと】', String(o.question || '').trim().slice(0, 200) || '(なし)',
+    '', '【答え】', ...body,
+  ];
   return clip(lines.join('\n'));
 }
 

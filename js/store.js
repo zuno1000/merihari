@@ -263,7 +263,7 @@ function normalizeSettings(raw) {
   s.art = normalizeArt(raw.art); // v0.58・F23
   s.buddy = normalizeBuddy(raw.buddy); // v0.62・F24
   s.pomo = normalizePomo(raw.pomo); // v0.72・F25
-  s.brief = { enabled: !(isObj(raw.brief) && raw.brief.enabled === false) }; // v0.55・F21: ブリーフィング(既定は有効)
+  s.brief = { enabled: !(isObj(raw.brief) && raw.brief.enabled === false), ...(isObj(raw.brief) && [0, 1320, 1440].includes(raw.brief.bed) ? { bed: raw.brief.bed } : {}) }; // v0.55・F21: ブリーフィング(既定は有効)。bed(v0.76): 寝る前の枠の時刻(分・0 = 出さない・既定 23:00 は持たない)
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);
   // v0.19: お金のカテゴリ(無ければ既定)と月の予算

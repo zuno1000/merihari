@@ -1709,3 +1709,50 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 /* v0.75.1: 性格の箱のボタンの行は 折り返す(v0.73 で「台詞をぜんぶ消す」を足して 3 つになり、幅 390px で 右にはみ出していた = 設定 › アシスタント だけ 画面が縮んで 細く見えた原因) */
 .bd-custom .row,.bd-charbox>.row{flex-wrap:wrap}
 .bd-charbox>.row>.muted{flex:1 1 180px;min-width:0}
+
+/* v0.76: 話す を チャットの形に(.bd-log は 高さを決めて 中でスクロール・.bd-compose 入力欄と その下の ワンタップの質問・.bd-tools)・日報の 範囲のチップ(.brief-seg)と「残りの時間で」の図(.brm / .bs-card) */
+.bd-talk{gap:8px}
+.bd-log{gap:8px;height:min(42vh,360px);max-height:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--bg);border-radius:14px;padding:10px}
+.bd-mrow{flex:none;display:flex;gap:6px;align-items:flex-end;min-width:0}
+.bd-mrow.me{justify-content:flex-end}
+.bd-mcol{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;max-width:86%}
+.bd-mcol .bd-msg{max-width:100%}
+.bd-log .bd-msg.ai{background:var(--card)}
+.bd-re{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;text-align:left;padding:4px 2px;min-height:28px;cursor:pointer}
+.bd-empty{margin:auto 4px;line-height:1.7}
+.bd-compose{display:flex;flex-direction:column;gap:8px}
+.bd-inrow{gap:8px}
+.bd-inrow .text{flex:1;min-width:0}
+.bd-sugg{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.bd-sugg::-webkit-scrollbar{display:none}
+.bd-sugg .chip{flex:none;white-space:nowrap}
+.bd-tools{display:flex;flex-wrap:wrap;gap:6px}
+.bd-hrow{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);min-height:52px}
+.bd-hrow:first-child{border-top:0}
+.bd-hopen{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;border:0;background:none;color:var(--fg);font:inherit;text-align:left;padding:8px 0;cursor:pointer}
+.bd-ht{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bd-hm{font-size:12px;color:var(--muted)}
+.brief .seg.brief-seg{margin:0 0 4px}
+.brm{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.brm-head{display:flex;align-items:baseline;gap:8px}
+.brm-k{font-size:12px;color:var(--muted)}
+.brm-v{font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.brm-sub{margin-left:auto;font-size:13px;color:var(--muted)}
+.brm-bar{height:14px;border-radius:7px;background:var(--accent);overflow:hidden}
+.brm-bar i{display:block;height:100%;background:var(--track)}
+.brm-ax{position:relative;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.brm-nowl{position:absolute;top:0;transform:translateX(-50%);color:var(--accent);font-weight:600;white-space:nowrap}
+.brm .br-tiles{margin-top:4px}
+.brief-sug.cards{gap:8px}
+.bs-card{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--bg);border-left:4px solid var(--deemph)}
+.bs-card .bs-k{align-self:flex-start;background:none;padding:0;font-size:11px;font-weight:600;color:var(--muted)}
+.bs-card .bs-t{font-size:15px;font-weight:600;line-height:1.45;overflow-wrap:anywhere}
+.bs-card.hot{border-left-color:var(--accent);background:var(--accent-bg)}
+.bs-card.hot .bs-k{color:var(--accent)}
+.bs-card.k-due,.bs-card.k-tmr{border-left-color:var(--danger)}
+.bs-card.k-habit{border-left-color:#3a9a5c}
+.bs-card.k-plan{border-left-color:#8a6fd1}
+.bs-card.k-goal,.bs-card.k-first{border-left-color:#d08a2a}
+.pm-fin-name{margin:-6px 0 0;text-align:center;font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.brm-ax{min-height:16px}
+.bd-mrow.ai{align-items:flex-start}
