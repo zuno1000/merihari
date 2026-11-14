@@ -114,3 +114,102 @@ export function insights({ entries, settings, today, workMin, progress = null })
   if (r) add('run', `この 30 日の最長の集中は ${fmtMin(r.best)}(${fmtMD(r.date)})${r.today >= 30 ? `。きょうは ${fmtMin(r.today)}` : ''}`);
   return out;
 }
+
+// ================= キャラクター(v0.62・F24-6〜) =================
+// ユーザー要望「キャラクター性のあるアシスタント。名前や口調は変えられるように。巨大な図書館・美術館・魔法学校のようなファンタジーの方向で。
+// 図録の土地を旅して 完成した 1 枚を絵はがきとして届ける・口調は明るく軽め・旅した土地のスタンプが増える」。
+// 設定: 大図書館の見習い司書。あなたの作業時間が書庫の灯りになる。灯りがあるあいだに、書庫から小説の続きを運び、「絵の扉」をくぐって絵や写真の土地へ行き、絵はがきを持ち帰る。
+// 台詞は決まった文から状況で選ぶ(ルールベース・§2-7)。責める言い方は入れない。絵は端末に置いた画像(無ければ内蔵の SVG)。
+
+export const DEFAULT_NAME = 'リブ';
+export const TONES = Object.freeze(['bright', 'polite', 'cool']);
+export const TONE_LABEL = Object.freeze({ bright: '明るく軽め', polite: 'ていねい', cool: 'ぶっきらぼう' });
+export const MOODS = Object.freeze(['base', 'happy', 'work', 'worry', 'night']);
+export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれしい', work: '作業中', worry: '気にかけている', night: 'おやすみ' });
+
+/** settings.buddy の正規化: { enabled(既定 true), name(12 字まで), tone, idle(ホームで声をかける・既定 true) } */
+export function normalizeBuddy(raw) {
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const name = typeof o.name === 'string' ? o.name.trim().slice(0, 12) : '';
+  return { enabled: o.enabled !== false, name: name || DEFAULT_NAME, tone: TONES.includes(o.tone) ? o.tone : 'bright', idle: o.idle !== false };
+}
+
+const LINES = Object.freeze({
+  hello_morning: { bright: ['おはよう! 書庫の灯り、つけておいたよ。', 'おはよう! きのうの記録をまとめておいたよ。'], polite: ['おはようございます。昨日の記録をまとめておきました。'], cool: ['おはよう。昨日のぶんは まとめてある。'] },
+  hello_noon: { bright: ['おつかれさま! 午前のぶんを見てみよう。'], polite: ['お疲れさまです。午前の記録をまとめました。'], cool: ['昼だ。午前のぶんを置いておく。'] },
+  hello_evening: { bright: ['こんばんは! きょうも あと少しだね。'], polite: ['こんばんは。午後の記録をまとめました。'], cool: ['夜だ。午後のぶんを まとめた。'] },
+  hello: { bright: ['やあ! 書庫で待ってたよ。', 'きょうは どの扉をくぐろうか。'], polite: ['こんにちは。書庫でお待ちしていました。'], cool: ['来たか。書庫は開いている。'] },
+  postcard: { bright: ['{place}に行ってきたよ! 絵はがきを図録に入れておいたからね。'], polite: ['{place}へ行ってまいりました。絵はがきを図録に収めてあります。'], cool: ['{place}から戻った。絵はがきは図録に入れてある。'] },
+  unread: { bright: ['書庫から続きを {n} 回分 持ってきたよ。読む?'], polite: ['書庫から続きを {n} 回分 お持ちしました。'], cool: ['続きが {n} 回分 届いている。'] },
+  switch: { bright: ['{min} 分たったね。区切るなら、いまがちょうどいいかも!'], polite: ['{min} 分たちました。区切るなら、いまがよい頃合いです。'], cool: ['{min} 分だ。区切るなら いま。'] },
+  working: { bright: ['いい調子! あと {n} 分で小説の続きを取ってこられるよ。', '灯りがついてる。あと {n} 分で続きが届くよ!'], polite: ['順調です。あと {n} 分で小説の続きをお持ちできます。'], cool: ['その調子。あと {n} 分で続きが届く。'] },
+  working_art: { bright: ['あと {n} ピースで{kind}の「{label}」がわかるよ!'], polite: ['あと {n} ピースで{kind}の「{label}」が開きます。'], cool: ['あと {n} ピースで「{label}」が開く。'] },
+  rest: { bright: ['ひと休み中だね。戻ったら また灯りをつけよう。'], polite: ['休憩中ですね。戻られたら また灯りをともしましょう。'], cool: ['休憩か。戻ったら続きだ。'] },
+  idle: { bright: ['ちょっと静かだね。5 分だけ、灯りをつけてみない?', 'いまなら 5 分で 1 ピース。やってみる?'], polite: ['少し間があきました。5 分だけ 始めてみませんか。'], cool: ['間があいた。5 分だけ、どうだ。'] },
+  due: { bright: ['きょうが期限のものが {n} 件 残ってるよ。先に片づけちゃおう!'], polite: ['今日が期限のものが {n} 件 残っています。'], cool: ['期限のものが {n} 件 残っている。'] },
+  night: { bright: ['きょうも おつかれさま。灯りを消しておくね、おやすみ!'], polite: ['今日もお疲れさまでした。おやすみなさい。'], cool: ['きょうは ここまで。休め。'] },
+  weather: { bright: ['きょうの空は {text} だよ。'], polite: ['今日の天気は {text} です。'], cool: ['きょうは {text}。'] },
+  umbrella: { bright: ['傘を忘れずにね!'], polite: ['傘をお持ちください。'], cool: ['傘を持て。'] },
+  clothes: { bright: ['{text}'], polite: ['{text}'], cool: ['{text}'] },
+  bgm: { bright: ['この時間に合いそうな 1 曲、選んでおいたよ。'], polite: ['この時間に合う 1 曲を選びました。'], cool: ['この時間向けの 1 曲だ。'] },
+  article: { bright: ['書庫に新しい記事が届いてたよ。気になるの、ある?'], polite: ['新しい記事が届いています。'], cool: ['新しい記事が届いている。'] },
+  tasks_none: { bright: ['きょうが期限のものは無いよ。好きな扉からどうぞ!'], polite: ['今日が期限のものはありません。'], cool: ['期限のものは無い。'] },
+  tasks_some: { bright: ['きょうまでのものが {n} 件。ここで済ませられるよ。'], polite: ['今日までのものが {n} 件あります。ここで済ませられます。'], cool: ['きょうまでが {n} 件。ここで済ませろ。'] },
+  bye: { bright: ['じゃあ、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
+});
+export const LINE_KEYS = Object.freeze(Object.keys(LINES));
+
+/** 台詞: key と口調から 1 つ選び、{n} などを埋める。seed(日付や分)で言い回しを選ぶ(同じ seed なら同じ文)。知らない key は '' */
+export function say(key, tone = 'bright', vars = {}, seed = 0) {
+  const set = LINES[key];
+  if (!set) return '';
+  const list = set[TONES.includes(tone) ? tone : 'bright'];
+  const t = list[Math.abs(Math.floor(seed)) % list.length];
+  return t.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ''));
+}
+
+/**
+ * ホームでのひとこと(状況から 1 つ・上にあるものほど優先)。
+ * st = { min(実効の分), slot, open: { role: 'work' | 'drift' | 'rest' | 'other', min } | null, idleMin(作業時間帯の中で 何も記録していない分 | null), due(きょうまでのタスクの数),
+ *        quest: { need, unread, done } | null, art: { need, next, name, allDone } | null, postcard: { place } | null, idleOn(声かけの設定) }
+ * 戻り値 { key, text, mood }
+ */
+export function homeLine(st, tone = 'bright', seed = 0) {
+  const s = st || {};
+  const mk = (key, mood, vars = {}) => ({ key, mood, text: say(key, tone, vars, seed) });
+  if (s.postcard) return mk('postcard', 'happy', { place: s.postcard.place });
+  if (s.quest && s.quest.unread > 0) return mk('unread', 'happy', { n: s.quest.unread });
+  const o = s.open;
+  if (o && o.role === 'drift' && o.min >= 20 && s.idleOn !== false) return mk('switch', 'worry', { min: o.min });
+  if (o && o.role === 'work') {
+    if (s.art && !s.art.allDone && s.art.next && s.art.next.pieces <= 3) return mk('working_art', 'work', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
+    if (s.quest && !s.quest.done) return mk('working', 'work', { n: s.quest.need });
+    return mk('hello', 'work');
+  }
+  if (o && o.role === 'rest') return mk('rest', 'base');
+  const m = s.min || 0;
+  if (m >= 1350 || m < 300) return mk('night', 'night');
+  if (!o && s.idleOn !== false && s.idleMin != null && s.idleMin >= 45) return mk('idle', 'worry');
+  if (!o && s.due > 0 && m >= 1020) return mk('due', 'worry', { n: s.due });
+  return mk('hello', 'base');
+}
+
+/** 旅した土地のスタンプ: 完成した絵と写真を 国ごとに。戻り値 [{ country, n, last(最後に完成した題名 / 場所) }](多い順・同数なら先に行った順) */
+export function stamps(doneWorks) {
+  const by = new Map();
+  for (const w of doneWorks || []) {
+    const c = String((w && w.country) || '').replace(/[((].*$/, '').trim();
+    if (!c) continue;
+    const x = by.get(c) || { country: c, n: 0, last: '', order: by.size };
+    x.n++; x.last = w.title || x.last;
+    by.set(c, x);
+  }
+  return [...by.values()].sort((a, b) => b.n - a.n || a.order - b.order).map(({ country, n, last }) => ({ country, n, last }));
+}
+
+const TONE_HINT = Object.freeze({ bright: '明るく軽い、親しい友だちのような口調', polite: 'ていねいで物静かな口調', cool: '口数が少なく ぶっきらぼうだが 面倒見のよい口調' });
+/** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
+export function persona(name, tone) {
+  const b = normalizeBuddy({ name, tone });
+  return `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。${TONE_HINT[b.tone]}で答えてください。`;
+}

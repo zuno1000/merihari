@@ -16,6 +16,7 @@ import { FEATURES } from './features.js';
 import { sectionTrain } from './ui-train.js';
 import { sectionQuest, questSummary } from './ui-quest.js'; // v0.56・F22
 import { sectionArt, artSummary } from './ui-art.js'; // v0.58・F23
+import { sectionBuddy, buddySummary } from './ui-buddy.js'; // v0.62・F24
 import { appBadgeSupported, enableAppBadge, disableAppBadge } from './ui-brief.js'; // v0.55・F21
 import * as train from './train.js';
 import { feedSheet, unmark, addSourceSheet, manageSourcesSheet, ghToken, setGhToken, ensureSource, setupPrivateSheet, usePublicCatalog } from './ui-feed.js';
@@ -667,8 +668,8 @@ function sectionHelp() {
     li(['v0.54: JR東日本の時刻表の URL から(自分だけのリポジトリ・Actions): 設定 › キャッチアップ で「自分だけの取得元リポジトリ」とトークン(Contents: Read and write)を設定してあれば、設定 › 電車 の「＋ URL を貼って登録」で駅時刻表ページ(timetables.jreast.co.jp・平日か土休日のページ)の URL を data/timetables.json に commit → GitHub Actions(update-trains.yml・週 1 と push のたび)が tools/train_fetch.py で平日 / 土休日の時刻表を取って data/trains.json を作る → 「リポジトリから読み込む」で路線に足す。URL の版(YYMM)が変わっても今月の版に読み替えます。リポジトリには tools/train_fetch.py と .github/workflows/update-trains.yml(このアプリの tools/ にあるもの)を置きます。', '設定 › 電車 で路線(駅と方面)を登録して「ホームに電車の印を出す」にすると、ホーム右上(天気の左)に電車の印と「次の電車まで ◯分」(先頭の路線)が出ます。タップすると路線ごとに次の 4 本(時刻・あと ◯分・種別)。上の いま / 15分後 / 30分後 / 60分後 で、出発をずらしたときの電車が見られます。路線は 5 つまで。', '時刻表の出どころは 2 つ。①公共交通オープンデータセンター(ODPT): developer.odpt.org で無料の開発者登録(承認まで数日)をしてアクセストークンを 設定 › 電車 に貼り、駅名で検索 → 方面を選ぶ。対象は 東京メトロ・都営・ゆりかもめ・りんかい線・つくばエクスプレス・横浜市営・多摩モノレール(2026-11 時点)。②手入力: 発車時刻を貼る(「7 02 12 22」の行か「7:02 7:12」。平日 / 土休日)。JR や私鉄の多くは ODPT の無償データに無いので手入力で。', '時刻表は端末に置く(ODPT は 30 日で取り直し・「更新」でも)ので、見るときは通信しません。土曜 / 日祝 / 年末年始の判定はアプリの中(祝日は法で計算)。トークンはこの端末だけ(同期しない)、路線の登録は同期します。']),
     h('作業用 BGM(任意・v0.32)'),
     li(['設定 › 作業用 BGM で「ホームに ♪ を出す」にすると、ホーム左上(カレンダーの右・きょうだけ)に ♪ が出ます。タップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。シートは出ません(ワンタップ)。', '同じ曲は二度すすめません(聞いた曲は記録として残り、同期します)。全部聞いたら、ちがう と言った曲以外の古いものから もう一度。', '選び方はルールベース: 設定の好みのジャンル(複数・無ければ全部から)・流したあとの 好き / ちがう(ホームの 1 行か 設定の一覧でタップ。好きな曲に近いジャンルとムードを多めに、ちがう と言った曲のチャンネルは控えめに)・時間帯(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中、休憩やダラダラの記録中はリラックス)・同じチャンネルは控えめ・20 分未満の短い曲は控えめ。上位 7 曲(同じジャンルは 2 曲まで)から順位の重みで選びます。', '曲の一覧は 同じ作者の todaybgm(todaybgm.pages.dev)のカタログ(約 700 曲・12 ジャンル・作業用の長めの曲)をアプリに同梱したもので、選ぶのに通信はしません。入れ替えは版の更新で。', 'きょう流した曲はホームに 1 行(♪ 題名・好き / ちがう・×)。題名をタップで もう一度開きます。× でその日だけ消え、設定 › 作業用 BGM「ホームに きょうの曲を出す」を外せば いつも出しません。流していない日は何も出ません。', 'ふり返り(期限が近いタスク と 最近 の間)に「きょうの BGM」: その日に流した曲を順に(サムネイル・題名・流した時刻・ジャンル・♡ / ⊖ で 好き / ちがう)。タップでもう一度開きます(v0.32.1〜v0.32.2)。', '曲の一覧は毎週土曜の朝に GitHub Actions が todaybgm の最新に合わせて作り直し、アプリは次に開いたときから新しい一覧を使います(版の更新は要りません・v0.32.1)。']),
-    h('アシスタント(v0.59)'),
-    li(['ブリーフィングのいちばん下に「アシスタント Lv.◯」の節が出ます。作業の合計(2026-11-14 から)で段が上がり、言えることが増えます: Lv.1 小説とピースの進み → Lv.2(5 時間)得意な時間帯 → Lv.3(15 時間)先週との違い → Lv.4(30 時間)崩れやすい曜日 → Lv.5(60 時間)最長の集中。', '下がることはありません。気づきは記録から計算するだけで、外には何も送りません。ブリーフィングを止めると一緒に止まります。']),
+    h('アシスタント(v0.59・v0.62 でキャラクターに)'),
+    li(['大図書館の見習い司書です。あなたの作業時間が書庫の灯りになり、そのあいだに小説の続きを運び、絵の扉の向こうの土地から絵はがき(図録の 1 枚)を持ち帰ります。名前・口調(明るく軽め / ていねい / ぶっきらぼう)・絵は 設定 › アシスタント で変えられます。', 'ホームの内訳の下に 顔と ひとこと が出ます(続きが届いた・絵はがき・作業中の進み・ダラダラが 20 分・45 分 何も記録していない・夜)。タップすると「話す」(iPhone のショートカットの AI へ文を送り、返事を貼り付ける)と「手帳」(段と、旅した土地のスタンプ)。', 'ブリーフィングは アシスタントからの日報になり、3 ページに分かれます: ふり返り → タスク → おすすめ(天気・作業用 BGM・記事・きょうの気づき。朝 / 昼 / 夜 で順と数が変わります)。', '作業の合計(2026-11-14 から)で段が上がり、言えることが増えます: Lv.1 小説とピースの進み → Lv.2(5 時間)得意な時間帯 → Lv.3(15 時間)先週との違い → Lv.4(30 時間)崩れやすい曜日 → Lv.5(60 時間)最長の集中。下がることはありません。']),
     h('連載小説(v0.56・v0.61 で「解読」から改名)'),
     li(['作業として記録した時間のぶんだけ、小説の続きが届きます。ホームの内訳の下の「小説 68%・あと 4 分」をタップすると、届いた回と、その次の回の伏せ字の先読みが見られます。', '10 分ぶんの作業で 1 回分(300〜400 字)。「‹ 前」「続きを読む ›」で、届いた範囲を行き来できます。作業しない日に減るものはありません。', '本は青空文庫の著作権の切れた作品(蠅男 / 孤島の鬼 / 火星兵団 / 幽霊塔)から 設定 › 連載小説 で選びます(替えると最初から)。文の終わり(。)で機械的に区切っています。']),
     h('ピースの図録(v0.58・v0.61 で風景の写真も)'),
@@ -718,6 +719,7 @@ const SECTIONS = {
   brief: { title: 'ブリーフィング', build: (re, ctx) => sectionBrief(re, ctx) }, // v0.55・F21
   ...(FEATURES.QUEST ? { quest: { title: '連載小説', build: (re) => sectionQuest(re) } } : {}), // v0.56・F22
   ...(FEATURES.ART ? { art: { title: 'ピースの図録', build: (re) => sectionArt(re) } } : {}), // v0.58・F23
+  ...(FEATURES.BUDDY ? { buddy: { title: 'アシスタント', build: (re) => sectionBuddy(re) } } : {}), // v0.62・F24
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -837,7 +839,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('レポートのタイル', summary.tiles(), open('tiles')),
       srow('ブリーフィング', `${S().brief?.enabled === false ? '出さない' : '朝・昼・夜の初回'}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
     ]),
-    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('電車', summary.train(), open('train')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('キャッチアップ', summary.feed(), open('feed')), FEATURES.QUEST ? srow('連載小説', questSummary(), open('quest')) : null, FEATURES.ART ? srow('ピースの図録', artSummary(), open('art')) : null, srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
+    group('お金・任意の機能', [srow('お金', summary.money(), open('money')), srow('天気と服装', summary.weather(), open('weather')), srow('電車', summary.train(), open('train')), srow('作業用 BGM', summary.bgm(), open('bgm')), srow('キャッチアップ', summary.feed(), open('feed')), FEATURES.QUEST ? srow('連載小説', questSummary(), open('quest')) : null, FEATURES.ART ? srow('ピースの図録', artSummary(), open('art')) : null, FEATURES.BUDDY ? srow('アシスタント', buddySummary(), open('buddy')) : null, srow('AI(ショートカット)', store.state.local.ai?.enabled ? `有効・「${store.state.local.ai.shortcutName || 'メリハリ'}」` : '使わない', open('ai'))]),
     group('Google', [srow('カレンダー・Drive', google.isConnected() ? `接続済み${store.state.local.lastSyncAt ? '・同期 ' + fmtTs(store.state.local.lastSyncAt) : ''}` : '未接続', open('google'))]),
     group('データ', [
       srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後の書き出し ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {

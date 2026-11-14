@@ -9,7 +9,8 @@ import { catOf } from './ui-today.js';
 import { driftLabelOf } from './report.js';
 import { overdueCheck } from './ui-tasks.js';
 import { autoSync } from './sync.js';
-import { buddyBox } from './ui-buddy.js'; // v0.59・F24: アシスタントの節(FEATURES.BUDDY)
+import { bubble, recoPage, reportTitle } from './ui-buddy.js'; // v0.62・F24: 日報の吹き出しと おすすめのページ(FEATURES.BUDDY)
+import { FEATURES } from './features.js';
 
 const S = () => store.state.data.settings;
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
@@ -96,11 +97,16 @@ export function maybeBrief(ctx) {
   return true;
 }
 
-/** ブリーフィングのシート。タスクは ✓ でその場で済みにできる(中身を作り直す)。閉じたら いまの画面を描き直す */
+/**
+ * ブリーフィング(v0.62: アシスタントからの日報)のシート。3 ページに分ける(ユーザー要望「情報量が増えるので見づらくならないように。複数ページでも」):
+ *  1 ふり返り(吹き出しの あいさつ+図)→ 2 タスク(✓ でその場で完了・このあとは)→ 3 おすすめ(天気・作業用 BGM・記事・きょうの気づき。時間帯で順と数が変わる・ui-buddy.recoPage)。
+ * 下に ‹ 戻る・ページの点・次へ ›(最後は 閉じる)。おすすめに出すものが無ければ 2 ページ。アシスタントを止めていれば吹き出しは出ない。閉じたら いまの画面を描き直す
+ */
 export function openBrief(ctx) {
   const d = store.state.data;
   const body = el('div.brief');
   let close = () => {};
+  let page = 0;
   const draw = () => {
     const n = now();
     const b = brief.build({ slot: brief.slotOf(n.min), date: n.date, nowMin: n.min, entries: d.entries, tasks: d.tasks, settings: d.settings, planBlocks: d.planBlocks });
@@ -114,19 +120,33 @@ export function openBrief(ctx) {
       ]);
     };
     const rows = [...b.due.overdue.map((t) => row(t, 'over')), ...b.due.today.map((t) => row(t, 'today')), ...(b.slot === 'evening' ? b.due.tomorrow.map((t) => row(t, 'tmr')) : [])];
+    const reco = FEATURES.BUDDY ? recoPage(b.slot, draw) : [];
+    const pages = [
+      { name: 'ふり返り', nodes: [bubble(`hello_${b.slot}`, {}, 'base'), el('h3', b.reviewTitle), b.stats ? reviewBox(b) : el('p.muted', b.empty)] },
+      { name: 'タスク', nodes: [
+        bubble(b.due.count ? 'tasks_some' : 'tasks_none', { n: b.due.count }, b.due.count ? 'worry' : 'happy'),
+        el('h3', b.taskTitle), el('p', { class: b.due.count ? 'brief-due' : '' }, b.taskLine),
+        rows.length ? el('div.list', rows) : null,
+        b.suggest.length ? el('h3', b.suggestTitle) : null,
+        b.suggest.length ? el('div.brief-sug', b.suggest.map((x) => el('div.bs-row', { class: `bs-row${x.kind === 'switch' || x.kind === 'now' ? ' hot' : ''}` }, [el('span.bs-k', brief.SUGGEST_LABEL[x.kind] || ''), el('span.bs-t', x.text)]))) : null,
+        el('div.row.brief-act', [
+          b.due.overdue.length ? el('button.btn.sm', { type: 'button', onclick: () => { close(); overdueCheck(ctx, { force: true }); } }, '期限切れを処理') : null,
+          el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.go('tasks'); } }, 'タスクを開く'),
+        ]),
+      ] },
+      reco.length ? { name: 'おすすめ', nodes: [bubble('bye', {}, 'happy'), ...reco] } : null,
+    ].filter(Boolean);
+    page = Math.max(0, Math.min(page, pages.length - 1));
+    const last = page === pages.length - 1;
+    const go = (p) => { page = p; draw(); if (body.parentNode) body.parentNode.scrollTop = 0; };
     clear(body);
     body.append(...[
-      el('h2', b.title),
-      el('h3', b.reviewTitle), b.stats ? reviewBox(b) : el('p.muted', b.empty),
-      el('h3', b.taskTitle), el('p', { class: b.due.count ? 'brief-due' : '' }, b.taskLine),
-      rows.length ? el('div.list', rows) : null,
-      b.suggest.length ? el('h3', b.suggestTitle) : null,
-      b.suggest.length ? el('div.brief-sug', b.suggest.map((x) => el('div.bs-row', { class: `bs-row${x.kind === 'switch' || x.kind === 'now' ? ' hot' : ''}` }, [el('span.bs-k', brief.SUGGEST_LABEL[x.kind] || ''), el('span.bs-t', x.text)]))) : null,
-      buddyBox(), // v0.59・F24: アシスタント(段・気づき・次の力まで)
-      el('div.row.brief-act', [
-        b.due.overdue.length ? el('button.btn', { type: 'button', onclick: () => { close(); overdueCheck(ctx, { force: true }); } }, '期限切れを処理') : null,
-        el('button.btn', { type: 'button', onclick: () => { close(); ctx.go('tasks'); } }, 'タスクを開く'),
-        el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる'),
+      el('div.brief-top', [el('h2', reportTitle(b.slot) || b.title), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
+      ...pages[page].nodes,
+      el('div.row.brief-nav', [
+        el('button.btn.ghost', { type: 'button', disabled: page === 0, 'aria-label': '前のページ', onclick: () => go(page - 1) }, '‹ 戻る'),
+        el('span.brief-dots', { 'aria-hidden': 'true' }, pages.map((_, i) => el('i', { class: i === page ? 'on' : '' }))),
+        last ? el('button.btn.primary', { type: 'button', onclick: () => close() }, '閉じる') : el('button.btn.primary', { type: 'button', onclick: () => go(page + 1) }, `${pages[page + 1].name} ›`),
       ]),
     ].filter(Boolean));
   };

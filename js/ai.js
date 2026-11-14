@@ -45,7 +45,7 @@ function notesBlock(lines, notes) {
  */
 export function summaryText(o) {
   const lines = [];
-  lines.push(ROLE, '', `【${fmtMD(o.date, true)}の記録】`);
+  lines.push(ROLE, ...(o.persona ? [String(o.persona).slice(0, 200)] : []), '', `【${fmtMD(o.date, true)}の記録】`);
   const agg = o.agg;
   if (agg) {
     const cats = Object.entries(agg.byCategory || {}).filter(([, r]) => r.actual > 0).sort((a, b) => b[1].actual - a[1].actual).slice(0, 8)
@@ -91,7 +91,7 @@ export function summaryText(o) {
  * o = { question, nowMin, open(記録中 { name, elapsedMin }|null), workMin, goals, gs(plan.goals), near([{ name, deadline }]), mood }
  */
 export function consultText(o) {
-  const lines = [ROLE, '', '【いまの状況】'];
+  const lines = [ROLE, ...(o.persona ? [String(o.persona).slice(0, 200)] : []), '', '【いまの状況】']; // persona(v0.62): アシスタントの名前と口調
   if (o.nowMin != null) lines.push(`時刻${mm(o.nowMin % 1440)}`);
   if (o.open) lines.push(`記録中: ${o.open.name}(${fmtMinJa(o.open.elapsedMin)})`);
   else lines.push('いまは何も記録していない');

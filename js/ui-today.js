@@ -16,6 +16,7 @@ import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import { bgmButton, bgmStrip } from './ui-bgm.js';
 import { feedBox } from './ui-feed.js'; // v0.34・F17: キャッチアップ(ホームの折りたたみ・きょうだけ)
+import { buddyHome, buddyOn } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
 import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
 import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainButton } from './ui-train.js'; // v0.50・F18: 次の電車(ホーム右上の印)
@@ -331,7 +332,7 @@ export function calButton(onclick) {
 const wxInflight = new Set();
 const wxCache = () => store.state.local.weatherCache || {};
 /** 地域 1 つの天気を取りに行く(古いときだけ)。届いたら onData(data)。失敗は onFail() */
-function loadWeather(r, onData, onFail = () => {}) {
+export function loadWeather(r, onData, onFail = () => {}) { // v0.62: 日報の おすすめ(ui-buddy)からも
   const c = wxCache()[r.id];
   if (weather.isFresh(c, Date.now()) || wxInflight.has(r.id)) return false;
   if (!navigator.onLine) { onFail(); return false; }
@@ -468,10 +469,11 @@ export function renderNow(view, ctx, dateArg = null) {
     head,
     FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
     hero?.node, bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // v0.32: その日に流した BGM の 1 行(流していなければ無し)
+    isToday ? buddyHome(ctx) : null, // v0.62・F24: アシスタントの顔と ひとこと(タップで 話す / 手帳 / 日報)
     isToday ? stripRow([questStrip(), artStrip()]) : null, // v0.56・F22 解読 / v0.58・F23 名画のピース: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
     isToday ? habitsBox(v, rerender, ctx) : null, // v0.49・F5-15: きょうの習慣(✓・続いた日数・声かけ。習慣が無ければ無し)
     isToday ? feedBox(rerender) : null, // v0.34・F17: キャッチアップ(有効なときだけ・折りたたみ・きょうだけ)
-    isToday && S().brief?.enabled !== false && ctx.openBrief ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(きょうだけ・いまの時点で作り直す)
+    isToday && S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(きょうだけ・いまの時点で作り直す)
   ].filter(Boolean));
   view.append(home);
   timelineDate = isToday ? null : date; // タブバーの ＋ はその日に足す

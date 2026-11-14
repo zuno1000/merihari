@@ -136,7 +136,7 @@ export function openArt(onClose = null) {
 }
 
 /** いまの進み(アシスタント F24 が読む): { need, allDone, next: { label, pieces } | null }。無効・読めないときは null */
-export function artStatus() { if (!artOn()) return Promise.resolve(null); return loadWorks().then(() => { const p = snapshot().p; return { need: p.need, allDone: p.allDone, name: art.kindName(p.cur != null ? works[p.cur] : null), next: p.cur != null ? art.nextInfo(works[p.cur], p.pieces, p.n) : null }; }).catch(() => null); }
+export function artStatus() { if (!artOn()) return Promise.resolve(null); return loadWorks().then(() => { const sn = snapshot(), p = sn.p; return { doneWorks: works.slice(0, p.done), postcard: sn.unseenDone > 0 ? (works[sn.seenDone].kind === 'photo' ? works[sn.seenDone].title : `「${works[sn.seenDone].title}」の絵の中`) : null, need: p.need, allDone: p.allDone, name: art.kindName(p.cur != null ? works[p.cur] : null), next: p.cur != null ? art.nextInfo(works[p.cur], p.pieces, p.n) : null }; }).catch(() => null); }
 
 /** 設定の一覧の右側 */
 export function artSummary() { const a = A(); return a.enabled ? `有効・${art.SET_LABEL[a.set]}` : '使わない'; }
