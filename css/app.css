@@ -1756,3 +1756,15 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .pm-fin-name{margin:-6px 0 0;text-align:center;font-size:14px;color:var(--muted);overflow-wrap:anywhere}
 .brm-ax{min-height:16px}
 .bd-mrow.ai{align-items:flex-start}
+/* v0.77・F24-24: キャラクターを AI に調べてもらう箱(.bd-research)・調べた内容の確認(.bd-pf)・入力欄の文字数(.bd-count) */
+.bd-research{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--deemph);border-radius:12px;padding:10px 12px;margin:4px 0 10px}
+.bd-research .bd-h,.bd-research p{margin:0}
+.bd-rbtns{flex-wrap:wrap;gap:8px}
+.bd-count{display:block;text-align:right;font-size:12px;color:var(--muted);margin:2px 0 6px;font-variant-numeric:tabular-nums}
+.bd-count.full{color:var(--danger);font-weight:600}
+.bd-pf{display:flex;flex-direction:column;margin:0 0 12px}
+.bd-pfrow{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-top:1px solid var(--line)}
+.bd-pfrow:first-child{border-top:0}
+.bd-pfk{font-size:11px;font-weight:600;color:var(--muted)}
+.bd-pfv{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.chip.bd-allchip{border-color:var(--accent);color:var(--accent);font-weight:600}

@@ -45,7 +45,7 @@ function notesBlock(lines, notes) {
  */
 export function summaryText(o) {
   const lines = [];
-  lines.push(ROLE, ...(o.persona ? [String(o.persona).slice(0, 200)] : []), '', `【${fmtMD(o.date, true)}の記録】`);
+  lines.push(ROLE, ...(o.persona ? [String(o.persona).slice(0, 700)] : []), '', `【${fmtMD(o.date, true)}の記録】`);
   const agg = o.agg;
   if (agg) {
     const cats = Object.entries(agg.byCategory || {}).filter(([, r]) => r.actual > 0).sort((a, b) => b[1].actual - a[1].actual).slice(0, 8)
@@ -91,7 +91,7 @@ export function summaryText(o) {
  * o = { question, nowMin, open(記録中 { name, elapsedMin }|null), workMin, goals, gs(plan.goals), near([{ name, deadline }]), mood }
  */
 export function consultText(o) {
-  const lines = [ROLE, ...(o.persona ? [String(o.persona).slice(0, 200)] : []), '', '【いまの状況】']; // persona(v0.62): アシスタントの名前と口調
+  const lines = [ROLE, ...(o.persona ? [String(o.persona).slice(0, 700)] : []), '', '【いまの状況】']; // persona(v0.62): アシスタントの名前と口調
   if (o.nowMin != null) lines.push(`時刻${mm(o.nowMin % 1440)}`);
   if (o.open) lines.push(`記録中: ${o.open.name}(${fmtMinJa(o.open.elapsedMin)})`);
   else lines.push('いまは何も記録していない');
@@ -120,7 +120,7 @@ export function rephraseText(o) {
   const body = [o.title, ...(Array.isArray(o.lines) ? o.lines : [])].filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 160));
   const lines = [
     '時間管理アプリ「メリハリ」の案内役として、下の【答え】を 相手に伝える文に言い直してください。',
-    ...(o.persona ? [String(o.persona).slice(0, 300)] : []),
+    ...(o.persona ? [String(o.persona).slice(0, 700)] : []),
     '【答え】は アプリが記録から調べた 正しい内容です。名前・数・時刻は 1 つも変えず、項目を足さず、省かないでください。変えてよいのは 口調と つなぎの言葉だけです。前置きと締めは 1 文ずつまで。',
     '', '【聞かれたこと】', String(o.question || '').trim().slice(0, 200) || '(なし)',
     '', '【答え】', ...body,

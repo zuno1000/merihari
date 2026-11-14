@@ -128,7 +128,8 @@ export const MOODS = Object.freeze(['base', 'happy', 'work', 'worry', 'night']);
 export const MOOD_LABEL = Object.freeze({ base: 'ふだん', happy: 'うれしい', work: '作業中', worry: '気にかけている', night: 'おやすみ' });
 
 // ---- 自分で足す性格(v0.67・F24-16): 口調の 4 つ目以降。台詞は AI に書いてもらい(personaPrompt)、検査して custom[].set に持つ。無い場面は 土台(base)の内蔵の台詞 ----
-export const MAX_CUSTOM = 5, CUSTOM_PER = 4, LABEL_MAX = 12, HINT_MAX = 200, PLINE_MIN = 2, PLINE_MAX = 80;
+// v0.77(実機 FB「キャラクターの設定を書いていると 文字数の上限で切られる」): 上限は 端末の AI に渡す文(1,800 字)に収めるための 意図したものだったが、台詞は ほかの AI に頼む形になったので 広げた
+export const MAX_CUSTOM = 8, CUSTOM_PER = 4, LABEL_MAX = 20, HINT_MAX = 800, PLINE_MIN = 2, PLINE_MAX = 80;
 const isCustomId = (t) => typeof t === 'string' && /^c[0-9a-z]{1,10}$/.test(t);
 /** 口調の id。say などの tone には、内蔵の口調の文字列か、足した性格({ id, base, set, … }= voiceOf の戻り値)を渡せる */
 export const toneId = (tone) => (tone && typeof tone === 'object' ? tone.id : tone);
@@ -158,8 +159,8 @@ export function normalizeBuddy(raw) {
   };
 }
 // ---- キャラクターを複数(v0.68・F24-17・ユーザー要望「キャラクターを複数登録・キャラクターごとに名前や画像、性格を」)----
-export const MAX_CHARS = 5, MAIN_ID = 'main';
-export const SOURCE_MAX = 40, SAMPLE_MAX = 10, SAMPLE_LEN = 80;
+export const MAX_CHARS = 8, MAIN_ID = 'main', NAME_MAX = 20;
+export const SOURCE_MAX = 60, SAMPLE_MAX = 20, SAMPLE_LEN = 100;
 /** 台詞の例を整える: 文字列(1 行に 1 つ)か 配列 → 空でない行を SAMPLE_MAX 個まで・1 つ SAMPLE_LEN 字まで・頭の記号と かぎかっこは外す・重複は 1 つ */
 export function cleanSamples(raw) {
   const rows = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
@@ -172,7 +173,7 @@ export function cleanSamples(raw) {
   }
   return out;
 }
-export const DEFAULT_TITLE = '見習い司書', DEFAULT_WORLD = '大図書館。あなたの作業時間が 書庫の灯りになる', TITLE_MAX = 20, WORLD_MAX = 120;
+export const DEFAULT_TITLE = '見習い司書', DEFAULT_WORLD = '大図書館。あなたの作業時間が 書庫の灯りになる', TITLE_MAX = 40, WORLD_MAX = 400;
 /** 選んでいるキャラクターの 肩書きと世界: { title, world, custom(どちらかを自分で決めている) } */
 export function roleOf(b) {
   const c = b && Array.isArray(b.chars) ? b.chars.find((x) => x.id === b.cur) : null;
@@ -219,7 +220,7 @@ export function cropTransform(w, h, size, st) {
   return { k: (size / Math.max(1, Math.min(w, h))) * c.zoom, rad: (c.rot * Math.PI) / 180, dx: size / 2 + c.x * size, dy: size / 2 + c.y * size };
 }
 const isCharId = (t) => t === MAIN_ID || (typeof t === 'string' && /^k[0-9a-z]{1,10}$/.test(t));
-const cleanName = (x) => (typeof x === 'string' ? x.trim().slice(0, 12) : '');
+const cleanName = (x) => (typeof x === 'string' ? x.trim().slice(0, NAME_MAX) : '');
 /** キャラクターの一覧を整える: [{ id, name(12 字まで), tone(内蔵の口調 か 足した性格の id) }](MAX_CHARS 人まで・1 人も無ければ fallback) */
 export function normalizeChars(raw, toneOk, fallback) {
   const out = [];
@@ -595,30 +596,38 @@ export function coverage(c) {
   for (const g of GROUP_KEYS) { const keys = groupKeys(g); out[g] = { have: keys.filter((k) => c && c.set && Array.isArray(c.set[k]) && c.set[k].length).length, total: keys.length }; }
   return out;
 }
-/** AI に渡す文: その束の場面ぜんぶの台詞を「場面の名前: 台詞」で 1 行ずつ。voice = 足した性格(voiceOf の形) */
+/**
+ * AI に渡す文: その束の場面ぜんぶの台詞を「場面の名前: 台詞」で 1 行ずつ。voice = 足した性格(voiceOf の形)。
+ * v0.77: group に ALL_GROUP を渡すと ぜんぶの束を 1 つの文で頼む(場面ごとの個数は 行の末尾の【 】)。作品のキャラクター(role.source)は
+ * 「やさしく前向きに・命令や否定は使わない」の決まりを外し、そのキャラクターらしさを優先してもらう(再現度のため)
+ */
+export const ALL_GROUP = 'all';
 export function personaPrompt(group, name, voice, role = null) {
-  const g = GROUPS[group];
-  if (!g) return '';
-  const keys = groupKeys(group);
+  const all = group === ALL_GROUP, g = GROUPS[group];
+  if (!g && !all) return '';
+  const keys = all ? GROUP_KEYS.flatMap((x) => groupKeys(x)) : groupKeys(group);
+  const per = (k) => GROUPS[SCENES[k].g].per;
+  const total = keys.reduce((a, k) => a + per(k), 0);
   return [
     writerHead(name, voice, role),
     '',
-    `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} 個ずつ書いてください(ぜんぶで ${keys.length * g.per} 行)。`,
+    all ? `次の ${keys.length} の場面で このキャラクターが言う台詞を書いてください。個数は 場面ごとに違い、場面の行の末尾の【 】に書いてあります(ぜんぶで ${total} 行)。途中で止めず、最後の場面まで書いてください。`
+      : `次の ${keys.length} の場面で このキャラクターが言う台詞を、場面ごとに ${g.per} 個ずつ書いてください(ぜんぶで ${total} 行)。`,
     '',
     '書き方:',
     '・1 行に 1 つ。「場面の名前: 台詞」の形で書く(例: hello: やあ、待ってたよ。)。場面の名前は 下の英字をそのまま使う。',
     '・番号・かぎかっこ・説明・前置き・あとがきは付けない。',
-    `・1 つは 60 字まで。${g.per > 1 ? '同じ場面の台詞は 言い回しを変える。' : ''}`,
+    `・1 つは 60 字まで。${all || g.per > 1 ? '同じ場面の台詞は 言い回しを変える。' : ''}`,
     '・{n} のような { } の差し込みは、その場面に書いてあるものだけを、そのままの形で使う。「必ず」とあるものは 必ず入れる。',
     '・あとで何度も使い回すので、日付・時刻・タスクの名前などの「その場だけの事実」は入れない。',
-    '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
+    role && role.source ? '・このキャラクターらしさを いちばん大事にする。ぶっきらぼう・皮肉・命令口調・そっけなさも、そのキャラクターらしければ そのまま書く(相手を本気で傷つける言い方だけは避ける)。' : '・やさしく前向きな言い方にする。命令や否定の言い方は使わない。',
     customRole(role) ? worldRule(role) : '・書庫の灯り、棚、しおり、絵の扉 など 大図書館の言葉は、性格に合えば使う。',
     ...sourceRule(role), ...sampleRule(role),
     '',
     '場面:',
     ...keys.map((k) => {
       const sc = SCENES[k], vs = Object.keys(sc.v || {});
-      return `${k} = ${(customRole(role) && sc.wn) || sc.when}${vs.length ? `。差し込み: ${vs.map((v) => `{${v}}=${sc.v[v]}${(sc.need || []).includes(v) ? '・必ず' : ''}`).join(' / ')}` : ''}`;
+      return `${k} = ${(customRole(role) && sc.wn) || sc.when}${vs.length ? `。差し込み: ${vs.map((v) => `{${v}}=${sc.v[v]}${(sc.need || []).includes(v) ? '・必ず' : ''}`).join(' / ')}` : ''}${all ? ` 【${per(k)} 個】` : ''}`;
     }),
   ].join('\n');
 }
@@ -633,6 +642,86 @@ export function parsePersona(text, group = null) {
   }
   return out;
 }
+// ---- キャラクターを AI に調べてもらう(v0.77・F24-24・実機 FB「既存のゲームなどのキャラクターを設定しても 再現度が低い。事前の情報収集も AI に任せたい」)----
+// researchPrompt(調査を頼む文)→ 好きな AI(検索のできる Gemini など)→ 返事を parseProfile → applyProfile で キャラクター(作品・肩書き・世界・台詞の例)と 性格(名前・説明・土台)を 1 回で作る
+export const PROFILE_FIELDS = Object.freeze(['名前', '作品', '肩書き', '世界', '性格の名前', '性格と口調', '土台', '台詞の例']);
+/** 調査を頼む文。name(必須)と source(作品の名前・分かれば) */
+export function researchPrompt(name, source = '') {
+  const nm = cleanName(name), src = typeof source === 'string' ? source.replace(/\s+/g, ' ').trim().slice(0, SOURCE_MAX) : '';
+  if (!nm) return '';
+  return [
+    'ゲーム・アニメ・小説などのキャラクターを、時間管理アプリの案内役(利用者に話しかけるアシスタント)として再現するための資料を作ってください。',
+    '',
+    `調べるキャラクター: 「${nm}」${src ? `(作品「${src}」)` : ''}`,
+    '・検索が使えるなら使い、公式の情報(公式サイト・作中の台詞・公式の紹介文)を優先して調べてください。',
+    '・分からないことは 推測で埋めず、その項目を短くしてください。同じ名前のキャラクターが いくつもあるときは、いちばん有名なものを選び、「作品」に その名前を書いてください。',
+    '',
+    '下の 8 項目だけを、この順で答えてください。前置き・あとがき・出典の一覧・見出しや太字などの飾りは付けません。各項目は「項目名: 内容」の形で、行の頭から書きます。',
+    '',
+    `名前: アプリでの呼び名(${NAME_MAX}字まで。ふつうは キャラクターの名前)`,
+    `作品: 作品の正式な名前(${SOURCE_MAX}字まで)`,
+    `肩書き: 作品の中での立場や役割(${TITLE_MAX}字まで。例: 騎士団の副団長)`,
+    `世界: 作品の舞台と、その中で このキャラクターが どんな所で 何をしているか(${WORLD_MAX}字まで・改行なしの 1 段落)`,
+    `性格の名前: 性格を ひとことで(${LABEL_MAX}字まで。例: 皮肉屋の天才)`,
+    `性格と口調: 次のことを ${HINT_MAX}字までで、改行なしの 1 段落で。一人称 / 相手(利用者)の呼び方 / 語尾と口ぐせ / 敬語か くだけた口調か / 性格と価値観 / 相手との距離感(励まし方・たしなめ方)/ 好きなもの・こだわり / このキャラクターが 言わなそうなこと`,
+    '土台: bright(明るく軽め)/ polite(ていねい)/ cool(ぶっきらぼう)のうち、いちばん近いもの 1 つ(英字で)',
+    '台詞の例:',
+    `- (このキャラクターらしい台詞を ${SAMPLE_MAX} 個。1 行に 1 つ・1 つ ${SAMPLE_LEN}字まで。作中の台詞か、それに近い言い回しで。あいさつ・励まし・ねぎらい・たしなめる・雑談・別れ際 など、場面をばらけさせる)`,
+  ].join('\n');
+}
+/**
+ * 調査の返事 → { name, source, title, world, label, hint, base, samples[] }(見つかった項目だけ・上限で切る)。
+ * 「項目名: 内容」の行で項目が始まり、次の項目名の行まで その項目の続き(世界 / 性格と口調 は 1 段落につなぐ・台詞の例 は 1 行に 1 つ)。
+ * 見出しや太字(## ・ ** ・ - )が付いていても拾う。名前・性格と口調・台詞の例 の どれも無ければ null
+ */
+export function parseProfile(text) {
+  const KEY = { 名前: 'name', 作品: 'source', 肩書き: 'title', 世界: 'world', 性格の名前: 'label', 性格と口調: 'hint', 土台: 'base', 台詞の例: 'samples' };
+  const re = new RegExp(`^[\\s\\-*#・>●\\d.)]*[*_\`【\\[]*(${PROFILE_FIELDS.join('|')})[*_\`】\\]]*\\s*(?:[:：][*_]*\\s*(.*))?$`);
+  const raw = {};
+  let cur = null;
+  for (const row of String(text || '').split(/\r?\n/)) {
+    const m = re.exec(row);
+    if (m) { cur = KEY[m[1]]; raw[cur] = raw[cur] || []; if (m[2] && m[2].trim()) raw[cur].push(m[2].trim()); continue; } // 項目名のすぐあとが「:」か 行の終わり のときだけ 項目の始まり
+    if (cur && row.trim() && !/^[\s\-*_=]+$/.test(row)) raw[cur].push(row.trim());
+  }
+  const one = (k, max) => (raw[k] || []).join(' ').replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const out = {};
+  const put = (k, v) => { if (v && v.length) out[k] = v; };
+  put('name', one('name', 60).replace(/^[「『"]+|[」』"]+$/g, '').replace(/[(（].*$/, '').trim().slice(0, NAME_MAX));
+  put('source', one('source', 200).replace(/^[「『"]+|[」』"]+$/g, '').slice(0, SOURCE_MAX));
+  put('title', one('title', TITLE_MAX));
+  put('world', one('world', WORLD_MAX));
+  put('label', one('label', 60).replace(/^[「『"]+|[」』"]+$/g, '').slice(0, LABEL_MAX));
+  put('hint', one('hint', HINT_MAX));
+  const b = one('base', 60);
+  if (b) out.base = /polite|ていねい|丁寧/i.test(b) ? 'polite' : /cool|ぶっきらぼう|クール/i.test(b) ? 'cool' : 'bright';
+  const sm = (raw.samples || []).map((x) => x.replace(/[*_`]+/g, '')), marked = sm.filter((x) => /^[-・●\d「『"]/.test(x)); // 印の付いた行があれば その行だけ(あとがきの文を 例にしない)
+  put('samples', cleanSamples(marked.length ? marked : sm));
+  return out.name || out.hint || out.samples ? out : null;
+}
+/**
+ * 調査の結果を 取り込む。newId を渡せば 新しいキャラクター(その名前で足して 替える)、無ければ いま選んでいるキャラクターに上書き(返事に無い項目は そのまま)。
+ * 性格(label / hint があるとき): 新しいキャラクター か いまが内蔵の口調なら customId で足す・いまが足した性格なら それを直す(台詞は残る)。
+ * 戻り値 { buddy, persona: 'new' | 'updated' | 'full'(性格が いっぱい)| 'none' } / 足せなければ null
+ */
+export function applyProfile(b, p, { newId = null, customId = null } = {}) {
+  if (!p || typeof p !== 'object') return null;
+  let next = normalizeBuddy(b);
+  if (newId) { next = addChar(next, newId, p.name || ''); if (!next) return null; }
+  const id = next.cur;
+  const patch = {};
+  for (const k of ['name', 'source', 'title', 'world', 'samples']) if (p[k] && p[k].length) patch[k] = p[k];
+  next = patchChar(next, id, patch);
+  let persona = 'none';
+  const label = p.label || (p.hint ? (p.name || next.name) : '');
+  if (label) {
+    const mine = !newId ? next.custom.find((c) => c.id === next.tone) : null;
+    if (mine) { next = patchCustom(next, mine.id, { label, ...(p.hint ? { hint: p.hint } : {}), ...(p.base ? { base: p.base } : {}) }); persona = 'updated'; }
+    else { const added = addCustom(next, customId, { label, hint: p.hint || '', base: p.base || 'bright' }); if (added) { next = added; persona = 'new'; } else persona = 'full'; }
+  }
+  return { buddy: next, persona };
+}
+
 /** 性格を足す。戻り値は新しい buddy(口調を その性格に)。MAX_CUSTOM 件を超えるか 名前が空なら null */
 export function addCustom(b, id, { label, hint, base } = {}) {
   const cur = normalizeBuddy(b);
@@ -767,8 +856,8 @@ export function writerHead(name, tone, role = null) {
 /** AI(F11・ショートカット)に渡す人格の一文。返事をキャラクターの声にする */
 export function persona(name, tone, role = null) {
   const b = normalizeBuddy({ name });
-  const head = customRole(role) ? `あなたは${whoLine(role, b.name)}です。${role.world ? `舞台は「${role.world}」です。` : ''}図書館や書庫の話は この舞台には出てきません。${role.samples && role.samples.length ? `口調の手本は 次の台詞です: ${role.samples.slice(0, 5).map((s) => `「${s}」`).join('')}。` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
+  const head = customRole(role) ? `あなたは${whoLine(role, b.name)}です。${role.world ? `舞台は「${role.world.slice(0, 160)}」です。` : ''}図書館や書庫の話は この舞台には出てきません。${role.samples && role.samples.length ? `口調の手本は 次の台詞です: ${role.samples.slice(0, 5).map((s) => `「${s}」`).join('')}。` : ''}` // v0.69: 肩書きと世界を決めたキャラクター
     : `あなたは大図書館の見習い司書「${b.name}」です。相手の作業時間が書庫の灯りになります。`;
-  if (tone && typeof tone === 'object' && !tone.builtin) return `${head}あなたの性格と口調は「${tone.label}」${tone.hint ? `(${tone.hint})` : ''}です。この性格と口調で答えてください。`; // v0.67: 足した性格
+  if (tone && typeof tone === 'object' && !tone.builtin) return `${head}あなたの性格と口調は「${tone.label}」${tone.hint ? `(${tone.hint.slice(0, 300)})` : ''}です。この性格と口調で答えてください。`; // v0.77: 説明が長くなったので、会話に渡す分は 300 字まで(台詞を頼む文には ぜんぶ入る) // v0.67: 足した性格
   return `${head}${TONE_HINT[baseOf(tone)]}で答えてください。`;
 }
