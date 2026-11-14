@@ -178,6 +178,12 @@ const LINES = Object.freeze({
   near: { bright: ['この先 7 日の期限、棚に並べておいたよ。'], polite: ['この先 7 日の期限を並べておきました。'], cool: ['この先 7 日の期限だ。'] },
   report_open: { bright: ['数字で見ると、こんな一日だったよ。', 'この日の灯りを、ぜんぶ並べてみたよ。'], polite: ['数字でご覧になると、このような一日でした。'], cool: ['数字だ。見ておけ。'] },
   report_period: { bright: ['この期間を まとめて見てみよう。'], polite: ['この期間をまとめてご覧ください。'], cool: ['まとめて見ろ。'] },
+  ins_band: { bright: ['作業がいちばん進むのは{name}みたい。この2週間の{pct}%が、そこだったよ。', '{name}の灯りがいちばん明るいよ。2週間の{pct}%。'], polite: ['作業がもっとも進むのは{name}です。この2週間の{pct}%を占めています。'], cool: ['いちばん進むのは{name}だ。2週間の{pct}%。'] },
+  ins_week_up: { bright: ['この7日は1日{avg}。その前の7日より{diff}多いよ!', '先週より1日{diff}ぶん、灯りが増えてる。いまは1日{avg}だよ。'], polite: ['この7日は1日{avg}です。その前の7日より{diff}多くなっています。'], cool: ['この7日は1日{avg}。前より{diff}多い。'] },
+  ins_week_down: { bright: ['この7日は1日{avg}。その前より{diff}少なめだけど、波はあるものだよ。'], polite: ['この7日は1日{avg}です。その前より{diff}少なめですが、波はあるものです。'], cool: ['この7日は1日{avg}。前より{diff}少ない。波はある。'] },
+  ins_weekday: { bright: ['{day}曜はダラダラが長くなりやすいみたい(平均{avg})。覚えておくね。'], polite: ['{day}曜はダラダラが長くなりやすいようです(平均{avg})。'], cool: ['{day}曜はダラダラが長い(平均{avg})。'] },
+  ins_weekday_today: { bright: ['きょうは{day}曜。ダラダラが長くなりやすい日だから、最初の一歩を小さくしよう。'], polite: ['今日は{day}曜です。ダラダラが長くなりやすい日ですので、最初の一歩を小さくしましょう。'], cool: ['きょうは{day}曜。崩れやすい日だ。最初の一歩を小さくしろ。'] },
+  ins_run: { bright: ['この30日でいちばん長く集中できたのは{best}({date})。すごいよね。', '{date}の{best}が、この30日の最長記録だよ。'], polite: ['この30日でもっとも長い集中は{best}({date})でした。'], cool: ['この30日の最長は{best}({date})だ。'] },
   bye: { bright: ['じゃあ、いってらっしゃい!', '灯りを持って、いってらっしゃい!'], polite: ['それでは、いってらっしゃいませ。'], cool: ['行ってこい。'] },
 });
 export const LINE_KEYS = Object.freeze(Object.keys(LINES));
@@ -347,6 +353,30 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });
   add('hello', 'base');
+  return out;
+}
+
+/**
+ * 気づきを アシスタントの台詞にする材料(v0.65・ユーザー要望「きょうの気づきは文字だけなので、キャラクターのコメントに統廃合」): insights と同じ中身を、
+ * 台詞の場面(key)と 差し込み(vars)で返す。開いた段のぶんだけ・言えるものだけ。戻り値 [{ key, vars, mood }]
+ */
+export function facts({ entries, settings, today, workMin, progress = null }) {
+  const lv = levelOf(workMin);
+  const can = (k) => lv.unlocked.includes(k);
+  const out = [];
+  if (progress && can('progress')) {
+    const q = progress.quest, a = progress.art;
+    if (q && !q.done) out.push(q.unread > 0 ? { key: 'unread', vars: { n: q.unread }, mood: 'happy' } : { key: 'quest_wait', vars: { n: q.need }, mood: 'base' });
+    if (a && !a.allDone && a.next) out.push({ key: 'art_wait', vars: { n: a.next.pieces, label: a.next.label, kind: a.name || '絵' }, mood: 'base' });
+  }
+  const b = can('band') ? bestBand(entries, settings, today) : null;
+  if (b) out.push({ key: 'ins_band', vars: { name: b.name, pct: Math.round(b.share * 100) }, mood: 'happy' });
+  const w = can('week') ? weekDelta(entries, settings, today) : null;
+  if (w) out.push({ key: w.diff >= 0 ? 'ins_week_up' : 'ins_week_down', vars: { avg: fmtMin(w.avg), diff: fmtMin(Math.abs(w.diff)) }, mood: w.diff >= 0 ? 'happy' : 'base' });
+  const d = can('weekday') ? driftWeekday(entries, settings, today) : null;
+  if (d) out.push({ key: d.today ? 'ins_weekday_today' : 'ins_weekday', vars: { day: DAY_JA[d.day], avg: fmtMin(d.avg) }, mood: 'worry' });
+  const r = can('run') ? longestRun(entries, settings, today) : null;
+  if (r) out.push({ key: 'ins_run', vars: { best: fmtMin(r.best), date: fmtMD(r.date) }, mood: 'happy' });
   return out;
 }
 

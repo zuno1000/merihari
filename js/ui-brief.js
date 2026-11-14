@@ -134,7 +134,7 @@ export function openBrief(ctx) {
           el('button.btn.sm', { type: 'button', onclick: () => { close(); ctx.go('tasks'); } }, 'タスクを開く'),
         ]),
       ] },
-      reco.length ? { name: 'おすすめ', nodes: [bubble('bye', {}, 'happy'), ...reco] } : null,
+      reco.length ? { name: 'おすすめ', nodes: reco } : null, // v0.65: 頭の吹き出しは recoPage の「気づき」(タップで次へ)
     ].filter(Boolean);
     page = Math.max(0, Math.min(page, pages.length - 1));
     const last = page === pages.length - 1;

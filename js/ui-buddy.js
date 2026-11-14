@@ -8,13 +8,13 @@ import * as log from './log.js';
 import * as plan from './plan.js';
 import * as ai from './ai.js';
 import * as photos from './photos.js';
-import * as weather from './weather.js';
 import * as feed from './feed.js';
 import { workByDay } from './quest.js';
 import { questStatus } from './ui-quest.js';
 import { artStatus } from './ui-art.js';
-import { loadWeather } from './ui-today.js';
-import { bgmOn, playBgm } from './ui-bgm.js';
+import { loadWeather, weatherCard } from './ui-today.js';
+import { bgmOn, suggestBgm, playSuggested } from './ui-bgm.js';
+import * as bgm from './bgm.js';
 import { feedOn, feedRow, ensureSource } from './ui-feed.js';
 import { dateKey, minuteOfDay, effectiveDay, fmtMin, hm, windowFor } from './time.js';
 import { autoSync } from './sync.js';
@@ -241,25 +241,60 @@ export function openBuddy(ctx, onClose = null) {
 }
 
 /**
- * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す(朝=天気 → BGM → 記事 1 / 昼=BGM → 記事 2 → 天気 / 夜=記事 2 → あすの天気 → BGM)。
- * 有効にしている機能のぶんだけ。最後に きょうの気づき(段のぶん)。戻り値は節の配列(何も無ければ空)。
+ * 気づきの吹き出し(v0.65): 日報の おすすめ のページの頭。きょうの気づき(小説とピースの進み・得意な時間帯・先週との違い・崩れやすい曜日・最長の集中)を
+ * アシスタントの台詞で 1 つずつ言う。吹き出しをタップで次へ(名前の横に 1 / 4)。言えることが無ければ 見送りの ひとこと。止めていれば null
+ */
+function insightBubble() {
+  if (!buddyOn()) return null;
+  const b = B(), d = store.state.data;
+  const name = el('span.bd-name'), text = el('span.bd-text'), av = el('span.bd-avwrap');
+  let turn = 0, mood = null;
+  const paint = () => {
+    const list = buddy.facts({ entries: d.entries, settings: S(), today: now().date, workMin: totalWork(), progress: primed });
+    const all = list.length ? list : [{ key: 'bye', vars: {}, mood: 'happy' }];
+    const x = all[turn % all.length];
+    name.textContent = all.length > 1 ? `${b.name}・${(turn % all.length) + 1} / ${all.length}` : b.name;
+    text.textContent = buddy.say(x.key, b.tone, x.vars, seed() + Math.floor(turn / all.length), ex(x.key));
+    if (x.mood !== mood) { mood = x.mood; clear(av); av.append(avatar(mood, 44)); }
+  };
+  const node = el('div.bd-say', [av, el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかの気づきを聞く', onclick: () => { turn++; paint(); } }, [name, text])]);
+  paint();
+  prime(() => { if (node.isConnected) paint(); });
+  return node;
+}
+
+/**
+ * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 気づきの吹き出し → 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す
+ * (朝=天気 → BGM → 記事 1 / 昼=BGM → 記事 2 → 天気 / 夜=記事 2 → あすの天気 → BGM)。有効にしている機能のぶんだけ。
+ * v0.65(実機 FB): 天気は 天気のシートと同じ札(絵・気温・傘・降水・服装)、BGM は 選んだ 1 曲のサムネイル・題名・ジャンル・長さ を見せてから流す。
+ * きょうの気づきの文字だけの箱は やめ、吹き出しに統合。戻り値は節の配列(何も無ければ空)。
  */
 export function recoPage(slot, redraw) {
   const s = S(), local = store.state.local, tone = B().tone, on = buddyOn();
-  const line = (key, vars) => (on ? buddy.say(key, tone, vars, seed()) : '');
+  const line = (key, vars) => (on ? buddy.say(key, tone, vars, seed(), ex(key)) : '');
   const card = (kicker, text, ...more) => el('div.bd-card', [el('span.bd-kick', kicker), text ? el('p.bd-line', text) : null, ...more].filter(Boolean));
   const parts = {};
   const r = s.weather?.enabled && Array.isArray(s.weather.regions) ? s.weather.regions[0] : null;
   if (r) {
     const d = (local.weatherCache || {})[r.id]?.data || null;
     loadWeather(r, () => redraw());
-    const day = d && slot === 'evening' && d.tomorrow ? d.tomorrow : d;
-    if (day) {
-      const text = weather.lineText(day);
-      parts.weather = card(slot === 'evening' && d.tomorrow ? `あすの天気・${r.name}` : `天気・${r.name}`, on ? `${line('weather', { text })}${weather.umbrella(day) ? line('umbrella') : ''}` : `${text}${weather.umbrella(day) ? '・傘' : ''}`);
+    const tmr = slot === 'evening' && d && d.tomorrow;
+    if (d) parts.weather = el('div.bd-wx', [weatherCard(tmr ? { ...r, name: `${r.name}・あす` } : r, tmr ? { ...d.tomorrow, tomorrow: null } : d, 'ok')]);
+  }
+  if (bgmOn()) {
+    const sg = suggestBgm(slot);
+    if (!sg) bgm.loadCatalog().then(() => redraw()).catch(() => {});
+    else {
+      const song = sg.song;
+      const genres = (Array.isArray(song.g) ? song.g : []).slice(0, 3).map((g) => bgm.GENRE_LABELS[g] || g);
+      parts.bgm = card('作業用 BGM', line('bgm'),
+        el('button.bd-song', { type: 'button', 'aria-label': `${song.t} を流す`, onclick: () => playSuggested(song, redraw) }, [
+          el('span.bd-thumb', [el('img', { src: bgm.thumbUrl(song.id), alt: '', loading: 'lazy' }), el('i', { 'aria-hidden': 'true' }, '▶')]),
+          el('span.bd-songmain', [el('span.bd-songtitle', song.t), el('span.bd-songmeta', [...genres.map((g) => el('span.bd-tag', g)), song.d ? el('span.bd-dur', song.d >= 60 ? `${Math.round(song.d / 6) / 10} 時間` : `${song.d} 分`) : null])]),
+        ]),
+        el('div.row.bd-songact', [el('button.btn.sm.primary', { type: 'button', onclick: () => playSuggested(song, redraw) }, '♪ 流す'), el('button.btn.sm.ghost', { type: 'button', onclick: () => { suggestBgm(slot, true); redraw(); } }, 'ほかの曲')]));
     }
   }
-  if (bgmOn()) parts.bgm = card('作業用 BGM', line('bgm'), el('div.row', el('button.btn.sm', { type: 'button', onclick: () => playBgm() }, '♪ 1 曲 流す')));
   if (feedOn()) {
     ensureSource();
     const f = feed.feedNow();
@@ -271,34 +306,8 @@ export function recoPage(slot, redraw) {
   }
   const order = slot === 'morning' ? ['weather', 'bgm', 'article'] : slot === 'noon' ? ['bgm', 'article', 'weather'] : ['article', 'weather', 'bgm'];
   const out = order.map((k) => parts[k]).filter(Boolean);
-  const box = buddyBox();
-  if (box) out.push(box);
-  return out;
-}
-
-/**
- * きょうの気づき(日報の おすすめ のページの最後): 段(Lv.)・開いた力のぶんの気づき(札+1 行)・次の力まで あと何時間。
- * 小説と図録の進みは、読み込めてから足す(読めなければ言わないだけ)。
- */
-export function buddyBox() {
-  if (!FEATURES.BUDDY || !store.state.data.meta.setupAt) return null;
-  const d = store.state.data, s = d.settings, n = now();
-  const workMin = totalWork();
-  const lv = buddy.levelOf(workMin);
-  const rows = el('div.brief-sug');
-  const box = el('div.buddy', [
-    el('h3', `きょうの気づき(Lv.${lv.level})`),
-    rows,
-    lv.next ? el('p.muted.small.buddy-next', `あと ${fmtMin(lv.next.needMin)} の作業で「${lv.next.name}」を言えるようになります`) : null,
-  ]);
-  const fill = (progress) => {
-    const list = buddy.insights({ entries: d.entries, settings: s, today: n.date, workMin, progress });
-    clear(rows);
-    for (const x of list) rows.append(el('div.bs-row', [el('span.bs-k', x.label), el('span.bs-t', x.text)]));
-  };
-  fill(primed);
-  prime(() => { if (rows.isConnected && primed) fill(primed); });
-  return box;
+  const say = insightBubble();
+  return say ? [say, ...out] : out;
 }
 
 /** 設定の一覧の右側 */

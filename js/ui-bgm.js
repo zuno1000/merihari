@@ -127,3 +127,28 @@ function thumb(id) {
 }
 const HEART = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' })]);
 const MINUS = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 8.5 }), svg('path', { d: 'M8 12h8' })]);
+
+/**
+ * 日報の おすすめ(v0.65・実機 FB「おすすめの 1 曲の題名などが出ていない」): この時間に合う 1 曲を 先に選んで見せる(聞いた印はまだ付けない)。
+ * 同じ枠(key)のあいだは 1 時間 同じ曲を返す(描き直すたびに変わらないように)。again で選び直す。カタログが手元に無ければ null(呼ぶ側が loadCatalog して描き直す)。
+ */
+let suggestion = null;
+export function suggestBgm(key = '', again = false) {
+  const cat = bgm.catalogNow();
+  if (!cat) return null;
+  if (again || !suggestion || suggestion.key !== key || Date.now() - suggestion.at > 3600000) {
+    const r = bgm.pick(cat, P(), S(), { hour: new Date().getHours(), mood: moodNow() });
+    if (!r) return null;
+    suggestion = { ...r, key, at: Date.now() };
+  }
+  return suggestion;
+}
+/** 見せておいた曲を流す(聞いた印を付けて YouTube で開く。タップの中で呼ぶ)。次は別の曲を選ぶ */
+export function playSuggested(song, rerender = null) {
+  markPlayed(song.id, effNow().date);
+  const url = bgm.openSong(song.id, { app: S().bgm?.app !== false, onStay });
+  toast(`♪ ${song.t}`);
+  suggestion = null;
+  if (rerender) rerender();
+  return url;
+}

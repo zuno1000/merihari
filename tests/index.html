@@ -1561,6 +1561,21 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(['review_head', 'review_mid', 'review_none', 'review_past', 'diary_ask', 'diary_past', 'ai_offer', 'near', 'report_open', 'report_period', 'quest_wait', 'art_wait'].every((k) => Bd.LINE_KEYS.includes(k)) && Bd.say('review_head', 'bright', { text: 'よい一日' }, 0) === '記録を読んだよ。きょうは「よい一日」だね。' && Bd.say('review_head', 'cool', { text: 'よい一日' }, 0) === '記録は読んだ。「よい一日」だ。', 'ふり返りタブとレポートの台詞(判定を ひとことで・気持ちを残す誘い・まとめる申し出・期限・レポートの頭)');
     }
 
+    // ---- v0.65・F24-14: 気づきを台詞に(buddy.facts)----
+    log('\n# v0.65 気づきを アシスタントの台詞に');
+    {
+      const Bd = M.buddy, d8 = S.defaultSettings();
+      const workId = d8.categories.find((c) => M.store.catRole(d8, c.id).work).id, driftId = d8.categories.find((c) => M.store.catRole(d8, c.id).drift).id;
+      const en = (id, date, start, end, categoryId = workId) => ({ id, date, start, end, categoryId, deletedAt: null });
+      const T0 = '2026-11-30', E = {};
+      for (let i = 1; i <= 14; i++) { const dt = T.addDays(T0, -i); E[`w${i}`] = en(`w${i}`, dt, '09:30', i <= 7 ? '11:30' : '10:30'); E[`n${i}`] = en(`n${i}`, dt, '21:30', '22:00'); }
+      for (const i of [1, 8, 15, 22]) E[`g${i}`] = en(`g${i}`, T.addDays(T0, -i), '13:00', '15:00', driftId);
+      const prog = { quest: { need: 3, unread: 0, done: false }, art: { need: 2, allDone: false, name: '写真', next: { label: '場所', pieces: 4 } } };
+      const f1 = Bd.facts({ entries: E, settings: d8, today: T0, workMin: 10, progress: prog }), f5 = Bd.facts({ entries: E, settings: d8, today: T0, workMin: 61 * 60, progress: prog }), fd = Bd.facts({ entries: E, settings: d8, today: T.addDays(T0, -1), workMin: 61 * 60 });
+      ok(eq(f1.map((x) => x.key), ['quest_wait', 'art_wait']) && eq(f5.map((x) => x.key), ['quest_wait', 'art_wait', 'ins_band', 'ins_week_up', 'ins_weekday', 'ins_run']) && eq(f5[2].vars, { name: '午前(9〜12 時)', pct: 75 }) && eq(f5[3].vars, { avg: '2h30m', diff: '1h' }) && f5[4].vars.day === '日' && fd.some((x) => x.key === 'ins_weekday_today') && eq(Bd.facts({ entries: {}, settings: d8, today: T0, workMin: 61 * 60 }), []) && Bd.facts({ entries: E, settings: d8, today: T0, workMin: 0, progress: { quest: { need: 0, unread: 2, done: false }, art: null } })[0].key === 'unread', 'facts: 気づきを 台詞の場面と差し込みで返す(開いた段のぶんだけ・言えるものだけ)');
+      ok(f5.every((x) => Bd.TONES.every((t) => { const s = Bd.say(x.key, t, x.vars, 0); return s.length > 0 && !/[ 　{}]/.test(s); })) && Bd.say('ins_band', 'bright', f5[2].vars, 0) === '作業がいちばん進むのは午前(9〜12時)みたい。この2週間の75%が、そこだったよ。' && Bd.say('ins_week_up', 'cool', f5[3].vars, 0) === 'この7日は1日2h30m。前より1h多い。' && Bd.say('ins_week_down', 'bright', { avg: '2h', diff: '30m' }, 0).includes('波はあるものだよ'), '気づきの台詞: どの口調でも言える・空白が入らない・減った週も責めない');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

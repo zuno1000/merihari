@@ -390,25 +390,7 @@ export function weatherSheet(ctx) {
   sheet((close) => {
     const cards = el('div.wxcards');
     const foot = el('p.wx-foot.muted.small');
-    const cardOf = (r, d, state) => {
-      const key = d ? weather.iconKey(d.code) : 'none';
-      const u = d ? weather.umbrella(d) : null; // v0.47: 傘が要る日は先頭に傘のチップ(大きく)。服装の一言から「傘」は外す(重ねない)
-      const chips = d ? [
-        u ? el('span.wxchip.umb', { class: `wxchip umb ${u}` }, [weatherIcon('umbrella', 'wx-chip-ico'), u === 'umbrella' ? '傘を持って' : '折りたたみ傘があると安心']) : null,
-        d.pop != null ? el('span.wxchip.pop', [el('i.wx-drop', { 'aria-hidden': 'true' }), `降水 ${d.pop}%`]) : null,
-        ...weather.clothing(d).split('・').filter((x) => x && x !== '傘' && x !== '折りたたみ傘').map((x) => el('span.wxchip', x)),
-      ].filter(Boolean) : [];
-      return el('div.wxcard', { class: `wxcard k-${key}`, dataset: { id: r.id } }, [
-        el('span.wx-name', r.name),
-        el('div.wx-main', [
-          weatherIcon(u ? 'umbrella' : key, 'wx-big'), // v0.47: 傘が要る日は大きな絵も傘
-          d ? el('div.wx-temps', [el('b.wx-hi', d.tmax != null ? `${d.tmax}°` : '–'), el('span.wx-lo', d.tmin != null ? `/ ${d.tmin}°` : '')]) : el('div.wx-temps', el('span.wx-lo', state === 'loading' ? '取得中…' : 'いまは取れません')),
-          d ? el('span.wx-label', d.label || '') : null,
-        ]),
-        chips.length ? el('div.wxchips', chips) : null,
-        d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.umbrella(d.tomorrow) ? 'umbrella' : weather.iconKey(d.tomorrow.code), 'wx-sm'), /* v0.47.1: あすも傘が要れば傘の絵 */ el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
-      ]);
-    };
+    const cardOf = weatherCard; // v0.65: 札は モジュールの関数に出した(日報でも使う)
     const draw = (r, d, state) => { const n = cardOf(r, d, state); const old = cards.querySelector(`.wxcard[data-id="${CSS.escape(r.id)}"]`); if (old) old.replaceWith(n); else cards.append(n); refoot(); };
     const refoot = () => { const ats = regions.map((r) => wxCache()[r.id]?.at).filter(Boolean); foot.textContent = ats.length ? `取得 ${fmtClock(Math.max(...ats))}・Open-Meteo` : 'Open-Meteo'; };
     const load = (force = false) => {
@@ -427,6 +409,27 @@ export function weatherSheet(ctx) {
       el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
     ];
   });
+}
+
+/** 天気の札(地域の名前・絵・最高 / 最低・ひとこと・傘 / 降水 / 服装 のチップ・あす)。天気のシートと 日報の おすすめ(ui-buddy)で使う。d が無ければ state('loading' / 'fail')の文 */
+export function weatherCard(r, d, state) {
+  const key = d ? weather.iconKey(d.code) : 'none';
+  const u = d ? weather.umbrella(d) : null; // v0.47: 傘が要る日は先頭に傘のチップ(大きく)。服装の一言から「傘」は外す(重ねない)
+  const chips = d ? [
+    u ? el('span.wxchip.umb', { class: `wxchip umb ${u}` }, [weatherIcon('umbrella', 'wx-chip-ico'), u === 'umbrella' ? '傘を持って' : '折りたたみ傘があると安心']) : null,
+    d.pop != null ? el('span.wxchip.pop', [el('i.wx-drop', { 'aria-hidden': 'true' }), `降水 ${d.pop}%`]) : null,
+    ...weather.clothing(d).split('・').filter((x) => x && x !== '傘' && x !== '折りたたみ傘').map((x) => el('span.wxchip', x)),
+  ].filter(Boolean) : [];
+  return el('div.wxcard', { class: `wxcard k-${key}`, dataset: { id: r.id } }, [
+    el('span.wx-name', r.name),
+    el('div.wx-main', [
+      weatherIcon(u ? 'umbrella' : key, 'wx-big'), // v0.47: 傘が要る日は大きな絵も傘
+      d ? el('div.wx-temps', [el('b.wx-hi', d.tmax != null ? `${d.tmax}°` : '–'), el('span.wx-lo', d.tmin != null ? `/ ${d.tmin}°` : '')]) : el('div.wx-temps', el('span.wx-lo', state === 'loading' ? '取得中…' : 'いまは取れません')),
+      d ? el('span.wx-label', d.label || '') : null,
+    ]),
+    chips.length ? el('div.wxchips', chips) : null,
+    d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.umbrella(d.tomorrow) ? 'umbrella' : weather.iconKey(d.tomorrow.code), 'wx-sm'), /* v0.47.1: あすも傘が要れば傘の絵 */ el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
+  ]);
 }
 
 /** 解読と絵の行を横に並べる(どちらも無ければ何も出さない) */
