@@ -36,7 +36,7 @@ export function renderDrinks(view, ctx) {
   const all = drinks.listDrinks(D());
   const sum = drinks.summary(D());
   const list = drinks.listDrinks(D(), filter);
-  const chips = el('div.chips.small', { role: 'group', 'aria-label': '種類で絞る' }, [
+  const chips = el('div.chips.small.dk-filter', { role: 'group', 'aria-label': '種類で絞る' }, [
     el('button.chip.sm2', { type: 'button', class: `chip sm2${filter == null ? ' on' : ''}`, 'aria-pressed': filter == null ? 'true' : 'false', onclick: () => { filter = null; rerender(); } }, `すべて ${all.length}`),
     ...drinks.KINDS.filter((k) => sum[k.id]).map((k) => el('button.chip.sm2', { type: 'button', class: `chip sm2${filter === k.id ? ' on' : ''}`, 'aria-pressed': filter === k.id ? 'true' : 'false', onclick: () => { filter = k.id; rerender(); } }, `${k.name} ${sum[k.id].n}`)),
   ]);

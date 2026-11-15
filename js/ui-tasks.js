@@ -217,8 +217,9 @@ export function renderTasks(view, ctx, listKey = null) {
   // v0.47.2(ユーザー要望): 「今週が期限」(日曜まで)だと週末に近いほど一覧が短くなり、来週の頭の期限が見えなかった → 常に 7 日先まで。「いつまで」の 今週(日曜)は変えない
   const isDuty = (t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && !overdueIds.has(t.id);
   const weekEnd = addDays(today, 7); // v0.47.2: 1 週間後まで(「いつまで」の 今週 とは別)
-  const todayList = (FEATURES.TASK_ESTIMATE ? tasks.filter((t) => !t.doneAt && (goalOf[t.id]?.kind === 'deadline' || goalOf[t.id]?.kind === 'todo') && !overdueIds.has(t.id)) : tasks.filter((t) => isDuty(t) && plan.deadlineKey(t, today) === today)).sort(byDeadline);
-  const weekList = FEATURES.TASK_ESTIMATE ? [] : tasks.filter((t) => isDuty(t) && plan.deadlineKey(t, today) > today && plan.deadlineKey(t, today) <= weekEnd).sort(byDeadline);
+  const in24 = (t) => plan.deadlineKey(t, today) === today || plan.dueIn24h(t, today, nowMin); // v0.82・F5-18(ユーザー要望): 強く出すのは「今日が期限」ではなく「24 時間以内が期限」(明日の この時刻までの 時刻つきも)
+  const todayList = (FEATURES.TASK_ESTIMATE ? tasks.filter((t) => !t.doneAt && (goalOf[t.id]?.kind === 'deadline' || goalOf[t.id]?.kind === 'todo') && !overdueIds.has(t.id)) : tasks.filter((t) => isDuty(t) && in24(t))).sort(byDeadline);
+  const weekList = FEATURES.TASK_ESTIMATE ? [] : tasks.filter((t) => isDuty(t) && !in24(t) && plan.deadlineKey(t, today) > today && plan.deadlineKey(t, today) <= weekEnd).sort(byDeadline);
   const todayIds = new Set([...todayList, ...weekList].map((t) => t.id));
   const memos = tasks.filter((t) => !t.doneAt && t.kind === 'memo').sort((a, b) => ((a.updatedAt || '') < (b.updatedAt || '') ? 1 : -1)); // v0.22: 新しい順
   const duties = tasks.filter((t) => !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && !todayIds.has(t.id) && !overdueIds.has(t.id)).sort(byDeadline);
@@ -263,7 +264,7 @@ export function renderTasks(view, ctx, listKey = null) {
       ? () => { t.checks = plan.toggleCheck(t, today); saveTask(t); toast(plan.isChecked(t, today) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); }
       : () => toggleDone(t, rerender);
     const dueKey = !t.doneAt && !t.repeat && t.kind !== 'wish' && t.kind !== 'memo' && t.deadline ? plan.deadlineKey(t, today) : null;
-    const dueCls = dueKey === today ? ' due-today' : dueKey === addDays(today, 1) ? ' due-tmr' : ''; // v0.47: 今日 > 明日 の順に目立つ(期限切れは .over の赤のまま)
+    const dueCls = dueKey && in24(t) ? ' due-today' : dueKey === addDays(today, 1) ? ' due-tmr' : ''; // v0.47: 今日 > 明日 の順に目立つ(期限切れは .over の赤のまま)
     return el('div.trow', { class: `trow${over ? '' : dueCls}` }, [
       el('button.check', { type: 'button', 'aria-label': habit ? `${t.name} を${checked ? `${span}の済みから外す` : `${span}は済んだことにする`}` : `${t.name} を${t.doneAt ? '未完了に戻す' : '完了にする'}`, class: `check${checked ? ' on' : ''}`, onclick: onCheck }, checked ? '✓' : ''),
       el('button.tmain', { type: 'button', 'aria-label': `${t.name} を編集`, onclick: () => editSheet(t, today, rerender, ctx) }, [
@@ -303,7 +304,7 @@ export function renderTasks(view, ctx, listKey = null) {
     quickAdd(today, rerender),
     overdue.length ? el('section.group', [el('h2', '期限切れ'), el('div.list', overdue.map(row)), el('div.row', { style: { marginTop: '6px' } }, [el('span.grow'), el('button.btn.sm', { type: 'button', onclick: () => overdueCheck(ctx, { force: true }) }, 'まとめて処理')])]) : null,
     FEATURES.TASK_ESTIMATE ? section('今日', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、今日やる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
-      : section('今日が期限', todayList, tasks.some((t) => !t.doneAt) ? '今日が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
+      : section('24時間以内が期限', todayList, tasks.some((t) => !t.doneAt) ? '24 時間以内が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
     FEATURES.TASK_ESTIMATE ? null : section('1週間以内が期限', weekList, `1週間以内(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
     el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),
   ].filter(Boolean));

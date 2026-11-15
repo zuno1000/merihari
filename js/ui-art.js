@@ -35,6 +35,9 @@ function snapshot() {
   return { p, workMin, seenDone, unseenDone: p.done - seenDone, active: !!o && store.entryRole(S(), o).work };
 }
 
+/** 次のピースまで あと何分の作業か(v0.82・「次はこれ」の ひとこと用)。まだ読み込んでいない・ぜんぶ集めた・使っていない なら null */
+export function artNeed() { if (!artOn() || !raw) return null; const s = snapshot(); return s.p.allDone ? null : { need: s.p.need, text: `${art.kindName(works[s.p.cur])}のピースが 1 つ開きます` }; }
+
 /** ホームの 1 行: 「絵 17 / 48 ─ あと 3 分」(写真のときは「写真 …」)。完成して まだ見ていない 1 枚があれば「1 枚 完成・見る ›」。タップでシート */
 export function artStrip() {
   if (!artOn()) return null;

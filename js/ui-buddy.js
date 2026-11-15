@@ -393,7 +393,7 @@ function talker(items, { empty = 'hello', label = 'ほかの話を聞く', size 
     const all = list.length ? list : [{ key: empty, vars: {}, mood: 'base' }];
     const x = all[turn % all.length];
     name.textContent = all.length > 1 ? `${b.name}・${(turn % all.length) + 1} / ${all.length}` : b.name;
-    text.textContent = buddy.say(x.key, buddy.voiceOf(b), x.vars || {}, seed() + Math.floor(turn / all.length), ex(x.key));
+    text.textContent = buddy.say(x.key, buddy.voiceOf(b), x.vars || {}, seed() + Math.floor(turn / all.length) + (x.n || 0), ex(x.key)); // x.n(v0.82): 同じ場面が続くとき 何番目か(別の言い回しに ずらす)
     const m = x.mood || 'base';
     if (m !== mood) { mood = m; clear(av); av.append(avatar(mood, size)); }
   };
@@ -419,7 +419,7 @@ export function dayGuide(o) {
     out.push(o.written ? { key: 'diary_done', mood: 'happy' } : { key: o.isToday ? 'diary_ask' : 'diary_past', mood: 'base' });
     // v0.81(実機 FB「報告の文が アシスタントの口調になっていない」): レポートの文は そのまま言わず、場面 tell_good / tell_back / tell_better / tell_next の台詞に「」で引いて伝える
     const seen = new Set(out.map((x) => x.vars && x.vars.text).filter(Boolean));
-    const tell = (t, key, mood) => { const s = typeof t === 'string' ? t.trim().replace(/[。.]$/, '').replace(/「/g, '『').replace(/」/g, '』') : ''; /* 文の中の「」は 『』に(台詞の「」と 重ならないように) */ if (s && !seen.has(s)) { seen.add(s); out.push({ key, vars: { text: s }, mood }); } };
+    const tell = (t, key, mood) => { const s = typeof t === 'string' ? t.trim().replace(/[。.]$/, '').replace(/「/g, '『').replace(/」/g, '』') : ''; /* 文の中の「」は 『』に(台詞の「」と 重ならないように) */ if (s && !seen.has(s)) { seen.add(s); out.push({ key, vars: { text: s }, mood, n: out.filter((x) => x.key.startsWith('tell_')).length }); } }; // n(v0.82): tell_* の何番目か → 続いても「」の外の言い回しが 同じにならない
     for (const t of fb.good || []) tell(t, 'tell_good', 'happy');
     for (const t of fb.lookBack || []) tell(t, 'tell_back', 'base');
     tell(fb.better, 'tell_better', 'base');

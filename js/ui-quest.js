@@ -39,6 +39,9 @@ function snapshot() {
   return { p, seen, unread: p.opened - seen, active: !!o && store.entryRole(S(), o).work };
 }
 
+/** 次の回まで あと何分の作業か(v0.82・「次はこれ」の ひとこと用)。まだ読み込んでいない・読み終えた・使っていない なら null */
+export function questNeed() { if (!questOn() || !story()) return null; const s = snapshot(); return s.p.done ? null : { need: Math.ceil(s.p.need), text: '小説の続きが届きます' }; }
+
 const bar = (pct) => el('span.q-bar', { 'aria-hidden': 'true' }, el('i', { style: { width: `${Math.round(Math.max(0, Math.min(1, pct)) * 100)}%` } }));
 
 /**

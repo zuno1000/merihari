@@ -39,7 +39,7 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.81.1';
+export const APP_VERSION = '0.82.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -133,6 +133,10 @@ function handleParams() {
 
 // 初回は設定ウィザードへ。2回目以降は前回のタブ(未設定なら今日)
 const firstRun = !store.state.data.meta.setupAt;
+{ // v0.82・F1-22: これまでの記録も 1 日の切れ目に そろえる(切れ目より前の分を 前の日へ。変わったときだけ保存)
+  const aligned = log.alignToCut(store.state.data.entries, (d) => time.dayCut(store.state.data.settings, d), { uid: store.uid, nowISO: store.nowISO });
+  if (aligned !== store.state.data.entries) { store.state.data.entries = aligned; store.save(); }
+}
 const logged = handleParams();
 go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
 if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !pomoCheck(ctx, { force: true }) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.73: 閉じている間に終わった ポモドーロは、ここで 確かめてから記録 // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)

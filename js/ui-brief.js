@@ -21,7 +21,8 @@ export const briefEnabled = () => S().brief?.enabled !== false;
 export function dueCount() {
   const d = store.state.data;
   if (!d.meta.setupAt) return 0;
-  return plan.dueTasks(d.tasks, now().date, d.entries).count;
+  const n = now();
+  return plan.dueTasks(d.tasks, n.date, d.entries, { nowMin: n.min }).count; // v0.82・F5-18: 24 時間以内が期限 も数える
 }
 
 /**

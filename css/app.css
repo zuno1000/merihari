@@ -1586,6 +1586,9 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .nx-title{display:flex;align-items:center;gap:8px;font-size:21px;line-height:1.35;font-weight:700;overflow-wrap:anywhere}
 .nx-title .dot{width:12px;height:12px}
 .nx-reason{font-size:14px;color:var(--muted)}
+.nx-hook{font-size:13px;font-weight:600;color:var(--accent);line-height:1.4} /* v0.82・F24-27: いまだけの ひとこと */
+.nx-at{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dk-filter{margin:18px 0 6px} /* v0.82: 「＋ 飲み物を記録」と 絞り込みのチップの間を空ける */
 .nx-btns{gap:8px;align-items:stretch}
 .nx-start{flex:1;min-height:54px;font-size:18px}
 .nx-other{align-self:center;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:6px 10px;min-height:36px;cursor:pointer}

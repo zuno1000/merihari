@@ -2,7 +2,7 @@
 // すべて純関数: entries(id → entry)を受け取り、新しい entries を返す(引数は変更しない)。
 // entry = { id, date:'YYYY-MM-DD', start:'HH:MM', end:'HH:MM'|null, categoryId, taskId, note, plannedMin, updatedAt, deletedAt }
 // ctx = { uid(), nowISO() }  … id と更新時刻の生成を外から渡す(テストで固定するため)
-import { hm, mm, addDays } from './time.js';
+import { hm, mm, addDays, subtractIntervals } from './time.js';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const alive = (e) => e && !e.deletedAt;
@@ -296,6 +296,35 @@ export function fillSleepBack(entries, id, ds, ctx, { maxGap = 360, slack = 10 }
     out[head.id] = head;
   }
   return { entries: resolveOverlap(out, id, 1440, ctx), filledMin: gap, from: last };
+}
+
+/**
+ * 1 日の切れ目に そろえる(v0.82・F1-22・実機 FB「前日の未記入を睡眠で埋めると、その分が 今日の時間に数えられて 今日が 24 時間を超える」)。
+ * 切れ目が 2:00 なら、その日の記録は 02:00〜26:00。date の 00:00〜02:00 に置かれた閉じた記録(fillSleepBack・24:00 で分けた続き・v0.45 の「深夜に始まる記録は翌日」)は
+ * 画面では前の日の下に映るのに 合計は date に入っていた → 切れ目より前の分を<b>前の日の 24:xx の記録</b>に移す(またぐ記録は 切れ目で分ける。前の日の記録と重なる所は 作らない)。
+ * cutOf(date) → その日の切れ目(分・0 なら何もしない)。移した頭の id は「元の id + ~c + 番号」(両方の端末が同じ直しをしても 同じ id になる)。
+ * 何も変わらなければ 入力そのもの(同じ参照)を返す。純関数
+ */
+export function alignToCut(entries, cutOf, ctx) {
+  let out = null;
+  for (const e0 of Object.values(entries || {})) {
+    if (!alive(e0) || e0.end == null) continue;
+    const s = hm(e0.start), en = hm(e0.end);
+    if (s == null || en == null || en <= s) continue;
+    const prev = addDays(e0.date, -1);
+    const c = cutOf(prev);
+    if (!(c > 0) || s >= c) continue;
+    out = out || clone(entries);
+    const e = out[e0.id], now = ctx.nowISO();
+    const taken = entriesOf(out, prev).map((x) => ({ start: hm(x.start), end: x.end == null ? 1800 : hm(x.end) }));
+    subtractIntervals([{ start: s + 1440, end: Math.min(en, c) + 1440 }], taken).forEach((f, i) => {
+      const id = `${e.id}~c${i}`;
+      out[id] = { ...e, id, date: prev, start: mm(f.start), end: mm(f.end), plannedMin: null, updatedAt: now, deletedAt: null };
+    });
+    if (en <= c) e.deletedAt = now; else e.start = mm(c);
+    e.updatedAt = now;
+  }
+  return out || entries;
 }
 
 /** 記録中エントリの経過分(別の日の記録中は 24:00 までで数える) */

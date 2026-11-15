@@ -17,8 +17,8 @@ import * as weather from './weather.js';
 import { bgmStrip, bgmTile } from './ui-bgm.js'; // v0.71: ♪ は「いま知りたいこと」のタイルに
 import { feedTile } from './ui-feed.js'; // v0.34・F17: キャッチアップ(v0.71: ホームは 新着の数のタイルだけ・中身は 一覧のシートと 日報)
 import { buddyHead, buddyActs, buddyOn, buddyName, bubble } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
-import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
-import { questStrip } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
+import { artStrip, artNeed } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
+import { questStrip, questNeed } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: 次はこれ(候補の順位・純関数)
 import { pomoOn, pomoCard, startSheet } from './ui-pomo.js';
@@ -55,6 +55,7 @@ export const redoCount = () => redoStack.length;
 export const undoLabel = () => (undoStack.length ? undoStack[undoStack.length - 1].label : '');
 export const redoLabel = () => (redoStack.length ? redoStack[redoStack.length - 1].label : '');
 function commit(entries, label = '記録の変更') {
+  entries = log.alignToCut(entries, (d) => dayCut(S(), d), LCTX); // v0.82・F1-22: 切れ目より前の分は 前の日の記録に(今日が 24 時間を超えない)
   if (store.state.data.entries !== entries) { undoStack.push({ label, entries: store.state.data.entries, at: Date.now() }); if (undoStack.length > 20) undoStack.shift(); redoStack.length = 0; }
   store.state.data.entries = entries; store.save();
 }
@@ -543,7 +544,17 @@ const pickKey = (c) => (c.taskId ? `t:${c.taskId}` : `c:${c.categoryId}`);
 function nextCard(n, hero, rerender, ctx) {
   const head = buddyHead(ctx);
   if (hero) return el('section.nx-card.rec', [head, hero.node].filter(Boolean));
-  const list = next.candidates({ date: n.date, nowMin: n.min, entries: E(), tasks: T(), settings: S(), planBlocks: store.state.data.planBlocks });
+  // v0.82・F24-27(実機 FB「いつ開いても同じで、やらない限り替わらない」): next.suggest が いまの時刻・いつもの時間帯・次の予定までの空き・ごほうびまでの残り で並べ直し、いまだけの ひとこと(hook)を添える。
+  //   いちばん上に 30 分 出したまま 始めなかった / ほかのものを始めた 候補は、その日のあいだ 少し下げる(local.nextSkip・端末ごと。いまの予定と もうすぐ期限は 下げない)
+  const sk = (() => { const l = store.state.local; if (!l.nextSkip || l.nextSkip.date !== n.date) l.nextSkip = { date: n.date, by: {}, top: null, since: 0 }; return l.nextSkip; })();
+  const build = () => next.suggest({ date: n.date, nowMin: n.min, entries: E(), tasks: T(), settings: S(), planBlocks: store.state.data.planBlocks, skips: sk.by, rewards: [questNeed(), artNeed()].filter(Boolean) });
+  const skip = (c) => { if (!c || next.URGENT.includes(c.kind)) return; const k = next.keyOf(c); sk.by[k] = (sk.by[k] || 0) + 1; };
+  let list = build();
+  if (list[0]) {
+    const k0 = next.keyOf(list[0]);
+    if (sk.top !== k0) { sk.top = k0; sk.since = Date.now(); store.saveLocal(); }
+    else if (Date.now() - sk.since >= 30 * 60000) { skip(list[0]); list = build(); sk.top = list[0] ? next.keyOf(list[0]) : null; sk.since = Date.now(); store.saveLocal(); }
+  }
   if (nextPick && nextPick.date !== n.date) nextPick = null;
   let top = list[0] || null, picked = false;
   if (nextPick) {
@@ -555,7 +566,7 @@ function nextCard(n, hero, rerender, ctx) {
   }
   const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
   const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
-  const begin = (c) => { startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
+  const begin = (c) => { if (list[0] && c !== list[0]) { skip(list[0]); store.saveLocal(); } startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
   // v0.79(ユーザー要望「ポモドーロは そこまで メインでは使わないので、いちばん目立つ所に 導線は要らない。始めるまでに ワンクッション置いてよい」):
   //   主役は「▶ 始める」(ワンタップで 記録が始まる・終わるときに 確認のシート)。ポモドーロは 下の「タイマーで始める ›」→ ui-pomo.startSheet(セット数と 終わる時刻を見てから 始める)
   const pm = pomoOn();
@@ -576,11 +587,11 @@ function nextCard(n, hero, rerender, ctx) {
     ];
   });
   const body = top ? [
-    el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : '次はこれ'), tag(top)]),
+    el('div.nx-top', [el('span.nx-k', picked ? '自分で選んだ' : '次はこれ'), tag(top), el('span.grow'), el('span.nx-at', `${mm(n.min % 1440)} のおすすめ`)]),
     // v0.79.1(実機 FB「替える の表記を無くし、その場所に 始める を。いま知りたいこと が ひと画面に納まるように」): 名前の箱(タップで 選び直し)の右に「▶ 始める」。大きなボタンの段は無くす
     el('div.nx-line', [
       el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
-        el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
+        el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason), top.hook ? el('span.nx-hook', top.hook) : null].filter(Boolean)),
       ]),
       el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める'),
     ]),
@@ -614,12 +625,12 @@ function focusBox(n, rerender, ctx) {
     el('span.nx-tag', { class: `nx-tag${hot ? ' hot' : ''}` }, tag),
   ]);
   // タスク: 今日が期限 → 期限切れ
-  const due = plan.dueTasks(T(), n.date, E());
+  const due = plan.dueTasks(T(), n.date, E(), { nowMin: n.min }); // v0.82・F5-18: 24 時間以内が期限(明日の この時刻までの 時刻つきも)
   const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
   const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
   const rows = all.slice(0, 5).map(([t, over]) => {
     const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
-    return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `今日${tm} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
+    return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `${plan.dueWord(t, n.date)} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
   });
   if (all.length > 5) rows.push(el('button.fx-rest', { type: 'button', onclick: () => ctx.go('tasks') }, `タスクは ほか ${all.length - 5} 件 ›`));
   // 習慣(v0.49・F5-15): ✓=済んだの印(明日はまた出る)・今日(今週)の分 / 目安・◯日続いてる・今週 m/n 日
@@ -640,7 +651,7 @@ function focusBox(n, rerender, ctx) {
     el('h2', '今日がんばること'),
     el('section.card.fx-card', [
       prog,
-      rows.length ? el('div.fx-rows', rows) : el('p.muted.small.fx-none', '今日が期限のタスクも 習慣も ありません。'),
+      rows.length ? el('div.fx-rows', rows) : el('p.muted.small.fx-none', '24 時間以内が期限のタスクも 習慣も ありません。'),
       nudge ? el('p.fx-nudge', nudge) : null,
       ask,
     ].filter(Boolean)),

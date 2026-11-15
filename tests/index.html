@@ -1880,6 +1880,38 @@ document.getElementById('app').addEventListener('load', async () => {
         && Bd.addLines(a1.lines, 'rest', 'cool', ['茶でも 飲んで休めよ。']).added === 0 && Bd.addLines(a1.lines, 'rest', 'bright', ['茶でも 飲んで休めよ。']).added === 1, 'teachPrompt(avoid) / addLines: 手帳の頼む文にも すでにある台詞・似た台詞は 足さない(口調が違えば 別)');
     }
 
+    // ---- v0.82: 切れ目に そろえる(F1-22)・24 時間以内が期限(F5-18)・いまの提案(F24-27)・ふり返りの言い回し ----
+    log('\n# v0.82 切れ目に そろえる・24 時間以内が期限・いまの提案');
+    {
+      const L2 = M.log, P2 = M.plan, N2 = M.next, D = '2026-11-14', D1 = '2026-11-15';
+      const C8 = { uid: () => 'u', nowISO: () => '2026-11-15T09:00:00+09:00' }, cut = () => 120;
+      const E0 = { g: { id: 'g', date: D, start: '24:10', end: '25:00', categoryId: 'sns', taskId: null, deletedAt: null }, s: { id: 's', date: D1, start: '00:00', end: '08:00', categoryId: 'sleep', taskId: null, note: '', deletedAt: null }, w: { id: 'w', date: D1, start: '09:00', end: '10:00', categoryId: 'research', taskId: null, deletedAt: null } };
+      const A0 = L2.alignToCut(E0, cut, C8), tot = L2.totalsByCategory(A0, D1, 1560);
+      ok(A0 !== E0 && E0.s.start === '00:00' && A0.s.start === '02:00' && A0.s.date === D1 && A0['s~c0'].date === D && A0['s~c0'].start === '24:00' && A0['s~c0'].end === '24:10' && A0['s~c1'].start === '25:00' && A0['s~c1'].end === '26:00' && A0['s~c1'].categoryId === 'sleep' && A0.g.end === '25:00'
+        && tot.sleep === 360 && tot.research === 60 && Object.values(tot).reduce((a, b) => a + b, 0) <= 1440 && L2.totalsByCategory(A0, D, 1560).sleep === 70, 'alignToCut: 切れ目(2:00)より前の睡眠は 前の日の 24:xx へ(前の日の記録と重なる所は作らない)・今日の合計は 24 時間を超えない');
+      const A1 = L2.alignToCut({ x: { id: 'x', date: D1, start: '01:00', end: '01:30', categoryId: 'sns', deletedAt: null } }, cut, C8);
+      ok(A1.x.deletedAt && A1['x~c0'].date === D && A1['x~c0'].start === '25:00' && A1['x~c0'].end === '25:30' && L2.alignToCut(A0, cut, C8) === A0 && L2.alignToCut(E0, () => 0, C8) === E0 && L2.alignToCut({ o: { id: 'o', date: D1, start: '01:00', end: null, categoryId: 'sns', deletedAt: null } }, cut, C8).o.start === '01:00', 'alignToCut: 丸ごと切れ目の前なら 前の日へ移す・そろっていれば / 切れ目が 0:00 なら 同じ参照・記録中は さわらない');
+      const tk = (id, x = {}) => ({ id, name: id, kind: 'duty', deadline: null, categoryId: 'research', remainingH: 0, remainingSetAt: null, repeat: null, note: '', doneAt: null, updatedAt: '2026-11-14T08:00:00+09:00', deletedAt: null, checks: [], noTime: false, recur: null, ...x });
+      const T8 = { a: tk('a', { deadline: `${D1}T15:00` }), b: tk('b', { deadline: D1 }), c: tk('c', { deadline: D }), y: tk('y', { deadline: '2026-11-13' }) };
+      const d0 = P2.dueTasks(T8, D, {}), d1 = P2.dueTasks(T8, D, {}, { nowMin: 960 }), d2 = P2.dueTasks(T8, D, {}, { nowMin: 600 });
+      ok(P2.dueIn24h(T8.a, D, 900) && !P2.dueIn24h(T8.a, D, 899) && !P2.dueIn24h(T8.b, D, 900) && P2.dueIn24h(T8.b, D, 1450) && P2.dueIn24h(T8.c, D, 0) && !P2.dueIn24h(T8.y, D, 600) && P2.dueWord(T8.a, D) === '明日 15:00' && P2.dueWord(T8.c, D) === '今日'
+        && eq(d0.today.map((t) => t.id), ['c']) && eq(d0.tomorrow.map((t) => t.id), ['a', 'b']) && d0.count === 2 && eq(d1.today.map((t) => t.id), ['c', 'a']) && eq(d1.tomorrow.map((t) => t.id), ['b']) && d1.count === 3 && eq(d2.today.map((t) => t.id), ['c']), 'dueIn24h / dueTasks(nowMin): 明日 15:00 の期限は 今日の 15:00 から「24 時間以内」・時刻なしの明日は 入らない・渡さなければ これまでどおり');
+      const s8 = S.defaultSettings(); s8.goals = { ...(s8.goals || {}), workMin: 240 };
+      const wc = N2.workCategories(s8), w0 = wc[0].id, w1 = wc[1].id;
+      const cd = N2.candidates({ date: D, nowMin: 960, entries: {}, tasks: T8, settings: s8, planBlocks: {} });
+      ok(cd.find((x) => x.taskId === 'a').kind === 'day' && cd.find((x) => x.taskId === 'a').reason.startsWith('明日 15:00 まで') && N2.NEXT_LABEL.day === '24時間以内' && cd.find((x) => x.taskId === 'b').kind === 'tmr', 'candidates: 24 時間以内の 明日の期限は 札「24時間以内」・それ以外の明日は「明日が期限」');
+      const hist = Object.fromEntries([1, 2, 3, 4, 5].map((i) => [`h${i}`, { id: `h${i}`, date: T.addDays(D, -i), start: '10:00', end: '11:00', categoryId: w1, taskId: null, note: '', asKind: null, deletedAt: null }]));
+      const sg = N2.suggest({ date: D, nowMin: 630, entries: hist, tasks: {}, settings: s8, planBlocks: {}, rewards: [{ need: 4, text: '小説の続きが届きます' }] });
+      const sgSkip = N2.suggest({ date: D, nowMin: 630, entries: hist, tasks: {}, settings: s8, planBlocks: {}, skips: { [`c:${w1}`]: 3 } });
+      const sgUrg = N2.suggest({ date: D, nowMin: 630, entries: hist, tasks: { u: tk('u', { deadline: `${D}T11:00`, categoryId: w0 }) }, settings: s8, planBlocks: {}, skips: { 't:u': 3 } });
+      const rh = N2.rhythm(hist, s8, D, 630);
+      ok(rh.cat[w1].days === 5 && rh.cat[w1].min === 300 && !rh.cat[w0] && sg[0].categoryId === w1 && sg[0].kind === 'goal' && sg[0].hooks.some((h) => h.includes('あと 4 分の作業で 小説の続き')) && sg[0].hooks.some((h) => h.includes('ここ 2 週間で 5 日')) && sg[0].hooks.some((h) => h.includes('今日の最初の 1 つ')) && sg[0].hooks.includes(sg[0].hook) && /いまから 10:55 まで、25 分だけ/.test(sg[0].hooks[sg[0].hooks.length - 1])
+        && sgSkip[0].categoryId !== w1 && sgUrg[0].taskId === 'u' && sgUrg[0].kind === 'soon' && eq(N2.suggest({ date: D, nowMin: 630, entries: {}, tasks: {}, settings: { ...s8, categories: [] }, planBlocks: {} }), []), 'suggest: いつもの時間帯の作業が上に・いまだけの ひとこと(ごほうび・いつもの時間・最初の 1 つ・いまから HH:MM まで)・選ばれなかった候補は下がる・もうすぐ期限は 下げない');
+      ok(eq(N2.milestone(50, 240), { left: 10, word: '目標の 4 分の 1' }) && eq(N2.milestone(130, 240), { left: 50, word: '目標の 4 分の 3' }) && N2.milestone(240, 240) === null && eq(N2.freeUntil({ p: { id: 'p', date: D, start: '11:00', end: '12:00', categoryId: w0, deletedAt: null } }, D, 630, s8), { min: 30, at: 660, what: 'plan' }) && N2.pickIndex('a', 5) === N2.pickIndex('a', 5) && N2.pickIndex('a', 0) === 0, 'milestone / freeUntil / pickIndex: 次の節目・次の予定までの空き・決まった乱数');
+      const Bd8 = M.buddy;
+      ok(Bd8.TONES.every((t) => ['tell_good', 'tell_back', 'tell_better', 'tell_next'].every((k) => { const xs = [0, 1, 2, 3].map((sd) => Bd8.say(k, t, { text: 'あ' }, sd)); return new Set(xs).size === 4 && xs.every((x) => x.includes('「あ」') && !/[{}]/.test(x)); })), 'tell_*: どの口調でも 続けて 4 つ 別の言い回し(「」の外が 同じ文にならない)');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

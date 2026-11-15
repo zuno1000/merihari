@@ -3,7 +3,7 @@
 // - 期限つき: 残り ÷ 期限までの日数 = 今日の目安(todayShare)
 // - 毎日 ◯分 / 毎週 ◯時間(repeat.daily / repeat.weekly): 今日 / 今週の記録と目安(goals)
 // - やりたいこと(kind:'wish'): 目安は持たず、今週の記録と最後にふれた日だけ
-import { addDays, hm, parseDateKey, weekday } from './time.js';
+import { addDays, hm, parseDateKey, weekday, fmtMD } from './time.js';
 import { FEATURES } from './features.js';
 /** 期限つきタスクの残り見積と目安を使うか(v0.44・F5-2 廃止): opts.estimate があればそれ、無ければ FEATURES.TASK_ESTIMATE。純関数のテストは { estimate: true } で従来の計算を検証する */
 const estimating = (opts) => (opts && typeof opts.estimate === 'boolean' ? opts.estimate : FEATURES.TASK_ESTIMATE);
@@ -393,11 +393,33 @@ export function rollWeekly(tasks, entries, today, ctx) {
 }
 
 /**
+ * 期限が いまから 24 時間以内か(v0.82・F5-18・ユーザー要望「明日の午後が締め切りのタスクは 今日中にやらないと間に合わないことがある。今日 ではなく 24 時間以内 を強調して」)。
+ * date / nowMin は 実効の日と その分(深夜は 1440 超)。時刻なしの期限は その日の 24:00。過ぎた期限(今日の中)も true・前の日までの期限(期限切れ)は false。純関数
+ */
+export function dueIn24h(t, date, nowMin) {
+  if (typeof t?.deadline !== 'string' || t.deadline.length < 10) return false;
+  const k = t.deadline.slice(0, 10);
+  if (k < date) return false;
+  return daysBetween(date, k) * 1440 + (deadlineMin(t) ?? 1440) - nowMin <= 1440;
+}
+/** 期限の日を ことばで(今日 / 明日 / 11月20日)+時刻。純関数 */
+export function dueWord(t, date) {
+  const k = t.deadline.slice(0, 10), tm = deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
+  return `${k === date ? '今日' : k === addDays(date, 1) ? '明日' : fmtMD(k)}${tm}`;
+}
+
+/**
  * 今日までに済ませるタスク(v0.55・F5-16 / F21・ユーザー要望「今日が期限のタスクのやり残しを無くしたい」): 済んでいない期限つきのタスク(習慣・やりたいこと・メモは除く)を
  * overdue(期限切れ・overdueTasks と同じ)/ today(今日が期限)/ tomorrow(明日が期限)に分ける。count = overdue + today(タスクのタブの数字・アイコンの数字)。
  * 並び: 時刻つきを時刻順に先・時刻なしは名前順(期限切れは期限の古い順)。純関数
  */
 export function dueTasks(tasks, date, entries = {}, opts = {}) {
+  if (opts.nowMin != null) { // v0.82・F5-18: いま(nowMin)を渡すと、today は「24 時間以内が期限」(明日の その時刻までの 時刻つきも)。tomorrow は その残り
+    const base = dueTasks(tasks, date, entries, { ...opts, nowMin: null });
+    const soon = base.tomorrow.filter((t) => dueIn24h(t, date, opts.nowMin));
+    const ids = new Set(soon.map((t) => t.id));
+    return { overdue: base.overdue, today: [...base.today, ...soon], tomorrow: base.tomorrow.filter((t) => !ids.has(t.id)), count: base.count + soon.length };
+  }
   const overdue = overdueTasks(tasks, date, entries, opts).filter((t) => t.kind !== 'memo');
   const skip = new Set(overdue.map((t) => t.id));
   const open = Object.values(tasks || {}).filter((t) => alive(t) && !t.doneAt && t.kind !== 'wish' && t.kind !== 'memo' && !t.repeat && typeof t.deadline === 'string' && t.deadline.length >= 10 && !skip.has(t.id));
