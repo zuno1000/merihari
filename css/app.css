@@ -1960,3 +1960,74 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .dk-why p{margin-top:6px}
 .dk-recbox .dk-legend{text-align:center;margin-top:-4px}
 .dw .dk-photo2,.dw .dk-about,.dw .dk-why{margin-top:10px}
+
+/* v0.88・F27: 英単語を LEXICA の作りに(札 → 品詞と 正解 / ミス / 定着・高さを取っておく 答えの段・正解の選択肢が「次へ」・まちがえた選択肢に その語・先に思い出す・メモ欄・品詞のチップ) */
+.vc-poschip{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:26px;padding:0 7px;border-radius:9px;border:0;font:inherit;font-size:12px;font-weight:700;background:var(--line);color:var(--fg);cursor:pointer}
+.vc-poschip.fixed{cursor:default;opacity:.85}
+.vc-poschip.p-v{background:color-mix(in srgb,#d95c5c 18%,var(--card));color:#c74545}
+.vc-poschip.p-n{background:color-mix(in srgb,#3b7fe8 18%,var(--card));color:#2f6fd0}
+.vc-poschip.p-adj{background:color-mix(in srgb,#27a567 18%,var(--card));color:#1f8a56}
+.vc-poschip.p-adv{background:color-mix(in srgb,#9c5bde 18%,var(--card));color:#8448c8}
+@media (prefers-color-scheme:dark){.vc-poschip.p-v{color:#f08a8a}.vc-poschip.p-n{color:#8ab4f5}.vc-poschip.p-adj{color:#6fd3a0}.vc-poschip.p-adv{color:#c49cf0}}
+.vc-card{align-items:stretch;padding:12px 14px 14px;gap:6px}
+.vc-cardtop{flex-wrap:wrap;gap:4px 8px;min-height:26px}
+.vc-cardtop .vc-count{font-size:11px}
+.vc-stats{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.vc-stats b{font-weight:700}
+.vc-stats .ok{color:#1f8a56}
+.vc-stats .ng{color:var(--danger)}
+.vc-stats .bx{color:var(--accent)}
+.vc-card .vc-en{margin:14px 0 2px}
+.vc-ans{min-height:74px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.vc-mean{font-size:16px;line-height:1.5;overflow-wrap:anywhere}
+.vc-memo{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);text-decoration:underline dotted;text-underline-offset:3px;padding:4px 8px;min-height:28px;cursor:pointer;overflow-wrap:anywhere}
+.vc-memo.has{color:var(--fg);text-decoration:none;background:color-mix(in srgb,#b8860b 12%,var(--card));border-radius:10px}
+.vc-memorow{width:100%;margin:0!important;gap:6px}
+.vc-ex{font-size:13px;color:var(--muted);font-style:italic;overflow-wrap:anywhere}
+.vc-card .vc-say{align-self:center}
+.vc-opt{display:flex;align-items:center;gap:10px;min-height:62px;font-weight:600;transition:transform .08s}
+.vc-opt:active:not(:disabled){transform:scale(.98)}
+.vc-opt .vc-opttext{flex:1;min-width:0;overflow-wrap:anywhere}
+.vc-opt.long{font-size:13.5px}
+.vc-opt.dim{opacity:.5}
+.vc-opt.right{background:color-mix(in srgb,#27a567 16%,var(--card));border-color:#27a567;color:#1c7a4c;cursor:pointer}
+.vc-opt.wrong{background:color-mix(in srgb,#d95c5c 13%,var(--card));border-color:#d95c5c;color:#c74545;text-decoration:none;opacity:1}
+@media (prefers-color-scheme:dark){.vc-opt.right{color:#7fe0b0}.vc-opt.wrong{color:#f5a3a3}}
+.vc-go{flex:none;font-size:12px;font-weight:700;white-space:nowrap}
+.vc-said{flex:none;max-width:46%;font-size:12px;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.vc-recall{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;border:1.5px dashed var(--line);border-radius:16px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer;padding:14px}
+.vc-recall b{font-size:17px}
+.vc-recall span{font-size:13px;color:var(--muted)}
+.vc-focus{font-size:13px;font-weight:700;color:var(--danger)}
+.vc-donehead{display:flex;align-items:baseline;gap:10px}
+.vc-donehead b{font-size:18px}
+.vc-donehead span{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.vc-fix{border-color:var(--danger);color:var(--danger);font-weight:600}
+.vc-memo-ta{width:100%;min-height:74px;font:inherit;font-size:16px;line-height:1.5;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg);padding:10px 12px;resize:none}
+.vc-memo-ta:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.vc-prev{display:flex;flex-direction:column;gap:6px}
+.vc-prow{display:flex;align-items:flex-start;gap:8px;background:var(--bg);border-radius:12px;padding:8px 10px}
+.vc-pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;font-size:14px;line-height:1.5}
+.vc-pja{color:var(--fg);overflow-wrap:anywhere}
+.vc-pnote{font-size:12px;color:var(--muted)}
+.vc-pnote.book{color:#1f8a56}
+.vc-look{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.vc-lookh{font-size:12px;color:var(--muted)}
+.vc-cands .chip{max-width:100%;white-space:normal;text-align:left}
+.vc-cpos{font-style:normal;font-size:10px;color:var(--muted);margin-right:4px}
+.vc-own{width:100%;font-size:14px}
+.vc-plus{flex:none;min-width:40px;font-size:17px;font-weight:700}
+.vc-mylist{display:flex;flex-direction:column;gap:8px}
+.vc-mylist-ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.vc-myrow{display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.vc-mymain{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.vc-mymain .vc-rowsay{max-width:100%;padding:0}
+.vc-jabtn{border:0;background:none;color:var(--fg);font:inherit;font-size:14px;line-height:1.5;text-align:left;padding:2px 0;cursor:pointer;overflow-wrap:anywhere}
+.vc-jabtn.wait{color:var(--muted);text-decoration:underline dotted}
+.vc-jafix{font-size:14px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.vc-jaedit{width:100%;margin:2px 0!important;gap:6px}
+.vc-jain{font-size:14px;min-height:38px}
+.vc-mymain .vc-st{font-size:11px;color:var(--muted)}
+.btn.vc-del{flex:none;color:var(--danger);font-size:13px}
+.vc-wait{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:12px;padding:8px 10px;font-size:13px}
+.vc-wait span{flex:1}
