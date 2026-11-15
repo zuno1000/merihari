@@ -354,6 +354,38 @@ export function totalsByKind(byCategory, settings) {
   return Object.values(out).sort((a, b) => b.min - a.min).map(({ topMin, ...k }) => k);
 }
 
+/**
+ * 種別ごとの合計(v0.89・実機 FB「元々は 作業じゃないカテゴリを 作業として記録した分が、種別の枠に 反映されない」): 記録ごとの「数え方」(asKind)を反映する。
+ * totalsByKind は カテゴリの主の種別で まとめるので、円グラフの「種別」と 見出しの「作業は ◯時間」(記録ごとの数え方)が 食い違っていた。
+ * acc に 足し込む(期間の合計は 日ごとに 呼ぶ)。戻り値 acc = { 種別 id: { id, name, min, cats: { カテゴリ id: 分 } } }。純関数
+ */
+export function kindTotals(entries, settings, date, nowMin = 1440, acc = {}) {
+  const t = totalsByRole(entries, date, nowMin, (e) => ({ kind: `${effectiveKind(settings, e)}\n${e.categoryId}` })).byKind;
+  for (const [key, min] of Object.entries(t)) {
+    const i = key.indexOf('\n'), kind = key.slice(0, i), cid = key.slice(i + 1);
+    const k = acc[kind] || (acc[kind] = { id: kind, name: kindRole(settings, kind).name || kind, min: 0, cats: {} });
+    k.min += min; k.cats[cid] = (k.cats[cid] || 0) + min;
+  }
+  return acc;
+}
+/** kindTotals の acc → [{ id, name, min, topCategoryId(その種別で いちばん長いカテゴリ = 色のもと) }](多い順) */
+export function kindRowsOf(acc) {
+  return Object.values(acc || {}).filter((k) => k.min > 0).sort((a, b) => b.min - a.min || (a.id < b.id ? -1 : 1))
+    .map((k) => ({ id: k.id, name: k.name, min: k.min, topCategoryId: Object.entries(k.cats).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0] }));
+}
+/**
+ * 確定済みのレポートが 古くなっているか(v0.89): 確定したあとに その日の記録が 変わった(足した・直した・消した・種別を付け替えた)か、
+ * v0.43.2〜v0.88 の不具合で 項目(loggedMin など)が 欠けている。古ければ 画面を出す前に いまの記録で 作り直す。純関数
+ */
+export function isStale(rep, entries, date) {
+  if (!rep || !rep.finalizedAt) return false;
+  if (rep.loggedMin == null || rep.coverage == null || rep.driftMin == null) return true;
+  const f = Date.parse(rep.finalizedAt);
+  if (Number.isNaN(f)) return false;
+  for (const e of Object.values(entries || {})) if (e && e.date === date && Date.parse(e.updatedAt || '') > f) return true;
+  return false;
+}
+
 /** 確定スナップショット(F3-5) */
 export function buildReport(opts) {
   const agg = aggregate(opts);
@@ -363,7 +395,9 @@ export function buildReport(opts) {
   const byCategory = {};
   for (const [id, r] of Object.entries(agg.byCategory)) byCategory[id] = { planned: pc?.byCategory[id]?.planned || 0, actual: r.actual, baseline: r.baseline };
   if (pc) for (const [id, v] of Object.entries(pc.byCategory)) if (!byCategory[id]) byCategory[id] = { planned: v.planned, actual: 0, baseline: null };
-  return { date: opts.date, byCategory, byKind: agg.byKind, workMin: agg.workMin, plannedWorkMin: 0, // byKind: v0.43.2(確定スナップショットにも種別ごとの合計。無いと「今日はどうだった」のタイルが asKind を無視してカテゴリの主の種別に戻る) driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
+  // byKind: v0.43.2(確定スナップショットにも種別ごとの合計。無いと「今日はどうだった」のタイルが asKind を無視してカテゴリの主の種別に戻る)
+  // v0.89(不具合): 上のコメントが v0.43.2 から 行の途中に入っていて、driftMin / unloggedMin / coverage / loggedMin / streak が スナップショットに 入っていなかった(くわしく の タイルが NaN・undefined)
+  return { date: opts.date, byCategory, byKind: agg.byKind, workMin: agg.workMin, plannedWorkMin: 0, driftMin: agg.driftMin, unloggedMin: agg.unloggedMin, coverage: Math.round(agg.coverage * 100) / 100, loggedMin: agg.loggedMin, streak: agg.streak,
     lines: lines.lines, positive: lines.positive, improve: lines.improve, tomorrow: lines.tomorrow, feedback, finalizedAt: opts.finalizedAt || null };
 }
 
@@ -387,11 +421,12 @@ export function weekSummary(entries, settings, date) {
  * nowDate の日は nowMin までで数える(記録中も)。戻り値 { from, to, days(期間の日数), loggedDays, loggedMin, workMin, driftMin, byCategory:{id:min}, daily:[{key, workMin, driftMin, loggedMin}] }
  */
 export function periodSummary(entries, settings, from, to, { nowDate = null, nowMin = 1440 } = {}) {
-  const by = {};
+  const by = {}, kinds = {};
   const daily = [];
   let loggedMin = 0, workMin = 0, driftMin = 0, loggedDays = 0;
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const t = totalsByCategory(entries, d, d === nowDate ? nowMin : 1440);
+    kindTotals(entries, settings, d, d === nowDate ? nowMin : 1440, kinds); // v0.89: 種別ごと(記録の数え方を反映)
     let lg = 0;
     for (const [id, m] of Object.entries(t)) { by[id] = (by[id] || 0) + m; lg += m; }
     const rr = totalsByRole(entries, d, d === nowDate ? nowMin : 1440, (e) => entryRole(settings, e)); // v0.30: 記録の数え方を反映
@@ -400,7 +435,7 @@ export function periodSummary(entries, settings, from, to, { nowDate = null, now
     loggedMin += lg; workMin += w; driftMin += dr;
     daily.push({ key: d, workMin: w, driftMin: dr, loggedMin: lg });
   }
-  return { from, to, days: daily.length, loggedDays, loggedMin, workMin, driftMin, byCategory: by, daily };
+  return { from, to, days: daily.length, loggedDays, loggedMin, workMin, driftMin, byCategory: by, byKind: kindRowsOf(kinds), daily };
 }
 
 /** 日ごとの列を週(weekEnd 曜日で終わる7日)にまとめる(「すべて」の推移用)。戻り値 [{ key(週の終わり), from, workMin, driftMin, loggedMin, days }] */

@@ -294,8 +294,8 @@ export function finalizePending() {
   if (rr.rolled.length) { d.tasks = rr.tasks; changed = true; for (const id of rr.rolled) toast(`${d.tasks[id]?.name || ''}: 来週の分(${fmtMD(d.tasks[id].deadline.slice(0, 10))}まで)が出ました`); }
   for (let i = 1; i <= 7; i++) {
     const date = addDays(today, -i);
-    if (d.reports[date]?.finalizedAt) continue;
-    if (!log.entriesOf(d.entries, date).length) continue;
+    if (d.reports[date]?.finalizedAt && !report.isStale(d.reports[date], d.entries, date)) continue; // v0.89: 確定したあとに 記録が変わった日は 作り直す
+    if (!log.entriesOf(d.entries, date).length && !d.reports[date]?.finalizedAt) continue;
     const endMin = 1440 + dayCut(d.settings, date);
     d.reports[date] = report.buildReport({ entries: d.entries, date, nowMin: endMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks, finalizedAt: store.nowISO() });
     changed = true;

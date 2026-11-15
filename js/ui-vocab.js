@@ -17,7 +17,7 @@ import * as vocab from './vocab.js';
 import * as log from './log.js';
 import { FEATURES } from './features.js';
 import { autoSync } from './sync.js';
-import { dateKey, minuteOfDay, effectiveDay } from './time.js';
+import { dateKey, minuteOfDay, effectiveDay, mm as hhmm } from './time.js';
 import { workCategories } from './next.js';
 import { buddyLine, buddyOn, buddyName } from './ui-buddy.js';
 import { addSpans } from './ui-today.js'; // 学習した時間を 記録に足す(循環 import だが 呼ぶのは シートを閉じるときだけ)
@@ -80,6 +80,54 @@ const posChip = (pos, onTap = null) => (onTap
   ? el('button.vc-poschip', { type: 'button', class: `vc-poschip p-${pos}`, 'aria-label': `品詞: ${vocab.POS_LABEL[pos] || ''}(タップで替える)`, onclick: onTap }, vocab.POS_SHORT[pos] || '?')
   : el('span.vc-poschip', { class: `vc-poschip p-${pos} fixed`, 'aria-label': `品詞: ${vocab.POS_LABEL[pos] || ''}` }, vocab.POS_SHORT[pos] || '?'));
 
+/**
+ * 英単語のふり返り(v0.89・ユーザー要望「学習が終わった / やめるときに、アシスタントのコメントつきの ふり返りを。そのまま 英語の時間を 記録していいかの 確認も兼ねて」)。
+ * シートを閉じたとき(ひと休み・途中でやめる)に、1 問でも解いていれば はさむ: アシスタントの ひとこと → この回の数 → まちがえた語 → 時間を 記録に足すか(カテゴリを選ぶ・記録しない)。
+ * これまでは 設定でカテゴリを選んであれば 黙って記録していた。いまは ここで 毎回 確かめる(設定のカテゴリは 先に選んである だけ)。背景のタップで閉じたら 記録しない。
+ * ses = { n, ok, first, got, missed: [{ en, ja }], date, startMin, endMin, mastered, due, streak }
+ */
+function wrapSheet(ses, rerender) {
+  const c = C(), cats = workCategories(S());
+  const min = (ses.endMin - ses.startMin + 1440) % 1440;
+  const open = log.openEntry(store.state.data.entries);
+  const openName = open ? (S().categories.find((x) => x.id === open.categoryId) || {}).name || '記録' : '';
+  let pick = cats.some((x) => x.id === c.categoryId) ? c.categoryId : null;
+  const line = buddyOn() ? buddyLine('vocab_done', { n: ses.n, ok: ses.ok }) : vocab.resultText(ses.n, ses.ok);
+  const tile = (k, v, sub) => el('div.sl-tile', [el('span.sl-k', k), el('b.sl-v', v), el('span.sl-s', sub)]);
+  sheet((close) => {
+    const body = el('div.vc-body');
+    const done = (msg) => { if (msg) toast(msg); close(); };
+    const draw = () => {
+      clear(body);
+      const canRecord = min >= 1 && !open && cats.length > 0;
+      body.append(...[
+        el('div.sl-say', [buddyOn() ? el('span.bd-name', buddyName()) : null, el('p', line)].filter(Boolean)),
+        el('div.sl-tiles', [tile('解いた', `${ses.n}問`, `${hhmm(ses.startMin)}〜${hhmm(ses.endMin)}`), tile('正解', `${ses.ok}`, `${Math.round((ses.ok / Math.max(1, ses.n)) * 100)}%`), tile('新しく出た', `${ses.first}`, '語'), tile('覚えた', `${ses.got}`, '語')]),
+        el('p.muted.small', `これまでに 覚えた語 ${ses.mastered.toLocaleString()}・${ses.due > 0 ? `いま復習する語 あと ${ses.due}` : 'いま復習する語は ありません'}・${ses.streak} 日 続いています`),
+        ses.missed.length ? el('h3.help-h', `まちがえた語(${ses.missed.length})`) : null,
+        ses.missed.length ? el('ul.vc-list', ses.missed.slice(0, 12).map((w) => el('li', [el('b', { lang: 'en' }, w.en), el('span', w.ja)]))) : null,
+        ses.missed.length ? el('p.muted.small', 'まちがえた語は、次に開いたとき 先に出ます。') : null,
+        el('h3.help-h', canRecord ? `学習した時間(${min} 分)を 記録に足しますか?` : '学習した時間'),
+        canRecord ? el('div.chips.small', { role: 'radiogroup', 'aria-label': '記録するカテゴリ' }, cats.map((k) => el('button.chip.sm2', { type: 'button', role: 'radio', 'aria-checked': pick === k.id ? 'true' : 'false', class: `chip sm2${pick === k.id ? ' on' : ''}`, onclick: () => { pick = pick === k.id ? null : k.id; draw(); } }, k.name))) : null,
+        canRecord ? null : el('p.muted.small', min < 1 ? '1 分に満たないので、時間は 記録しません。' : open ? `いま「${openName}」を 記録中なので、英単語の時間は 足しません(重なるため)。` : '作業のカテゴリが 無いので、時間は 記録しません。'),
+        canRecord
+          ? el('div.row', [
+            el('button.btn.grow', { type: 'button', onclick: () => done('') }, '記録しない'),
+            el('button.btn.primary.grow', { type: 'button', disabled: !pick, onclick: () => {
+              const k = cats.find((x) => x.id === pick); if (!k) return;
+              addSpans([{ date: ses.date, startMin: ses.startMin, endMin: ses.startMin + min, categoryId: k.id }], '英単語の記録');
+              if (c.categoryId !== k.id) saveConf({ ...C(), categoryId: k.id }); // 次から このカテゴリを 先に選んでおく
+              done(`英単語 ${min} 分を「${k.name}」として 記録しました`);
+            } }, pick ? `「${(cats.find((x) => x.id === pick) || {}).name}」で 記録する` : 'カテゴリを選ぶ'),
+          ])
+          : el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => done('') }, '閉じる')),
+      ].filter(Boolean));
+    };
+    draw();
+    return [el('h2', '英単語のふり返り'), body];
+  }, () => { autoSync(); if (rerender) rerender(); }, { cls: 'vc-sheet' });
+}
+
 const TABS = [['study', '学習'], ['book', '単語帳'], ['my', 'マイ単語']];
 let lastMode = 'auto'; // 選んだ学習の種類(画面の間だけ)
 /** 英単語のシート。first = 最初に開く切り替え('study' | 'book' | 'my' | 'import') */
@@ -90,6 +138,7 @@ export function vocabSheet(rerender = null, first = 'study') {
   let set = null; // 1 回分(セット)。下の begin を参照
   let startAt = null; // 学習を始めた時刻 { date, min }(最初に答えたとき)
   let answered = 0, query = '', autoTimer = null, memoEdit = false;
+  const tot = { n: 0, ok: 0, first: 0, got: 0, missed: [] }; // シートを開いてからの合計(閉じるときの ふり返り用)
   // マイ単語のメモ欄
   let memoText = '', posFix = {}, look = null, lookSeq = 0, lookTimer = null, addedEn = new Set(), editEn = null, filling = false;
   const refreshDeck = () => { dk = vocab.deck(words, R()); };
@@ -129,13 +178,13 @@ export function vocabSheet(rerender = null, first = 'study') {
     if (!ok) { recs = vocab.noteConfusion(recs, w.en, c.en, ctx()); if (lastMode === 'auto' && !set.focus) set.queue.push({ en: c.en, wait: 1 }); }
     saveRecs(recs);
     const b1 = recOf(w.en).s[0];
-    answered++; set.i++; set.recent.push(w.en);
-    if (!was) { set.first++; if (set.tag === 'my') set.myNew++; }
+    answered++; set.i++; set.recent.push(w.en); tot.n++;
+    if (!was) { set.first++; tot.first++; if (set.tag === 'my') set.myNew++; }
     if (ok) {
-      set.ok++;
+      set.ok++; tot.ok++;
       if (was && b1 > b0) set.up++;
-      if (b1 >= vocab.MASTER_BOX && b0 < vocab.MASTER_BOX) { set.got++; buzz([30, 40, 60]); toast(`「${w.en}」を 覚えた! 7 日あけても 思い出せた`); }
-    } else if (!set.missed.some((x) => x.en === w.en)) set.missed.push(w);
+      if (b1 >= vocab.MASTER_BOX && b0 < vocab.MASTER_BOX) { set.got++; tot.got++; buzz([30, 40, 60]); toast(`「${w.en}」を 覚えた! 7 日あけても 思い出せた`); }
+    } else { if (!set.missed.some((x) => x.en === w.en)) set.missed.push(w); if (!tot.missed.some((x) => x.en === w.en)) tot.missed.push({ en: w.en, ja: w.ja }); }
     if (dir() === 'j2e') speak(w.en); // 意味 → 英語 のときは、答えたあとに 発音を聞かせる
     draw();
     if (C().auto > 0) autoTimer = setTimeout(() => { autoTimer = null; if (body.isConnected && tab === 'study' && !memoEdit) advance(); }, C().auto);
@@ -450,18 +499,15 @@ export function vocabSheet(rerender = null, first = 'study') {
     else if (tab === 'my') drawMy();
     else { if (!set) begin(); if (set.done) drawResult(); else drawQuiz(); }
   }
-  /** シートを閉じたとき: 学習した時間を 記録に足す(カテゴリを決めてあって・1 分以上・ほかの記録が走っていないとき) */
+  /** シートを閉じたとき(v0.89): 1 問でも解いていれば、ふり返りを はさむ(アシスタントの ひとこと・この回の数・時間を 記録に足すかの確認)。解いていなければ そのまま閉じる */
   const onClose = () => {
-    const c = C();
     if (autoTimer) clearTimeout(autoTimer);
     if (lookTimer) clearTimeout(lookTimer);
     if (canSpeak()) { try { window.speechSynthesis.cancel(); } catch { /* おまけ */ } }
-    if (answered > 0 && startAt && c.categoryId && S().categories.some((x) => x.id === c.categoryId && !x.archived) && !log.openEntry(store.state.data.entries)) {
-      const end = minuteOfDay();
-      if (startAt.date === dateKey() && end - startAt.min >= 1) { addSpans([{ date: startAt.date, startMin: startAt.min, endMin: end, categoryId: c.categoryId }], '英単語の記録'); toast(`英単語 ${end - startAt.min} 分を 記録しました`); }
-    }
-    if (answered > 0) autoSync();
-    if (rerender) rerender();
+    if (!(answered > 0 && startAt && dk)) { if (rerender) rerender(); return; }
+    autoSync();
+    const n = today(), c = vocab.counts(R(), dk, Date.now());
+    wrapSheet({ ...tot, date: startAt.date, startMin: startAt.min, endMin: minuteOfDay(), mastered: c.mastered, due: c.due, streak: vocab.streak(R(), n.date) }, rerender);
   };
   const close = sheet(() => [el('h2', '英単語'), body], onClose, { cls: 'vc-sheet' });
   draw();
@@ -486,9 +532,9 @@ export function sectionVocab(rerender) {
     el('h3.help-h', '自動で次へ'),
     el('div.chips.small', { role: 'group', 'aria-label': '自動で次へ' }, vocab.AUTO_CHOICES.map((ms) => chip(vocab.AUTO_LABEL[ms], c.auto === ms, () => save({ ...c, auto: ms })))),
     el('p.muted.small', 'オフのときは、答えたあと 緑になった 正解の選択肢(「次へ ▶」)を押して 進みます。'),
-    el('h3.help-h', '学習した時間を 記録する'),
-    el('div.chips.small', { role: 'group', 'aria-label': '学習した時間を記録するカテゴリ' }, [chip('記録しない', !c.categoryId, () => save({ ...c, categoryId: null })), ...workCategories(S()).map((k) => chip(k.name, c.categoryId === k.id, () => save({ ...c, categoryId: k.id })))]),
-    el('p.muted.small', 'カテゴリを選ぶと、シートを閉じたときに 学習した時間が その作業として 記録されます(1 分以上・ほかの記録が走っていないとき)。'),
+    el('h3.help-h', '学習した時間を 記録するカテゴリ'),
+    el('div.chips.small', { role: 'group', 'aria-label': '学習した時間を記録するカテゴリ' }, [chip('決めない', !c.categoryId, () => save({ ...c, categoryId: null })), ...workCategories(S()).map((k) => chip(k.name, c.categoryId === k.id, () => save({ ...c, categoryId: k.id })))]),
+    el('p.muted.small', '英単語を 終えるとき(やめるとき)に ふり返りが出て、学習した時間を 記録に足すかを 毎回 確かめます。ここで選んだカテゴリは、そのとき 先に選ばれています(その場で 替えられます・「記録しない」も選べます)。'),
     el('p.small', q.seen ? `これまでに出た語 ${q.seen}・覚えた語 ${q.mastered}・いま復習する語 ${q.due}` : 'まだ 学習していません。'),
     el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => vocabSheet(rerender) }, '学習'), el('button.btn.sm', { type: 'button', onclick: () => vocabSheet(rerender, 'book') }, '単語帳'), el('button.btn.sm', { type: 'button', onclick: () => vocabSheet(rerender, 'my') }, 'マイ単語'), el('button.btn.sm', { type: 'button', onclick: () => vocabSheet(rerender, 'import') }, '引き継ぐ')]),
     q.seen ? el('div.row', el('button.btn.sm.danger', { type: 'button', onclick: () => confirmSheet('英単語の進みを 最初からにしますか?', 'これまでに出た語の進み(定着の段)を消して、最初から学び直します。マイ単語と、日ごとの数(続いている日数)は 残ります。', '最初からにする', () => { saveRecs(vocab.resetProgress(R(), { nowISO: store.nowISO() })); autoSync(); rerender(); toast('英単語の進みを 最初からにしました'); }, true) }, '進みを 最初からにする')) : null,

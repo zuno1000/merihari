@@ -67,8 +67,7 @@ export function reportSheet(date, range0 = 'day') {
 function dayView(date, today, nowMin, reopen, close = () => {}) {
   const d = store.state.data;
   const isToday = date === today;
-  const r = d.reports[date]?.finalizedAt ? d.reports[date]
-    : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks });
+  const r = reportOf(date, nowMin, today); // v0.89: 確定済みでも 記録が変わっていれば 作り直す
   const entries = log.entriesOf(d.entries, date);
   const W = windowFor(d.settings, date) || { start: 420, end: 1410 };
   const base = report.baseline(d.entries, date, 7, d.settings);
@@ -117,8 +116,7 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
  */
 export function dayTop(date, nowMin) {
   const d = store.state.data;
-  const r = d.reports[date]?.finalizedAt ? d.reports[date]
-    : report.buildReport({ entries: d.entries, date, nowMin, settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks });
+  const r = reportOf(date, nowMin); // v0.89: 確定済みでも 記録が変わっていれば 作り直す
   const fb = r.feedback || report.dayFeedback(report.aggregate({ entries: d.entries, date, nowMin, settings: d.settings }), { tasks: d.tasks, entries: d.entries, date, settings: d.settings, nowMin, planBlocks: d.planBlocks });
   const head = fb.head || (fb.verdict ? fb.verdict.split('(')[0] : null) || r.positive?.[0] || null;
   const sub = fb.head ? (fb.reasons || []).join('・') : (fb.verdict && fb.verdict.includes('(') ? fb.verdict.slice(fb.verdict.indexOf('(') + 1).replace(/\)$/, '') : '');
@@ -160,7 +158,7 @@ function periodView(range, date, nowMin) {
   return [
     el('div.rep-head', [el('h2', title)]),
     el('p.rep-lead', lead),
-    rows.length ? pieToggle((byKind) => shareDonut(byKind ? kindRows(rows) : rows, ps.loggedMin)) : null,
+    rows.length ? pieToggle((byKind) => shareDonut(byKind ? kindRows(ps.byKind) : rows, ps.loggedMin)) : null, // v0.89: 種別は 記録ごとの数え方を反映
     cmp,
     kiaiPeriod(from, to), // v0.25・F13
     mood,
@@ -172,8 +170,19 @@ function periodView(range, date, nowMin) {
 }
 
 /** カテゴリ別の行 [{id,min}] → 種別別の行 [{id(種別), name, color, min}](v0.16・F3-10)。色は種別の中でいちばん大きいカテゴリ */
-function kindRows(rows) {
-  return report.totalsByKind(Object.fromEntries(rows.map((x) => [x.id, x.min])), S()).map((k) => ({ id: k.id, name: k.name, color: colorOf(k.topCategoryId), min: k.min }));
+/** 種別の行(v0.89: 記録ごとの「数え方」を反映した report.kindRowsOf の結果から。色は その種別で いちばん長いカテゴリのもの) */
+const kindRows = (list) => (list || []).map((k) => ({ id: k.id, name: k.name, color: colorOf(k.topCategoryId), min: k.min }));
+/**
+ * その日のレポート(v0.89): 確定済みでも、確定したあとに 記録が変わっていれば(report.isStale)いまの記録で 作り直して 保存する。
+ * 確定していなければ いまの時点のもの。today を渡さなければ いまの日付から決める
+ */
+function reportOf(date, nowMin, today = null) {
+  const d = store.state.data, snap = d.reports[date];
+  if (snap?.finalizedAt && !report.isStale(snap, d.entries, date)) return snap;
+  const t = today || effectiveDay(d.settings, dateKey(), minuteOfDay()).date;
+  const fresh = report.buildReport({ entries: d.entries, date, nowMin: date === t ? nowMin : 1440 + dayCut(d.settings, date), settings: d.settings, tasks: d.tasks, planBlocks: d.planBlocks, finalizedAt: snap?.finalizedAt ? store.nowISO() : null });
+  if (snap?.finalizedAt) { d.reports[date] = fresh; store.save(); }
+  return fresh;
 }
 /** 円の上の「カテゴリ / 種別」の切替(v0.16)。build(byKind) が図を返す。選んだ方を端末に覚える */
 function pieToggle(build) {
@@ -284,7 +293,7 @@ export function pieFigure(entries, date, W, nowMin, r, { size = 200, stroke = 30
   if (!rows.some((x) => x.id !== 'future' && x.id !== 'sleep')) return null;
   const special = { unlogged: 1, sleep: 1, future: 1 };
   // 種別の円(v0.16・F3-10): カテゴリの部分だけを種別にまとめ、未記録・睡眠・これから はそのまま
-  if (byKind) rows = [...kindRows(rows.filter((x) => !special[x.id])), ...rows.filter((x) => special[x.id])];
+  if (byKind) rows = [...kindRows(report.kindRowsOf(report.kindTotals(entries, S(), date, Math.max(0, Math.min(1440, nowMin))))), ...rows.filter((x) => special[x.id])]; // v0.89: 記録ごとの「数え方」(asKind)を反映(これまでは カテゴリの主の種別で まとめていた)
   const SZ = size, STROKE = stroke, R = (SZ - STROKE) / 2, C = 2 * Math.PI * R;
   const nameOf = (id) => ({ unlogged: '未記録', sleep: '睡眠', future: 'これから' })[id] || (byKind ? rows.find((x) => x.id === id)?.name : catOf(id).name);
   const colorOf = (id) => (byKind ? rows.find((x) => x.id === id)?.color : displayColor(catOf(id).color));
