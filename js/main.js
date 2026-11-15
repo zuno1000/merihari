@@ -33,6 +33,7 @@ import * as brief from './brief.js';
 import * as reply from './reply.js';
 import * as next from './next.js'; // v0.71: 次はこれ
 import * as sleep from './sleep.js'; // v0.83・F26
+import * as vocab from './vocab.js'; // v0.85・F27
 import * as pomo from './pomo.js'; // v0.72・F25: ポモドーロ
 import { pomoCheck } from './ui-pomo.js';
 import * as quest from './quest.js';
@@ -40,7 +41,7 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.84.1';
+export const APP_VERSION = '0.85.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -205,6 +206,7 @@ if (ui.DEV) window.M = {
   brief, // v0.55・F21
   next, // v0.71・F24-20
   sleep, // v0.83・F26
+  vocab, // v0.85・F27
   reply, // v0.76・F24-23
   pomo, // v0.72・F25
   quest, // v0.56・F22

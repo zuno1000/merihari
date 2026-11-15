@@ -1851,3 +1851,40 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .dw-n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
 .dw-opt.on .dw-n{background:var(--accent);color:#fff}
 .dw-nav{margin-top:4px}
+
+/* v0.85・F27: 英単語(ホームのタイル .qtile.vc・シート .vc-sheet)。正解は 緑の枠、まちがいは 赤の枠(色だけに頼らず 太さも変える) */
+.qtile.vc{--tc:#1f8a70}
+.qtile.vc.hot .qt-v{color:var(--tc)}
+@media (prefers-color-scheme:dark){.qtile.vc{--tc:#5fc9ae}}
+.sheet.vc-sheet{max-height:92vh;max-height:92dvh;overflow:auto}
+.vc-body{display:flex;flex-direction:column;gap:10px}
+.vc-body p{margin:0}
+.vc-top{align-items:center;gap:10px}
+.vc-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.vc-bar{flex:1;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.vc-bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.vc-gap{min-height:46px}
+.vc-card{background:var(--bg);border-radius:16px;padding:18px 12px 20px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.vc-pos{font-size:12px;color:var(--muted)}
+.vc-en{font-size:30px;line-height:1.25;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere}
+.vc-opts{display:flex;flex-direction:column;gap:8px}
+.vc-opt{border:1.5px solid var(--line);background:var(--card);color:var(--fg);border-radius:14px;padding:10px 14px;min-height:52px;font:inherit;font-size:15px;line-height:1.45;text-align:left;cursor:pointer}
+.vc-opt:active{background:var(--accent-bg)}
+.vc-opt:disabled{cursor:default;opacity:.6}
+.vc-opt.right{border-color:#1f8a70;border-width:2.5px;opacity:1;font-weight:600}
+.vc-opt.wrong{border-color:var(--danger);border-width:2.5px;opacity:1;text-decoration:line-through}
+.vc-tiles{grid-template-columns:repeat(3,1fr)}
+.vc-week{display:flex;gap:6px;justify-content:center}
+.vc-day{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);border:1.5px solid var(--line);font-variant-numeric:tabular-nums}
+.vc-day.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.vc-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.vc-list li{display:flex;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.5}
+.vc-list li b{flex:none;max-width:45%;overflow-wrap:anywhere}
+.vc-list li span{flex:1;min-width:0;color:var(--muted)}
+.vc-list.my li{align-items:center}
+.vc-list li .vc-st{flex:none;font-size:11px;font-variant-numeric:tabular-nums}
+.vc-tabs{margin-top:2px}
+.vc-steps{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.6}
+.vc-ta{width:100%;min-height:64px;font-size:12px}
+.vc-note{min-height:1.5em}
+.vc-body .btn.grow{flex:1}

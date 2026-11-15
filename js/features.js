@@ -40,4 +40,9 @@ export const FEATURES = Object.freeze({
   SLEEP: true,
   /** v0.84・F19-9(ユーザー要望「おすすめの 今日のコーヒーやワインを アシスタントが提案。いま知りたいこと の 6 項目めに」): ホームの「今日の一杯」のタイル。false で タイルだけ出ない(飲み物の画面の おすすめは 残る) */
   DRINK_REC: true,
+  /**
+   * v0.85・F27(ユーザー要望「英単語アプリ tangoquest を メリハリに連携: アシスタントと一緒に メリハリの中で 英単語の学習を始められる・マイ単語を足せる。必須の機能ではない」): 英単語。
+   * 隔離した実装: js/vocab.js・js/ui-vocab.js・data/vocab.json と、ホームのタイル(ui-today.quickRow)・アシスタントの話題(ui-buddy.homeState の vocab)・設定の 1 項目・settings.vocab(既定は 使わない)・data.vocab だけ。false で どれも出ない。
+   */
+  VOCAB: true,
 });

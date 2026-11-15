@@ -1597,7 +1597,7 @@ document.getElementById('app').addEventListener('load', async () => {
     {
       const Bd = M.buddy;
       const gk = (g) => Bd.groupKeys(g);
-      ok(eq([...Bd.SCENE_KEYS].sort(), Bd.LINE_KEYS.filter((k) => k !== 'tell').sort()) && eq(Bd.GROUP_KEYS, ['home', 'brief', 'review', 'daily']) && eq(Bd.GROUP_KEYS.map((g) => gk(g).length), [22, 17, 19, 1]) && Bd.SCENE_KEYS.every((k) => Bd.SCENES[k].when && Bd.GROUPS[Bd.SCENES[k].g] && (Bd.SCENES[k].need || []).every((v) => (Bd.SCENES[k].v || {})[v])), 'SCENES: tell を除く ぜんぶの場面が 4 つの束(ホーム 22・日報 17・ふり返り 19・日常 1)のどれかに入る・必ず入れる差し込みには説明がある');
+      ok(eq([...Bd.SCENE_KEYS].sort(), Bd.LINE_KEYS.filter((k) => k !== 'tell').sort()) && eq(Bd.GROUP_KEYS, ['home', 'brief', 'review', 'daily']) && eq(Bd.GROUP_KEYS.map((g) => gk(g).length), [25, 17, 19, 1]) && Bd.SCENE_KEYS.every((k) => Bd.SCENES[k].when && Bd.GROUPS[Bd.SCENES[k].g] && (Bd.SCENES[k].need || []).every((v) => (Bd.SCENES[k].v || {})[v])), 'SCENES: tell を除く ぜんぶの場面が 4 つの束(ホーム 25・日報 17・ふり返り 19・日常 1)のどれかに入る・必ず入れる差し込みには説明がある');
       ok(['tell_good', 'tell_back', 'tell_better', 'tell_next'].every((k) => Bd.SCENES[k].g === 'review' && eq(Bd.SCENES[k].need, ['text']) && Bd.TONES.every((t) => [0, 1, 2].every((sd) => { const s = Bd.say(k, t, { text: '作業は合計3時間でした' }, sd); return s.includes('「作業は合計3時間でした」') && s !== '作業は合計3時間でした' && !/[{}]/.test(s); })) && Bd.cleanPersonaLine('ええとこ あったで。「{text}」やて。', k) && Bd.cleanPersonaLine('ええとこ あったで。', k) === null), 'tell_good / tell_back / tell_better / tell_next(v0.81): レポートの文は そのまま言わず、アシスタントの台詞に「」で引いて伝える・足した性格も {text} を入れた台詞を持てる');
       const b0 = Bd.normalizeBuddy({ name: 'ノア', tone: 'polite' });
       const b1 = Bd.addCustom(b0, 'c1', { label: '  関西弁の先輩  ', hint: '面倒見がよくて\n少しせっかち。関西弁。', base: 'cool' });
@@ -1609,12 +1609,12 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(eq(found, { hello: ['おう、来たな。待っとったで。', '今日もぼちぼちいこか。', '三つ目やで。', '四つ目やで。', '五つ目やで。'], unread: ['続き{n}回分、持ってきたで。'], working_art: ['あと{n}ピースで「{label}」や。'], rest: ['ゆっくりしいや。'] }) && eq(Object.keys(Bd.parsePersona(reply)), ['hello', 'unread', 'working_art', 'weather', 'rest']) && eq(Bd.parsePersona(''), {}) && Bd.cleanPersonaLine('傘、持ちや。', 'umbrella') === '傘、持ちや。' && Bd.cleanPersonaLine('{text}', 'tell') === null && Bd.cleanPersonaLine('かっこが { 閉じてへん', 'hello') === null, 'parsePersona / cleanPersonaLine: 「場面: 台詞」の行だけ(番号・かぎかっこ・全角のコロン)・その束の場面だけ・場面に無い差し込み / 必ず入れる差し込みが無い / URL / 長すぎ は捨てる・重複は 1 つ(1 場面 20 個まで)');
       const b2 = Bd.patchCustom(b1, 'c1', { set: found }), v2 = Bd.voiceOf(b2);
       const got = new Set(Array.from({ length: 40 }, (_, i) => Bd.say('hello', v2, {}, i)));
-      ok(eq([...got].sort(), [...found.hello].sort()) && Bd.variety('hello', v2) === 5 && Bd.say('unread', v2, { n: 3 }, 5) === '続き3回分、持ってきたで。' && Bd.say('night', v2, {}, 0) === Bd.say('night', 'cool', {}, 0) && Bd.say('tell', v2, { text: 'a b' }, 0) === 'a b' && eq(Bd.coverage(v2), { home: { have: 4, total: 22 }, brief: { have: 0, total: 17 }, review: { have: 0, total: 19 }, daily: { have: 0, total: 1 } }) && Bd.homeLine({ min: 600, due: 0, idleMin: 0, quest: { need: 4, unread: 2, done: false } }, v2, 0).text === '続き2回分、持ってきたで。', 'patchCustom → say: 覚えた場面は その性格の台詞だけ(呼びかけは足さない)・無い場面は土台・coverage は束ごとの数・ホームの ひとこと にも出る');
+      ok(eq([...got].sort(), [...found.hello].sort()) && Bd.variety('hello', v2) === 5 && Bd.say('unread', v2, { n: 3 }, 5) === '続き3回分、持ってきたで。' && Bd.say('night', v2, {}, 0) === Bd.say('night', 'cool', {}, 0) && Bd.say('tell', v2, { text: 'a b' }, 0) === 'a b' && eq(Bd.coverage(v2), { home: { have: 4, total: 25 }, brief: { have: 0, total: 17 }, review: { have: 0, total: 19 }, daily: { have: 0, total: 1 } }) && Bd.homeLine({ min: 600, due: 0, idleMin: 0, quest: { need: 4, unread: 2, done: false } }, v2, 0).text === '続き2回分、持ってきたで。', 'patchCustom → say: 覚えた場面は その性格の台詞だけ(呼びかけは足さない)・無い場面は土台・coverage は束ごとの数・ホームの ひとこと にも出る');
       const b3 = Bd.normalizeBuddy({ ...b2, lines: [{ k: 'idle', t: 'c1', s: 'ちょっとだけ、やってみいひん。' }, { k: 'idle', t: 'c7', s: 'いない性格の台詞です。' }, { k: 'idle', t: 'cool', s: '少しだけ、どうだ。' }] });
       const b4 = Bd.patchCustom(b3, 'c1', { set: { hello: [], rest: ['休みや。'] }, label: '先輩' }), b5 = Bd.removeCustom(b3, 'c1');
       ok(eq(b3.lines.map((x) => x.t), ['c1', 'cool']) && eq(Bd.learned(b3.lines, 'idle', Bd.voiceOf(b3)), ['ちょっとだけ、やってみいひん。']) && new Set(Array.from({ length: 60 }, (_, i) => Bd.say('idle', Bd.voiceOf(b3), {}, i, Bd.learned(b3.lines, 'idle', 'c1')))).has('ちょっとだけ、やってみいひん。') && !b4.custom[0].set.hello && eq(b4.custom[0].set.rest, ['休みや。']) && b4.custom[0].label === '先輩' && eq(b4.custom[0].set.unread, found.unread) && eq(b5.custom, []) && b5.tone === 'cool' && eq(b5.lines.map((x) => x.t), ['cool']) && eq(S.migrate({ schema: 1, settings: { buddy: b2 } }).settings.buddy, b2), '「台詞を増やす」は足した性格にも使える・場面ごとに置き換え([] で消す)・性格を消すと 口調は土台に戻り その性格で覚えた台詞も消える・保存と読み込みで変わらない');
       const pp = Bd.personaPrompt('home', 'ノア', v2), pb = Bd.personaPrompt('brief', 'ノア', v2);
-      ok(pp.includes('「ノア」') && pp.includes('「関西弁の先輩」') && pp.includes('少しせっかち') && gk('home').every((k) => pp.includes(`\n${k} = `)) && !pp.includes('\nweather = ') && pp.includes('44 行') && pp.includes('{n}=届いた回数') && pp.includes('必ず') && pb.includes('17 行') && gk('brief').every((k) => pb.includes(`\n${k} = `)) && Bd.personaPrompt('nope', 'a', v2) === '' && Bd.persona('ノア', v2).includes('関西弁の先輩') && !Bd.persona('ノア', v2).includes('ぶっきらぼう') && Bd.teachPrompt('idle', 'ノア', v2).includes('関西弁の先輩') && Bd.GROUP_KEYS.every((g) => Object.keys(Bd.parsePersona(gk(g).map((k) => `${k}: ` + Object.keys(Bd.SCENES[k].v || {}).map((v) => `{${v}}`).join('と') + 'の台詞やで。').join('\n'), g)).length === gk(g).length), 'personaPrompt: 人格(名前・性格の名前と説明)・その束の場面ぜんぶ・差し込みの意味と「必ず」・行数。会話と「台詞を増やす」の人格にも その性格が入る');
+      ok(pp.includes('「ノア」') && pp.includes('「関西弁の先輩」') && pp.includes('少しせっかち') && gk('home').every((k) => pp.includes(`\n${k} = `)) && !pp.includes('\nweather = ') && pp.includes('50 行') && pp.includes('{n}=届いた回数') && pp.includes('必ず') && pb.includes('17 行') && gk('brief').every((k) => pb.includes(`\n${k} = `)) && Bd.personaPrompt('nope', 'a', v2) === '' && Bd.persona('ノア', v2).includes('関西弁の先輩') && !Bd.persona('ノア', v2).includes('ぶっきらぼう') && Bd.teachPrompt('idle', 'ノア', v2).includes('関西弁の先輩') && Bd.GROUP_KEYS.every((g) => Object.keys(Bd.parsePersona(gk(g).map((k) => `${k}: ` + Object.keys(Bd.SCENES[k].v || {}).map((v) => `{${v}}`).join('と') + 'の台詞やで。').join('\n'), g)).length === gk(g).length), 'personaPrompt: 人格(名前・性格の名前と説明)・その束の場面ぜんぶ・差し込みの意味と「必ず」・行数。会話と「台詞を増やす」の人格にも その性格が入る');
     }
 
     // ---- v0.68・F24-17: キャラクターを複数(名前・口調 / 性格・絵は キャラクターごと)----
@@ -1718,7 +1718,7 @@ document.getElementById('app').addEventListener('load', async () => {
       const vc = Bd.voiceOf(bc);
       ok(vc.neutral === true && !vc.builtin && vc.label === '船乗り' && Bd.say('hello', vc, {}, 3) === 'よう、船は出せるぞ。' && !Bd.LIBRARY_RE.test(Bd.say('night', vc, {}, 0)) && Bd.writerHead('ノア', vw, role).includes('ぶっきらぼう') === false && Bd.writerHead('ノア', vw, role).includes('明るく軽い') && Bd.writerHead('ノア', vc, role).includes('「船乗り」') && Bd.persona('ノア', vw, role).includes('明るく軽い') && Bd.persona('ノア', vw, role).includes('航海士'), '世界を変えた 足した性格: 作った台詞は そのまま・無い場面は 世界を問わない内蔵の台詞・内蔵の口調を包んだ形でも 頼む文は 口調の説明のまま');
       const pp = Bd.personaPrompt('home', 'ノア', vc, role), pr = Bd.personaPrompt('review', 'ノア', vc, role), p0 = Bd.personaPrompt('home', 'ノア', 'bright');
-      ok(pp.includes('図書館ではない') && pp.includes('「書庫」') && pp.includes('「絵の扉」') && pp.includes('どの台詞にも入れない') && !pp.includes('書庫から') && !pp.includes('絵の扉の向こう') && pp.includes('unread = 小説の続きを持ってきたと知らせる') && !pr.includes('書庫から') && p0.includes('書庫から持ってきた') && p0.includes('大図書館の言葉は、性格に合えば使う') && pp.includes('44 行') && pp.includes('\npomo_done = ') && Bd.teachPrompt('idle', 'ノア', vc, 8, role).includes('どの台詞にも入れない') && Bd.persona('ノア', vc, role).includes('図書館や書庫の話は'), 'personaPrompt / teachPrompt / persona: 世界を変えたら 図書館の言葉を「入れない」と伝え、場面の説明からも 書庫・絵の扉 を外す(決めていなければ これまでどおり)');
+      ok(pp.includes('図書館ではない') && pp.includes('「書庫」') && pp.includes('「絵の扉」') && pp.includes('どの台詞にも入れない') && !pp.includes('書庫から') && !pp.includes('絵の扉の向こう') && pp.includes('unread = 小説の続きを持ってきたと知らせる') && !pr.includes('書庫から') && p0.includes('書庫から持ってきた') && p0.includes('大図書館の言葉は、性格に合えば使う') && pp.includes('50 行') && pp.includes('\npomo_done = ') && Bd.teachPrompt('idle', 'ノア', vc, 8, role).includes('どの台詞にも入れない') && Bd.persona('ノア', vc, role).includes('図書館や書庫の話は'), 'personaPrompt / teachPrompt / persona: 世界を変えたら 図書館の言葉を「入れない」と伝え、場面の説明からも 書庫・絵の扉 を外す(決めていなければ これまでどおり)');
       const lib = { title: '司書見習い', world: '海辺の小さな図書館' };
       ok(Bd.offWorld('書庫の灯りを つけておいたぞ。', role) && Bd.offWorld('絵の扉が開いた。', role) && !Bd.offWorld('船の灯りを つけておいたぞ。', role) && !Bd.offWorld('書庫で待ってる。', null) && !Bd.offWorld('書庫で待ってる。', { title: Bd.DEFAULT_TITLE, world: '' }) && !Bd.offWorld('図書館で待ってる。', lib) && Bd.offWorld('書庫で待ってる。', lib) && !Bd.libraryWords(lib).includes('図書館') && !Bd.libraryWords(lib).includes('司書') && Bd.libraryWords(role).length === 7, 'offWorld / libraryWords: 返事に残った 図書館の言葉を見分ける(世界や肩書きに 自分で書いた言葉は そのまま使える・世界を決めていなければ 何も外さない)');
       const bl = Bd.normalizeBuddy({ ...bc, lines: [{ k: 'idle', t: 'c1', s: 'ちょっとだけ、舵を取ってみないか。' }, { k: 'idle', t: 'cool', s: '少しだけ、どうだ。' }, { k: 'rest', t: 'c1', s: '錨を下ろして 休め。' }] });
@@ -1835,7 +1835,7 @@ document.getElementById('app').addEventListener('load', async () => {
         && eq(S.migrate({ schema: 1, settings: { buddy: r1.buddy } }).settings.buddy, r1.buddy), 'applyProfile: 新しいキャラクターと性格を 1 回で作る・いまのキャラクターなら 上書き(足した性格は 説明だけ直して 台詞は残す)・性格が いっぱいなら full・保存と読み込みで変わらない');
       const v = Bd.voiceOf(r1.buddy), role = Bd.roleOf(r1.buddy);
       const pa = Bd.personaPrompt(Bd.ALL_GROUP, 'ノア', v, role), ph = Bd.personaPrompt('home', 'ノア', v, role), p0 = Bd.personaPrompt(Bd.ALL_GROUP, 'リブ', 'bright');
-      ok(pa.includes(`${Bd.SCENE_KEYS.length} の場面`) && pa.includes('ぜんぶで 95 行') && Bd.SCENE_KEYS.every((k) => pa.includes(`\n${k} = `)) && /\nhello = .*【2 個】/.test(pa) && /\nchat = .*【15 個】/.test(pa) && /\nbye = .*【1 個】/.test(pa) && !ph.includes('【')
+      ok(pa.includes(`${Bd.SCENE_KEYS.length} の場面`) && pa.includes('ぜんぶで 101 行') && Bd.SCENE_KEYS.every((k) => pa.includes(`\n${k} = `)) && /\nhello = .*【2 個】/.test(pa) && /\nchat = .*【15 個】/.test(pa) && /\nbye = .*【1 個】/.test(pa) && !ph.includes('【')
         && pa.includes('このキャラクターらしさを いちばん大事にする') && !pa.includes('やさしく前向きな言い方にする') && p0.includes('やさしく前向きな言い方にする') && pa.includes('作品「星の航路」') && pa.includes('・よう、相棒。') && pa.includes(pf.hint)
         && Object.keys(Bd.parsePersona(Bd.SCENE_KEYS.map((k) => `${k}: ` + Object.keys(Bd.SCENES[k].v || {}).map((x) => `{${x}}`).join('と') + 'の台詞やで。').join('\n'))).length === Bd.SCENE_KEYS.length, 'personaPrompt(ALL_GROUP): ぜんぶの束を 1 つの文で(場面ごとの個数つき)・作品のキャラクターは らしさを優先・返事は どの束の場面も拾える');
       ok(Bd.LABEL_MAX === 20 && Bd.HINT_MAX === 800 && Bd.TITLE_MAX === 40 && Bd.WORLD_MAX === 400 && Bd.SOURCE_MAX === 60 && Bd.SAMPLE_MAX === 20 && Bd.SAMPLE_LEN === 100
@@ -1968,6 +1968,74 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(Dk.kindNow(DD, 600) === 'coffee' && Dk.kindNow(DD, 1200) === 'wine' && Dk.kindNow(DD, 1500) === 'wine' && Dk.kindNow({ w1: DD.w1 }, 600) === null && Dk.kindNow({ c1: DD.c1 }, 1200) === 'coffee' && Dk.kindNow({}, 600) === null
         && eq(Dk.radarPoints([5, 5, 5, 5], 100, 100, 50), [[100, 50], [150, 100], [100, 150], [50, 100]]) && eq(Dk.radarPoints([null, 2.5], 100, 100, 50), [[100, 100], [100, 125]]) && M.features.FEATURES.DRINK_REC === true,
         'kindNow / radarPoints: 15 時までは コーヒー・それ以降は 記録のある お酒(昼に お酒は すすめない)・記録が無ければ null / レーダーの頂点は 上から 時計回り');
+    }
+
+    // ---- v0.85: 英単語(F27: 復習の間隔・次に出す語・4 択・マイ単語・tangoquest からの引き継ぎ・保存と同期)----
+    log('\n# v0.85 英単語');
+    {
+      const V = M.vocab, St = M.store, D = '2026-11-15', NOW = 1.8e12, DAY = 864e5;
+      const cx = (now = NOW, date = D) => ({ now, nowISO: new Date(now).toISOString(), date });
+      const s1 = V.apply(null, true, NOW), s2 = V.apply(s1, true, NOW + DAY), s3 = V.apply(s2, false, NOW + 8 * DAY), s4 = V.apply(s3, true, NOW + 8 * DAY + 60e3), early = V.apply(s1, true, NOW + 1000), m1 = V.apply(null, false, NOW), m2 = V.apply(m1, true, NOW + 60e3);
+      ok(eq(s1, [2, NOW + DAY, 1, 0, 0, 0, NOW]) && s2[0] === 4 && s2[1] === NOW + 8 * DAY && s3[0] === 0 && s3[5] === 3 && s3[3] === 1 && s3[4] === 1 && s3[1] === NOW + 8 * DAY + 60e3 && s4[0] === 3 && s4[5] === 0 && s4[4] === 0
+        && early[0] === 2 && early[2] === 2 && early[1] === s1[1] && m1[0] === 0 && m1[1] === NOW + 60e3 && m2[0] === 1 && m2[1] === NOW + 60e3 + 600e3 && V.INTERVALS.length === 8 && V.MASTER_BOX === 5 && V.cleanState([9, 1, 2]) === null && eq(V.cleanState([99, -5, 1, 2]), [7, 0, 1, 2, 0, 0, 0]),
+        'apply: 初めて見て正解 → 1 日後・次も正解 → 7 日後 / ミスは 1 分後に もう一度・次に当てたら 1 つ下の段へ戻る / 期限の前の正解では 段を上げない');
+
+      const W = V.parseWords([['abate', '和らぐ', 'v'], ['abhor', '嫌う', 'v'], ['abide', '守る', 'v'], ['absorb', '吸う', 'v'], ['acquire', '得る', 'v'], ['give up', 'あきらめる', 'v'], ['zeal', '熱意', 'n'], ['constructor', 'x', 'n'], ['bad', '', 'n'], ['abate', '重複', 'v'], 'x']);
+      let recs = V.answer(V.answer({}, 'abate', true, cx()), 'abhor', false, cx());
+      const dk = V.deck(W, recs), hi = () => 0.9, lo = () => 0.1;
+      let allSeen = {}; for (const w of W) allSeen = V.answer(allSeen, w.en, true, cx());
+      ok(W.length === 7 && W[0].ja === '和らぐ' && dk.list.length === 7 && dk.by.get('zeal').book === true
+        && V.pick(recs, dk, NOW + 2 * DAY, { rnd: hi }).en === 'abhor' && V.pick(recs, dk, NOW + 2 * DAY, { rnd: hi, avoid: ['abhor'] }).en === 'abate' && V.pick(recs, dk, NOW + 2 * DAY, { rnd: lo }).en === 'abide'
+        && V.pick(recs, dk, NOW, { rnd: hi }).en === 'zeal' && V.pick(allSeen, V.deck(W, allSeen), NOW + 1, { rnd: hi }).en === 'abate' && V.pick({}, V.deck([], {}), NOW) === null
+        && eq(V.counts(recs, dk, NOW + 2 * DAY), { due: 2, seen: 2, mastered: 0, myNew: 0, total: 7 }) && eq(V.quick(recs, NOW), { due: 0, seen: 2, mastered: 0 }) && V.quick({ abate: { id: 'abate', s: [5, NOW - 1, 3, 0, 0, 0, NOW - DAY], updatedAt: 'x', deletedAt: null } }, NOW).mastered === 1,
+        'parseWords / deck / pick / counts: 形の合わない語は捨てる・期限の来た復習を 古いものから・直前の語は続けて出さない・4 回に 1 回は 新しい語・復習が無ければ 新しい語・ぜんぶ出たあとは 期限のいちばん近い語');
+
+      let k = 0; const cyc = () => ((k++ * 0.37) % 1);
+      const c1 = V.choices(W[0], dk, cyc), c2 = V.choices(dk.by.get('give up'), dk, cyc), c3 = V.choices(dk.by.get('zeal'), dk, cyc);
+      ok(c1.length === 4 && c1.some((c) => c.en === 'abate') && c1.every((c) => c.pos === 'v' && !c.en.includes(' ')) && new Set(c1.map((c) => c.ja)).size === 4 && c2.length === 4 && c2.some((c) => c.en === 'give up') && c3.length === 1 && c3[0].en === 'zeal',
+        'choices: 4 択(正解+同じ品詞の 3 語)・単語には単語・熟語が足りなければ 単語から・意味の同じ語は入れない・語が足りなければ 少ない数で');
+
+      const yest = { ...recs, [V.dayId('2026-11-14')]: { id: 'd:2026-11-14', n: 20, ok: 15, updatedAt: 'x', deletedAt: null } };
+      ok(eq(V.dayOf(recs, D), { n: 2, ok: 1 }) && V.streak(recs, D) === 1 && V.streak(yest, D) === 2 && V.streak(yest, '2026-11-17') === 0 && V.streak({ 'd:2026-11-14': yest['d:2026-11-14'] }, D) === 1 && eq(V.week(yest, D).map((x) => x.n), [0, 0, 0, 0, 0, 20, 2])
+        && eq(V.tileText({ due: 3 }, { n: 0, ok: 0 }, 0), { v: '3語', k: '英単語の復習', hot: true }) && eq(V.tileText({ due: 0 }, { n: 20, ok: 18 }, 3), { v: '20問', k: '3日 続いてる', hot: false }) && V.tileText({ due: 4 }, { n: 20, ok: 18 }, 3).k === '復習 あと4語' && V.tileText({ due: 0 }, { n: 0, ok: 0 }, 0).v === 'まだ'
+        && V.topic({ due: 5 }, { n: 0 }, 600).key === 'vocab_due' && V.topic({ due: 2 }, { n: 0 }, 600) === null && eq(V.topic({ due: 2 }, { n: 0 }, 1020, 30), { key: 'vocab_yet', vars: { n: 30 } }) && V.topic({ due: 9 }, { n: 3 }, 1200) === null,
+        'answer / dayOf / streak / week / tileText / topic: 今日の数を足す・続いている日数(今日がまだなら 昨日まで)・話題は 今日まだのときだけ(復習 5 語以上か 17 時から)');
+
+      const a1 = V.addMy(recs, { en: 'zeal' }, dk, cx()), a2 = V.addMy(a1.recs, { en: 'serendipity' }, dk, cx()), a3 = V.addMy(a1.recs, { en: 'serendipity', ja: '思いがけない発見', pos: 'n' }, dk, cx());
+      const dk3 = V.deck(W, a3.recs), rm = V.removeMy(a3.recs, 'serendipity', cx());
+      ok(a1.res === 'marked' && a1.recs.zeal.my && a1.recs.zeal.ja === '' && a2.res === 'need-ja' && a3.res === 'added' && V.addMy(a3.recs, { en: 'serendipity', ja: '偶然の幸運' }, dk3, cx()).res === 'updated' && V.addMy(recs, { en: '日本語' }, dk, cx()).res === 'bad'
+        && dk3.list.length === 8 && dk3.by.get('serendipity').book === false && V.pick(a3.recs, dk3, NOW, { rnd: hi }).en === 'zeal' && V.counts(a3.recs, dk3, NOW).myNew === 2 && eq(V.myList(a3.recs, dk3).map((w) => w.en).sort(), ['serendipity', 'zeal']) && V.myList(a3.recs, dk3)[0].box === null
+        && V.deck(W, rm).list.length === 7 && rm.serendipity.my === false
+        && eq(V.parseLine('serendipity — n — 思いがけない発見'), { en: 'serendipity', ja: '思いがけない発見', pos: 'n' }) && eq(V.parseLine('Ubiquitous どこにでもある'), { en: 'ubiquitous', ja: 'どこにでもある', pos: '' }) && eq(V.parseLine('1. abate: 和らぐ'), { en: 'abate', ja: '和らぐ', pos: '' })
+        && eq(V.parseLine(' give  up '), { en: 'give up', ja: '', pos: '' }) && V.parseLine('well-being — 名詞 — 幸福').pos === 'n' && V.parseLine('well-being — 名詞 — 幸福').en === 'well-being' && V.parseLine('日本語') === null && V.parseLine('') === null && V.parseLine('constructor') === null,
+        'addMy / removeMy / myList / parseLine: 単語帳の語は 印だけ・無い語は 意味が要る・マイ単語は 優先して出る・外すと 出なくなる / 「単語 — 品詞 — 意味」「単語 意味」「単語」を読む');
+
+      const dj = [[['思いがけない発見', 'serendipity', null, null, 1]], [['noun', ['セレンディピティ', '掘り出し物', 'luck'], [], 'serendipity', 1]], 'en'];
+      const exText = JSON.stringify({ app: 'tangoquest', v: 1, words: { abate: [5, NOW + 9 * DAY, 6, 1, 0, 0, NOW + DAY], zeal: [1, NOW, 1, 0, 0, 0, NOW - DAY], constructor: [1, 1, 1, 0, 0, 0, 1], unseen: [0, 0, 0, 0, 0, 0, 0] }, myw: { serendipity: ['偶然の発見', 'n'], zeal: ['', ''] } });
+      const ex = V.parseExport(exText), im = V.importInto(recs, ex, cx()), im2 = V.importInto(im.recs, ex, cx(NOW + 5));
+      ok(eq(V.dictParse(dj, 'serendipity'), { ja: '思いがけない発見、セレンディピティ、掘り出し物', pos: 'n' }) && V.dictParse([[['serendipity', 'serendipity']]], 'serendipity') === null && V.dictParse('x') === null && V.dictUrl('give up').endsWith('&q=give%20up') && V.dictUrl('a').startsWith('https://translate.googleapis.com/')
+        && eq(Object.keys(ex.words).sort(), ['abate', 'zeal']) && eq(ex.myw.serendipity, { ja: '偶然の発見', pos: 'n' }) && im.words === 2 && im.my === 2 && im.recs.abate.s[0] === 5 && im.recs.abhor.s[3] === 1 && im.recs.zeal.my && im.recs.zeal.s[0] === 1 && im.recs.serendipity.ja === '偶然の発見' && im.recs.serendipity.s === null
+        && im2.words === 0 && im2.my === 0 && V.importInto(im.recs, V.parseExport(JSON.stringify({ app: 'tangoquest', words: { abate: [1, 5, 9, 9, 0, 0, NOW - DAY] } })), cx()).words === 0 && V.parseExport('x') === null && V.parseExport('{"app":"other","words":{}}') === null && V.parseExport('[]') === null,
+        'dictParse / parseExport / importInto: 辞書の返事から 日本語の意味を 3 つまで・tangoquest の書き出しは 語ごとに 最後に解いたのが新しい方を残す(2 度 取り込んでも 増えない・古い進みで 上書きしない)・マイ単語は 印と意味');
+
+      const mg = St.migrate({ schema: 1, vocab: { abate: { s: [2, 5, 1, 0], my: true, updatedAt: '2026-11-15T10:00:00+09:00', x: 1 }, 'd:2026-11-15': { n: 3, ok: 9 }, 'bad key!': { s: [1, 1, 1, 1] }, zeal: 'x' } });
+      const base = St.migrate({ schema: 1 }), rec = (b, at) => ({ id: 'abate', s: [b, 1, 1, 0, 0, 0, 1], my: false, ja: '', pos: '', updatedAt: at, deletedAt: null });
+      const vA = { ...base, vocab: { abate: rec(1, '2026-11-01T00:00:00+09:00') } }, vB = { ...base, vocab: { abate: rec(3, '2026-11-09T00:00:00+09:00'), zeal: { ...rec(2, '2026-11-02T00:00:00+09:00'), id: 'zeal' } } };
+      const html = await (await fetch('../index.html', { cache: 'no-store' })).text();
+      ok(eq(V.normalizeVocab(null), { enabled: false, n: 20, categoryId: null }) && eq(V.normalizeVocab({ enabled: true, n: 30, categoryId: 'c1' }), { enabled: true, n: 30, categoryId: 'c1' }) && V.normalizeVocab({ n: 7 }).n === 20 && eq(St.defaultSettings().vocab, V.normalizeVocab(null)) && St.SCALAR_FIELDS.includes('vocab')
+        && eq(Object.keys(mg.vocab).sort(), ['abate', 'd:2026-11-15']) && eq(mg.vocab.abate.s, [2, 5, 1, 0, 0, 0, 0]) && mg.vocab.abate.my === true && mg.vocab.abate.id === 'abate' && mg.vocab['d:2026-11-15'].ok === 3 && 'vocab' in St.defaultData()
+        && M.sync.merge(vA, vB).vocab.abate.s[0] === 3 && M.sync.merge(vB, vA).vocab.abate.s[0] === 3 && M.sync.merge(vA, vB).vocab.zeal.s[0] === 2
+        && M.features.FEATURES.VOCAB === true && sw.includes(`'./js/vocab.js'`) && sw.includes(`'./js/ui-vocab.js'`) && !/ASSETS = \[[^\]]*data\/vocab/.test(sw) && html.includes('https://translate.googleapis.com;'),
+        'settings.vocab(既定は 使わない・1 回 20 問)・data.vocab を検査して持つ・同期は 語ごとに 新しい方・FEATURES.VOCAB・sw.js の ASSETS(単語帳は入れない)・CSP に 辞書の経路');
+
+      const Bv = M.buddy;
+      ok(['vocab_due', 'vocab_yet', 'vocab_done'].every((key) => Bv.SCENES[key].g === 'home' && Bv.TONES.every((t) => [0, 1].every((sd) => { const x = Bv.say(key, t, { n: 12, ok: 9 }, sd); return x.includes('12') && !/[{}]/.test(x); })))
+        && Bv.TONES.every((t) => Bv.say('vocab_done', t, { n: 20, ok: 17 }, 0).includes('17'))
+        && Bv.homeLines({ min: 600, vocab: { key: 'vocab_due', vars: { n: 12 } } }, 'bright', 0).some((x) => x.key === 'vocab_due' && x.text.includes('12')), 'vocab_*: 3 つの場面(ホームの束)・どの口調でも 数が入る・ホームの話題に出る');
+
+      const book = V.parseWords(await (await fetch('../data/vocab.json', { cache: 'no-store' })).json()), bdk = V.deck(book, {});
+      ok(book.length >= 8000 && book.every((w) => V.okEn(w.en) && w.ja && V.POS.includes(w.pos)) && bdk.by.has('abate') && bdk.by.has('protégé') && V.choices(book[0], bdk).length === 4 && V.pick({}, bdk, NOW) !== null && V.resultText(20, 17) === '20 問のうち 17 問 正解でした。',
+        '同梱の単語帳(data/vocab.json): 8,000 語以上・綴りと意味と品詞がそろっている・4 択が作れる');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');

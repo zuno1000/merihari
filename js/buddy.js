@@ -341,6 +341,10 @@ const LINES = Object.freeze({
   sleep_late: { bright: ['寝る時刻が 少しずつ 遅くなってるよ。今夜は {time}を目指してみよう。', 'このところ 夜ふかし気味かも。今夜は {time}までに、ね。'], polite: ['お休みの時刻が 少しずつ遅くなっています。今夜は {time}を目安に いかがでしょう。', 'このところ 夜ふかし気味のようです。今夜は {time}までに。'], cool: ['寝る時刻が 遅くなっている。今夜は {time}だ。', '夜ふかしが続いている。{time}には寝ろ。'] },
   sleep_good: { bright: ['この7日の平均は {avg}。よく眠れてるね! 今夜も {time}ごろに。', '眠りは 平均 {avg}。いい調子だよ。今夜も {time}ごろに おやすみしよう。'], polite: ['この7日の平均は {avg}です。よく眠れていますね。今夜も {time}ごろに。', '睡眠は 平均 {avg}。よい調子です。今夜も {time}ごろに お休みください。'], cool: ['7日の平均は {avg}。足りている。今夜も {time}ごろだ。', '平均 {avg}。その調子だ。{time}ごろに寝ろ。'] },
   sleep_soon: { bright: ['そろそろ 寝る時刻({time})だよ。きりのいい所で おしまいにしよう。', '{time}が 近いよ。続きは あしたの自分に まかせよう!'], polite: ['そろそろ お休みの時刻({time})です。きりのよい所で 終えましょう。', '{time}が近づいています。続きは 明日に いたしましょう。'], cool: ['そろそろ {time}だ。切り上げろ。', '{time}が近い。続きは 明日だ。'] },
+  // v0.85・F27: 英単語(復習がたまっている / 夕方になっても 今日は まだ / 1 回分が終わった)。{n} は 語の数 / 問題の数、{ok} は 正解の数
+  vocab_due: { bright: ['英単語の復習が {n}語 たまってるよ。いっしょに やろう?', '{n}語、そろそろ 思い出すころだよ。少しだけ 英単語、どう?'], polite: ['英単語の復習が {n}語あります。ご一緒に いかがですか。', '{n}語が 復習の時期です。少しだけ 英単語を いかがでしょう。'], cool: ['英単語の復習が {n}語ある。やるぞ。', '{n}語、思い出す時期だ。少しでいい。'] },
+  vocab_yet: { bright: ['今日の英単語は まだだね。{n}問だけ、いっしょに やってみよう?', '英単語、今日は まだだよ。{n}問なら すぐ終わるよ!'], polite: ['今日の英単語が まだのようです。{n}問だけ、ご一緒に いかがですか。', '英単語は 今日は まだです。{n}問なら すぐに終わります。'], cool: ['今日の英単語が まだだ。{n}問だけ やれ。', '英単語、{n}問だ。すぐ終わる。'] },
+  vocab_done: { bright: ['{n}問 おつかれさま! {ok}問 正解だったよ。', '{n}問 やりきったね。{ok}問 正解! まちがえた語は、また あとで出すね。'], polite: ['{n}問、お疲れさまでした。{ok}問 正解です。', '{n}問を終えました。正解は {ok}問です。まちがえた語は、また あとで お出しします。'], cool: ['{n}問 終わりだ。{ok}問 正解。', '{n}問中 {ok}問 正解だ。まちがえた語は また出す。'] },
   habit_done: { bright: ['今日の習慣、ぜんぶ済んでるよ。さすが!', '習慣は ぜんぶ おしまい。今日も続いたね!'], polite: ['今日の習慣は すべて済んでいます。お見事です。'], cool: ['習慣は ぜんぶ済んだ。上出来だ。'] },
   hello_evening: { bright: ['こんばんは! 今日も あと少しだね。', 'こんばんは。午後の灯りも、ちゃんと届いてたよ。'], polite: ['こんばんは。午後の記録をまとめました。', 'お疲れさまでした。午後のぶんをお持ちします。'], cool: ['夜だ。午後のぶんを まとめた。', '午後の記録だ。'] },
   hello: {
@@ -614,6 +618,9 @@ export const SCENES = Object.freeze({
   sleep_late: { g: 'home', when: '寝る時刻が 少しずつ遅くなっていると、責めずに知らせる', v: { time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
   sleep_good: { g: 'home', when: 'よく眠れていると ほめて、今夜も同じころに寝ようと言う', v: { avg: '7 日の平均(例: 7時間10分)', time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
   sleep_soon: { g: 'home', when: '寝る時刻が近いと知らせて、きりのいい所で終えようと誘う', v: { time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
+  vocab_due: { g: 'home', when: '英単語の復習がたまっていると知らせて、いっしょに やろうと誘う', v: { n: '復習する語の数' }, need: ['n'] },
+  vocab_yet: { g: 'home', when: '夕方になっても 今日の英単語が まだのとき、少しだけ やろうと誘う', v: { n: '1 回の問題の数(例: 20)' }, need: ['n'] },
+  vocab_done: { g: 'home', when: '英単語の 1 回分が終わったとき、ねぎらって 正解の数を伝える', v: { n: '解いた問題の数', ok: '正解の数' }, need: ['n', 'ok'] },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
   hello_morning: { g: 'brief', when: '朝の日報の冒頭。あいさつして、昨日の記録をまとめたと伝える' },
@@ -912,6 +919,7 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   // v0.76(ユーザー要望「◯◯はまだです。5分だけでも。のような システムの文は アシスタントに集約」): 習慣の声かけは 2 番目の話題に
   if (s.habit && s.habit.name) add(s.habit.kind === 'back' ? 'habit_back' : s.habit.kind === 'done' ? 'habit_done' : 'habit_left', s.habit.kind === 'done' ? 'happy' : s.habit.kind === 'left' ? 'worry' : 'base', { name: s.habit.name });
   if (s.sleep && s.sleep.key) add(s.sleep.key, s.sleep.key === 'sleep_good' ? 'happy' : 'worry', s.sleep.vars || {}); // v0.83・F26: 睡眠の声かけ(夜か、昨夜が短かった日)
+  if (s.vocab && s.vocab.key) add(s.vocab.key, 'base', s.vocab.vars || {}); // v0.85・F27: 英単語の声かけ(復習がたまった日・夕方になっても まだの日)
   if (s.quest && !s.quest.done && !(s.quest.unread > 0) && first.key !== 'working') add('quest_wait', 'base', { n: s.quest.need });
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });

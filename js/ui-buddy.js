@@ -26,6 +26,7 @@ import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
 import * as pomo from './pomo.js';
 import { sleepTopic } from './ui-sleep.js'; // v0.83・F26: 睡眠の声かけ
+import { vocabTopic } from './ui-vocab.js'; // v0.85・F27: 英単語の声かけ
 import { runNow } from './ui-pomo.js'; // v0.73: タイマーの間は 作業中 / 休憩中 として話す
 
 const S = () => store.state.data.settings;
@@ -119,7 +120,7 @@ function homeState() {
   // v0.76: 習慣の声かけ(昨日ひと休み / ぜんぶ済み / 夜に まだ)は ここから アシスタントが言う(ホームの「今日がんばること」の 1 行は やめた)
   const hs = plan.goals(d.tasks, d.entries, n.date, n.min, { chunk: plan.chunkOf(s) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && d.tasks[g.taskId]).map((g) => ({ task: d.tasks[g.taskId], stats: plan.habitStats(d.tasks[g.taskId], d.entries, n.date) }));
   const habit = hs.length ? plan.habitNudgeInfo(hs, n.min, windowFor(s, n.date)?.end ?? null) : null;
-  return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle, sleep: sleepTopic() };
+  return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle, sleep: sleepTopic(), vocab: vocabTopic() };
 }
 
 /** 吹き出し(顔+名前+1 行)。ブリーフィング(日報)の各ページの先頭にも使う。止めていれば null */
