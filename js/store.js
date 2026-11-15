@@ -16,7 +16,7 @@ import { normalizeVocab, normalizeRec as normalizeVocabRec } from './vocab.js'; 
 import { normalizeSleep } from './sleep.js'; // v0.83・F26(sleep.js は time.js だけを import)
 import { normalizePomo } from './pomo.js'; // v0.72・F25(pomo.js は何も import しないので循環しない)
 import { normalizeTrain } from './train.js';
-import { normalizeDrink } from './drinks.js';
+import { normalizeDrink, normalizePref as normalizeDrinkPref } from './drinks.js';
 import { normalizeItem as normalizeShopping } from './shopping.js';
 
 /** 種別(v0.15.2: ユーザーが増減できる)。work=レポートの「作業」に数える、drift=「ダラダラ」(先週より減ると良い)として数える */
@@ -120,6 +120,7 @@ export function defaultSettings() {
     buddy: { enabled: true, name: 'リブ', tone: 'bright', idle: true, lines: [], custom: [], chars: [{ id: 'main', name: 'リブ', tone: 'bright' }], cur: 'main' }, // chars / cur(v0.68・F24-17): キャラクター [{ id, name, tone }] と 選んでいる id(name / tone は その写し)。 custom(v0.67・F24-16): 足した性格 [{ id, label, hint, base, set }]。 lines(v0.63): 覚えた台詞 [{ k, t, s }]。 v0.62・F24: アシスタント(名前・口調 bright / polite / cool・ホームで声をかける)。絵は端末の IndexedDB、会話の控えは local.buddy
     art: { enabled: true, since: null, set: 'all' }, // set(v0.61): 集めるもの all=名画と写真を交互 / art / photo。 v0.58・F23: 名画のピース(作業 5 分で 1 ピース)。since=数え始めの日(null なら art.EPOCH)。進みは保存せず記録から計算する。見た印は local.art(端末ごと)
     quest: { enabled: true, since: null, book: 'haeotoko' }, // v0.56・F22: 解読(作業の記録時間で小説の続きが開く)。since=数え始めの日(null なら quest.EPOCH)。book=読んでいる本(data/books.json の id・v0.57)。進みは保存せず記録から計算する。読んだ印と音は local.quest(端末ごと)
+    drinkPref: {}, // v0.86・F19-14: 飲み物の好みの自己申告 { coffee / sake / wine: { 軸: 1〜5 } }(記録が少ないうちの おすすめのもと)
     vocab: normalizeVocab(null), // v0.85・F27: 英単語(既定は 使わない・1 回 20 問・学習した時間を記録するカテゴリ)。進みは data.vocab
     sleep: normalizeSleep(null), // v0.83・F26: 睡眠の管理(ホームのタイル・目安 7 時間)
     pomo: normalizePomo(null), // v0.72・F25: ポモドーロ(作業 25 分・休憩 5 分・4 セット・音・画面を消さない・通知は切)。走っている回は local.pomo(端末ごと)
@@ -133,7 +134,7 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed', 'train', 'brief', 'quest', 'art', 'buddy', 'pomo', 'sleep', 'vocab'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed', 'train', 'brief', 'quest', 'art', 'buddy', 'pomo', 'sleep', 'vocab', 'drinkPref'];
 /** 天気の設定を正規化(v0.29・F15): enabled は true のときだけ true、地域は 5 つまで・id 必須(無ければ付ける)・name 40 字・緯度経度の範囲。純関数 */
 export function normalizeWeather(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -270,6 +271,7 @@ function normalizeSettings(raw) {
   s.pomo = normalizePomo(raw.pomo); // v0.72・F25
   s.sleep = normalizeSleep(raw.sleep); // v0.83・F26
   s.vocab = normalizeVocab(raw.vocab); // v0.85・F27
+  s.drinkPref = normalizeDrinkPref(raw.drinkPref); // v0.86・F19-14
   s.brief = { enabled: !(isObj(raw.brief) && raw.brief.enabled === false), ...(isObj(raw.brief) && [0, 1320, 1440].includes(raw.brief.bed) ? { bed: raw.brief.bed } : {}) }; // v0.55・F21: ブリーフィング(既定は有効)。bed(v0.76): 寝る前の枠の時刻(分・0 = 出さない・既定 23:00 は持たない)
   s.fieldStamps = {};
   if (isObj(raw.fieldStamps)) for (const k of SCALAR_FIELDS) if (typeof raw.fieldStamps[k] === 'string') s.fieldStamps[k] = raw.fieldStamps[k].slice(0, 40);

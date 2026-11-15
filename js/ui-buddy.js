@@ -26,6 +26,7 @@ import { autoSync } from './sync.js';
 import { FEATURES } from './features.js';
 import * as pomo from './pomo.js';
 import { sleepTopic } from './ui-sleep.js'; // v0.83・F26: 睡眠の声かけ
+import { drinkBrief } from './ui-drinks.js'; // v0.86・F19-15: 日報の「今日の一杯」
 import { vocabTopic } from './ui-vocab.js'; // v0.85・F27: 英単語の声かけ
 import { runNow } from './ui-pomo.js'; // v0.73: タイマーの間は 作業中 / 休憩中 として話す
 
@@ -473,7 +474,8 @@ export function recoPage(slot, redraw) {
       if (list.length) parts.article = card('記事', line('article'), el('div.bd-feed', list.map((x) => feedRow(x, f, redraw))));
     }
   }
-  const order = ['weather', 'bgm', 'article']; // v0.76(実機 FB「天気 → BGM → 記事 の順に」): 時間帯で順を変えるのを やめた
+  if (FEATURES.DRINK_REC) { const dr = drinkBrief(redraw); if (dr) parts.drink = card(dr.kicker, on ? dr.lead : '', ...dr.nodes); } // v0.86・F19-15: 今日の一杯(飲み物の記録か 好みの申告が あるとき)
+  const order = ['weather', 'bgm', 'article', 'drink']; // v0.76(実機 FB「天気 → BGM → 記事 の順に」): 時間帯で順を変えるのを やめた
   const out = order.map((k) => parts[k]).filter(Boolean);
   const say = insightBubble();
   return say ? [say, ...out] : out;

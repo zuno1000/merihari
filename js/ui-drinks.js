@@ -57,10 +57,12 @@ export function renderDrinks(view, ctx) {
   };
   view.append(...[
     el('div.today-head', [el('span.head-side', el('button.btn.sm.ghost.back', { type: 'button', onclick: () => ctx.go('money') }, '‹ お金')), el('span.grow'), el('b', '飲み物'), el('span.grow'), el('span.head-side')]),
-    recBox(), // v0.84・F19-9: 今日のおすすめ
-    el('button.btn.primary.block', { type: 'button', onclick: () => drinkWizard(rerender) }, '＋ 飲み物を記録'), // v0.84・F19-7: アシスタントが 1 問ずつ聞く
+    el('button.btn.primary.block', { type: 'button', onclick: () => drinkWizard(rerender) }, '＋ 飲み物を記録'), // v0.84・F19-7: アシスタントが 1 問ずつ聞く(v0.86: おすすめの札が長くなったので 先頭へ)
+    recBox(rerender), // v0.84・F19-9 → v0.86・F19-11: 今日のおすすめ(日本酒は 実在の銘柄)
+    wishBox(rerender), // v0.86・F19-13: 気になる
     all.length ? chips : null,
     all.length ? prefBox(filter || (Object.values(sum).sort((a, b) => b.n - a.n)[0] || {}).kind) : null,
+    compareBox(rerender), // v0.86・F19-12: ネットの評価と 見比べる
     el('section.group', el('div.list', list.length ? list.map(row) : el('p.muted.small.pad', all.length ? 'この種類の記録はありません。' : 'まだありません。コーヒー・日本酒・ワインなど、飲み物を写真と味の印象で残します。'))),
   ].filter(Boolean));
 }
@@ -203,40 +205,167 @@ export function radar(axes, series, { size = 220, label = 'レーダーチャー
   return svg('svg', { class: 'dk-radar', viewBox: `0 0 ${size} ${size + 6}`, role: 'img', 'aria-label': `${label}: ${axes.map(([, nm], i) => `${nm} ${series[0] && series[0].values[i] != null ? series[0].values[i] : '–'}`).join('・')}` }, kids);
 }
 
-/** 今日のおすすめの種類(いまの時間と 記録から)と 中身。無ければ null */
-function recNow() {
-  const n = now(), kind = drinks.kindNow(D(), n.min);
-  return kind ? drinks.recommend(D(), kind, n.date) : null;
+// ---- v0.86・F19-11〜F19-16: おすすめ(実在の日本酒は さけのわデータから)・同じ軸のチャート・気になる・どこで飲めるか・好みの申告・日報の札 ----
+const PREF = () => drinks.normalizePref(S().drinkPref);
+let sakeDb = null, sakeLoading = null;
+/** 日本酒の銘柄(data/sake.json・約 190KB)を 1 度だけ読む。読めたら then(描き直し)。読めなくても おすすめは STYLES から出る */
+function loadSake(then = null) {
+  if (sakeDb) return;
+  if (!sakeLoading) sakeLoading = fetch('data/sake.json').then((r) => { if (!r.ok) throw new Error('sake'); return r.json(); }).then((j) => { sakeDb = drinks.parseSake(j); }).catch(() => { sakeLoading = null; });
+  if (then && sakeLoading) sakeLoading.then(() => { if (sakeDb) then(); });
 }
-/** ホームのタイル(いま知りたいこと・v0.84): 「今日の一杯」。飲み物の記録が 1 件も無ければ null(使っていない人には 出さない) */
-export function drinkTile(ctx) {
+let recKind = null; // 飲み物の画面で選んだ種類(null = いまの時間の種類)
+let recShown = null; // 「ほかの候補」で選んだもの { key: 日付:種類, name }
+/** おすすめ(いまの時間の種類か kind0)。無ければ null。日本酒は 銘柄を読めたら redraw */
+function recNow(redraw = null, kind0 = null) {
+  const n = now(), kind = kind0 || drinks.kindFor(D(), n.min, PREF());
+  if (!kind) return null;
+  if (kind === 'sake' && !sakeDb) loadSake(redraw);
+  return drinks.suggest(D(), kind, n.date, { declared: PREF(), sake: sakeDb });
+}
+const shownOf = (r) => { const key = `${now().date}:${r.kind}`; return (recShown && recShown.key === key && [r.pick, ...r.others].find((c) => c.name === recShown.name)) || r.pick; };
+const leadOf = (kind) => { const kn = drinks.kindName(kind), day = now().min < 900; return { bright: `${day ? '今日' : '今夜'}の${kn}は、これなんて どう?`, polite: `${day ? '本日' : '今夜'}の${kn}は、こちらは いかがでしょう。`, cool: `${day ? '今日' : '今夜'}の${kn}は これだ。` }[toneNow()]; };
+/** 気になる に入れる / 外す */
+function toggleWish(kind, c) {
+  const w = drinks.wishOf(D(), kind, c.name);
+  if (w) { w.deletedAt = store.nowISO(); saveDrink(w); toast('気になる から外しました'); return; }
+  const nd = drinks.normalizeDrink({ id: 'd_' + store.uid().slice(0, 10), kind, name: c.name, maker: [c.maker, c.area].filter(Boolean).join('・'), note: c.note || '', wish: true, ...(c.ref ? { ref: c.ref } : {}) });
+  if (nd) { saveDrink(nd); toast(`「${c.name}」を 気になる に入れました`); }
+}
+/** ホームのタイル(いま知りたいこと・v0.84 → v0.86): 「今日の一杯」。飲み物の記録も 好みの申告も 無ければ null(使っていない人には 出さない) */
+export function drinkTile(ctx, rerender = null) {
   if (!FEATURES.DRINK_REC || !store.state.data.meta.setupAt) return null;
-  const r = recNow();
+  const r = recNow(rerender);
   if (!r) return null;
-  const short = r.style.name.replace(/(.*?)/g, '');
-  return el('button.qtile.dk', { type: 'button', 'aria-label': `今日の一杯: ${r.style.name}(飲み物を開く)`, onclick: () => ctx.go('money', 'drinks') }, [el('span.qt-icowrap', cupIcon('qt-ico')), el('span.qt-v', short), el('span.qt-k', `${now().min < 900 ? '今日' : '今夜'}の一杯`)]);
+  const short = r.pick.name.replace(/\s*\([^)]*\)/g, '');
+  return el('button.qtile.dk', { type: 'button', 'aria-label': `今日の一杯: ${r.pick.name}(飲み物を開く)`, onclick: () => ctx.go('money', 'drinks') }, [el('span.qt-icowrap', cupIcon('qt-ico')), el('span.qt-v', short), el('span.qt-k', `${now().min < 900 ? '今日' : '今夜'}の一杯`)]);
 }
-/** 飲み物の画面の先頭: アシスタントの おすすめ(今日の一杯・久しぶりの 1 本) */
-function recBox() {
-  const r = recNow();
+/** おすすめの中身(名前・ネットの評価・チャート・気になる・どこで・ほかの候補・出どころ)。飲み物の画面と 日報のシートで 同じもの */
+function recNodes(r, redraw) {
+  const c = shownOf(r), kind = r.kind, kd = drinks.kindOf(kind), net = c.src === 'sakenowa';
+  const axes = net ? kd.axes.filter(([k]) => drinks.SAKE_AXES.includes(k)) : kd.axes;
+  const tg = r.target, hasT = axes.some(([k]) => tg.t[k] != null);
+  const wished = !!drinks.wishOf(D(), kind, c.name);
+  const meta = [c.maker, c.area].filter(Boolean).join('・');
+  return [
+    el('div.dk-rec', [el('b.dk-rec-name', c.name), meta ? el('span.dk-rec-meta', meta) : null, c.note ? el('span.dk-rec-note', c.note) : null].filter(Boolean)),
+    net && c.score != null ? el('p.dk-net', [el('span.muted.small', 'ネットの人気: '), el('b', c.score.toFixed(1)), el('span.muted.small', ` / 5${c.rank ? `・全国 ${c.rank} 位` : ''}`)]) : null,
+    radar(axes, [{ values: axes.map(([k]) => c.t[k] ?? null), cls: 'top' }, ...(hasT ? [{ values: axes.map(([k]) => tg.t[k] ?? null), cls: 'all' }] : [])], { size: 200, label: `${c.name} の味の目安` }),
+    el('p.muted.small.dk-legend', [el('i.rd-key.top'), net ? 'この銘柄(ネットの評価からの目安) ' : 'この種類の 一般的な傾向 ', ...(hasT ? [el('i.rd-key.all'), 'あなたの好み'] : [])]),
+    el('p.muted.small', `${r.why && c === r.pick ? `好みと同じく ${r.why}。` : ''}${drinks.basisText(tg)}`),
+    el('div.row.dk-acts', [
+      el('button.btn.sm', { type: 'button', class: `btn sm${wished ? ' on' : ''}`, 'aria-pressed': wished ? 'true' : 'false', onclick: () => { toggleWish(kind, c); redraw(); } }, wished ? '★ 気になる' : '☆ 気になる'),
+      ...drinks.whereLinks(kind, c.name).map((l) => el('button.btn.sm', { type: 'button', onclick: () => window.open(l.url, '_blank', 'noopener') }, l.label)),
+    ]),
+    r.others.length ? el('div.chips.small.dk-others', { role: 'group', 'aria-label': 'ほかの候補' }, [r.pick, ...r.others].map((o) => el('button.chip.sm2', { type: 'button', class: `chip sm2${o.name === c.name ? ' on' : ''}`, 'aria-pressed': o.name === c.name ? 'true' : 'false', onclick: () => { recShown = { key: `${now().date}:${kind}`, name: o.name }; redraw(); } }, o.name.replace(/\s*\([^)]*\)/g, '')))) : null,
+    net
+      ? el('p.muted.small', [el('a', { href: drinks.SAKE_CREDIT.url, target: '_blank', rel: 'noopener' }, drinks.SAKE_CREDIT.text), `を利用しています${sakeDb && sakeDb.updated ? `(${sakeDb.updated.slice(0, 4)} 年 ${+sakeDb.updated.slice(4)} 月)` : ''}。味の軸は その指標(${drinks.SAKE_F.join('・')})から このアプリが換算した目安です。酸味と苦味は 指標に無いので 出していません。`])
+      : el('p.muted.small', '味の目安は 一般的な傾向です(産地や 造り手で 変わります)。コーヒーとワインは、銘柄ごとの評価を 自由に使える形で公開している所が無いので、品種・産地の単位で すすめます。'),
+  ].filter(Boolean);
+}
+/** 飲み物の画面の先頭: アシスタントの おすすめ(種類を選べる・久しぶりの 1 本・好みを伝える) */
+function recBox(rerender) {
+  const kind = recKind || drinks.kindFor(D(), now().min, PREF()) || 'coffee';
+  const r = recNow(rerender, kind);
   if (!r) return null;
-  const kn = drinks.kindName(r.kind), tone = toneNow();
-  const lead = { bright: `${now().min < 900 ? '今日' : '今夜'}の${kn}は、これなんて どう?`, polite: `${now().min < 900 ? '本日' : '今夜'}の${kn}は、こちらは いかがでしょう。`, cool: `${now().min < 900 ? '今日' : '今夜'}の${kn}は これだ。` }[tone];
+  const kn = drinks.kindName(kind), told = !!PREF()[kind];
   return el('section.card.dk-say', [
-    askBubble(lead, 'dk-lead'),
-    el('div.dk-rec', [el('b.dk-rec-name', r.style.name), el('span.dk-rec-note', r.style.note)]),
-    el('p.muted.small', r.why ? `${r.why}の傾向です。` : r.basis ? 'これまでの記録の 味の平均に 近い傾向です。' : '味の記録が たまると、好みに近いものを選びます(いまは 日替わり)。'),
+    el('div.chips.small.dk-reckind', { role: 'group', 'aria-label': 'おすすめの種類' }, drinks.PREF_KINDS.map((k) => el('button.chip.sm2', { type: 'button', class: `chip sm2${k === kind ? ' on' : ''}`, 'aria-pressed': k === kind ? 'true' : 'false', onclick: () => { recKind = k; rerender(); } }, drinks.kindName(k)))),
+    askBubble(leadOf(kind), 'dk-lead'),
+    ...recNodes(r, rerender),
     r.again ? el('p.dk-again', [el('span.muted.small', '久しぶりに: '), r.again.name, el('b', ` ${drinks.fmtOverall(r.again.overall)}`), el('span.muted.small', `(${r.again.days} 日ぶり)`)]) : null,
-    el('p.muted.small', '味の目安は 一般的な傾向です(産地や 造り手で 変わります)。'),
+    el('div.row', el('button.btn.sm.ghost', { type: 'button', onclick: () => prefSheet(kind, rerender) }, told ? `${kn}の好みを 伝え直す` : `${kn}の好みを 先に伝える`)),
   ].filter(Boolean));
+}
+/** 気になる(ブックマーク)の一覧: 飲んだら「記録する」(名前を入れた状態で 聞き取りへ・記録したら 一覧から外れる) */
+function wishBox(rerender) {
+  const list = drinks.listWish(D());
+  if (!list.length) return null;
+  return el('section.group.dk-wish', [
+    el('h2', `気になる(${list.length})`),
+    el('div.list', list.map((d) => el('div.srow.dk-wishrow', [
+      el('span.dk-main', [el('span.dk-name', d.name), el('span.dk-meta.muted.small', [drinks.kindName(d.kind), d.maker || null].filter(Boolean).join('・'))]),
+      el('button.btn.sm', { type: 'button', onclick: () => drinkWizard(rerender, { kind: d.kind, name: d.name, maker: d.maker, ref: d.ref || null, wishId: d.id }) }, '記録する'),
+      el('button.btn.sm.ghost', { type: 'button', 'aria-label': `${d.name} を 気になる から外す`, onclick: () => { d.deletedAt = store.nowISO(); saveDrink(d); rerender(); } }, '×'),
+    ]))),
+  ]);
+}
+/** ネットの評価と 自分の評価を 見比べる(日本酒・さけのわに ある銘柄だけ・新しい 2 つ) */
+function compareBox(rerender) {
+  if (!drinks.listDrinks(D(), 'sake').length) return null;
+  if (!sakeDb) { loadSake(rerender); return null; }
+  const list = drinks.compareList(D(), sakeDb, 2);
+  if (!list.length) return null;
+  const axes = drinks.axesOf('sake').filter(([k]) => drinks.SAKE_AXES.includes(k));
+  return el('details.group.dk-pref.dk-cmp', [
+    el('summary', [el('span.feed-h', 'ネットの評価と 見比べる'), el('span.muted.small', `日本酒 ${list.length} 本`)]),
+    el('section.card.dk-prefcard', [
+      ...list.flatMap((x) => {
+        const diffs = axes.filter(([k]) => x.own.t[k] != null).map(([k, nm]) => ({ nm, d: Math.round((x.own.t[k] - x.net.t[k]) * 10) / 10 })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+        const top = diffs[0];
+        return [
+          el('p.dk-best', [x.name, x.own.overall != null ? el('b', ` ${drinks.fmtOverall(x.own.overall)}`) : null, x.net.score != null ? el('span.muted.small', `(ネットの人気 ${x.net.score.toFixed(1)})`) : null].filter(Boolean)),
+          radar(axes, [{ values: axes.map(([k]) => x.own.t[k] ?? null), cls: 'top' }, { values: axes.map(([k]) => x.net.t[k]), cls: 'all' }], { size: 190, label: `${x.name}: 自分の評価と ネットの評価` }),
+          el('p.muted.small', top && Math.abs(top.d) >= 1 ? `${top.nm}は、ネットの目安より ${top.d > 0 ? '強く' : '弱く'} 感じています(差 ${Math.abs(top.d).toFixed(1)})。` : 'ネットの目安と ほぼ同じ 感じ方です。'),
+        ];
+      }),
+      el('p.muted.small.dk-legend', [el('i.rd-key.top'), '自分の評価 ', el('i.rd-key.all'), 'ネットの評価からの目安']),
+      el('p.muted.small', [el('a', { href: drinks.SAKE_CREDIT.url, target: '_blank', rel: 'noopener' }, drinks.SAKE_CREDIT.text), 'を利用しています。目安は その指標から このアプリが換算したものです。']),
+    ]),
+  ]);
+}
+/** 好みを 先に伝えるシート(記録が少ないうちの おすすめのもと。あとから 実際の記録を優先する) */
+function prefSheet(kind, rerender) {
+  const t = { ...(PREF()[kind] || {}) }, kn = drinks.kindName(kind);
+  sheet((close) => {
+    const body = el('div.dw');
+    const draw = () => {
+      clear(body);
+      body.append(
+        askBubble({ bright: `${kn}は、どんな味が 好き? わかる所だけで いいよ。`, polite: `${kn}は、どのような味が お好みですか。わかる所だけで かまいません。`, cool: `${kn}の好みを 教えろ。わかる所だけでいい。` }[toneNow()], 'dk-lead'),
+        ...drinks.axesOf(kind).map(([key, nm]) => el('div.dk-prefrow', [
+          el('span.dk-prefname', nm),
+          el('div.chips.small', { role: 'radiogroup', 'aria-label': nm }, [1, 2, 3, 4, 5].map((v) => el('button.chip.sm2', { type: 'button', role: 'radio', 'aria-checked': t[key] === v ? 'true' : 'false', class: `chip sm2${t[key] === v ? ' on' : ''}`, onclick: () => { if (t[key] === v) delete t[key]; else t[key] = v; draw(); } }, String(v)))),
+          el('span.muted.small.dk-prefword', t[key] ? drinks.levelsOf(kind, key)[t[key] - 1] : 'まだ'),
+        ])),
+        el('p.muted.small', '1 = 弱い・控えめ、5 = 強い。もう一度 押すと 外れます。記録が たまると、実際の記録のほうを だんだん優先します(総評 4 以上が 3 件で 半々)。'),
+        el('div.row', [
+          el('button.btn', { type: 'button', onclick: () => close() }, 'やめる'),
+          el('button.btn.primary.grow', { type: 'button', onclick: () => { const all = { ...PREF() }; if (Object.keys(t).length) all[kind] = t; else delete all[kind]; S().drinkPref = drinks.normalizePref(all); store.touchSettings(); autoSync(); close(); rerender(); toast(Object.keys(t).length ? `${kn}の好みを 覚えました` : `${kn}の好みを 消しました`); } }, '覚える'),
+        ]),
+      );
+    };
+    draw();
+    return [el('h2', `${kn}の好み`), body];
+  }, null, { cls: 'dk-sheet' });
+}
+/** おすすめのシート(日報の札から) */
+export function recSheet(onClose = null) {
+  sheet((close) => {
+    const body = el('div.dw');
+    const draw = () => { clear(body); const r = recNow(draw); if (!r) { body.append(el('p', 'おすすめは まだ ありません。')); return; } body.append(askBubble(leadOf(r.kind), 'dk-lead'), ...recNodes(r, draw), el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる'))); };
+    draw();
+    return [el('h2', `${now().min < 900 ? '今日' : '今夜'}の一杯`), body];
+  }, onClose, { cls: 'dk-sheet' });
+}
+/** 日報の「おすすめ」のページに出す札の中身(ui-buddy.recoPage): { kicker, lead, nodes } | null(記録も 好みの申告も 無ければ 出さない) */
+export function drinkBrief(redraw) {
+  if (!FEATURES.DRINK_REC) return null;
+  const r = recNow(redraw);
+  if (!r) return null;
+  const c = r.pick, wished = !!drinks.wishOf(D(), r.kind, c.name), meta = [c.maker, c.area].filter(Boolean).join('・');
+  return { kicker: `${now().min < 900 ? '今日' : '今夜'}の一杯`, lead: leadOf(r.kind), nodes: [
+    el('button.bd-drink', { type: 'button', 'aria-label': `${c.name} を くわしく見る`, onclick: () => recSheet(redraw) }, [el('b', c.name), meta ? el('span.muted.small', meta) : null, c.note ? el('span.muted.small', c.note) : null].filter(Boolean)),
+    el('div.row.bd-songact', [el('button.btn.sm', { type: 'button', onclick: () => { toggleWish(r.kind, c); redraw(); } }, wished ? '★ 気になる' : '☆ 気になる'), el('button.btn.sm.ghost', { type: 'button', onclick: () => recSheet(redraw) }, 'チャートを見る')]),
+  ] };
 }
 
 /**
  * アシスタントが 1 問ずつ聞く記録(F19-7・新しい記録だけ。直すときは これまでの 1 枚の画面)。
  * なにを飲んだ(種類・名前・作り手・写真)→ 調べる(任意・ここで ネット / AI)→ 軸ごとに 5 つの基準から選ぶ(選ぶと 次へ)→ 総評(5 つの目安 → 0.1 刻みで直す)とコメント → 保存。
  */
-export function drinkWizard(rerender) {
-  const d = { id: 'd_' + store.uid().slice(0, 10), kind: filter || 'coffee', name: '', maker: '', place: '', date: dateKey(), taste: {}, overall: null, note: '', photo: false, updatedAt: null, deletedAt: null };
+export function drinkWizard(rerender, preset = null) { // preset(v0.86): 気になる から記録するとき { kind, name, maker, ref, wishId }
+  const d = { id: 'd_' + store.uid().slice(0, 10), kind: (preset && preset.kind) || filter || 'coffee', name: (preset && preset.name) || '', ...(preset && preset.ref ? { ref: preset.ref } : {}), maker: (preset && preset.maker) || '', place: '', date: dateKey(), taste: {}, overall: null, note: '', photo: false, updatedAt: null, deletedAt: null };
   let i = 0, blob = null;
   sheet((close) => {
     const body = el('div.dw');
@@ -245,6 +374,7 @@ export function drinkWizard(rerender) {
       const nd = drinks.normalizeDrink({ ...d, photo: !!blob });
       if (!nd) { toast('名前を入れてください'); i = 0; draw(); return; }
       try { if (blob) await photos.putPhoto(nd.id, blob); } catch (err) { toast(err.message || '写真を保存できませんでした(記録は保存します)'); nd.photo = false; }
+      if (preset && preset.wishId && D()[preset.wishId]) { D()[preset.wishId].deletedAt = store.nowISO(); D()[preset.wishId].updatedAt = store.nowISO(); } // 気になる から外す(飲んだので)
       saveDrink(nd); close(); rerender(); toast(`${nd.name} を記録しました`);
     };
     const draw = () => {

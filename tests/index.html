@@ -2038,6 +2038,58 @@ document.getElementById('app').addEventListener('load', async () => {
         '同梱の単語帳(data/vocab.json): 8,000 語以上・綴りと意味と品詞がそろっている・4 択が作れる');
     }
 
+    // ---- v0.86: 飲み物のおすすめ(F19-11〜16: 実在の日本酒・好みの申告・気になる・ネットの評価と見比べ・どこで)----
+    log('\n# v0.86 飲み物のおすすめ(実在の銘柄・好みの申告・気になる・見比べ)');
+    {
+      const Dk = M.drinks, St = M.store, D0 = '2026-11-15';
+      const mk = (id, kind, name, taste, overall, more = {}) => Dk.normalizeDrink({ id, kind, name, taste, overall, date: '2026-11-10', ...more });
+      const sk = Dk.parseSake({ updated: '202610', credit: 'x', items: [
+        [1, '甘口の酒', '蔵A', '新潟県', [60, 70, 30, 30, 10, 30], [45, 48, 30, 12], 430, 1, ['甘味', 'フルーティ']],
+        [2, '辛口の酒', '蔵B', '高知県', [20, 20, 30, 40, 80, 70], [15, 12, 20, 49], 400, 2, ['辛口']],
+        [3, '重い酒', '蔵C', '奈良県', [20, 60, 80, 40, 30, 10], [14, 30, 50, 20], 0, 0, []],
+        [3, '重複', '', '', [0, 0, 0, 0, 0, 0], [10, 10, 10, 10], 0, 0, []], ['bad'], [4, '', '', '', [1, 1, 1, 1, 1, 1], [10, 10, 10, 10], 0, 0, []],
+      ] });
+      ok(sk.updated === '202610' && sk.items.length === 3 && eq(sk.items[0].t, { aroma: 4.5, sweet: 4.8, body: 3, sharp: 1.2 }) && sk.items[0].score === 4.3 && sk.items[0].rank === 1 && sk.items[2].score === null && sk.items[2].rank === null && eq(sk.items[0].f.slice(0, 2), [0.6, 0.7])
+        && Dk.sakeWords(sk.items[0].f) === '芳醇・華やか' && Dk.sakeWords(sk.items[1].f) === 'ドライ・軽快' && eq(Dk.parseSake(null).items, []) && eq(Dk.SAKE_AXES, ['aroma', 'sweet', 'body', 'sharp']) && Dk.SAKE_F.length === 6 && Dk.SAKE_CREDIT.url === 'https://sakenowa.com',
+        'parseSake / sakeWords: さけのわデータの銘柄(味の目安は 1〜5・人気の点と順位・形の合わないものと 重複は捨てる)・強い指標 2 つの名前');
+
+      const told = { sake: { sweet: 5, sharp: 1 } };
+      const three = { s1: mk('s1', 'sake', 'A', { sweet: 2 }, 4.5), s2: mk('s2', 'sake', 'B', { sweet: 2 }, 4.2), s3: mk('s3', 'sake', 'C', { sweet: 2 }, 4) };
+      const t0 = Dk.target({}, 'sake', told), t1 = Dk.target(three, 'sake', null), t2 = Dk.target(three, 'sake', told), t3 = Dk.target({}, 'sake', null);
+      ok(eq(Dk.normalizePref({ coffee: { aroma: 5, sweet: 9, tannin: 3, x: 1 }, beer: { aroma: 3 }, sake: {} }), { coffee: { aroma: 5 } }) && eq(Dk.normalizePref('x'), {})
+        && eq(t0, { t: { sweet: 5, sharp: 1 }, basis: 'self', n: 0, w: 0 }) && eq(t1, { t: { sweet: 2 }, basis: 'top', n: 3, w: 0.5 }) && eq(t2.t, { sweet: 3.5, sharp: 1 }) && t2.basis === 'mix' && eq(t3, { t: {}, basis: null, n: 0, w: 0 })
+        && Dk.basisText(t0).includes('伝えてもらった好み') && Dk.basisText(t2).includes('50%') && Dk.basisText(t1).includes('総評 4 以上') && Dk.basisText(t3).includes('日替わり'),
+        'normalizePref / target / basisText: 好みの申告は その種類の軸の 1〜5 だけ・記録が 0 件なら 申告だけ・3 件で 半々(だんだん 記録を優先)・どちらも無ければ 的なし');
+
+      const sg = Dk.suggest({}, 'sake', D0, { declared: told, sake: sk }), sgHad = Dk.suggest({ x: mk('x', 'sake', ' 甘口 の酒', { sweet: 5 }, 4.8) }, 'sake', D0, { sake: sk }), sgC = Dk.suggest({}, 'coffee', D0), sgNoDb = Dk.suggest({}, 'sake', D0, { declared: told });
+      const names = (r) => [r.pick, ...r.others].map((c) => c.name);
+      ok(sg.kind === 'sake' && sg.pick.src === 'sakenowa' && names(sg).length === 3 && new Set(names(sg)).size === 3 && sg.pick.ref > 0 && sg.target.basis === 'self' && eq(names(Dk.suggest({}, 'sake', D0, { declared: told, sake: sk })), names(sg))
+        && !names(sgHad).includes('甘口の酒') && names(sgHad).length === 2 && sgC.pick.src === 'style' && sgC.pick.name === Dk.recommend({}, 'coffee', D0).style.name && sgC.others.length <= 4 && sgNoDb.pick.src === 'style' && Dk.suggest({}, 'other', D0) === null
+        && sg.pick.note.length > 0 && (sg.pick.name !== '甘口の酒' || sg.pick.note.startsWith('芳醇・華やか')),
+        'suggest: 日本酒は 銘柄のデータがあれば 実在の銘柄から(もう記録した銘柄は 出さない・同じ日は同じ)・無ければ 品種の表から・コーヒーは これまでと同じ選び方');
+
+      const real = Dk.parseSake(await (await fetch('../data/sake.json', { cache: 'no-store' })).json());
+      const sweet = Dk.suggest({}, 'sake', D0, { declared: { sake: { sweet: 5, sharp: 1 } }, sake: real }), dry = Dk.suggest({}, 'sake', D0, { declared: { sake: { sweet: 1, sharp: 5 } }, sake: real });
+      ok(real.items.length >= 1000 && /^\d{6}$/.test(real.updated) && real.items.every((x) => x.name && Dk.SAKE_AXES.every((k) => x.t[k] >= 1 && x.t[k] <= 5) && x.f.length === 6) && real.items.some((x) => x.rank === 1) && new Set(real.items.map((x) => x.ref)).size === real.items.length
+        && [sweet.pick, ...sweet.others].every((c) => c.t.sweet >= 3.5 && c.t.sharp <= 2.5) && [dry.pick, ...dry.others].every((c) => c.t.sweet <= 2.5 && c.t.sharp >= 3.5) && sweet.others.length === 4,
+        '同梱の日本酒(data/sake.json・さけのわデータ): 1,000 銘柄以上・味の目安がそろっている・甘口好みには 甘い銘柄、辛口好みには キレのある銘柄が出る');
+
+      const w = Dk.normalizeDrink({ id: 'w1', kind: 'sake', name: '新政', maker: '新政酒造・秋田県', wish: true, ref: 109, updatedAt: '2026-11-15T10:00:00+09:00' });
+      const own = { o1: mk('o1', 'sake', '甘口の酒', { aroma: 3, sweet: 5, body: 2, sharp: 1, acid: 4 }, 4.5), o2: mk('o2', 'sake', '甘口の酒', { aroma: 5, sweet: 4 }, 3.5), o3: mk('o3', 'sake', '知らない酒', { sweet: 3 }, 3), w1: w };
+      const cmp = Dk.compareList(own, sk);
+      ok(w.wish === true && w.ref === 109 && !('wish' in mk('n', 'sake', 'x', {}, 3)) && Dk.listDrinks(own).length === 3 && !Dk.summary(own).sake.best.wish && Dk.summary(own).sake.n === 3 && eq(Dk.listWish(own).map((d) => d.id), ['w1']) && Dk.wishOf(own, 'sake', ' 新 政 ').id === 'w1' && Dk.wishOf(own, 'wine', '新政') === null
+        && eq(Dk.ownOf(own, 'sake', '甘口の酒'), { n: 2, t: { aroma: 4, sweet: 4.5, acid: 4, body: 2, sharp: 1 }, overall: 4 }) && Dk.ownOf(own, 'sake', '無い') === null && cmp.length === 1 && cmp[0].name === '甘口の酒' && cmp[0].net.ref === 1 && cmp[0].own.t.sweet === 4.5 && eq(Dk.compareList(own, null), [])
+        && St.migrate({ schema: 1, drinks: { w1: { ...w } } }).drinks.w1.wish === true,
+        '気になる(wish)/ ownOf / compareList: 気になる は 記録の数・平均・好みに 入らない・名前の空白は 無視して 重なりを見る・ネットの評価と見比べられるのは さけのわに ある銘柄だけ');
+
+      const wl = Dk.whereLinks('sake', '新政'), wc = Dk.whereLinks('coffee', 'エチオピア(浅煎り)');
+      const rec3 = { c1: mk('c1', 'coffee', 'a', { aroma: 4 }, 4), k1: mk('k1', 'sake', 'b', {}, 4), k2: mk('k2', 'sake', 'c', {}, 4), v1: mk('v1', 'wine', 'd', {}, 4) };
+      ok(wl.length === 2 && wl[0].label === '近くで探す' && wl[0].url === `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('新政 日本酒 取扱店')}` && wl[1].url.startsWith('https://www.google.com/search?q=') && wc[0].url.endsWith(encodeURIComponent('エチオピア コーヒー豆')) && eq(Dk.whereLinks('wine', ' '), [])
+        && Dk.kindFor({}, 600, null) === null && Dk.kindFor({}, 600, { coffee: { aroma: 4 } }) === 'coffee' && Dk.kindFor({}, 1200, { sake: { sweet: 3 } }) === 'sake' && Dk.kindFor({}, 1200, { coffee: { aroma: 4 } }) === 'coffee' && Dk.kindFor(rec3, 600) === 'coffee' && Dk.kindFor(rec3, 1200) === 'sake' && Dk.kindFor(rec3, 1200) === Dk.kindNow(rec3, 1200)
+        && eq(St.defaultSettings().drinkPref, {}) && St.SCALAR_FIELDS.includes('drinkPref') && eq(St.migrate({ schema: 1, settings: { drinkPref: { wine: { tannin: 4, sharp: 2 }, other: { aroma: 1 } } } }).settings.drinkPref, { wine: { tannin: 4 } }) && !/ASSETS = \[[^\]]*data\/sake/.test(sw),
+        'whereLinks / kindFor / settings.drinkPref: 地図の検索と ネットの検索(外のページを開くだけ)・記録が無くても 好みを申告した種類は すすめる・好みの申告は 設定として同期・銘柄のデータは ASSETS に入れない');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

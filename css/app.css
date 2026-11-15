@@ -1888,3 +1888,19 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .vc-ta{width:100%;min-height:64px;font-size:12px}
 .vc-note{min-height:1.5em}
 .vc-body .btn.grow{flex:1}
+
+/* v0.86・F19-11〜16: 飲み物のおすすめ(実在の銘柄・チャート・気になる・好みの申告・日報の札) */
+.dk-rec-meta{font-size:13px;color:var(--muted)}
+.dk-net{margin:0;font-size:14px}
+.dk-reckind{margin-bottom:2px}
+.dk-acts{flex-wrap:wrap;gap:8px}
+.dk-acts .btn.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.dk-others{margin-top:2px}
+.dk-wish h2{font-size:13px;color:var(--muted);margin:0 0 6px 4px;font-weight:600}
+.dk-wishrow{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.dk-wishrow .dk-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.dk-prefrow{display:grid;grid-template-columns:3.2em 1fr;align-items:center;gap:2px 8px;margin:8px 0}
+.dk-prefname{font-size:14px;font-weight:600}
+.dk-prefword{grid-column:2;min-height:1.4em}
+.bd-drink{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;background:var(--bg);color:var(--fg);border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer;margin-bottom:8px}
+.bd-drink b{font-size:16px}

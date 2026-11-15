@@ -680,7 +680,7 @@ function weatherTile(ctx) {
 }
 /** ③ いま知りたいこと(v0.71): 電車・天気・作業用 BGM・キャッチアップ のタイル(使っているものだけ・横に並ぶ)。1 つも無ければ出さない */
 function quickRow(ctx, rerender) {
-  const xs = [trainTile(ctx), weatherTile(ctx), sleepTile(), vocabTile(rerender), bgmTile(rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ'), drinkTile(ctx)].filter(Boolean); // v0.74: 記事は アシスタントが集めてきた形に
+  const xs = [trainTile(ctx), weatherTile(ctx), sleepTile(), vocabTile(rerender), bgmTile(rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ'), drinkTile(ctx, rerender)].filter(Boolean); // v0.74: 記事は アシスタントが集めてきた形に
   return xs.length ? el('section.group.quick-box', [el('h2', 'いま知りたいこと'), el('div.quick-row', { class: `quick-row${xs.length > 4 ? ' two' : ''}` }, xs)]) : null; // v0.83: 5 つ以上は 3 列の 2 段に(1 段に 5 つは 幅 390px で 窮屈)
 }
 /** 描き直しが要る状態のキー: 記録中の id / 直近の記録の終わり / 分(内訳は分ごとに動く) */

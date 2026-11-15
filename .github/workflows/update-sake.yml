@@ -1,0 +1,31 @@
+# merihari ─ 飲み物のおすすめ(F19-11)の 日本酒の銘柄(data/sake.json)を、さけのわデータから 月 1 回 作り直す(v0.86.0・2026-11-15)。
+# さけのわデータ(https://muro.sakenowa.com/sakenowa-data/): 無料・商用可・加工可・帰属表示が条件(アプリの おすすめの札に いつも出している)。ランキングは 月ごとに変わる。
+# 版は上げない: data/sake.json は SW の ASSETS でも DATA でもなく「ネットワーク優先」。変わったときだけ commit。
+name: update-sake
+on:
+  schedule:
+    - cron: '23 21 2 * *'   # 毎月 3 日 6:23 JST(= 2 日 21:23 UTC)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-sake
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: data/sake.json を作り直す
+        run: python -X utf8 -I tools/sake_fetch.py
+      - name: 変わっていれば commit
+        run: |
+          if git diff --quiet -- data/sake.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sake.json
+          git commit -m "sake: 日本酒の銘柄を さけのわデータから更新($(date -u +%Y-%m-%d))"
+          git push

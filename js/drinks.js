@@ -39,11 +39,11 @@ export function normalizeDrink(r, id = null) {
   for (const [k] of axesOf(kind)) { const v = Math.round(+src[k]); if (Number.isFinite(v) && v >= 1 && v <= 5) taste[k] = v; }
   const s = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
   return { id: String(r.id || id || ''), kind, name: r.name.trim().slice(0, 100), maker: s(r.maker, 80), place: s(r.place, 80), date: /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null,
-    taste, overall: clampOverall(r.overall), note: s(r.note, 1000), photo: r.photo === true, updatedAt: s(r.updatedAt, 40) || null, deletedAt: s(r.deletedAt, 40) || null };
+    taste, overall: clampOverall(r.overall), note: s(r.note, 1000), photo: r.photo === true, ...(r.wish === true ? { wish: true } : {}), ...(Number.isInteger(r.ref) && r.ref > 0 ? { ref: r.ref } : {}), updatedAt: s(r.updatedAt, 40) || null, deletedAt: s(r.deletedAt, 40) || null }; // wish(v0.86): 気になる(まだ飲んでいない)・ref: さけのわの銘柄の番号
 }
 /** 生きている記録(新しい日付 → 更新順) */
 export function listDrinks(drinks, kind = null) {
-  return Object.values(drinks || {}).filter((d) => alive(d) && (!kind || d.kind === kind)).sort((a, b) => ((b.date || '') < (a.date || '') ? -1 : (b.date || '') > (a.date || '') ? 1 : (b.updatedAt || '') < (a.updatedAt || '') ? -1 : 1));
+  return Object.values(drinks || {}).filter((d) => alive(d) && !d.wish && (!kind || d.kind === kind)).sort((a, b) => ((b.date || '') < (a.date || '') ? -1 : (b.date || '') > (a.date || '') ? 1 : (b.updatedAt || '') < (a.updatedAt || '') ? -1 : 1));
 }
 /** 種類ごとの件数と平均の総評 */
 export function summary(drinks) {
@@ -225,4 +225,154 @@ export function recommend(drinks, kind, date) {
 export function radarPoints(values, cx, cy, r) {
   const n = values.length;
   return values.map((v, i) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / n, k = v == null ? 0 : Math.max(0, Math.min(5, v)) / 5; return [Math.round((cx + Math.cos(a) * r * k) * 10) / 10, Math.round((cy + Math.sin(a) * r * k) * 10) / 10]; });
+}
+
+// ---- v0.86・F19-11〜F19-16(ユーザー要望「登録した情報をもとに 今日の一杯を。網羅的なサイトから 情報を取って(権利を確かめて)・おすすめも 同じ軸のチャートで・ネットの評価と自己評価を見比べ・
+//      気になる(ブックマーク)・どこで飲めるか・日報でも・記録が少ないうちは 好みを自己申告(あとから 実際の記録を優先)」)----
+// 日本酒は さけのわデータ(data/sake.json・tools/sake_fetch.py・帰属表示が条件)の 実在の銘柄から。コーヒーとワインは 銘柄ごとの味を 自由に使える形で公開している所が無いので、上の STYLES(品種・産地の目安)から。
+
+/** 好みを自己申告できる種類 */
+export const PREF_KINDS = Object.freeze(['coffee', 'sake', 'wine']);
+/** settings.drinkPref の正規化: { 種類: { 軸: 1〜5 } }(その種類の軸だけ・空の種類は持たない) */
+export function normalizePref(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const k of PREF_KINDS) {
+    const src = raw[k] && typeof raw[k] === 'object' ? raw[k] : {}, t = {};
+    for (const [key] of axesOf(k)) { const v = Math.round(+src[key]); if (Number.isFinite(v) && v >= 1 && v <= 5) t[key] = v; }
+    if (Object.keys(t).length) out[k] = t;
+  }
+  return out;
+}
+/**
+ * おすすめの的(まと)= いまの好み。記録(好きなもの = 総評 4 以上の平均。無ければ ぜんぶの平均)と 自己申告を、記録の数で混ぜる:
+ * 記録の重み w = n / (n + 3)(n = もとにした記録の数。0 件なら 申告だけ・3 件で 半々・9 件で 記録が 4 分の 3)。
+ * 戻り値 { t: { 軸: 値 }, basis: 'top' | 'all' | 'self' | 'mix' | null, n, w }。純関数
+ */
+export function target(drinks, kind, declared = null) {
+  const p = preference(drinks, kind);
+  const useTop = p.axes.some((a) => a.avgTop != null);
+  const n = useTop ? listDrinks(drinks, kind).filter((d) => d.overall != null && d.overall >= 4).length : p.axes.some((a) => a.avgAll != null) ? listDrinks(drinks, kind).filter((d) => Object.keys(d.taste).length).length : 0;
+  const w = n / (n + 3), self = normalizePref({ [kind]: declared && declared[kind] })[kind] || {};
+  const t = {};
+  let hasA = false, hasS = false;
+  for (const a of p.axes) {
+    const act = useTop ? a.avgTop : a.avgAll, s = self[a.key] ?? null;
+    if (act != null) hasA = true;
+    if (s != null) hasS = true;
+    const v = act != null && s != null ? s * (1 - w) + act * w : act ?? s;
+    if (v != null) t[a.key] = Math.round(v * 10) / 10;
+  }
+  return { t, basis: hasA && hasS ? 'mix' : hasA ? (useTop ? 'top' : 'all') : hasS ? 'self' : null, n, w: Math.round(w * 100) / 100 };
+}
+
+/** さけのわの 6 つの指標の名前(f1〜f6) */
+export const SAKE_F = Object.freeze(['華やか', '芳醇', '重厚', '穏やか', 'ドライ', '軽快']);
+/** 日本酒で ネットの値と見比べられる軸(さけのわの指標から 換算できるもの。酸味と 苦味は 指標に無い) */
+export const SAKE_AXES = Object.freeze(['aroma', 'sweet', 'body', 'sharp']);
+export const SAKE_CREDIT = Object.freeze({ text: 'さけのわデータ', url: 'https://sakenowa.com' });
+/** data/sake.json → { updated, items: [{ ref, name, maker, area, f: [6](0〜1), t: { aroma, sweet, body, sharp }(1〜5), score(人気の点 0〜5 | null), rank(全国の順位 | null), tags }] }(形の合わないものは捨てる) */
+export function parseSake(raw) {
+  const out = { updated: raw && typeof raw.updated === 'string' ? raw.updated.slice(0, 6) : '', items: [] };
+  if (!raw || !Array.isArray(raw.items)) return out;
+  const seen = new Set();
+  for (const x of raw.items) {
+    if (!Array.isArray(x) || !Number.isInteger(x[0]) || typeof x[1] !== 'string' || !x[1].trim() || !Array.isArray(x[4]) || x[4].length !== 6 || !Array.isArray(x[5]) || x[5].length !== 4 || seen.has(x[0])) continue;
+    const t5 = x[5].map((v) => Math.max(1, Math.min(5, +v / 10)));
+    if (t5.some((v) => !Number.isFinite(v))) continue;
+    seen.add(x[0]);
+    out.items.push({ ref: x[0], name: x[1].trim().slice(0, 60), maker: typeof x[2] === 'string' ? x[2].slice(0, 60) : '', area: typeof x[3] === 'string' ? x[3].slice(0, 20) : '', f: x[4].map((v) => Math.max(0, Math.min(1, +v / 100 || 0))),
+      t: Object.fromEntries(SAKE_AXES.map((k, i) => [k, t5[i]])), score: +x[6] > 0 ? Math.round(+x[6]) / 100 : null, rank: +x[7] > 0 ? Math.round(+x[7]) : null, tags: Array.isArray(x[8]) ? x[8].filter((s) => typeof s === 'string').slice(0, 5) : [] });
+  }
+  return out;
+}
+/** さけのわの指標のうち 強い 2 つの名前(例「華やか・軽快」) */
+export const sakeWords = (f) => SAKE_F.map((name, i) => ({ name, v: f[i] || 0 })).sort((a, b) => b.v - a.v).slice(0, 2).map((x) => x.name).join('・');
+
+/** 名前を そろえる(見比べ・重なりの判定用): 空白を取り、英字は小文字に */
+export const nameKey = (s) => String(s || '').replace(/[\s\u3000]/g, '').toLowerCase();
+/** 気になる(ブックマーク): data.drinks の中の wish = true の記録(総評も 日付も 無い)。新しい順 */
+export function listWish(drinks) {
+  return Object.values(drinks || {}).filter((d) => d && !d.deletedAt && d.wish === true).sort((a, b) => ((b.updatedAt || '') < (a.updatedAt || '') ? -1 : 1));
+}
+/** その候補を もう 気になる に入れているか(種類と名前で) → 記録 | null */
+export const wishOf = (drinks, kind, name) => listWish(drinks).find((d) => d.kind === kind && nameKey(d.name) === nameKey(name)) || null;
+/** 同じ名前の 自分の記録の平均 { n, t: { 軸: 平均 }, overall(平均 | null) } | null(ネットの評価と 見比べる) */
+export function ownOf(drinks, kind, name) {
+  const list = listDrinks(drinks, kind).filter((d) => nameKey(d.name) === nameKey(name));
+  if (!list.length) return null;
+  const t = {};
+  for (const [key] of axesOf(kind)) { const xs = list.filter((d) => d.taste[key] != null); if (xs.length) t[key] = Math.round((xs.reduce((a, d) => a + d.taste[key], 0) / xs.length) * 10) / 10; }
+  const rated = list.filter((d) => d.overall != null);
+  return { n: list.length, t, overall: rated.length ? Math.round((rated.reduce((a, d) => a + d.overall, 0) / rated.length) * 10) / 10 : null };
+}
+/** 自分の記録のうち、ネットの値(さけのわ)と 見比べられるもの [{ name, own, net }](新しい順・max 件まで) */
+export function compareList(drinks, sake, max = 3) {
+  const by = new Map((sake?.items || []).map((x) => [nameKey(x.name), x]));
+  const out = [], seen = new Set();
+  for (const d of listDrinks(drinks, 'sake')) {
+    const k = nameKey(d.name), net = by.get(k);
+    if (!net || seen.has(k)) continue;
+    const own = ownOf(drinks, 'sake', d.name);
+    if (!own || !SAKE_AXES.some((a) => own.t[a] != null)) continue;
+    seen.add(k); out.push({ name: d.name, own, net });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** どこで飲める / 買えるか の入口(外のページを開くだけ・通信はしない): 地図で探す(Google マップの検索 = いまいる場所の近く)・ネットで調べる */
+export function whereLinks(kind, name) {
+  const q = String(name || '').replace(/\s*\([^)]*\)/g, '').trim();
+  if (!q) return [];
+  const word = kind === 'coffee' ? 'コーヒー豆' : kind === 'sake' ? '日本酒 取扱店' : kind === 'wine' ? 'ワイン' : kindName(kind);
+  return [
+    { label: '近くで探す', url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${q} ${word}`)}` },
+    { label: 'ネットで調べる', url: `https://www.google.com/search?q=${encodeURIComponent(`${q} ${kind === 'sake' ? '日本酒' : kindName(kind)}`)}` },
+  ];
+}
+
+/**
+ * いまの時間に すすめる種類(v0.86): kindNow と同じ決め方だが、記録が無くても 好みを自己申告した種類は 候補に入る。
+ * 15 時までは コーヒー。それ以降は お酒(記録か 申告のあるもの・記録の多い順)、無ければ コーヒー。どれも無ければ null
+ */
+export function kindFor(drinks, nowMin, declared = null) {
+  const sum = summary(drinks), pref = normalizePref(declared);
+  const has = (k) => !!sum[k] || !!pref[k];
+  const liquor = ['sake', 'wine', 'beer'].filter(has).sort((a, b) => (sum[b]?.n || 0) - (sum[a]?.n || 0))[0] || null;
+  if (nowMin >= 900 && liquor) return liquor;
+  return has('coffee') ? 'coffee' : null;
+}
+/**
+ * おすすめ(v0.86・F19-11): 的(target)に 味が近い候補を選ぶ。
+ * 日本酒で sake(parseSake)があれば 実在の銘柄から: まだ記録していない銘柄のうち 的に近い 40 本 → 人気の順位・点の高い順に 8 本 → 日付で 1 本(同じ日は同じ)。
+ * それ以外は STYLES から 近い 3 つ → 日付で 1 つ(recommend と同じ)。的が無ければ 人気の順 / 表の順から 日替わり。
+ * 戻り値 { kind, pick, others(ほかの候補 4 つまで), target, why, again } | null。
+ * 候補 = { name, maker, area, note, t: { 軸: 1〜5 }, src: 'sakenowa' | 'style', ref, score, rank, f }。純関数
+ */
+export function suggest(drinks, kind, date, { declared = null, sake = null } = {}) {
+  const fromDb = kind === 'sake' && sake && sake.items && sake.items.length > 0;
+  const had = new Set(listDrinks(drinks, kind).map((d) => nameKey(d.name)));
+  const cands = fromDb
+    ? sake.items.filter((x) => !had.has(nameKey(x.name))).map((x) => ({ name: x.name, maker: x.maker, area: x.area, note: [sakeWords(x.f), ...x.tags.slice(0, 3)].filter(Boolean).join('・'), t: x.t, src: 'sakenowa', ref: x.ref, score: x.score, rank: x.rank, f: x.f }))
+    : (STYLES[kind] || []).map((s) => ({ name: s.name, maker: '', area: '', note: s.note, t: s.t, src: 'style', ref: null, score: null, rank: null, f: null }));
+  if (!cands.length) return null;
+  const tg = target(drinks, kind, declared);
+  const keys = Object.keys(tg.t).filter((k) => cands.some((c) => c.t[k] != null));
+  const dist = (c) => keys.reduce((a, k) => a + ((c.t[k] ?? 3) - tg.t[k]) ** 2, 0);
+  const pop = (a, b) => (a.c.rank || 9999) - (b.c.rank || 9999) || (b.c.score || 0) - (a.c.score || 0) || a.i - b.i;
+  const ranked = cands.map((c, i) => ({ c, i, d: dist(c) })).sort((a, b) => a.d - b.d || a.i - b.i);
+  const pool = fromDb ? (keys.length ? ranked.slice(0, 40) : ranked).slice().sort(pop).slice(0, 8) : keys.length ? ranked.slice(0, 3) : ranked;
+  const at = hash(`${date}:${kind}`) % pool.length, pick = pool[at].c;
+  const near = keys.filter((k) => Math.abs((pick.t[k] ?? 3) - tg.t[k]) <= 0.8 && (tg.t[k] >= 3.8 || tg.t[k] <= 2.2)).map((k) => `${axisName(kind, k)}が ${tg.t[k] >= 3.8 ? '強め' : '控えめ'}`);
+  const days = (d) => (d ? Math.round((new Date(`${date}T00:00`) - new Date(`${d}T00:00`)) / 86400000) : 999);
+  const again = listDrinks(drinks, kind).filter((d) => d.overall != null && d.overall >= 4 && days(d.date) >= 14).sort((a, b) => b.overall - a.overall || days(b.date) - days(a.date))[0] || null;
+  return { kind, pick, others: pool.filter((_, i) => i !== at).slice(0, 4).map((x) => x.c), target: tg, why: near.length ? `${near.slice(0, 2).join('・')}` : null, again: again ? { name: again.name, overall: again.overall, days: days(again.date) } : null };
+}
+/** おすすめの もとの説明(1 文): 記録から / 自己申告から / 両方 / まだ無い */
+export function basisText(tg) {
+  if (!tg || !tg.basis) return '味の記録か 好みの申告があると、好みに近いものを選びます(いまは 日替わり)。';
+  if (tg.basis === 'self') return '伝えてもらった好みに 近いものです。記録が たまると、実際の記録を優先します。';
+  if (tg.basis === 'mix') return `伝えてもらった好みと これまでの記録(${tg.n} 件)を 合わせた好みに 近いものです。記録が増えるほど 記録を優先します(いまは 記録が ${Math.round(tg.w * 100)}%)。`;
+  return tg.basis === 'top' ? `好きなもの(総評 4 以上・${tg.n} 件)の 味の平均に 近いものです。` : 'これまでの記録の 味の平均に 近いものです。';
 }
