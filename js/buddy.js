@@ -335,6 +335,12 @@ const LINES = Object.freeze({
   work_done: { bright: ['{min}分、おつかれさま! ひと息 入れよう。', 'おつかれさま! {min}分も がんばったね。', '{min}分 やりきったね。えらい!'], polite: ['{min}分の作業、お疲れさまでした。少し休みましょう。', 'お疲れさまでした。{min}分、よく続きましたね。'], cool: ['{min}分か。よくやった。少し休め。', '{min}分。上出来だ。'] },
   habit_left: { bright: ['「{name}」が まだみたい。ちょっとだけ、やっておく?', 'そういえば「{name}」、今日は まだだよ。少しでも やれば 続くよ!'], polite: ['「{name}」が まだのようです。少しだけでも、いかがですか。', '「{name}」が 今日は まだです。短い時間でも 続きになります。'], cool: ['「{name}」が まだだ。少しでいい、やっておけ。', '「{name}」が残っている。短くていい。'] },
   habit_back: { bright: ['「{name}」は きのう ひと休みだったね。今日から また 1 日目、いこう!', '「{name}」、今日から また 1 日目だよ。ゆっくりでいいからね。'], polite: ['「{name}」は 昨日お休みでしたね。今日から また 1 日目です。'], cool: ['「{name}」は 昨日休んだな。今日から また 1 日目だ。'] },
+  // v0.83・F26: 睡眠(昨夜が短い / 7 日の平均が足りない / 寝る時刻が遅くなっている / 足りている / そろそろ寝る時刻)。{time} は 今夜 寝る時刻の目安
+  sleep_short: { bright: ['昨夜は {last}だったね。今夜は {time}までに 寝よう?', '{last}しか 眠れてないよ。今日は 早めに、{time}までには おふとんへ!'], polite: ['昨夜は {last}でした。今夜は {time}までに お休みになりませんか。', '{last}の睡眠でした。今夜は {time}を目安に お休みください。'], cool: ['昨夜は {last}だ。今夜は {time}までに寝ろ。', '{last}では足りない。{time}には寝ろ。'] },
+  sleep_debt: { bright: ['この7日の平均は {avg}。ちょっと 足りてないみたい。今夜は {time}までに 寝よう。', '眠りが 平均 {avg}で 少なめだよ。今夜は {time}を目指そう!'], polite: ['この7日の平均は {avg}で、少し不足しています。今夜は {time}までに お休みください。', '睡眠の平均が {avg}です。今夜は {time}を目安に いかがでしょう。'], cool: ['7日の平均は {avg}。足りていない。今夜は {time}までに寝ろ。', '平均 {avg}だ。{time}には寝ろ。'] },
+  sleep_late: { bright: ['寝る時刻が 少しずつ 遅くなってるよ。今夜は {time}を目指してみよう。', 'このところ 夜ふかし気味かも。今夜は {time}までに、ね。'], polite: ['お休みの時刻が 少しずつ遅くなっています。今夜は {time}を目安に いかがでしょう。', 'このところ 夜ふかし気味のようです。今夜は {time}までに。'], cool: ['寝る時刻が 遅くなっている。今夜は {time}だ。', '夜ふかしが続いている。{time}には寝ろ。'] },
+  sleep_good: { bright: ['この7日の平均は {avg}。よく眠れてるね! 今夜も {time}ごろに。', '眠りは 平均 {avg}。いい調子だよ。今夜も {time}ごろに おやすみしよう。'], polite: ['この7日の平均は {avg}です。よく眠れていますね。今夜も {time}ごろに。', '睡眠は 平均 {avg}。よい調子です。今夜も {time}ごろに お休みください。'], cool: ['7日の平均は {avg}。足りている。今夜も {time}ごろだ。', '平均 {avg}。その調子だ。{time}ごろに寝ろ。'] },
+  sleep_soon: { bright: ['そろそろ 寝る時刻({time})だよ。きりのいい所で おしまいにしよう。', '{time}が 近いよ。続きは あしたの自分に まかせよう!'], polite: ['そろそろ お休みの時刻({time})です。きりのよい所で 終えましょう。', '{time}が近づいています。続きは 明日に いたしましょう。'], cool: ['そろそろ {time}だ。切り上げろ。', '{time}が近い。続きは 明日だ。'] },
   habit_done: { bright: ['今日の習慣、ぜんぶ済んでるよ。さすが!', '習慣は ぜんぶ おしまい。今日も続いたね!'], polite: ['今日の習慣は すべて済んでいます。お見事です。'], cool: ['習慣は ぜんぶ済んだ。上出来だ。'] },
   hello_evening: { bright: ['こんばんは! 今日も あと少しだね。', 'こんばんは。午後の灯りも、ちゃんと届いてたよ。'], polite: ['こんばんは。午後の記録をまとめました。', 'お疲れさまでした。午後のぶんをお持ちします。'], cool: ['夜だ。午後のぶんを まとめた。', '午後の記録だ。'] },
   hello: {
@@ -603,6 +609,11 @@ export const SCENES = Object.freeze({
   habit_left: { g: 'home', when: '夜になっても まだ済んでいない習慣があると、やさしく知らせて 少しだけでもと誘う', v: { name: '習慣の名前(「{name}」のように かぎかっこで囲む)' }, need: ['name'] },
   habit_back: { g: 'home', when: '昨日は休んだ習慣が、今日から また 1 日目だと 明るく伝える', v: { name: '習慣の名前(「{name}」のように かぎかっこで囲む)' }, need: ['name'] },
   habit_done: { g: 'home', when: '今日の習慣が ぜんぶ済んだと伝えて、ほめる' },
+  sleep_short: { g: 'home', when: '昨夜の睡眠が短かったと伝えて、今夜は早く寝ようと誘う', v: { last: '昨夜の睡眠の長さ(例: 5時間20分)', time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
+  sleep_debt: { g: 'home', when: 'この 7 日の睡眠の平均が足りないと伝えて、今夜は早く寝ようと誘う', v: { avg: '7 日の平均(例: 6時間5分)', time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
+  sleep_late: { g: 'home', when: '寝る時刻が 少しずつ遅くなっていると、責めずに知らせる', v: { time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
+  sleep_good: { g: 'home', when: 'よく眠れていると ほめて、今夜も同じころに寝ようと言う', v: { avg: '7 日の平均(例: 7時間10分)', time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
+  sleep_soon: { g: 'home', when: '寝る時刻が近いと知らせて、きりのいい所で終えようと誘う', v: { time: '今夜 寝る時刻の目安(例: 23:30)' }, need: ['time'] },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
   hello_morning: { g: 'brief', when: '朝の日報の冒頭。あいさつして、昨日の記録をまとめたと伝える' },
@@ -900,6 +911,7 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   if (first.key === 'night') return out; // 夜は おやすみ だけ
   // v0.76(ユーザー要望「◯◯はまだです。5分だけでも。のような システムの文は アシスタントに集約」): 習慣の声かけは 2 番目の話題に
   if (s.habit && s.habit.name) add(s.habit.kind === 'back' ? 'habit_back' : s.habit.kind === 'done' ? 'habit_done' : 'habit_left', s.habit.kind === 'done' ? 'happy' : s.habit.kind === 'left' ? 'worry' : 'base', { name: s.habit.name });
+  if (s.sleep && s.sleep.key) add(s.sleep.key, s.sleep.key === 'sleep_good' ? 'happy' : 'worry', s.sleep.vars || {}); // v0.83・F26: 睡眠の声かけ(夜か、昨夜が短かった日)
   if (s.quest && !s.quest.done && !(s.quest.unread > 0) && first.key !== 'working') add('quest_wait', 'base', { n: s.quest.need });
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });

@@ -18,7 +18,8 @@ import { bgmStrip, bgmTile } from './ui-bgm.js'; // v0.71: ♪ は「いま知�
 import { feedTile } from './ui-feed.js'; // v0.34・F17: キャッチアップ(v0.71: ホームは 新着の数のタイルだけ・中身は 一覧のシートと 日報)
 import { buddyHead, buddyActs, buddyOn, buddyName, bubble } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
 import { artStrip, artNeed } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
-import { questStrip, questNeed } from './ui-quest.js'; // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
+import { questStrip, questNeed } from './ui-quest.js';
+import { sleepTile } from './ui-sleep.js'; // v0.83・F26: 睡眠のタイル // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: 次はこれ(候補の順位・純関数)
 import { pomoOn, pomoCard, startSheet } from './ui-pomo.js';
@@ -677,8 +678,8 @@ function weatherTile(ctx) {
 }
 /** ③ いま知りたいこと(v0.71): 電車・天気・作業用 BGM・キャッチアップ のタイル(使っているものだけ・横に並ぶ)。1 つも無ければ出さない */
 function quickRow(ctx, rerender) {
-  const xs = [trainTile(ctx), weatherTile(ctx), bgmTile(rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ')].filter(Boolean); // v0.74: 記事は アシスタントが集めてきた形に
-  return xs.length ? el('section.group.quick-box', [el('h2', 'いま知りたいこと'), el('div.quick-row', xs)]) : null;
+  const xs = [trainTile(ctx), weatherTile(ctx), sleepTile(), bgmTile(rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ')].filter(Boolean); // v0.74: 記事は アシスタントが集めてきた形に
+  return xs.length ? el('section.group.quick-box', [el('h2', 'いま知りたいこと'), el('div.quick-row', { class: `quick-row${xs.length > 4 ? ' two' : ''}` }, xs)]) : null; // v0.83: 5 つ以上は 3 列の 2 段に(1 段に 5 つは 幅 390px で 窮屈)
 }
 /** 描き直しが要る状態のキー: 記録中の id / 直近の記録の終わり / 分(内訳は分ごとに動く) */
 function homeKey(n) {

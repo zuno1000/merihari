@@ -33,4 +33,9 @@ export const FEATURES = Object.freeze({
    * 隔離した実装: js/pomo.js・js/ui-pomo.js と、ホームのカード(ui-today.nextCard)・設定の 1 項目・settings.pomo・local.pomo だけ。false で「▶ 始める」(時間を決めない記録)に戻る。
    */
   POMO: true,
+  /**
+   * v0.83・F26(ユーザー要望「睡眠時間を記録して、アシスタントが 今日は早く寝よう のように 睡眠も管理。いま知りたいこと の 1 つとして。推移をグラフで」): 睡眠の管理。
+   * 隔離した実装: js/sleep.js・js/ui-sleep.js と、ホームのタイル(ui-today.quickRow)・アシスタントの話題(ui-buddy.homeState の sleep)・設定の 1 項目・settings.sleep だけ。false で どれも出ない。
+   */
+  SLEEP: true,
 });
