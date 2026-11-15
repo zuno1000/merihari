@@ -1588,7 +1588,7 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .nx-reason{font-size:14px;color:var(--muted)}
 .nx-hook{font-size:13px;font-weight:600;color:var(--accent);line-height:1.4} /* v0.82・F24-27: いまだけの ひとこと */
 .nx-at{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.dk-filter{margin:18px 0 6px} /* v0.82: 「＋ 飲み物を記録」と 絞り込みのチップの間を空ける */
+.chips.small.dk-filter{margin:18px 0 6px} /* v0.82: 「＋ 飲み物を記録」と 絞り込みのチップの間を空ける */
 .nx-btns{gap:8px;align-items:stretch}
 .nx-start{flex:1;min-height:54px;font-size:18px}
 .nx-other{align-self:center;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:6px 10px;min-height:36px;cursor:pointer}
@@ -1812,3 +1812,42 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .sl-hit{fill:transparent;cursor:pointer}
 .sl-detail{font-size:13px;min-height:1.5em;font-variant-numeric:tabular-nums}
 .quick-row.two{display:grid;grid-template-columns:repeat(3,1fr)}
+
+/* v0.84・F19-7〜F19-10: 飲み物 ─ 1 問ずつ聞く記録(.dw)・レーダーチャート(.dk-radar)・今日のおすすめ(.dk-say)・ホームのタイル(.qtile.dk) */
+.qtile.dk{--tc:#a9692b}
+@media (prefers-color-scheme:dark){.qtile.dk{--tc:#d9a066}}
+.dk-say{padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin:0 0 12px}
+.dk-say p{margin:0}
+.dk-lead,.dw-q{background:var(--bg);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.dk-lead p,.dw-q p{margin:0;font-size:15px;line-height:1.6}
+.dk-rec{display:flex;flex-direction:column;gap:2px}
+.dk-rec-name{font-size:18px}
+.dk-rec-note{font-size:14px;color:var(--muted)}
+.dk-again b{font-variant-numeric:tabular-nums}
+.dk-radar{display:block;width:100%;max-width:260px;height:auto;margin:0 auto}
+.rd-ring{fill:none;stroke:var(--line);stroke-width:1}
+.rd-ring.out{stroke:var(--muted);stroke-opacity:.5}
+.rd-spoke{stroke:var(--line);stroke-width:1}
+.rd-area{stroke-linejoin:round}
+.rd-area.top,.rd-area.one{fill:color-mix(in srgb,var(--accent) 22%,transparent);stroke:var(--accent);stroke-width:2}
+.rd-area.all{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 3}
+.rd-name{font-size:11px;fill:var(--fg)}
+.rd-val{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.dk-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px;justify-content:center}
+.rd-key{display:inline-block;width:16px;height:0;border-top:2px solid var(--accent);margin-right:2px}
+.rd-key.top,.rd-key.one{height:8px;border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);border-radius:2px}
+.rd-key.all{border-top:2px dashed var(--muted)}
+.dw{display:flex;flex-direction:column;gap:10px}
+.dw p{margin:0}
+.dw-top{align-items:center}
+.dw-top h2{margin:0}
+.dw-step{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.dw-guide{font-size:14px;line-height:1.6}
+.dw-look{display:flex;gap:8px;flex-wrap:wrap}
+.dw-look .btn{flex:1 1 0;min-width:140px}
+.dw-opts{display:flex;flex-direction:column;gap:6px}
+.dw-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:15px;text-align:left;border-radius:12px;padding:6px 12px;cursor:pointer}
+.dw-opt.on{border-color:var(--accent);background:var(--accent-bg)}
+.dw-n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.dw-opt.on .dw-n{background:var(--accent);color:#fff}
+.dw-nav{margin-top:4px}

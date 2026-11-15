@@ -38,4 +38,6 @@ export const FEATURES = Object.freeze({
    * 隔離した実装: js/sleep.js・js/ui-sleep.js と、ホームのタイル(ui-today.quickRow)・アシスタントの話題(ui-buddy.homeState の sleep)・設定の 1 項目・settings.sleep だけ。false で どれも出ない。
    */
   SLEEP: true,
+  /** v0.84・F19-9(ユーザー要望「おすすめの 今日のコーヒーやワインを アシスタントが提案。いま知りたいこと の 6 項目めに」): ホームの「今日の一杯」のタイル。false で タイルだけ出ない(飲み物の画面の おすすめは 残る) */
+  DRINK_REC: true,
 });

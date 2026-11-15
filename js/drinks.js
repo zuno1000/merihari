@@ -103,3 +103,126 @@ export function aiPrompt(kind, name, maker = '') {
   const ax = axesOf(kind).map(([, n]) => n).join('・');
   return `${kindName(kind)}「${q}」${maker ? `(${maker})` : ''}について、作り手(産地)・特徴・味の印象(${ax} をそれぞれ 1〜5)・合う料理や飲み方を、日本語で短く教えてください。わからない項目は「不明」と書いてください。`;
 }
+
+// ---- v0.84・F19-7〜F19-10(ユーザー要望「記録のときに アシスタントが この飲み物は どう感じた? と 複数ページで聞く。調べるタイミングと 各項目の基準が 分かりにくい(ぶれやすい)。
+//      好みを レーダーチャートで。おすすめの 今日のコーヒーやワインを 提案してほしい」)。すべて純関数・ルールベース(§2-7)・同梱の小さな表だけ(外へは 何も送らない) ----
+
+/** 軸ごとの 5 段階の基準(1 → 5)。種類ごとの言い方は KIND_LEVELS が上書きする */
+export const AXIS_LEVELS = Object.freeze({
+  aroma: ['ほとんど香らない', '近づけると香る', 'ふつうに香る', '注いだときから香る', 'あたりに広がるほど'],
+  sweet: ['甘さを感じない', 'あと味に少し', 'ほどよく甘い', 'はっきり甘い', 'デザートのよう'],
+  acid: ['酸っぱさを感じない', 'かすかに', 'ほどよい', 'はっきり酸っぱい', 'きゅっとするほど'],
+  bitter: ['苦くない', 'あと味に少し', 'ほどよい', 'はっきり苦い', '顔をしかめるほど'],
+  body: ['水のように軽い', '軽め', 'ふつう', '重め・とろり', '濃くて どっしり'],
+  sharp: ['あと味が 長く残る', 'やや残る', 'ふつう', 'すっと消える', '一瞬で消える'],
+  tannin: ['渋くない', 'かすかに', 'ほどよい', '口の中が乾く', 'きしむほど'],
+});
+export const KIND_LEVELS = Object.freeze({
+  coffee: { acid: ['感じない(深煎りに多い)', 'かすかに', 'ほどよい(中煎り)', '果物のよう(浅煎りに多い)', 'レモンのよう'], bitter: ['苦くない(紅茶のよう)', 'あと味に少し', 'ほどよい', 'はっきり(深煎り)', 'エスプレッソのよう'], body: ['お茶のように軽い', '軽め', 'ふつう', '重め', 'とろりと濃い'] },
+  wine: { sweet: ['辛口(甘くない)', 'やや辛口', '中口', 'やや甘口', '甘口(デザートワイン)'], body: ['ライト(さらり)', 'やや軽い', 'ミディアム', 'やや重い', 'フルボディ'] },
+  sake: { sweet: ['大辛口', '辛口', '中口', 'やや甘口', '甘口'], aroma: ['穏やか', 'ほのか', 'ふつう', '華やか(吟醸の香り)', '果物のように強い'] },
+  beer: { bitter: ['苦くない(白ビール)', '少し', 'ふつう(ラガー)', 'はっきり(ペールエール)', 'とても強い(IPA)'] },
+});
+/** その種類・その軸の 5 段階の基準(文字列 5 つ) */
+export const levelsOf = (kind, key) => (KIND_LEVELS[kind] && KIND_LEVELS[kind][key]) || AXIS_LEVELS[key] || LEVEL_WORDS.slice(1);
+/** 迷ったときの決め方(どの軸でも同じ) */
+export const LEVEL_TIP = '迷ったら 3。いつも飲んでいるものを 3 として、それより 強いか 弱いかで 決めると ぶれません。';
+/** 総評の 5 つの目安(あとで 0.1 刻みで 直せる) */
+export const OVERALL_CHOICES = Object.freeze([[1, 'もう飲まない'], [2, 'いまひとつ'], [3, 'ふつう・あれば飲む'], [4, 'おいしい・また飲みたい'], [5, '最高・人に すすめたい']]);
+/** 聞く文(口調 bright / polite / cool)。{name} = 軸の名前 */
+const ASK = Object.freeze({
+  what: { bright: 'なにを飲んだの? 名前を教えて!', polite: '何を お飲みになりましたか。名前を お聞かせください。', cool: '何を飲んだ。名前を。' },
+  look: { bright: '味を見る前に、どんな飲み物か ちょっと調べてみる?(とばしても いいよ)', polite: '味を見る前に、どんな飲み物か 調べておきますか。(とばしても かまいません)', cool: '先に 素性を調べるか。とばしてもいい。' },
+  axis: { bright: '{name}は どうだった?', polite: '{name}は いかがでしたか。', cool: '{name}は どうだ。' },
+  overall: { bright: 'ぜんぶ ひっくるめて、どうだった?', polite: '全体としては いかがでしたか。', cool: '全体では どうだ。' },
+});
+export const askText = (step, tone = 'bright', name = '') => ((ASK[step] || ASK.axis)[['bright', 'polite', 'cool'].includes(tone) ? tone : 'bright']).replace('{name}', name);
+/** 記録の手順: what(種類と名前)→ look(調べる・任意)→ 軸ごと → overall(総評とコメント)。戻り値 [{ step, key?, name? }] */
+export function wizardSteps(kind) {
+  return [{ step: 'what' }, { step: 'look' }, ...axesOf(kind).map(([key, name]) => ({ step: 'axis', key, name })), { step: 'overall' }];
+}
+
+/** 好みを 1 文で(F19-8): 好きなもの(総評 4 以上)の平均が 3.8 以上の軸 = しっかり・2.2 以下 = 控えめ。言えることが無ければ null */
+export function profile(p) {
+  if (!p || !p.enough) return null;
+  const strong = p.axes.filter((a) => a.avgTop != null && a.avgTop >= 3.8).map((a) => a.name), weak = p.axes.filter((a) => a.avgTop != null && a.avgTop <= 2.2).map((a) => a.name);
+  if (!strong.length && !weak.length) return p.axes.some((a) => a.avgTop != null) ? `${kindName(p.kind)}は、どの味も ほどよい つり合いのものが 好みのようです。` : null;
+  return `${kindName(p.kind)}は、${[strong.length ? `${strong.join('と')}が しっかり` : null, weak.length ? `${weak.join('と')}は 控えめ` : null].filter(Boolean).join('で、')}なものが 好みのようです。`;
+}
+
+/** 代表的な銘柄・品種・造りの 味の目安(1〜5・一般的な傾向。産地や造り手で変わる)。おすすめ(recommend)の候補 */
+export const STYLES = Object.freeze({
+  coffee: [
+    { name: 'エチオピア(浅煎り)', note: '花や紅茶のような香りと、明るい酸味', t: { aroma: 5, sweet: 3, acid: 4, bitter: 1, body: 2 } },
+    { name: 'ケニア', note: 'ベリーのような 強い酸味と 厚み', t: { aroma: 4, sweet: 3, acid: 5, bitter: 2, body: 3 } },
+    { name: 'グアテマラ', note: '酸味・苦味・コクの つり合いがよい', t: { aroma: 3, sweet: 3, acid: 3, bitter: 3, body: 3 } },
+    { name: 'コロンビア', note: 'まろやかで 甘みのある、飲みやすい味', t: { aroma: 3, sweet: 4, acid: 3, bitter: 2, body: 3 } },
+    { name: 'コスタリカ(ハニー精製)', note: 'はちみつのような甘みと、やわらかい酸味', t: { aroma: 4, sweet: 4, acid: 3, bitter: 1, body: 3 } },
+    { name: 'ブラジル', note: 'ナッツのような香ばしさ。酸味は 控えめ', t: { aroma: 3, sweet: 3, acid: 2, bitter: 3, body: 3 } },
+    { name: 'マンデリン(深煎り)', note: 'どっしりした苦味とコク。酸味は ほとんど無い', t: { aroma: 3, sweet: 2, acid: 1, bitter: 5, body: 5 } },
+    { name: '深煎りのブレンド', note: '香ばしく 力強い苦味。ミルクにも合う', t: { aroma: 3, sweet: 2, acid: 1, bitter: 4, body: 4 } },
+  ],
+  wine: [
+    { name: 'ソーヴィニヨン・ブラン(白)', note: 'ハーブや柑橘の香り。すっきりした酸味', t: { aroma: 4, sweet: 1, acid: 4, bitter: 1, body: 2, tannin: 1 } },
+    { name: 'シャルドネ(樽熟成・白)', note: 'バターやナッツの香り。厚みのある白', t: { aroma: 4, sweet: 2, acid: 3, bitter: 1, body: 4, tannin: 1 } },
+    { name: 'リースリング(白)', note: '花や りんごの香り。甘みと 強い酸味', t: { aroma: 5, sweet: 3, acid: 5, bitter: 1, body: 2, tannin: 1 } },
+    { name: '甲州(白)', note: 'おだやかな香りで さらり。和食に合う', t: { aroma: 2, sweet: 1, acid: 3, bitter: 2, body: 1, tannin: 1 } },
+    { name: 'ピノ・ノワール(赤)', note: 'いちごのような香り。軽やかで 渋みは おだやか', t: { aroma: 5, sweet: 1, acid: 4, bitter: 1, body: 2, tannin: 2 } },
+    { name: 'メルロー(赤)', note: 'まろやかで ふくよか。渋みは ほどよい', t: { aroma: 3, sweet: 2, acid: 2, bitter: 1, body: 4, tannin: 3 } },
+    { name: 'カベルネ・ソーヴィニヨン(赤)', note: '濃い色と しっかりした渋み。どっしり', t: { aroma: 4, sweet: 1, acid: 3, bitter: 2, body: 5, tannin: 5 } },
+    { name: 'シラー(赤)', note: '黒こしょうのような香り。濃くて 力強い', t: { aroma: 4, sweet: 1, acid: 3, bitter: 2, body: 5, tannin: 4 } },
+  ],
+  sake: [
+    { name: '純米大吟醸', note: '果物のような 華やかな香り。なめらか', t: { aroma: 5, sweet: 3, acid: 2, bitter: 1, body: 2, sharp: 3 } },
+    { name: '吟醸・純米吟醸', note: '香りと 味の つり合いがよい', t: { aroma: 4, sweet: 3, acid: 2, bitter: 1, body: 3, sharp: 3 } },
+    { name: '本醸造の辛口', note: 'すっきりして あと味が すっと消える', t: { aroma: 2, sweet: 1, acid: 2, bitter: 2, body: 2, sharp: 5 } },
+    { name: '純米(生酛・山廃)', note: '酸味とコクが しっかり。燗にも合う', t: { aroma: 2, sweet: 2, acid: 4, bitter: 2, body: 5, sharp: 3 } },
+    { name: 'にごり酒', note: 'とろりとして 甘い。米の味が濃い', t: { aroma: 3, sweet: 5, acid: 2, bitter: 1, body: 4, sharp: 1 } },
+    { name: '生酒', note: 'しぼりたての みずみずしさ。香りが はっきり', t: { aroma: 4, sweet: 3, acid: 3, bitter: 1, body: 3, sharp: 3 } },
+  ],
+  beer: [
+    { name: 'ピルスナー', note: 'すっきりした のどごしと、ほどよい苦味', t: { aroma: 2, sweet: 1, acid: 1, bitter: 3, body: 2, sharp: 5 } },
+    { name: 'ペールエール', note: '柑橘のような香りと、はっきりした苦味', t: { aroma: 4, sweet: 2, acid: 2, bitter: 4, body: 3, sharp: 3 } },
+    { name: 'IPA', note: '強い香りと 強い苦味', t: { aroma: 5, sweet: 2, acid: 2, bitter: 5, body: 3, sharp: 3 } },
+    { name: 'ヴァイツェン(白ビール)', note: 'バナナのような香り。苦味は 弱く まろやか', t: { aroma: 4, sweet: 3, acid: 2, bitter: 1, body: 3, sharp: 2 } },
+    { name: 'スタウト(黒ビール)', note: 'コーヒーのような香ばしさと 濃いコク', t: { aroma: 4, sweet: 2, acid: 1, bitter: 4, body: 5, sharp: 2 } },
+    { name: 'セゾン', note: 'さわやかな酸味と 香辛料のような香り', t: { aroma: 4, sweet: 1, acid: 3, bitter: 2, body: 2, sharp: 4 } },
+  ],
+});
+const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+/**
+ * いまの時間に すすめる種類: 15 時までは コーヒー(コーヒーの記録があるとき)。それ以降は 記録のある お酒(日本酒 / ワイン / ビール)のうち いちばん多いもの、無ければ コーヒー。
+ * すすめられる種類の記録が 1 件も無ければ null。nowMin は 実効の分(深夜は 1440 超 = 夜のまま)。純関数
+ */
+export function kindNow(drinks, nowMin) {
+  const sum = summary(drinks);
+  const daytime = nowMin < 900;
+  const liquor = ['sake', 'wine', 'beer'].filter((k) => sum[k]).sort((a, b) => sum[b].n - sum[a].n)[0] || null;
+  if (!daytime && liquor) return liquor;
+  return sum.coffee ? 'coffee' : null;
+}
+/**
+ * 今日のおすすめ(F19-9): その種類の 好きなもの(総評 4 以上)の平均(無ければ ぜんぶの平均)に 味の目安が近い STYLES を 近い順に 3 つ → 日付で 1 つ選ぶ(同じ日は同じ)。
+ * 味の記録が無ければ 表ぜんぶから 日替わり。again = 総評 4 以上で 14 日以上 飲んでいない記録のうち いちばん高いもの。
+ * 戻り値 { kind, style:{ name, note, t }, why(近い理由の言葉 | null), basis('top' | 'all' | null), again:{ name, overall, days } | null } / STYLES に無い種類は null。純関数
+ */
+export function recommend(drinks, kind, date) {
+  const styles = STYLES[kind];
+  if (!styles) return null;
+  const p = preference(drinks, kind);
+  const useTop = p.axes.some((a) => a.avgTop != null);
+  const target = Object.fromEntries(p.axes.map((a) => [a.key, useTop ? a.avgTop : a.avgAll]).filter(([, v]) => v != null));
+  const keys = Object.keys(target);
+  const ranked = styles.map((s, i) => ({ s, i, d: keys.reduce((a, k) => a + ((s.t[k] ?? 3) - target[k]) ** 2, 0) })).sort((a, b) => a.d - b.d || a.i - b.i);
+  const pool = keys.length ? ranked.slice(0, 3) : ranked;
+  const pick = pool[hash(`${date}:${kind}`) % pool.length].s;
+  const near = keys.filter((k) => Math.abs((pick.t[k] ?? 3) - target[k]) <= 0.8 && (target[k] >= 3.8 || target[k] <= 2.2)).map((k) => `${axisName(kind, k)}が ${target[k] >= 3.8 ? '強め' : '控えめ'}`);
+  const days = (d) => (d ? Math.round((new Date(`${date}T00:00`) - new Date(`${d}T00:00`)) / 86400000) : 999);
+  const again = listDrinks(drinks, kind).filter((d) => d.overall != null && d.overall >= 4 && days(d.date) >= 14).sort((a, b) => b.overall - a.overall || days(b.date) - days(a.date))[0] || null;
+  return { kind, style: pick, why: near.length ? `好きなものと同じく ${near.slice(0, 2).join('・')}` : null, basis: keys.length ? (useTop ? 'top' : 'all') : null, again: again ? { name: again.name, overall: again.overall, days: days(again.date) } : null };
+}
+/** レーダーチャートの頂点(中心 cx, cy・半径 r・値 0〜5 → 0〜1)。values = 軸の順の配列(null は 0)。戻り値 [[x, y], …](上から 時計回り) */
+export function radarPoints(values, cx, cy, r) {
+  const n = values.length;
+  return values.map((v, i) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / n, k = v == null ? 0 : Math.max(0, Math.min(5, v)) / 5; return [Math.round((cx + Math.cos(a) * r * k) * 10) / 10, Math.round((cy + Math.sin(a) * r * k) * 10) / 10]; });
+}

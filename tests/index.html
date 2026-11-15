@@ -1939,6 +1939,28 @@ document.getElementById('app').addEventListener('load', async () => {
         && Bd9.homeLines({ min: 600, sleep: { key: 'sleep_short', vars: { last: '5時間', time: '23:10' } } }, 'bright', 0).some((x) => x.key === 'sleep_short' && x.text.includes('5時間')), 'sleep_*: 5 つの場面(ホームの束)・どの口調でも 寝る時刻が入る・ホームの話題に出る');
     }
 
+    // ---- v0.84: 飲み物(F19-7〜F19-10: 1 問ずつ聞く記録・基準・好みの 1 文・おすすめ・レーダー)----
+    log('\n# v0.84 飲み物の聞き取りと おすすめ');
+    {
+      const Dk = M.drinks, D = '2026-11-15';
+      const dk = (id, kind, name, date, taste, overall) => Dk.normalizeDrink({ id, kind, name, maker: '', date, taste, overall });
+      const DD = Object.fromEntries([
+        dk('c1', 'coffee', 'イルガチェフェ', '2026-10-20', { aroma: 5, sweet: 3, acid: 4, bitter: 2, body: 2 }, 4.6), dk('c2', 'coffee', 'マンデリン', '2026-11-12', { aroma: 3, sweet: 2, acid: 1, bitter: 5, body: 5 }, 3.1),
+        dk('c3', 'coffee', 'ケニア', '2026-11-09', { aroma: 4, sweet: 3, acid: 5, bitter: 2, body: 3 }, 4.3), dk('w1', 'wine', 'シャブリ', '2026-11-11', { aroma: 4, sweet: 2, acid: 4, bitter: 1, body: 2, tannin: 1 }, 4.2),
+      ].map((x) => [x.id, x]));
+      ok(Dk.KINDS.every((k) => k.axes.every(([key]) => { const lv = Dk.levelsOf(k.id, key); return lv.length === 5 && lv.every((x) => typeof x === 'string' && x.length > 0 && x.length <= 16); })) && Dk.levelsOf('coffee', 'acid')[3].includes('浅煎り') && eq(Dk.levelsOf('other', 'acid'), Dk.AXIS_LEVELS.acid) && Dk.levelsOf('wine', 'sweet')[0].startsWith('辛口')
+        && Dk.OVERALL_CHOICES.length === 5 && eq(Dk.wizardSteps('coffee').map((x) => x.step), ['what', 'look', 'axis', 'axis', 'axis', 'axis', 'axis', 'overall']) && Dk.wizardSteps('wine').length === 9 && Dk.wizardSteps('wine')[7].key === 'tannin'
+        && Dk.askText('axis', 'cool', '酸味') === '酸味は どうだ。' && Dk.askText('axis', 'x', '酸味') === '酸味は どうだった?' && Dk.askText('look', 'polite').includes('調べて'), 'levelsOf / wizardSteps / askText: どの種類の どの軸にも 5 段階の基準(16 字まで)・手順は 種類と名前 → 調べる → 軸ごと → 総評・口調ごとの聞き方');
+      const pr = Dk.preference(DD, 'coffee'), rc = Dk.recommend(DD, 'coffee', D);
+      ok(Dk.profile(pr) === 'コーヒーは、香りと酸味が しっかりで、苦味は 控えめなものが 好みのようです。' && Dk.profile(Dk.preference(DD, 'wine')) === null && ['エチオピア(浅煎り)', 'ケニア', 'コスタリカ(ハニー精製)'].includes(rc.style.name) && rc.basis === 'top' && rc.why.startsWith('好きなものと同じく ') && eq(rc.again, { name: 'イルガチェフェ', overall: 4.6, days: 26 })
+        && eq(Dk.recommend(DD, 'coffee', D), rc) && Dk.recommend(DD, 'other', D) === null && Dk.recommend({}, 'sake', D).basis === null && Dk.STYLES.sake.some((x) => x === Dk.recommend({}, 'sake', D).style)
+        && Object.entries(Dk.STYLES).every(([k, xs]) => xs.length >= 6 && xs.every((x) => x.name && x.note && Dk.axesOf(k).every(([key]) => x.t[key] >= 1 && x.t[key] <= 5) && Object.keys(x.t).length === Dk.axesOf(k).length)),
+        'profile / recommend / STYLES: 好みを 1 文で・好きなものの平均に近い 3 つから 日替わりで 1 つ(同じ日は同じ)・久しぶりの 1 本・味の記録が無ければ 表から・表は 種類の軸ぜんぶ 1〜5');
+      ok(Dk.kindNow(DD, 600) === 'coffee' && Dk.kindNow(DD, 1200) === 'wine' && Dk.kindNow(DD, 1500) === 'wine' && Dk.kindNow({ w1: DD.w1 }, 600) === null && Dk.kindNow({ c1: DD.c1 }, 1200) === 'coffee' && Dk.kindNow({}, 600) === null
+        && eq(Dk.radarPoints([5, 5, 5, 5], 100, 100, 50), [[100, 50], [150, 100], [100, 150], [50, 100]]) && eq(Dk.radarPoints([null, 2.5], 100, 100, 50), [[100, 100], [100, 125]]) && M.features.FEATURES.DRINK_REC === true,
+        'kindNow / radarPoints: 15 時までは コーヒー・それ以降は 記録のある お酒(昼に お酒は すすめない)・記録が無ければ null / レーダーの頂点は 上から 時計回り');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));
