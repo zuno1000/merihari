@@ -27,10 +27,13 @@ const int = (v, max = 1e15) => (Number.isFinite(+v) && +v > 0 ? Math.min(max, Ma
 export const okEn = (en) => typeof en === 'string' && EN_RE.test(en) && !UNSAFE.has(en);
 export const dayId = (date) => `d:${date}`;
 
-/** settings.vocab の正規化: { enabled(既定 false・必須の機能ではない), n(1 回の問題数), categoryId(学習した時間を記録するカテゴリ・null = 記録しない) } */
+/** 出題の向き(v0.87): e2j = 英語を見て 意味を選ぶ / j2e = 意味を見て 英語を選ぶ */
+export const DIRS = Object.freeze(['e2j', 'j2e']);
+export const DIR_LABEL = Object.freeze({ e2j: '英語 → 意味', j2e: '意味 → 英語' });
+/** settings.vocab の正規化: { enabled(既定 false・必須の機能ではない), n(1 回の問題数), categoryId(学習した時間を記録するカテゴリ・null = 記録しない), dir(出題の向き) } */
 export function normalizeVocab(raw) {
   const o = isObj(raw) ? raw : {};
-  return { enabled: o.enabled === true, n: SET_CHOICES.includes(+o.n) ? +o.n : 20, categoryId: typeof o.categoryId === 'string' && o.categoryId ? o.categoryId.slice(0, 40) : null };
+  return { enabled: o.enabled === true, n: SET_CHOICES.includes(+o.n) ? +o.n : 20, categoryId: typeof o.categoryId === 'string' && o.categoryId ? o.categoryId.slice(0, 40) : null, dir: DIRS.includes(o.dir) ? o.dir : 'e2j' };
 }
 /** 進みの配列を整える(7 つの数・段は 0〜7)。形が違えば null */
 export function cleanState(s) {
@@ -109,22 +112,52 @@ export function counts(recs, dk, now) {
   }
   return { due, seen, mastered, myNew, total: dk.list.length };
 }
+/** 学習の種類(v0.87・実機 FB「取り組めるのは 復習の単語だけ?」→ 自分で選べるように): おまかせ / 新しい語 / 復習 / マイ単語 / にがて */
+export const MODES = Object.freeze(['auto', 'new', 'review', 'my', 'weak']);
+export const MODE_LABEL = Object.freeze({ auto: 'おまかせ', new: '新しい語', review: '復習', my: 'マイ単語', weak: 'にがて' });
+/** にがて: 出たことがあり まだ覚えていない語のうち、ミスが 2 回以上か 直前にまちがえたもの */
+const isWeak = (r) => seenRec(r) && r.s[0] < MASTER_BOX && (r.s[3] >= 2 || r.s[4] >= 1);
+/** いま出ている語の札: new(新しい語)/ my(まだ出ていないマイ単語)/ weak(にがて)/ review(復習) */
+export function tagOf(recs, w) { const r = recs?.[w.en]; return !seenRec(r) ? (w.my ? 'my' : 'new') : isWeak(r) ? 'weak' : 'review'; }
+export const TAG_LABEL = Object.freeze({ new: '新しい語', my: 'マイ単語', weak: 'にがて', review: '復習' });
+/** 種類ごとの 語の数 { new(まだ出ていない語), review(いま復習する語), my(マイ単語), weak(にがて) } */
+export function modeCounts(recs, dk, now) {
+  const out = { new: 0, review: 0, my: 0, weak: 0 };
+  for (const w of dk.list) {
+    const r = recs?.[w.en];
+    if (w.my) out.my++;
+    if (!seenRec(r)) { out.new++; continue; }
+    if (r.s[1] <= now) out.review++;
+    if (isWeak(r)) out.weak++;
+  }
+  return out;
+}
 /**
- * 次に出す語。順: 期限の来た復習(古いものから)→ まだ出ていないマイ単語 → 新しい語 → (どれも無ければ)いちばん早く期限が来る語。
- * 復習が 40 語より少ないときは、4 回に 1 回 新しい語を混ぜる。avoid = 直前に出した語(続けて同じ語を出さない)。rnd = 0〜1 の乱数。無ければ null
+ * 次に出す語。mode(学習の種類):
+ *  auto   期限の来た復習(古いものから)→ まだ出ていないマイ単語 → 新しい語 → (どれも無ければ)いちばん早く期限が来る語。復習が 40 語より少ないときは 4 回に 1 回 新しい語を混ぜる
+ *  new    まだ出ていない語だけ(マイ単語を先に・あとは ばらばらに)
+ *  review 期限の来た復習だけ(古いものから)
+ *  my     マイ単語だけ(期限の来たもの → まだ出ていないもの → 期限の近いもの)
+ *  weak   にがてだけ(直前にまちがえたもの → ミスの多いもの)
+ * avoid = 直前に出した語(続けて同じ語を出さない)。rnd = 0〜1 の乱数。出せる語が無ければ null
  */
-export function pick(recs, dk, now, { rnd = Math.random, avoid = [] } = {}) {
+export function pick(recs, dk, now, { rnd = Math.random, avoid = [], mode = 'auto' } = {}) {
   const skip = new Set(avoid);
+  const byDue = (a, b) => recs[a.en].s[1] - recs[b.en].s[1] || (a.en < b.en ? -1 : 1);
   const seen = dk.list.filter((w) => seenRec(recs?.[w.en]));
-  const due = seen.filter((w) => recs[w.en].s[1] <= now && !skip.has(w.en)).sort((a, b) => recs[a.en].s[1] - recs[b.en].s[1] || (a.en < b.en ? -1 : 1));
+  const due = seen.filter((w) => recs[w.en].s[1] <= now && !skip.has(w.en)).sort(byDue);
   const fresh = dk.list.filter((w) => !seenRec(recs?.[w.en]) && !skip.has(w.en));
   const myNew = fresh.filter((w) => w.my);
   const newWord = () => myNew[0] || (fresh.length ? fresh[Math.min(fresh.length - 1, Math.floor(rnd() * fresh.length))] : null);
+  if (mode === 'new') return newWord();
+  if (mode === 'review') return due[0] || null;
+  if (mode === 'my') return due.filter((w) => w.my)[0] || myNew[0] || seen.filter((w) => w.my && !skip.has(w.en)).sort(byDue)[0] || null;
+  if (mode === 'weak') return seen.filter((w) => !skip.has(w.en) && isWeak(recs[w.en])).sort((a, b) => recs[b.en].s[4] - recs[a.en].s[4] || recs[b.en].s[3] - recs[a.en].s[3] || byDue(a, b))[0] || null;
   if (due.length && (due.length >= 40 || !fresh.length || rnd() >= 0.25)) return due[0];
   const nw = newWord();
   if (nw) return nw;
   if (due.length) return due[0];
-  const later = seen.filter((w) => !skip.has(w.en)).sort((a, b) => recs[a.en].s[1] - recs[b.en].s[1] || (a.en < b.en ? -1 : 1));
+  const later = seen.filter((w) => !skip.has(w.en)).sort(byDue);
   return later[0] || seen[0] || null;
 }
 /** 4 択(正解+同じ品詞の 3 語・熟語には熟語・意味が同じ語は入れない)。並びは rnd で混ぜる。語が足りなければ 少ない数で返す */
@@ -244,10 +277,10 @@ export function parseExport(text) {
  * 書き出しを data.vocab に取り込む。語ごとに「最後に解いた時刻」が新しい方(同じなら 解いた数が多い方)を残す。マイ単語は 印と意味を足す(いまの意味は 上書きしない)。
  * 戻り値 { recs, words(進みを入れた語の数), my(マイ単語として入れた語の数) }
  */
-export function importInto(recs, exp, ctx) {
+export function importInto(recs, exp, ctx, { progress = true } = {}) { // progress = false(v0.87): マイ単語だけ(進みは 最初から)
   const out = { ...(recs || {}) };
   let words = 0, my = 0;
-  for (const [en, s] of Object.entries(exp?.words || {})) {
+  for (const [en, s] of Object.entries(progress ? exp?.words || {} : {})) {
     const old = live(out[en]) ? out[en] : null, cur = old && old.s;
     if (cur && (cur[6] > s[6] || (cur[6] === s[6] && cur[2] + cur[3] >= s[2] + s[3]))) continue;
     out[en] = { id: en, s, my: !!(old && old.my), ja: old ? old.ja : '', pos: old ? old.pos : '', updatedAt: ctx.nowISO, deletedAt: null };
@@ -263,3 +296,34 @@ export function importInto(recs, exp, ctx) {
 }
 /** 1 回の結果の文(システムの文・アシスタントを止めているとき) */
 export const resultText = (n, ok) => `${n} 問のうち ${ok} 問 正解でした。`;
+
+// ---- v0.87(実機 FB「これまで LEXICA でやっていた学習を メリハリで完結できるように・UI も」)----
+/** 単語帳を引く: 英字なら 綴りの前方一致 → 部分一致、それ以外は 意味の部分一致。戻り値 [{ en, ja, pos, my, seen, box, mastered }](max 件まで) */
+export function search(dk, recs, q, max = 30) {
+  const t = String(q || '').trim().toLowerCase();
+  if (!t) return [];
+  const ascii = /^[\x20-\x7e\u00c0-\u00ff]+$/.test(t);
+  const head = [], rest = [];
+  for (const w of dk.list) {
+    if (ascii) { const e = w.en.toLowerCase(); if (e.startsWith(t)) head.push(w); else if (e.includes(t)) rest.push(w); } else if (w.ja.includes(t)) head.push(w);
+    if (head.length >= max) break;
+  }
+  return [...head, ...rest].slice(0, max).map((w) => rowOf(recs, w));
+}
+/** 一覧の 1 行 { en, ja, pos, my, seen, box, mastered } */
+export function rowOf(recs, w) { const r = recs?.[w.en], sn = seenRec(r); return { en: w.en, ja: w.ja, pos: w.pos, my: !!w.my, seen: sn, box: sn ? r.s[0] : null, mastered: sn && r.s[0] >= MASTER_BOX }; }
+/** にがての語(直前にまちがえたもの → ミスの多いもの・max 件まで) */
+export function weakList(recs, dk, max = 20) {
+  return dk.list.filter((w) => isWeak(recs?.[w.en])).sort((a, b) => recs[b.en].s[4] - recs[a.en].s[4] || recs[b.en].s[3] - recs[a.en].s[3] || (a.en < b.en ? -1 : 1)).slice(0, max).map((w) => rowOf(recs, w));
+}
+/** 状態の言葉: 覚えた / 段 n / これから */
+export const statusText = (row) => (row.mastered ? '覚えた' : row.seen ? `定着 ${row.box} / ${MASTER_BOX}` : 'これから');
+/** 進みを 最初からにする(マイ単語の印と意味は 残す・日ごとの数も 残す)。新しい map を返す */
+export function resetProgress(recs, ctx) {
+  const out = {};
+  for (const [id, r] of Object.entries(recs || {})) {
+    if (!r || r.deletedAt || DAY_RE.test(id)) { out[id] = r; continue; }
+    out[id] = r.my ? { ...r, s: null, updatedAt: ctx.nowISO } : { ...r, s: null, updatedAt: ctx.nowISO, deletedAt: ctx.nowISO };
+  }
+  return out;
+}

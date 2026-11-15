@@ -1,0 +1,155 @@
+[
+ {
+  "id": "c-ethiopia",
+  "img": "data/drinks/c-ethiopia.jpg",
+  "w": 960,
+  "h": 640,
+  "credit": "写真: ProtoplasmaKid(CC BY-SA 4.0)",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Coffee_ceremony_of_Ethiopia_and_Eritrea_1.jpg"
+ },
+ {
+  "id": "c-colombia",
+  "img": "data/drinks/c-colombia.jpg",
+  "w": 960,
+  "h": 793,
+  "credit": "写真: U.S. Fish and Wildlife Service(Public domain)",
+  "license": "Public domain",
+  "page": "https://commons.wikimedia.org/wiki/File:Reserve_coffee_farm_in_Colombia_(4604557800).jpg"
+ },
+ {
+  "id": "c-costarica",
+  "img": "data/drinks/c-costarica.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Passengerpigeon(CC BY-SA 4.0)",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Coffee_drying_Doka_Plantation_Costa_Rica_IMG_0114.jpg"
+ },
+ {
+  "id": "c-brazil",
+  "img": "data/drinks/c-brazil.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Josue Marinho(CC BY 3.0)",
+  "license": "CC BY 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Carmo_de_Minas_MG_Brasil_-_Cafezal_-_panoramio.jpg"
+ },
+ {
+  "id": "c-mandheling",
+  "img": "data/drinks/c-mandheling.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Susansumi(CC BY-SA 4.0)",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Coffe_of_Pagalaram,_South_Sumatra,_Indonesia.jpg"
+ },
+ {
+  "id": "c-dark",
+  "img": "data/drinks/c-dark.jpg",
+  "w": 960,
+  "h": 640,
+  "credit": "写真: Sage Ross(CC BY-SA 3.0)",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Dark_roasted_espresso_blend_coffee_beans_1.jpg"
+ },
+ {
+  "id": "w-sauvignon",
+  "img": "data/drinks/w-sauvignon.jpg",
+  "w": 960,
+  "h": 640,
+  "credit": "写真: Olivier Lemoine(CC BY-SA 4.0)",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Pied_sauvignon_blanc.jpg"
+ },
+ {
+  "id": "w-chardonnay",
+  "img": "data/drinks/w-chardonnay.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Missvain(CC0)",
+  "license": "CC0",
+  "page": "https://commons.wikimedia.org/wiki/File:Chradonnay_grapes_-_August_2024_-_Sarah_Stierch.jpg"
+ },
+ {
+  "id": "w-riesling",
+  "img": "data/drinks/w-riesling.jpg",
+  "w": 960,
+  "h": 638,
+  "credit": "写真: Bauer Karl(CC BY 2.0 at)",
+  "license": "CC BY 2.0 at",
+  "page": "https://commons.wikimedia.org/wiki/File:Rieslingtrauben.jpg"
+ },
+ {
+  "id": "w-koshu",
+  "img": "data/drinks/w-koshu.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Aw1805(CC BY-SA 4.0)",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Koshu_Grapes.jpg"
+ },
+ {
+  "id": "w-pinot",
+  "img": "data/drinks/w-pinot.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Ethan Prater(CC BY 2.0)",
+  "license": "CC BY 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Pinot_Noir_Grapes_in_the_Willamette_Valley.jpg"
+ },
+ {
+  "id": "w-merlot",
+  "img": "data/drinks/w-merlot.jpg",
+  "w": 960,
+  "h": 619,
+  "credit": "写真: michael clarke stuff(CC BY-SA 2.0)",
+  "license": "CC BY-SA 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Merlot_grapes_in_Bourg_vineyard.jpg"
+ },
+ {
+  "id": "w-cabernet",
+  "img": "data/drinks/w-cabernet.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Lyn Gateley(CC BY 2.0)",
+  "license": "CC BY 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Cabernet_Sauvignon_grapes_at_Opus_One,_Napa_Valley,_California,_USA.jpg"
+ },
+ {
+  "id": "w-syrah",
+  "img": "data/drinks/w-syrah.jpg",
+  "w": 960,
+  "h": 640,
+  "credit": "写真: Hahn Family Wines(CC BY 2.0)",
+  "license": "CC BY 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Syrah_grapes_at_Hahn_vineyard.jpg"
+ },
+ {
+  "id": "s-junmai",
+  "img": "data/drinks/s-junmai.jpg",
+  "w": 960,
+  "h": 720,
+  "credit": "写真: Kentin(CC BY-SA 3.0)",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Tokkuri_sake_and_takowasa.JPG"
+ },
+ {
+  "id": "s-nigori",
+  "img": "data/drinks/s-nigori.jpg",
+  "w": 960,
+  "h": 638,
+  "credit": "写真: Luigi Anzivino(CC BY-SA 2.0)",
+  "license": "CC BY-SA 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Nigori_sake.jpg"
+ },
+ {
+  "id": "s-nama",
+  "img": "data/drinks/s-nama.jpg",
+  "w": 960,
+  "h": 640,
+  "credit": "写真: Daderot(CC0)",
+  "license": "CC0",
+  "page": "https://commons.wikimedia.org/wiki/File:Sugidama_-_Kiku_no_Tsukasa_Sake_Brewery_-_Morioka,_Iwate_-_DSC04109.jpg"
+ }
+]

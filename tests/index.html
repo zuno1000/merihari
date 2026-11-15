@@ -2022,7 +2022,7 @@ document.getElementById('app').addEventListener('load', async () => {
       const base = St.migrate({ schema: 1 }), rec = (b, at) => ({ id: 'abate', s: [b, 1, 1, 0, 0, 0, 1], my: false, ja: '', pos: '', updatedAt: at, deletedAt: null });
       const vA = { ...base, vocab: { abate: rec(1, '2026-11-01T00:00:00+09:00') } }, vB = { ...base, vocab: { abate: rec(3, '2026-11-09T00:00:00+09:00'), zeal: { ...rec(2, '2026-11-02T00:00:00+09:00'), id: 'zeal' } } };
       const html = await (await fetch('../index.html', { cache: 'no-store' })).text();
-      ok(eq(V.normalizeVocab(null), { enabled: false, n: 20, categoryId: null }) && eq(V.normalizeVocab({ enabled: true, n: 30, categoryId: 'c1' }), { enabled: true, n: 30, categoryId: 'c1' }) && V.normalizeVocab({ n: 7 }).n === 20 && eq(St.defaultSettings().vocab, V.normalizeVocab(null)) && St.SCALAR_FIELDS.includes('vocab')
+      ok(eq(V.normalizeVocab(null), { enabled: false, n: 20, categoryId: null, dir: 'e2j' }) && eq(V.normalizeVocab({ enabled: true, n: 30, categoryId: 'c1', dir: 'j2e' }), { enabled: true, n: 30, categoryId: 'c1', dir: 'j2e' }) && V.normalizeVocab({ dir: 'x' }).dir === 'e2j' && V.normalizeVocab({ n: 7 }).n === 20 && eq(St.defaultSettings().vocab, V.normalizeVocab(null)) && St.SCALAR_FIELDS.includes('vocab')
         && eq(Object.keys(mg.vocab).sort(), ['abate', 'd:2026-11-15']) && eq(mg.vocab.abate.s, [2, 5, 1, 0, 0, 0, 0]) && mg.vocab.abate.my === true && mg.vocab.abate.id === 'abate' && mg.vocab['d:2026-11-15'].ok === 3 && 'vocab' in St.defaultData()
         && M.sync.merge(vA, vB).vocab.abate.s[0] === 3 && M.sync.merge(vB, vA).vocab.abate.s[0] === 3 && M.sync.merge(vA, vB).vocab.zeal.s[0] === 2
         && M.features.FEATURES.VOCAB === true && sw.includes(`'./js/vocab.js'`) && sw.includes(`'./js/ui-vocab.js'`) && !/ASSETS = \[[^\]]*data\/vocab/.test(sw) && html.includes('https://translate.googleapis.com;'),
@@ -2032,6 +2032,23 @@ document.getElementById('app').addEventListener('load', async () => {
       ok(['vocab_due', 'vocab_yet', 'vocab_done'].every((key) => Bv.SCENES[key].g === 'home' && Bv.TONES.every((t) => [0, 1].every((sd) => { const x = Bv.say(key, t, { n: 12, ok: 9 }, sd); return x.includes('12') && !/[{}]/.test(x); })))
         && Bv.TONES.every((t) => Bv.say('vocab_done', t, { n: 20, ok: 17 }, 0).includes('17'))
         && Bv.homeLines({ min: 600, vocab: { key: 'vocab_due', vars: { n: 12 } } }, 'bright', 0).some((x) => x.key === 'vocab_due' && x.text.includes('12')), 'vocab_*: 3 つの場面(ホームの束)・どの口調でも 数が入る・ホームの話題に出る');
+
+      // v0.87: 学習の種類・札・単語帳を引く・にがて・進みを最初から・マイ単語だけの引き継ぎ
+      const wk = { ...recs, absorb: { id: 'absorb', s: [1, NOW + 5, 1, 3, 0, 0, NOW - 9], my: false, ja: '', pos: '', updatedAt: 'x', deletedAt: null }, zeal: { id: 'zeal', s: null, my: true, ja: '', pos: '', updatedAt: 'x', deletedAt: null } };
+      const dkw = V.deck(W, wk), later = NOW + 2 * DAY;
+      ok(eq(V.MODES, ['auto', 'new', 'review', 'my', 'weak']) && V.MODES.every((m) => V.MODE_LABEL[m])
+        && V.pick(wk, dkw, later, { mode: 'new', rnd: hi }).en === 'zeal' && V.pick(wk, dkw, later, { mode: 'new', rnd: lo, avoid: ['zeal'] }).en === 'abide' && V.pick(allSeen, V.deck(W, allSeen), NOW, { mode: 'new' }) === null
+        && V.pick(wk, dkw, later, { mode: 'review' }).en === 'absorb' && V.pick(wk, dkw, NOW, { mode: 'review' }) === null
+        && V.pick(wk, dkw, later, { mode: 'my' }).en === 'zeal' && V.pick(recs, dk, later, { mode: 'my' }) === null
+        && V.pick(wk, dkw, later, { mode: 'weak' }).en === 'abhor' && V.pick(wk, dkw, later, { mode: 'weak', avoid: ['abhor'] }).en === 'absorb' && V.pick({}, dkw, NOW, { mode: 'weak' }) === null
+        && eq(V.modeCounts(wk, dkw, later), { new: 4, review: 3, my: 1, weak: 2 }) && V.tagOf(wk, dkw.by.get('zeal')) === 'my' && V.tagOf(wk, dkw.by.get('abide')) === 'new' && V.tagOf(wk, dkw.by.get('abhor')) === 'weak' && V.tagOf(wk, dkw.by.get('abate')) === 'review' && Object.keys(V.TAG_LABEL).length === 4,
+        'pick(mode)/ modeCounts / tagOf: 学習の種類(新しい語だけ・復習だけ・マイ単語だけ・にがてだけ)・無ければ null・いまの語が 新しい語 / 復習 / マイ単語 / にがて のどれか');
+      const fresh0 = V.resetProgress(wk, cx()), onlyMy = V.importInto({}, ex, cx(), { progress: false });
+      ok(eq(V.search(dkw, wk, 'ab').map((r) => r.en), ['abate', 'abhor', 'abide', 'absorb']) && eq(V.search(dkw, wk, 'up').map((r) => r.en), ['give up']) && eq(V.search(dkw, wk, '熱').map((r) => r.en), ['zeal']) && eq(V.search(dkw, wk, ' '), []) && V.search(dkw, wk, 'a', 2).length === 2
+        && eq(V.rowOf(wk, dkw.by.get('abate')), { en: 'abate', ja: '和らぐ', pos: 'v', my: false, seen: true, box: 2, mastered: false }) && V.statusText(V.rowOf(wk, dkw.by.get('abate'))) === '定着 2 / 5' && V.statusText(V.rowOf(wk, dkw.by.get('zeal'))) === 'これから' && V.statusText({ mastered: true }) === '覚えた'
+        && eq(V.weakList(wk, dkw).map((r) => r.en), ['abhor', 'absorb']) && fresh0.zeal.s === null && fresh0.zeal.my === true && !fresh0.zeal.deletedAt && fresh0.abate.s === null && !!fresh0.abate.deletedAt && fresh0[V.dayId(D)].n === 2 && V.quick(fresh0, later).seen === 0 && V.deck(W, fresh0).by.get('zeal').my === true
+        && onlyMy.words === 0 && onlyMy.my === 2 && onlyMy.recs.serendipity.ja === '偶然の発見' && onlyMy.recs.zeal.s === null && !('abate' in onlyMy.recs),
+        'search / rowOf / weakList / resetProgress / importInto(マイ単語だけ): 綴りの前方一致 → 部分一致・意味でも引ける・進みを最初からにしても マイ単語と 日ごとの数は 残る');
 
       const book = V.parseWords(await (await fetch('../data/vocab.json', { cache: 'no-store' })).json()), bdk = V.deck(book, {});
       ok(book.length >= 8000 && book.every((w) => V.okEn(w.en) && w.ja && V.POS.includes(w.pos)) && bdk.by.has('abate') && bdk.by.has('protégé') && V.choices(book[0], bdk).length === 4 && V.pick({}, bdk, NOW) !== null && V.resultText(20, 17) === '20 問のうち 17 問 正解でした。',
@@ -2088,6 +2105,22 @@ document.getElementById('app').addEventListener('load', async () => {
         && Dk.kindFor({}, 600, null) === null && Dk.kindFor({}, 600, { coffee: { aroma: 4 } }) === 'coffee' && Dk.kindFor({}, 1200, { sake: { sweet: 3 } }) === 'sake' && Dk.kindFor({}, 1200, { coffee: { aroma: 4 } }) === 'coffee' && Dk.kindFor(rec3, 600) === 'coffee' && Dk.kindFor(rec3, 1200) === 'sake' && Dk.kindFor(rec3, 1200) === Dk.kindNow(rec3, 1200)
         && eq(St.defaultSettings().drinkPref, {}) && St.SCALAR_FIELDS.includes('drinkPref') && eq(St.migrate({ schema: 1, settings: { drinkPref: { wine: { tannin: 4, sharp: 2 }, other: { aroma: 1 } } } }).settings.drinkPref, { wine: { tannin: 4 } }) && !/ASSETS = \[[^\]]*data\/sake/.test(sw),
         'whereLinks / kindFor / settings.drinkPref: 地図の検索と ネットの検索(外のページを開くだけ)・記録が無くても 好みを申告した種類は すすめる・好みの申告は 設定として同期・銘柄のデータは ASSETS に入れない');
+    }
+
+    // ---- v0.87: 飲み物の解説と 関連した写真(F19-16)----
+    log('\n# v0.87 飲み物の解説と写真');
+    {
+      const Dk = M.drinks;
+      const names = Object.values(Dk.STYLES).flat().map((x) => x.name);
+      const ph = Dk.parsePhotos(await (await fetch('../data/drink-photos.json', { cache: 'no-store' })).json());
+      const heads = await Promise.all(Object.values(ph).map((x) => fetch(`../${x.img}`, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok)));
+      ok(names.every((n) => (Dk.STYLE_ABOUT[n] || '').length >= 30) && Object.keys(Dk.STYLE_ABOUT).every((n) => names.includes(n)) && Object.keys(Dk.STYLE_PHOTO).every((n) => names.includes(n) && ph[Dk.STYLE_PHOTO[n]])
+        && Object.keys(ph).length >= 15 && Object.values(ph).every((x) => /^写真: .+(CC0|Public domain|CC BY)/.test(x.credit) && /^https:\/\/commons\.wikimedia\.org\//.test(x.page) && x.w > 0 && x.h > 0) && heads.every(Boolean) && Dk.SAKE_NOTE.length === 6 && !/ASSETS = \[[^\]]*data\/drink/.test(sw),
+        '解説と写真: どの品種・産地・造りにも 解説がある・写真の鍵は 同梱の写真を指す・写真は 自由なライセンスだけで 撮影者とライセンスの表示つき・画像がある');
+      const c = { src: 'sakenowa', name: 'x', maker: '蔵A', area: '新潟県', f: [0.2, 0.3, 0.1, 0.2, 0.8, 0.5], t: {} };
+      ok(Dk.infoOf(c).about === `新潟県の 蔵Aの銘柄。${Dk.SAKE_NOTE[4]}` && !!ph[Dk.infoOf(c).photo] && Dk.infoOf({ src: 'style', name: '甲州(白)' }).photo === 'w-koshu' && Dk.infoOf({ src: 'style', name: 'ケニア' }).photo === null && Dk.infoOf({ src: 'style', name: 'ケニア' }).about.includes('SL28') && eq(Dk.infoOf(null), { about: '', photo: null })
+        && eq(Dk.parsePhotos([{ id: 'a', img: 'data/other/a.jpg', w: 1, h: 1 }, { id: 'b', img: 'data/drinks/b.jpg', w: 10, h: 5, credit: 'c', page: 'http://x' }, 'x']), { b: { img: 'data/drinks/b.jpg', w: 10, h: 5, credit: 'c', page: '' } }) && Dk.basisShort(null) === '日替わり' && Dk.basisShort({ basis: 'mix' }) === '好みの申告と 記録から',
+        'infoOf / parsePhotos / basisShort: 日本酒の銘柄は 産地・蔵と いちばん強い指標の ひとこと・写真が無い種類は null・同梱の場所の写真だけ');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
