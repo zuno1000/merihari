@@ -1509,6 +1509,15 @@ document.getElementById('app').addEventListener('load', async () => {
       const photos = A.parseList(await (await fetch('../data/photos.json', { cache: 'no-store' })).json());
       const heads = await Promise.all(photos.map((x) => fetch(`../${x.img}`, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok)));
       ok(photos.length >= 12 && new Set(photos.map((x) => x.id)).size === photos.length && photos.every((x) => x.kind === 'photo' && x.title && x.country && x.region && x.artist && x.story.length >= 40 && x.look.length >= 40 && /^(CC0|Public domain|CC BY(-SA)? \d)/.test(x.license) && x.credit.includes(x.artist) && x.credit.includes(x.license) && /^https:\/\/commons\.wikimedia\.org\//.test(x.page)) && heads.every(Boolean), '同梱の写真(data/photos.json): 12 枚以上・自由なライセンスだけ・撮影者とライセンスの表示つき・画像がある');
+      // v0.84.1・F23-11: 毎週 公開する候補(data/art-pool.json・data/photos-pool.json)。公開済みは 名画と写真が同じ数(交互の並びが あとから ずれない)
+      const pubArt = A.parseList(await (await fetch('../data/art.json', { cache: 'no-store' })).json());
+      const [poolA, poolP] = await Promise.all(['art-pool', 'photos-pool'].map(async (n) => A.parseList(await (await fetch(`../data/${n}.json`, { cache: 'no-store' })).json())));
+      const poolHeads = await Promise.all([...poolA, ...poolP].map((x) => fetch(`../${x.img}`, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok)));
+      const allIds = [...pubArt, ...photos, ...poolA, ...poolP].map((x) => x.id);
+      ok(pubArt.length === photos.length && new Set(allIds).size === allIds.length && poolHeads.every(Boolean)
+        && poolA.every((x) => x.kind === 'art' && /^data\/art\//.test(x.img) && x.title && x.artist && x.country && x.year && x.medium && x.tech && x.museum && x.story.length >= 40 && x.look.length >= 40 && /^https:\/\//.test(x.page) && x.license.includes('CC0'))
+        && poolP.every((x) => x.kind === 'photo' && /^data\/photo\//.test(x.img) && x.title && x.country && x.region && x.artist && x.story.length >= 40 && x.look.length >= 40 && /^(CC0|Public domain|CC BY(-SA)? \d)/.test(x.license) && x.credit.includes(x.artist) && x.credit.includes(x.license) && /^https:\/\/commons\.wikimedia\.org\//.test(x.page)),
+      '図録の候補(data/art-pool.json・data/photos-pool.json): 公開済みは 名画と写真が同じ数・候補は 公開済みと重ならない・解説とライセンスの表示がそろっている・画像がある');
     }
 
     // ---- v0.62・F24: アシスタントのキャラクター(buddy.js)----

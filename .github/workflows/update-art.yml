@@ -1,0 +1,42 @@
+# merihari ─ ピースの図録(F23)の候補を 毎週 名画 2 点と 写真 2 枚ずつ公開する(F23-11・2026-11-15)。
+# 無料: 公開リポジトリの GitHub Actions。通信はしない(候補の画像と解説は リポジトリに取り込み済み・data/art-pool.json / data/photos-pool.json)。
+# 版は上げない: data/art.json・data/photos.json は SW の ASSETS でも DATA でもなく「ネットワーク優先」なので、次に開いたときに新しい一覧になる。
+# 候補が 2 週間ぶんを切ったら Issue を 1 つ立てて知らせる(GitHub からメールが届く)。候補を足すのは tools/art_fetch.py・tools/photo_fetch.py の WORKS。
+name: update-art
+on:
+  schedule:
+    - cron: '23 20 * * 0'   # 月 5:23 JST(= 日 20:23 UTC)。GitHub の cron は数時間遅れることがある(月曜の午前中には出る)
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: update-art
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 候補から 名画 2 点と 写真 2 枚を公開する
+        id: rel
+        run: python -X utf8 -I tools/art_release.py 2
+      - name: 変わっていれば commit
+        run: |
+          if git diff --quiet -- data; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/art.json data/art-pool.json data/photos.json data/photos-pool.json
+          git commit -m "art: 図録に ${{ steps.rel.outputs.added }} 点を足す($(date -u +%Y-%m-%d)・候補の残り ${{ steps.rel.outputs.left }} 点ずつ)"
+          git push
+      - name: 候補が少なくなったら Issue で知らせる(開いているものがあれば 立てない)
+        if: ${{ steps.rel.outputs.weeks < 2 }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "図録の候補 in:title" --json number --jq length)
+          if [ "$open" != "0" ]; then echo "already open"; exit 0; fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "図録の候補が残り ${{ steps.rel.outputs.left }} 点ずつです" --body "ピースの図録の候補(data/art-pool.json・data/photos-pool.json)が あと ${{ steps.rel.outputs.weeks }} 週間ぶんです。Claude のセッションで「図録の候補を足して」と頼むと、tools/art_fetch.py と tools/photo_fetch.py の WORKS に足せます。足したら この Issue を閉じてください。"
