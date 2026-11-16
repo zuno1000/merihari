@@ -881,7 +881,8 @@ export function renderSettings(view, ctx, section = null) {
     ]),
     group('お金', [srow('予算・カテゴリ', summary.money(), open('money'))]),
     group('データ', [
-      srow('書き出し(JSON)', `${store.state.local.lastExportAt ? `最後 ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も'}・いま ${fmtKB(dataBytes)} / 約 5MB(${usedPct}%)`, () => {
+      el('div.srow.plain', [el('span.lbl', '端末の置き場所'), el('span.val', `${usedPct}%(${fmtKB(dataBytes)} / 約 5MB)`)]), // v0.93.2(実機 FB): 書き出しの行に 並べていた % が 日付に 押されて 読めなかった → 自分の行に
+      srow('書き出し(JSON)', store.state.local.lastExportAt ? `最後 ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も', () => {
         exportJSONFile();
         ctx.go('settings');
       }),
