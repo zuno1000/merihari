@@ -914,7 +914,8 @@ export function removeCustom(b, id) {
  */
 export function homeLine(st, tone = 'bright', seed = 0, lines = []) {
   const s = st || {};
-  const mk = (key, mood, vars = {}) => ({ key, mood, text: say(key, tone, vars, seed, learned(lines, key, tone)) });
+  const sd = (key) => (typeof seed === 'function' ? seed(key) : seed); // v0.91: 場面ごとに 言い回しの番号を 進められるように(seed は 数 か (場面) => 数)
+  const mk = (key, mood, vars = {}) => ({ key, mood, text: say(key, tone, vars, sd(key), learned(lines, key, tone)) });
   if (s.postcard) return mk('postcard', 'happy', { place: s.postcard.place });
   if (s.quest && s.quest.unread > 0) return mk('unread', 'happy', { n: s.quest.unread });
   const o = s.open;
@@ -941,7 +942,8 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   const s = st || {};
   const first = homeLine(s, tone, seed, lines);
   const out = [first];
-  const add = (key, mood, vars = {}) => { if (!out.some((x) => x.key === key)) out.push({ key, mood, text: say(key, tone, vars, seed, learned(lines, key, tone)) }); };
+  const sd = (key) => (typeof seed === 'function' ? seed(key) : seed);
+  const add = (key, mood, vars = {}) => { if (!out.some((x) => x.key === key)) out.push({ key, mood, text: say(key, tone, vars, sd(key), learned(lines, key, tone)) }); };
   if (first.key === 'night') return out; // 夜は おやすみ だけ
   // v0.76(ユーザー要望「◯◯はまだです。5分だけでも。のような システムの文は アシスタントに集約」): 習慣の声かけは 2 番目の話題に
   if (s.habit && s.habit.name) add(s.habit.kind === 'back' ? 'habit_back' : s.habit.kind === 'done' ? 'habit_done' : 'habit_left', s.habit.kind === 'done' ? 'happy' : s.habit.kind === 'left' ? 'worry' : 'base', { name: s.habit.name });

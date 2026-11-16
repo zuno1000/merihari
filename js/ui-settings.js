@@ -397,6 +397,25 @@ export function shouldRemindExport({ firstDate, today, lastExportAt, now }) {
   const since = lastExportAt ? (now - lastExportAt) / 86400000 : days;
   return since >= EXPORT_REMIND_DAYS;
 }
+/**
+ * 静かに同期する(v0.91・実機 FB「開くたびに ポップアップが出て 数秒 操作できない。裏で 完全に 動かせるなら そうして」)。
+ * 入(既定): Google のトークンを 期限(約 1 時間)まで、パスフレーズから作った鍵(取り出せない形)を ずっと、この端末に覚える → 開いたとき 確認なしで 同期。
+ * トークンが切れたあとは Google の確認が要る。「画面を切り替えて確認」(試験的)を入れると、ポップアップの代わりに 開いたときに いちど Google のページへ移って すぐ戻る。
+ */
+function quietBox(rerender) {
+  const local = store.state.local;
+  const quiet = google.quietOn();
+  return el('div.col', { style: { marginTop: '12px', gap: '6px' } }, [
+    el('label.row.field', [el('input', { type: 'checkbox', checked: quiet, onchange: async (e) => { local.quietSync = e.target.checked; if (!e.target.checked) { local.silentAuth = false; google.clearToken(); await sync.forgetKey(); } store.saveLocal(); toast(e.target.checked ? '次の同期から、この端末に 鍵を覚えます' : 'この端末の 鍵とトークンを 消しました'); rerender(); } }), el('span', '静かに同期する(この端末に 鍵を覚える)')]),
+    el('p.muted.small', '開いたときの同期で パスフレーズや 顔認証を 聞かなくなります。パスフレーズそのものは 保存せず、そこから作った鍵を 中身を読み出せない形で この端末に しまいます。Google の確認(トークン)は 約 1 時間 有効で、その間に開き直したときは 何も出ません。'),
+    quiet ? el('label.row.field', [el('input', { type: 'checkbox', checked: !!local.silentAuth, onchange: (e) => { local.silentAuth = e.target.checked; local.silentErr = 0; local.silentTryAt = 0; store.saveLocal(); rerender(); } }), el('span', '1 時間を過ぎたら 画面を切り替えて 確認する(試験的)')]) : null,
+    quiet ? el('p.muted.small', [
+      '入れると、トークンが切れているとき、最初のタップで ポップアップを出す代わりに、開いた直後に いちど Google のページへ移って すぐ戻ります(1 秒ほど・タップ不要)。',
+      '先に Google Cloud の クライアント ID の「承認済みのリダイレクト URI」に ', el('code', google.redirectUri()), ' を足してください(足していないと Google のエラーの画面で止まります。そのときは アプリを開き直せば 自動で 切になります)。うまく戻れないことが 2 回 続いても 自動で 切になります。',
+      local.silentAuth && !sync.hasDeviceKey() ? ' いまは まだ 鍵を覚えていないので、いちど 同期すると 次から 働きます。' : '',
+    ]) : null,
+  ].filter(Boolean));
+}
 function sectionGoogle(rerender) {
   const local = store.state.local;
   const connected = google.isConnected();
@@ -406,19 +425,19 @@ function sectionGoogle(rerender) {
   const cid = el('input.text', { type: 'text', value: local.clientIdOverride || '', placeholder: google.CLIENT_ID, autocomplete: 'off', onchange: (e) => { local.clientIdOverride = e.target.value.trim(); store.saveLocal(); } });
   return card('Google', 'カレンダーは「予定の有無(free/busy)」だけを読み、タイトルや場所は取得しません。Drive はアプリ専用領域に端末で暗号化してから保存します。',
     el('div.list', [
-      el('div.srow.plain', [el('span.lbl', '状態'), el('span.val', connected ? (google.savedToken() ? '接続済み(このセッション有効)' : '接続済み(次の操作で再認証)') : '未接続')]),
+      el('div.srow.plain', [el('span.lbl', '状態'), el('span.val', connected ? (google.savedToken() ? '接続済み(確認なしで 同期できます)' : '接続済み(次の操作で Google の確認)') : '未接続')]),
       el('div.srow.plain', [el('span.lbl', '予定(busy)'), el('span.val', f.fetchedAt ? `${fmtTs(f.fetchedAt)} 取得・${local.busyCache.busy.length}件${f.error ? '・前回失敗' : ''}` : '未取得')]),
       el('div.srow.plain', [el('span.lbl', '最終同期'), el('span.val', fmtTs(local.lastSyncAt) + (local.pendingSync ? '・未同期の変更あり' : ''))]),
     ]),
     el('div.row.wrap', { style: { marginTop: '10px' } }, connected ? [
       el('button.btn', { type: 'button', onclick: () => run('予定を取得中…', async () => { await google.fetchBusy({ force: true, interactive: true }); toast('予定を取得しました'); }) }, '予定を取得'),
       el('button.btn.primary', { type: 'button', onclick: () => run('同期中…', async () => { const r = await sync.syncDrive({ interactive: true }); toast(r === 'skip' ? '同期を見送りました' : r === 'ok' ? '同期済み・他の端末の変更を取り込み' : '同期済み・この端末が最新'); }) }, 'Drive と同期'),
-      el('button.btn.ghost', { type: 'button', onclick: () => confirmSheet('Google との接続を解除しますか?', 'この端末のトークンと予定のキャッシュを消します。Drive 上の暗号化ファイルは残ります。', '解除', () => { google.disconnect(); sync.forgetPass(); toast('解除しました'); rerender(); }, true) }, '接続を解除'),
+      el('button.btn.ghost', { type: 'button', onclick: () => confirmSheet('Google との接続を解除しますか?', 'この端末のトークンと予定のキャッシュを消します。Drive 上の暗号化ファイルは残ります。', '解除', () => { google.disconnect(); sync.forgetPass(); sync.forgetKey(); toast('解除しました'); rerender(); }, true) }, '接続を解除'),
     ] : [
       el('button.btn.primary.grow', { type: 'button', onclick: () => run('Google に接続中…', async () => { await google.getToken({ interactive: true }); try { await google.fetchBusy({ force: true, interactive: true }); } catch (e) { console.warn(e); } toast('接続しました'); }) }, '接続する'),
     ]),
     connected ? el('div.list', { style: { marginTop: '12px' } }, [
-      el('div.srow.plain', [el('span.lbl', 'パスフレーズ'), el('span.val', sync.getPass() ? 'このセッションでは記憶' : '未入力(同期のときに聞きます)')]),
+      el('div.srow.plain', [el('span.lbl', 'パスフレーズ'), el('span.val', sync.hasDeviceKey() ? 'この端末が 鍵を覚えています(聞きません)' : sync.getPass() ? 'このセッションでは記憶' : '未入力(同期のときに聞きます)')]),
       el('div.srow.plain', [el('span.lbl', '顔認証 / パスキー'), el('span.val', !passkey.supported() ? 'このブラウザでは使えません' : passkey.enrolled() ? 'この端末で有効' : '未設定')]),
     ]) : null,
     connected ? el('div.row.wrap', { style: { marginTop: '10px' } }, [
@@ -426,6 +445,7 @@ function sectionGoogle(rerender) {
       passkey.enrolled() ? el('button.btn.ghost', { type: 'button', onclick: () => { passkey.forget(); toast('この端末のパスキー登録を消しました'); rerender(); } }, 'パスキー登録を消す') : null,
       sync.getPass() ? el('button.btn.ghost', { type: 'button', onclick: () => { sync.forgetPass(); toast('忘れました'); rerender(); } }, 'このセッションから忘れる') : null,
     ]) : null,
+    connected ? quietBox(rerender) : null,
     connected ? el('p.muted.small', 'パスフレーズは通常このセッションの間だけ記憶します。「顔認証 / パスキー」を有効にすると、この端末のパスキー(Face ID・指紋・Windows Hello など)の中の秘密でパスフレーズを包んで保存し、次回からは認証だけで同期できます(パスフレーズそのものは保存しません。古いブラウザでは使えません)。') : null,
     DEV ? el('details', [el('summary.muted.small', 'クライアント ID を上書き(開発用)'), el('label.field.col', [el('span.label', 'OAuth クライアント ID'), cid])]) : null); // v0.25(レビュー B-4): localhost / ?test のときだけ
 }

@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import { normalizeAfterMerge, alignToCut } from './log.js';
 import { dayCut } from './time.js';
-import { gfetch, getToken, isConnected, savedToken, loadGis } from './google.js';
+import { gfetch, getToken, isConnected, savedToken, loadGis, quietOn } from './google.js';
 import { el, sheet, toast } from './ui.js';
 import * as passkey from './passkey.js';
 
@@ -35,26 +35,71 @@ async function deriveKey(pass, salt, iterations = ITERATIONS) {
   const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
-/** obj を暗号化した JSON 文字列。hint は平文(秘密でない短文)。iterations はテスト用(既定 310,000) */
-export async function encrypt(obj, pass, hint = '', { iterations = ITERATIONS } = {}) {
-  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(pass, salt, iterations);
+/** 鍵(deriveKey の結果)で 暗号化した JSON 文字列。salt は その鍵を作ったときの salt(base64) */
+async function sealWith(obj, key, salt, iterations, hint = '') {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
-  return JSON.stringify({ v: 1, app: 'merihari', kdf: `PBKDF2-SHA256-${iterations}`, hint: String(hint || '').slice(0, 80), salt: b64(salt), iv: b64(iv), ct: b64(new Uint8Array(ct)) });
+  return JSON.stringify({ v: 1, app: 'merihari', kdf: `PBKDF2-SHA256-${iterations}`, hint: String(hint || '').slice(0, 80), salt, iv: b64(iv), ct: b64(new Uint8Array(ct)) });
+}
+/** obj を暗号化した JSON 文字列。hint は平文(秘密でない短文)。iterations はテスト用(既定 600,000)。salt(base64・v0.91)を渡すと その salt を使う(渡さなければ 新しく作る) */
+export async function encrypt(obj, pass, hint = '', { iterations = ITERATIONS, salt = null } = {}) {
+  const sb = salt || b64(crypto.getRandomValues(new Uint8Array(16)));
+  return sealWith(obj, await deriveKey(pass, unb64(sb), iterations), sb, iterations, hint);
 }
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
-export async function decrypt(txt, pass) {
+/** 同期ファイルの 外側を読む(v0.91): { salt, iv, ct, iterations }。形が合わなければ 投げる */
+export function parseFile(txt) {
   if (typeof txt !== 'string' || txt.length > MAX_FILE_BYTES) throw new Error('同期ファイルが大きすぎます');
   let o;
   try { o = JSON.parse(txt); } catch { throw new Error('同期ファイルの形式が不正です'); }
   if (!o || o.v !== 1 || typeof o.salt !== 'string' || typeof o.iv !== 'string' || typeof o.ct !== 'string') throw new Error('同期ファイルの形式が不正です');
   const iterations = +(/^PBKDF2-SHA256-(\d+)$/.exec(o.kdf || '')?.[1]) || ITERATIONS;
   if (iterations < 1000 || iterations > 5000000) throw new Error('同期ファイルの形式が不正です');
-  const key = await deriveKey(pass, unb64(o.salt), iterations);
+  return { salt: o.salt, iv: o.iv, ct: o.ct, iterations };
+}
+async function openWith(head, key) {
   try {
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct));
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(head.iv) }, key, unb64(head.ct));
     return JSON.parse(new TextDecoder().decode(pt));
   } catch { throw new Error('復号できません。パスフレーズが違う可能性があります'); }
+}
+export async function decrypt(txt, pass) {
+  const head = parseFile(txt);
+  return openWith(head, await deriveKey(pass, unb64(head.salt), head.iterations));
+}
+
+// ---- この端末の鍵(v0.91・実機 FB「開くたびに 同期の確認が出て 数秒 操作できない。裏で 完全に 動かせるなら そうして」)----
+// パスフレーズそのものは これまでどおり 保存しない。パスフレーズから作った 鍵(取り出せない形の CryptoKey = 中身を スクリプトから読めない)を、
+// その鍵を作った salt と一緒に IndexedDB に しまう。同期ファイルの salt を 上げるたびに 変えず 引き継ぐので、次に開いたときは パスフレーズなしで 開ける。
+// 別の端末(古い版)が 新しい salt で 上げていたら 合わなくなる → そのときだけ パスフレーズ(か パスキー)を聞いて 覚え直す。「静かに同期する」を 切ると 消す。
+const KEY_DB = 'merihari-keys';
+function keyStore(mode, fn) {
+  return new Promise((res, rej) => {
+    let rq;
+    try { rq = indexedDB.open(KEY_DB, 1); } catch (e) { rej(e); return; }
+    rq.onupgradeneeded = () => { rq.result.createObjectStore('k'); };
+    rq.onerror = () => rej(rq.error);
+    rq.onsuccess = () => {
+      const db = rq.result;
+      let out;
+      try { const tx = db.transaction('k', mode); out = fn(tx.objectStore('k')); tx.oncomplete = () => { db.close(); res(out ? out.result : undefined); }; tx.onerror = tx.onabort = () => { db.close(); rej(tx.error); }; } catch (e) { db.close(); rej(e); }
+    };
+  });
+}
+let devKey = null, keyLoading = null, needPass = false; // devKey = { key, salt, iterations } / needPass = 覚えた鍵が 同期ファイルに 合わなかった(パスフレーズを 聞き直す)
+/** 覚えた鍵を読む(1 度だけ・main.js が 起動時に呼ぶ) */
+export function loadKey() {
+  if (!keyLoading) keyLoading = (quietOn() ? keyStore('readonly', (s) => s.get('sync')).then((v) => { devKey = v && v.key && typeof v.salt === 'string' && v.iterations > 0 ? v : null; }) : Promise.resolve()).catch((e) => { console.warn('key load', e); });
+  return keyLoading;
+}
+const markKey = (on) => { if (!!store.state.local.hasDevKey !== on) { store.state.local.hasDevKey = on; store.saveLocal(); } };
+async function rememberKey(k) { devKey = k; needPass = false; try { await keyStore('readwrite', (s) => s.put(k, 'sync')); markKey(true); } catch (e) { console.warn('key save', e); } }
+export async function forgetKey() { devKey = null; needPass = false; markKey(false); try { await keyStore('readwrite', (s) => s.delete('sync')); } catch (e) { console.warn('key delete', e); } }
+export const hasDeviceKey = () => !!devKey;
+/** 鍵の選び方(純関数): 同期ファイルの外側(head | null)と 覚えた鍵(dk | null)・パスフレーズの有無 → 'device'(覚えた鍵で 開ける)| 'pass'(パスフレーズから作る)| 'ask'(聞く) */
+export function keyPlan(head, dk, hasPass) {
+  const fits = !!dk && (!head || (head.salt === dk.salt && head.iterations === dk.iterations));
+  return fits ? 'device' : hasPass ? 'pass' : 'ask';
 }
 export function readHint(txt) { try { const h = JSON.parse(txt).hint; return typeof h === 'string' ? h.slice(0, 80) : ''; } catch { return ''; } }
 
@@ -270,7 +315,10 @@ export async function syncDrive({ interactive = false } = {}) {
   if (syncing) return syncing;
   syncing = (async () => {
     const local = store.state.local;
-    if (!interactive && (!isConnected() || !savedToken() || !getPass())) return 'skip';
+    await loadKey();
+    const quiet = quietOn();
+    if (!quiet && devKey) await forgetKey();
+    if (!interactive && (!isConnected() || !savedToken() || !(getPass() || devKey))) return 'skip';
     const tk = await getToken({ interactive });
     if (!tk) return 'skip';
     let file = await findFile(interactive);
@@ -281,18 +329,26 @@ export async function syncDrive({ interactive = false } = {}) {
     for (let attempt = 0; ; attempt++) {
       let remoteTxt = null;
       if (file) { remoteTxt = await download(file.id, interactive); hint = readHint(remoteTxt); }
-      if (!pass && interactive && passkey.enrolled()) {
+      const head = remoteTxt ? parseFile(remoteTxt) : null;
+      let how = keyPlan(head, devKey, !!pass); // v0.91: 覚えた鍵で 開けるなら パスフレーズは 要らない
+      if (how === 'ask' && !interactive) { if (devKey) needPass = true; return 'skip'; }
+      if (how === 'ask' && interactive && passkey.enrolled()) {
         // v0.8: 顔認証/パスキーで包んだパスフレーズをほどく(ユーザー操作の中)。キャンセルや失敗なら手入力へ
         try { pass = await passkey.unlock(); if (pass) setPass(pass); } catch (e) { console.warn('passkey unlock', e); toast(e.name === 'NotAllowedError' ? 'パスキーをキャンセルしました。手入力へ' : e.message); }
       }
-      if (!pass) {
-        if (!interactive) return 'skip';
-        ({ pass, hint } = await askPass({ hint, isNew: !file }));
+      if (how === 'ask' && !pass) ({ pass, hint } = await askPass({ hint, isNew: !file }));
+      if (how === 'ask') how = 'pass';
+      // 使う鍵: 覚えた鍵 か、パスフレーズから(同期ファイルの salt を 引き継ぐ。回数が 古いファイルは 新しい salt と いまの回数で 上げ直す)
+      let wk = how === 'device' ? devKey : null, readKey = wk ? wk.key : null;
+      if (!wk) {
+        if (head) readKey = await deriveKey(pass, unb64(head.salt), head.iterations);
+        if (head && head.iterations === ITERATIONS) wk = { key: readKey, salt: head.salt, iterations: ITERATIONS };
+        else { const sb = b64(crypto.getRandomValues(new Uint8Array(16))); wk = { key: await deriveKey(pass, unb64(sb), ITERATIONS), salt: sb, iterations: ITERATIONS }; }
       }
       let data = store.state.data;
       if (remoteTxt) {
         let remote;
-        try { remote = await decrypt(remoteTxt, pass); } catch (e) { forgetPass(); throw e; }
+        try { remote = await openWith(head, readKey); } catch (e) { if (how === 'device') await forgetKey(); else forgetPass(); throw e; }
         data = merge(data, remote);
         data.entries = normalizeAfterMerge(alignToCut(data.entries, (d) => dayCut(data.settings, d), { uid: store.uid, nowISO: store.nowISO }), { uid: store.uid, nowISO: store.nowISO }); // v0.82・F1-22: 切れ目に そろえてから / v0.15.12: 別端末の記録との重なり・二重の記録中を整える
         // v0.15.7: 同期でカテゴリ・種別・配色が変わるときは、同期前の設定を端末に 1 つ控える(設定 › データ「同期前の設定に戻す」)
@@ -307,13 +363,15 @@ export async function syncDrive({ interactive = false } = {}) {
       store.state.data = data;
       store.save();
       seq = store.state.saveSeq;
-      const body = await encrypt(data, pass, hint || local.syncHint || '');
+      const body = await sealWith(data, wk.key, wk.salt, wk.iterations, hint || local.syncHint || '');
       if (file && attempt < 2) {
         let cur = null;
         try { cur = await fileMeta(file.id, interactive); } catch (e) { console.warn('fileMeta', e); }
         if (cur && cur.modifiedTime && cur.modifiedTime !== file.modifiedTime) { console.warn('sync: 別の端末が先に上げていたので取り込み直す'); file = cur; continue; }
       }
       await upload(file?.id || null, body, interactive);
+      if (quiet && (!devKey || devKey.salt !== wk.salt || devKey.iterations !== wk.iterations)) await rememberKey(wk); // 次からは この端末だけで 開ける
+      needPass = false;
       break;
     }
     local.lastSyncAt = Date.now(); local.syncHint = hint || local.syncHint || '';
@@ -348,7 +406,7 @@ export function autoSyncDecision(s) {
   if (s.hasToken && s.hasPass) return 'silent';
   return 'gesture';
 }
-const autoState = () => ({ connected: isConnected(), hasToken: !!savedToken(), hasPass: !!getPass(), online: navigator.onLine, now: Date.now(), lastSyncAt: store.state.local.lastSyncAt || 0, pending: !!store.state.local.pendingSync });
+const autoState = () => ({ connected: isConnected(), hasToken: !!savedToken(), hasPass: !!getPass() || (quietOn() && !!devKey && !needPass), online: navigator.onLine, now: Date.now(), lastSyncAt: store.state.local.lastSyncAt || 0, pending: !!store.state.local.pendingSync });
 
 let gesturePending = false;
 const say = (r, auto) => { if (r === 'ok') toast('他の端末の記録を取り込みました'); else if (!auto) toast(r === 'same' ? '同期済み・この端末が最新' : '同期を見送りました'); };
@@ -363,12 +421,17 @@ export function autoSync() {
  * 開いたとき・戻ったときの同期(v0.7): 鍵があれば静かに(他の端末の変更を取り込む)。
  * 鍵が無ければ(ふつうは起動のたび: トークンとパスフレーズは sessionStorage)、次のタップ(ユーザー操作あり=ポップアップが通る)で同期する。
  */
-export function autoSyncOnOpen() {
+export async function autoSyncOnOpen() {
+  await loadKey(); // v0.91: この端末が 鍵を覚えていれば、パスフレーズなしで 静かに
   const d = autoSyncDecision(autoState());
   if (d === 'none') return;
-  if (d === 'silent') { gesturePending = false; syncDrive({ interactive: false }).then((r) => say(r, true)).catch((e) => console.warn('auto sync', e)); return; }
-  gesturePending = true;
-  loadGis().catch(() => {}); // タップ時にポップアップが止められないよう先読み
+  const wait = () => { gesturePending = true; loadGis().catch(() => {}); }; // タップ時にポップアップが止められないよう先読み
+  if (d === 'silent') {
+    gesturePending = false;
+    syncDrive({ interactive: false }).then((r) => { say(r, true); if (r === 'skip' && needPass) wait(); }).catch((e) => console.warn('auto sync', e)); // 覚えた鍵が 合わなかったら 次のタップで 聞き直す
+    return;
+  }
+  wait();
 }
 /** 最初のタップ(pointerdown ではなく click: iOS でユーザー操作として扱われる)。同期が控えていれば、タップの処理とは別に走らせる */
 export function autoSyncOnGesture() {

@@ -2,6 +2,7 @@
 // v0.26: 「AI に頼む」はカードではなく 1 行(タップでシート)。見た目は Apple ジャーナル / Google Keep に倣い、線と部品を減らす。
 // 書くたびに自動保存(トーストは出さない・右上に小さく「保存」)。v0.30(実機 FB): 「材料」と「明日の予定」の札は廃止。並びは ①どうだった → ②気持ちを残す(明日は を含む)→ AI → 期限が近いタスク。
 // 下に続いた日数と最近14日の一覧(気分の点・1行目)。‹ › で前の日(未来は書かない)。レポート「今日」にも抜粋が出る(ui-report)。
+import { vocabRecap } from './ui-vocab.js'; // v0.91・F27-18: 英単語の 日別の記録
 import { el, clear, toast, svg, sheet } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
@@ -161,7 +162,7 @@ export function renderDiary(view, ctx, dateArg = null) {
         el('span.chev', { 'aria-hidden': 'true' }, '›')]); }) : el('p.muted.small.pad', '7 日以内の期限はありません。')),
     ]);
   }
-  view.append(...[el('h1', 'ふり返り'), head, guide, cardSec, topSec, taskSec, bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): 今日の BGM は 期限が近いタスク と 最近 の間
+  view.append(...[el('h1', 'ふり返り'), head, guide, cardSec, topSec, taskSec, vocabRecap(date, { isToday }), bgmRecap(date, rerender, { isToday }), memBox, listBox].filter(Boolean)); // v0.32.2(実機 FB): 今日の BGM は 期限が近いタスク と 最近 の間
   if (pendingReflect) { pendingReflect = false; if (isToday) openWizard(0); } // ホームの「ふり返る」から来たとき
 }
 

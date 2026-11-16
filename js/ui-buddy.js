@@ -103,6 +103,11 @@ function avatar(mood, size, cid = B().cur) {
 // ---- いまの状況 ----
 /** 「次はこれ」について いま言えること(v0.90・ui-today の nextCard が 描くたびに 渡す。記録中は null)。ホームの吹き出しの話題の 1 つになる */
 let homeHint = null;
+/** ホームの吹き出しの 持ち越し(v0.91): turn = 何番目の話題か / first = いちばん言いたいことの場面 / key = いま出している場面 / n = 場面ごとに 何回 言ったか(言い回しの番号) */
+const homeMem = { turn: 0, first: null, key: null, n: new Map() };
+const homeSalt = Math.floor(Math.random() * 100000);
+const keyHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 9973; };
+const homeSeed = (key) => homeSalt + keyHash(key) + (homeMem.n.get(key) || 0);
 export const setHomeHint = (h) => { homeHint = h && h.text ? h : null; };
 function homeState() {
   const d = store.state.data, s = S(), n = now();
@@ -144,16 +149,21 @@ export function buddyHead(ctx) {
   if (!buddyOn()) return null;
   const b = B();
   const text = el('span.bd-text'), av = el('span.bd-avwrap'), nameEl = el('span.bd-name', b.name);
-  let mood = null, turn = 0, firstKey = null; // turn: 何番目の話題か(タップと、決めた間隔ごとに 進む・v0.75)
-  const paint = () => {
+  let mood = null;
+  // v0.91(実機 FB「発言フレーズの 出現率に 偏りを感じる」): 何番目の話題か(homeMem.turn)と 場面ごとの 言い回しの番号(homeMem.n)を、ホームを描き直しても 持ち越す。
+  // これまでは 描き直すたびに 同じ話題の 同じ言い回しへ戻り、言い回しの番号も「話題の数」と「言い回しの数」の 割り切れ方しだいで 同じ 1 つに 固まっていた。
+  const lines = () => { const b = B(); return buddy.homeLines(homeState(), buddy.voiceOf(b), homeSeed, b.lines); };
+  const paint = (step = false) => {
     const b = B();
-    let list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed() + turn, b.lines);
-    if (list[0].key !== firstKey) { // いちばん言いたいことが替わった(記録を始めた・続きが届いた など)→ それを先に言う
-      if (firstKey != null) { turn = 0; list = buddy.homeLines(homeState(), buddy.voiceOf(b), seed(), b.lines); }
-      else if (list[0].key === 'hello') turn = turn0 % list.length; // v0.76: とくに言いたいことが無いとき(あいさつ)は、開くたびに ちがう話題から
-      firstKey = list[0].key;
-    }
-    const l = list[turn % list.length];
+    let list = lines();
+    const was = homeMem.key;
+    if (list[0].key !== homeMem.first) { // いちばん言いたいことが替わった(記録を始めた・続きが届いた など)→ それを先に言う
+      homeMem.turn = homeMem.first == null && list[0].key === 'hello' ? turn0 % list.length : 0; // とくに言いたいことが無いとき(あいさつ)は、開くたびに ちがう話題から(v0.76)
+      homeMem.first = list[0].key;
+    } else if (step) homeMem.turn++;
+    const key = list[homeMem.turn % list.length].key;
+    if (key !== was || step) { homeMem.n.set(key, (homeMem.n.get(key) || 0) + 1); homeMem.key = key; list = lines(); } // その場面を 言うたびに 次の言い回しへ(ひとまわり するまで 同じ文は 出ない)
+    const l = list.find((x) => x.key === key) || list[0];
     if (nameEl.textContent !== b.name) nameEl.textContent = b.name;
     if (text.textContent !== l.text) text.textContent = l.text;
     const face = `${b.cur}:${l.mood}`;
@@ -161,12 +171,12 @@ export function buddyHead(ctx) {
   };
   const node = el('div.bd-home', [
     el('button.bd-avbtn', { type: 'button', 'aria-label': `${b.name}(アシスタント)を開く`, onclick: () => openBuddy(ctx, paint) }, av),
-    el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => { turn++; paint(); } }, [nameEl, text]),
+    el('button.bd-bubble.bd-tap', { type: 'button', 'aria-label': 'ほかのコメントを聞く', onclick: () => paint(true) }, [nameEl, text]),
   ]);
   paint();
   prime(() => { if (node.isConnected) paint(); });
   // v0.75(ユーザー要望「台詞が切り替わるタイミングを もう少し早く・自分で決められるように」): 設定の間隔(既定 30 秒)ごとに 次の話題へ。画面を見ていない間は進めない
-  const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } if (document.visibilityState !== 'visible' || document.querySelector('.overlay')) return; turn++; paint(); }, buddy.rotateOf(b) * 1000);
+  const timer = setInterval(() => { if (!node.isConnected) { clearInterval(timer); return; } if (document.visibilityState !== 'visible' || document.querySelector('.overlay')) return; paint(true); }, buddy.rotateOf(b) * 1000);
   return node;
 }
 /** ホームの下の 3 つ(日報 / ふり返る / 話す)。止めていれば null */

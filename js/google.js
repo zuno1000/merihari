@@ -1,6 +1,9 @@
 // merihari ─ google.js: Google Identity Services(token model・リダイレクト無し)と Calendar freeBusy(仕様書 F6・§8)。
 // - スコープは calendar.freebusy と drive.appdata だけ。タイトル等は取得しない。
 // - トークンは sessionStorage(閉じれば消える)。ユーザー操作のないタイミングで認証ポップアップは出さない(interactive=false なら null)。
+// - v0.91(実機 FB「開くたびに ポップアップが出て 数秒 操作できない」): 「静かに同期する」(local.quietSync・既定は 入)の端末では、トークンを 期限(約 1 時間)まで localStorage に置く
+//   (1 時間以内に 開き直したときは 確認なしで 同期できる)。切れたあとは Google の確認が要る: ふつうは 最初のタップで ポップアップ。
+//   「画面を切り替えて確認」(local.silentAuth・試験的・既定は 切)を入れると、開いたときに Google の確認ページへ いちど移って すぐ戻る(prompt=none・ポップアップなし・タップ不要)。
 // - busy は端末ローカル(local.busyCache)にだけ置き、Drive には送らない(F6-4)。
 import * as store from './store.js';
 import { dateKey, parseDateKey, addDays } from './time.js';
@@ -17,14 +20,68 @@ let tokenClient = null, tokenClientId = null, gisPromise = null;
 export const clientId = () => store.state.local.clientIdOverride || CLIENT_ID;
 export const isConnected = () => !!store.state.local.gAuthed;
 
+/** 静かに同期する(v0.91): この端末に トークン(期限まで)と 同期の鍵を 覚える。既定は 入 */
+export const quietOn = () => store.state.local.quietSync !== false;
+const readTok = (st) => { try { const t = JSON.parse(st.getItem(TOKEN_KEY)); if (t && t.tok && t.exp > Date.now()) return t.tok; } catch { /* ignore */ } return null; };
 export function savedToken() {
-  try { const t = JSON.parse(sessionStorage.getItem(TOKEN_KEY)); if (t && t.tok && t.exp > Date.now()) return t.tok; } catch { /* ignore */ }
-  return null;
+  return readTok(sessionStorage) || (quietOn() ? readTok(localStorage) : null);
 }
 function saveToken(tok, expiresIn) {
-  try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ tok, exp: Date.now() + Math.max(60, (+expiresIn || 3600) - 60) * 1000 })); } catch { /* ignore */ }
+  const v = JSON.stringify({ tok, exp: Date.now() + Math.max(60, (+expiresIn || 3600) - 60) * 1000 });
+  try { sessionStorage.setItem(TOKEN_KEY, v); } catch { /* ignore */ }
+  try { if (quietOn()) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
 }
-export function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } }
+export function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } }
+
+// ---- 画面を切り替えて確認(v0.91・試験的): ポップアップの代わりに、ページごと Google の確認へ移って 戻る(OAuth の implicit flow・prompt=none) ----
+const SILENT_GAP_MS = 10 * 60000; // 続けて 試さない(戻れなかったときに 行ったり来たり しない)
+/** 戻り先(Google Cloud の「承認済みのリダイレクト URI」に 登録するもの): アプリの入口。index.html は 外す */
+export const redirectUri = () => location.origin + location.pathname.replace(/index\.html$/, '');
+/** 戻ってきた URL の # を読む(純関数): { token, expiresIn, state } | { error, state } | null(認証の戻りでは ない) */
+export function parseAuthHash(hash) {
+  const h = String(hash || '').replace(/^#/, '');
+  if (!/(^|&)state=mh-/.test(h) || !/(^|&)(access_token|error)=/.test(h)) return null;
+  const q = new URLSearchParams(h);
+  const state = q.get('state') || '';
+  if (q.get('access_token')) return { token: q.get('access_token'), expiresIn: +q.get('expires_in') || 3600, state };
+  return { error: q.get('error') || 'error', state };
+}
+/** 確認ページの URL(純関数) */
+export function silentAuthUrl(cid, redirect, state) {
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: cid, redirect_uri: redirect, response_type: 'token', scope: SCOPES, prompt: 'none', include_granted_scopes: 'true', state }).toString();
+}
+/**
+ * 起動のいちばん最初に呼ぶ: 確認から戻ってきていれば トークンを受け取り、URL の # を消す。
+ * 戻り値 'ok' | 'error'(確認が要る = ふつうの ポップアップへ)| 'lost'(行ったきり 戻らなかった → 自動で 切にした)| null
+ */
+export function takeRedirect() {
+  const local = store.state.local;
+  const r = parseAuthHash(location.hash);
+  if (!r) {
+    if (local.silentPending) { local.silentPending = 0; local.silentAuth = false; store.saveLocal(); return 'lost'; }
+    return null;
+  }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch { /* ignore */ }
+  const good = r.token && local.silentNonce && r.state === `mh-${local.silentNonce}`;
+  local.silentPending = 0; local.silentNonce = '';
+  if (good) { saveToken(r.token, r.expiresIn); local.gAuthed = true; local.silentErr = 0; store.saveLocal(); return 'ok'; }
+  local.silentErr = (local.silentErr || 0) + 1;
+  if (local.silentErr >= 2) local.silentAuth = false; // 2 回 続けて だめなら 切る(ポップアップの確認に戻る)
+  store.saveLocal();
+  return 'error';
+}
+/** 開いたとき / 戻ったとき: 条件が そろっていれば 確認ページへ移る(true を返したら この画面は すぐ 替わる)。条件 = 入・接続済み・トークン切れ・同期の鍵を この端末が覚えている・オンライン・前回から 10 分以上 */
+export function trySilentRedirect() {
+  const local = store.state.local;
+  if (!local.silentAuth || !quietOn() || !isConnected() || !local.hasDevKey || savedToken() || navigator.onLine === false) return false;
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') return false;
+  if (Date.now() - (local.silentTryAt || 0) < SILENT_GAP_MS) return false;
+  const nonce = store.uid().replace(/-/g, '').slice(0, 20);
+  local.silentTryAt = Date.now(); local.silentPending = Date.now(); local.silentNonce = nonce;
+  store.saveLocal();
+  location.replace(silentAuthUrl(clientId(), redirectUri(), `mh-${nonce}`));
+  return true;
+}
 
 /** GIS スクリプトを先読み(表示時に読んでおくとタップ→ポップアップがユーザー操作由来のまま通る) */
 export function loadGis() {
@@ -83,6 +140,7 @@ export function disconnect() {
   if (t && globalThis.google?.accounts?.oauth2) { try { google.accounts.oauth2.revoke(t, () => {}); } catch { /* ignore */ } }
   clearToken();
   store.state.local.gAuthed = false;
+  store.state.local.silentPending = 0;
   store.state.local.busyCache = null;
   store.saveLocal();
 }

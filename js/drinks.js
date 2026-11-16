@@ -229,7 +229,7 @@ export function radarPoints(values, cx, cy, r) {
 
 // ---- v0.86・F19-11〜F19-16(ユーザー要望「登録した情報をもとに 今日の一杯を。網羅的なサイトから 情報を取って(権利を確かめて)・おすすめも 同じ軸のチャートで・ネットの評価と自己評価を見比べ・
 //      気になる(ブックマーク)・どこで飲めるか・日報でも・記録が少ないうちは 好みを自己申告(あとから 実際の記録を優先)」)----
-// 日本酒は さけのわデータ(data/sake.json・tools/sake_fetch.py・帰属表示が条件)の 実在の銘柄から。コーヒーとワインは 銘柄ごとの味を 自由に使える形で公開している所が無いので、上の STYLES(品種・産地の目安)から。
+// 日本酒は さけのわデータ(data/sake.json・tools/sake_fetch.py・帰属表示が条件)の 実在の銘柄から。コーヒーとワインは v0.90 までは 上の STYLES(品種・産地の目安)だけ → v0.91 で 銘柄のデータを足した(下の F19-18)。ビールは STYLES のまま。
 
 /** 好みを自己申告できる種類 */
 export const PREF_KINDS = Object.freeze(['coffee', 'sake', 'wine']);
@@ -289,6 +289,59 @@ export function parseSake(raw) {
 /** さけのわの指標のうち 強い 2 つの名前(例「華やか・軽快」) */
 export const sakeWords = (f) => SAKE_F.map((name, i) => ({ name, v: f[i] || 0 })).sort((a, b) => b.v - a.v).slice(0, 2).map((x) => x.name).join('・');
 
+// ---- v0.91・F19-18(ユーザー要望「非商用を前提に、コーヒーや ワインも 具体的な銘柄(商品名)で すすめてほしい」)----
+// ワイン = X-Wines の Slim 版(data/wine.json・tools/wine_fetch.py・CC0・1,007 本)/ コーヒー = Firstbloom Data(data/coffee.json・tools/coffee_fetch.py・CC BY 4.0・1,500 銘柄)。
+// どちらも 出典を おすすめの札に いつも出す(CREDITS)。味の軸のうち データに無いものは このアプリの見立て(ツールの頭の説明)。
+export const WINE_TYPES = Object.freeze(['赤', '白', 'スパークリング', 'ロゼ', 'デザート', '酒精強化']);
+/** ワインで 銘柄ごとの値がある軸(香りは 手がかりが無い)/ コーヒーは 5 軸とも */
+export const WINE_AXES = Object.freeze(['sweet', 'acid', 'tannin', 'body']);
+export const COFFEE_AXES = Object.freeze(['aroma', 'sweet', 'acid', 'bitter', 'body']);
+/** 出典の表示(銘柄のもと src → { text, url })。札から 消さない(さけのわ と Firstbloom は 表示が 利用の条件) */
+export const CREDITS = Object.freeze({
+  sakenowa: SAKE_CREDIT,
+  xwines: Object.freeze({ text: 'X-Wines(de Azambuja ほか 2023・CC0)', url: 'https://github.com/rogerioxavier/X-Wines' }),
+  firstbloom: Object.freeze({ text: 'Firstbloom Data(Alex Caza・CC BY 4.0)', url: 'https://github.com/alexcaza/firstbloom-data' }),
+});
+const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+const strs = (v, max, n) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string' && s.trim()).slice(0, max).map((s) => s.trim().slice(0, n)) : []);
+const tOf = (keys, arr) => { if (!Array.isArray(arr) || arr.length !== keys.length) return null; const v = arr.map((x) => Math.max(1, Math.min(5, +x / 10))); return v.some((x) => !Number.isFinite(x)) ? null : Object.fromEntries(keys.map((k, i) => [k, v[i]])); };
+/** data/wine.json → { updated, items: [{ ref, name, maker, area(国), region, type(0〜5), grapes, t: { sweet, acid, tannin, body }, abv(% | null), score(評価の平均 | null), n(評価の件数) }] }(形の合わないものと 名前の重なりは 捨てる) */
+export function parseWine(raw) {
+  const out = { updated: str(raw && raw.updated, 6), items: [] };
+  if (!raw || !Array.isArray(raw.items)) return out;
+  const seen = new Set();
+  for (const x of raw.items) {
+    if (!Array.isArray(x) || !Number.isInteger(x[0]) || !str(x[1], 80) || !(x[5] >= 0 && x[5] < WINE_TYPES.length)) continue;
+    const t = tOf(WINE_AXES, x[7]), key = nameKey(x[1]);
+    if (!t || seen.has(key)) continue;
+    seen.add(key);
+    out.items.push({ ref: x[0], name: str(x[1], 80), maker: str(x[2], 60), area: str(x[3], 20), region: str(x[4], 40), type: x[5], grapes: strs(x[6], 3, 30), t, abv: +x[8] > 0 ? Math.round(+x[8]) / 10 : null, score: +x[9] > 0 ? Math.round(+x[9]) / 100 : null, n: +x[10] > 0 ? Math.round(+x[10]) : 0 });
+  }
+  return out;
+}
+/** data/coffee.json → { updated, items: [{ ref, name, maker(ロースター), area(産地の国 | 'ブレンド'), proc(精製), words(風味の言葉), t: { aroma, sweet, acid, bitter, body }, year }] } */
+export function parseCoffee(raw) {
+  const out = { updated: str(raw && raw.updated, 6), items: [] };
+  if (!raw || !Array.isArray(raw.items)) return out;
+  const seen = new Set();
+  for (const x of raw.items) {
+    if (!Array.isArray(x) || !Number.isInteger(x[0]) || !str(x[1], 60) || !str(x[2], 60)) continue;
+    const t = tOf(COFFEE_AXES, x[6]), key = nameKey(`${x[2]} ${x[1]}`);
+    if (!t || seen.has(key)) continue;
+    seen.add(key);
+    out.items.push({ ref: x[0], name: str(x[1], 60), maker: str(x[2], 60), area: str(x[3], 20), proc: str(x[4], 20), words: strs(x[5], 4, 20), t, year: +x[7] > 2000 ? Math.round(+x[7]) : null });
+  }
+  return out;
+}
+/** 銘柄 → おすすめの候補の形(suggest の cands) */
+const CAND = {
+  sake: (x) => ({ name: x.name, maker: x.maker, area: x.area, note: [sakeWords(x.f), ...x.tags.slice(0, 3)].filter(Boolean).join('・'), t: x.t, src: 'sakenowa', ref: x.ref, score: x.score, rank: x.rank, f: x.f }),
+  wine: (x) => ({ name: x.name, maker: x.maker, area: [x.area, x.region].filter(Boolean).join('・'), note: [WINE_TYPES[x.type], ...x.grapes].join('・'), t: x.t, src: 'xwines', ref: x.ref, score: x.score, rank: null, n: x.n, f: null, type: x.type, grapes: x.grapes, abv: x.abv, country: x.area }),
+  coffee: (x) => ({ name: x.name, maker: x.maker, area: x.area, note: [x.proc, ...x.words].filter(Boolean).join('・'), t: x.t, src: 'firstbloom', ref: x.ref, score: null, rank: null, f: null, proc: x.proc, year: x.year }),
+};
+/** 探すときの言葉(コーヒーは 銘柄の名前だけでは 見つからないので 産地を頭に) */
+export const searchName = (c) => (c && c.src === 'firstbloom' && c.area && c.area !== 'ブレンド' && !c.name.includes(c.area) ? `${c.area} ${c.name}` : (c && c.name) || '');
+
 /** 名前を そろえる(見比べ・重なりの判定用): 空白を取り、英字は小文字に */
 export const nameKey = (s) => String(s || '').replace(/[\s\u3000]/g, '').toLowerCase();
 /** 気になる(ブックマーク): data.drinks の中の wish = true の記録(総評も 日付も 無い)。新しい順 */
@@ -346,21 +399,23 @@ export function kindFor(drinks, nowMin, declared = null) {
 /**
  * おすすめ(v0.86・F19-11): 的(target)に 味が近い候補を選ぶ。
  * 日本酒で sake(parseSake)があれば 実在の銘柄から: まだ記録していない銘柄のうち 的に近い 40 本 → 人気の順位・点の高い順に 8 本 → 日付で 1 本(同じ日は同じ)。
- * それ以外は STYLES から 近い 3 つ → 日付で 1 つ(recommend と同じ)。的が無ければ 人気の順 / 表の順から 日替わり。
+ * v0.91: ワイン(wine = parseWine)と コーヒー(coffee = parseCoffee)も 同じく 実在の銘柄から(ワインは 評価の件数の多い順・コーヒーは 新しい順に 8 つ)。
+ * 銘柄を読めていなければ STYLES から 近い 3 つ → 日付で 1 つ(recommend と同じ)。的が無ければ 人気の順 / 表の順から 日替わり。
  * 戻り値 { kind, pick, others(ほかの候補 4 つまで), target, why, again } | null。
- * 候補 = { name, maker, area, note, t: { 軸: 1〜5 }, src: 'sakenowa' | 'style', ref, score, rank, f }。純関数
+ * 候補 = { name, maker, area, note, t: { 軸: 1〜5 }, src: 'sakenowa' | 'xwines' | 'firstbloom' | 'style', ref, score, rank, f }。純関数
  */
-export function suggest(drinks, kind, date, { declared = null, sake = null } = {}) {
-  const fromDb = kind === 'sake' && sake && sake.items && sake.items.length > 0;
+export function suggest(drinks, kind, date, { declared = null, sake = null, wine = null, coffee = null } = {}) {
+  const db = { sake, wine, coffee }[kind] || null;
+  const fromDb = !!(db && db.items && db.items.length > 0 && CAND[kind]);
   const had = new Set(listDrinks(drinks, kind).map((d) => nameKey(d.name)));
   const cands = fromDb
-    ? sake.items.filter((x) => !had.has(nameKey(x.name))).map((x) => ({ name: x.name, maker: x.maker, area: x.area, note: [sakeWords(x.f), ...x.tags.slice(0, 3)].filter(Boolean).join('・'), t: x.t, src: 'sakenowa', ref: x.ref, score: x.score, rank: x.rank, f: x.f }))
+    ? db.items.filter((x) => !had.has(nameKey(x.name))).map(CAND[kind])
     : (STYLES[kind] || []).map((s) => ({ name: s.name, maker: '', area: '', note: s.note, t: s.t, src: 'style', ref: null, score: null, rank: null, f: null }));
   if (!cands.length) return null;
   const tg = target(drinks, kind, declared);
   const keys = Object.keys(tg.t).filter((k) => cands.some((c) => c.t[k] != null));
   const dist = (c) => keys.reduce((a, k) => a + ((c.t[k] ?? 3) - tg.t[k]) ** 2, 0);
-  const pop = (a, b) => (a.c.rank || 9999) - (b.c.rank || 9999) || (b.c.score || 0) - (a.c.score || 0) || a.i - b.i;
+  const pop = (a, b) => (a.c.rank || 9999) - (b.c.rank || 9999) || (b.c.n || 0) - (a.c.n || 0) || (b.c.score || 0) - (a.c.score || 0) || a.i - b.i;
   const ranked = cands.map((c, i) => ({ c, i, d: dist(c) })).sort((a, b) => a.d - b.d || a.i - b.i);
   const pool = fromDb ? (keys.length ? ranked.slice(0, 40) : ranked).slice().sort(pop).slice(0, 8) : keys.length ? ranked.slice(0, 3) : ranked;
   const at = hash(`${date}:${kind}`) % pool.length, pick = pool[at].c;
@@ -425,9 +480,22 @@ export const SAKE_NOTE = Object.freeze([
   '軽く さらりと飲めるタイプ。よく冷やして。',
 ]);
 const SAKE_PHOTO = ['s-nama', 's-junmai', 's-junmai', 's-junmai', 's-nama', 's-nama']; // 華やか・ドライ・軽快 = 杉玉 / 芳醇・重厚・穏やか = 徳利と お猪口
+/** 銘柄の おもな品種 / 産地の国 → STYLES の名前(解説と 写真を 借りる)。ワインは 色が合うときだけ */
+const GRAPE_STYLE = Object.freeze({ 'ソーヴィニヨン・ブラン': ['ソーヴィニヨン・ブラン(白)', 1], 'シャルドネ': ['シャルドネ(樽熟成・白)', 1], 'リースリング': ['リースリング(白)', 1], 'ピノ・ノワール': ['ピノ・ノワール(赤)', 0], 'メルロー': ['メルロー(赤)', 0], 'カベルネ・ソーヴィニヨン': ['カベルネ・ソーヴィニヨン(赤)', 0], 'シラー': ['シラー(赤)', 0] });
+const ORIGIN_STYLE = Object.freeze({ 'エチオピア': 'エチオピア(浅煎り)', 'ケニア': 'ケニア', 'グアテマラ': 'グアテマラ', 'コロンビア': 'コロンビア', 'コスタリカ': 'コスタリカ(ハニー精製)', 'ブラジル': 'ブラジル' });
 /** 候補(suggest の pick / others)の 解説と 写真の鍵 { about, photo } */
 export function infoOf(c) {
   if (!c) return { about: '', photo: null };
+  if (c.src === 'xwines') {
+    const g = (c.grapes || [])[0], st = g && GRAPE_STYLE[g] && (GRAPE_STYLE[g][1] === c.type || (GRAPE_STYLE[g][1] === 1 && c.type === 2)) ? GRAPE_STYLE[g][0] : null;
+    const head = `${c.area ? `${c.area}の ` : ''}${WINE_TYPES[c.type] || ''}ワイン。${c.grapes && c.grapes.length ? `品種は ${c.grapes.join('、')}。` : ''}${c.abv ? `アルコール ${c.abv}%。` : ''}`;
+    return { about: `${head}${st ? `${g}: ${STYLE_ABOUT[st]}` : ''}`, photo: (st && STYLE_PHOTO[st]) || null };
+  }
+  if (c.src === 'firstbloom') {
+    const st = (c.proc === 'スマトラ式' && c.area === 'インドネシア' ? 'マンデリン(深煎り)' : ORIGIN_STYLE[c.area]) || null;
+    const head = `${c.maker}(海外のロースター)が ${c.year ? `${c.year} 年ごろに ` : ''}売っていた銘柄。産地は ${c.area}${c.proc ? `、精製は ${c.proc}` : ''}。`;
+    return { about: `${head}${st ? STYLE_ABOUT[st] : ''}`, photo: (st && STYLE_PHOTO[st]) || null };
+  }
   if (c.src === 'sakenowa' && Array.isArray(c.f)) {
     const top = c.f.indexOf(Math.max(...c.f));
     const from = [c.area, c.maker].filter(Boolean).join('の ');

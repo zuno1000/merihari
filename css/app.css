@@ -2065,3 +2065,37 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .vc-optbox+.row .btn{flex:1}
 .vc-optrow span{display:flex;flex-direction:column}
 .sheet .bd-say.dk-leadsay{margin:0 0 4px}
+/* v0.91(実機 FB「語のまわりの余白が目立つ・選択肢のボタンは もう少し大きく」): 余った高さを 語のカードだけでなく 選択肢にも配る(選択肢 60〜84px・文字 16px)。カードは 300px まで */
+.vc-body.quiz .vc-card{flex:1 1 170px;min-height:170px;max-height:300px}
+.vc-body.quiz .vc-opts{flex:1.6 1 auto;margin-top:auto;max-height:372px}
+.vc-body.quiz .vc-opt{flex:1 1 60px;min-height:60px;max-height:84px;font-size:16px;padding:10px 16px}
+.vc-body.quiz .vc-opt.long{font-size:14px}
+.vc-body.quiz .vc-pre .vc-recall{flex:1 1 196px}
+.vc-body.quiz .vc-pre .vc-preoff{flex:none}
+/* v0.91・F27-18: 英単語の 日別の記録(14 日の棒・一覧・ふり返りタブの札) */
+.vc-hist{display:flex;align-items:flex-end;gap:3px;height:94px}
+.vc-hcol{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px}
+.vc-hn{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1;min-height:9px}
+.vc-hbar{width:100%;max-width:18px;border-radius:4px 4px 0 0;background:color-mix(in srgb,var(--danger) 45%,var(--card));display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;flex:none}
+.vc-hbar i{display:block;width:100%;background:var(--accent)}
+.vc-hd{font-size:9px;color:var(--muted);line-height:1.2;white-space:nowrap;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);width:100%;text-align:center;padding-top:2px}
+.vc-hcol.cur .vc-hd{color:var(--fg);font-weight:700}
+.vc-hkey .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:baseline}
+.vc-hkey .k.ok{background:var(--accent)}
+.vc-hkey .k.ng{background:color-mix(in srgb,var(--danger) 45%,var(--card));margin-left:6px}
+.vc-hlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.vc-hlist li{display:grid;grid-template-columns:1fr auto auto 44px;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;font-variant-numeric:tabular-nums}
+.vc-hlist li span{color:var(--muted);font-size:13px}
+.vc-hlist .vc-hpct{text-align:right;color:var(--fg)}
+button.card.vc-recap{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;font:inherit;color:var(--fg);border:0;cursor:pointer}
+.vc-recapline{margin:0;font-size:15px}
+.vc-recapline b{font-size:18px}
+.vc-recapmore{align-self:flex-end;font-size:12px;color:var(--accent)}
+/* v0.91: 起動の画面(「画面を切り替えて確認」で Google のページへ移る直前に 出す) */
+.launch{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.launch img{border-radius:18px;margin-bottom:6px}
+.launch p{margin:0;font-size:17px;font-weight:700}
+.launch p.muted{font-size:12px;font-weight:400}
+/* v0.91・F19-18: 銘柄の名前が長い(ワインは 造り手+銘柄)ので、ほかの候補の チップは 折り返す */
+.dk-others .chip{max-width:100%;white-space:normal;text-align:left;height:auto;min-height:32px;padding-top:5px;padding-bottom:5px;line-height:1.35}
+.dk-rec-name{overflow-wrap:anywhere}

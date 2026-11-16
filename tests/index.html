@@ -2228,6 +2228,68 @@ document.getElementById('app').addEventListener('load', async () => {
         'buildReport / isStale: 確定スナップショットに ダラダラ・未記録・記録の合計・カバー率・連続日数が入る(v0.43.2 から 欠けていた)・確定したあとに その日の記録が変わったら 古い(ほかの日の記録では 古くならない)');
     }
 
+    { // v0.91: アシスタントの言い回しの持ち回り / 英単語の日別の記録 / 同期の鍵と 確認の戻り / ワインと コーヒーの銘柄
+      const B1 = M.buddy, st1 = { min: 600, due: 2, idleMin: 0 };
+      const n1 = new Map(), sd1 = (key) => 7 + (n1.get(key) || 0);
+      const seenHello = new Set();
+      for (let i = 0; i < 12; i++) { n1.set('hello', i); seenHello.add(B1.homeLines(st1, 'bright', sd1).find((x) => x.key === 'hello').text); }
+      const fixed = new Set(Array.from({ length: 12 }, () => B1.homeLines(st1, 'bright', 7).find((x) => x.key === 'hello').text));
+      ok(seenHello.size >= 3 && fixed.size === 1 && eq(B1.homeLines(st1, 'bright', () => 0).map((x) => x.key), B1.homeLines(st1, 'bright', 0).map((x) => x.key)) && B1.homeLine(st1, 'bright', (k) => (k === 'hello' ? 1 : 0)).text === B1.say('hello', 'bright', {}, 1),
+        'homeLines / homeLine: seed に 場面ごとの関数を渡せる(その場面を言うたびに 番号を進めれば 言い回しが ひとまわりする・数のままなら これまでどおり)');
+
+      const V1 = M.vocab, vr = { 'd:2026-11-14': { id: 'd:2026-11-14', n: 20, ok: 15 }, 'd:2026-11-16': { id: 'd:2026-11-16', n: 8, ok: 8 }, 'd:2026-11-10': { id: 'd:2026-11-10', n: 5, ok: 9 }, 'd:2026-11-01': { id: 'd:2026-11-01', n: 3, ok: 1, deletedAt: 'x' }, apple: { id: 'apple', s: [1, 0, 1, 0, 1, 0, 0] } };
+      const h1 = V1.history(vr, '2026-11-16', 14), hl1 = V1.historyList(vr, 2);
+      ok(h1.length === 14 && h1[0].date === '2026-11-03' && h1[13].date === '2026-11-16' && h1[13].n === 8 && h1[11].n === 20 && h1[11].ok === 15 && h1[12].n === 0
+        && eq(hl1.list.map((x) => x.date), ['2026-11-16', '2026-11-14']) && eq(hl1.total, { days: 3, n: 33, ok: 28 }) && eq(V1.historyList({}).list, []) && V1.history({}, '2026-11-16', 7).every((x) => x.n === 0),
+        'vocab.history / historyList: その日までの 14 日(学習していない日は 0)・学習した日の一覧は 新しい順(消した日は 入れない・正解は 解いた数まで)と ぜんぶの合計');
+
+      const Sy = M.sync, G1 = M.google;
+      const enc1 = await Sy.encrypt({ a: 1 }, 'correct horse battery', 'h', { iterations: 1000 }), head1 = Sy.parseFile(enc1);
+      const enc2 = await Sy.encrypt({ a: 2 }, 'correct horse battery', 'h', { iterations: 1000, salt: head1.salt }), head2 = Sy.parseFile(enc2);
+      const dk1 = { key: {}, salt: head1.salt, iterations: 1000 };
+      ok(head2.salt === head1.salt && head2.iv !== head1.iv && head1.iterations === 1000 && eq(await Sy.decrypt(enc2, 'correct horse battery'), { a: 2 }) && throws(() => Sy.parseFile('{}')) && throws(() => Sy.parseFile('x'))
+        && Sy.keyPlan(head1, dk1, false) === 'device' && Sy.keyPlan(null, dk1, false) === 'device' && Sy.keyPlan({ ...head1, salt: 'AAAA' }, dk1, false) === 'ask' && Sy.keyPlan({ ...head1, salt: 'AAAA' }, dk1, true) === 'pass'
+        && Sy.keyPlan({ ...head1, iterations: 600000 }, dk1, true) === 'pass' && Sy.keyPlan(head1, null, false) === 'ask' && Sy.keyPlan(head1, null, true) === 'pass',
+        'sync: salt を引き継いで 暗号化できる(iv は 毎回 新しい)・parseFile・keyPlan(覚えた鍵は 同じ salt と 回数の ファイルにだけ 使う。合わなければ パスフレーズ、無ければ 聞く)');
+      const url1 = G1.silentAuthUrl('cid.apps', 'https://example.com/app/', 'mh-abc'), q1 = new URL(url1).searchParams;
+      ok(url1.startsWith('https://accounts.google.com/o/oauth2/v2/auth?') && q1.get('prompt') === 'none' && q1.get('response_type') === 'token' && q1.get('redirect_uri') === 'https://example.com/app/' && q1.get('state') === 'mh-abc' && q1.get('scope') === G1.SCOPES
+        && eq(G1.parseAuthHash('#access_token=tk&token_type=Bearer&expires_in=3599&state=mh-abc'), { token: 'tk', expiresIn: 3599, state: 'mh-abc' }) && eq(G1.parseAuthHash('#error=interaction_required&state=mh-abc'), { error: 'interaction_required', state: 'mh-abc' })
+        && G1.parseAuthHash('#access_token=tk&state=other') === null && G1.parseAuthHash('') === null && G1.parseAuthHash('#top') === null,
+        'google: 画面を切り替えての確認(prompt=none の URL・戻ってきた # の読み取り。自分の state で 始まらないものは 認証の戻りと みなさない)');
+
+      const Dk2 = M.drinks, D2 = '2026-11-16';
+      const wn = Dk2.parseWine({ updated: '2022', items: [
+        [1, 'Alpha Cabernet', 'Alpha', 'チリ', 'Maipo', 0, ['カベルネ・ソーヴィニヨン'], [10, 45, 50, 50], 140, 410, 900],
+        [2, 'Beta Riesling', 'Beta', 'ドイツ', 'Mosel', 1, ['リースリング'], [30, 45, 10, 20], 90, 400, 500],
+        [3, 'Gamma Brut', 'Gamma', 'フランス', 'Champagne', 2, ['シャルドネ', 'ピノ・ノワール'], [10, 45, 10, 30], 120, 0, 0],
+        [3, 'dup id but new name', 'X', 'x', '', 9, [], [10, 10, 10, 10], 0, 0, 0], [4, 'Alpha  cabernet', 'Alpha', 'チリ', '', 0, [], [10, 10, 10, 10], 0, 0, 0], [5, 'bad t', 'X', 'x', '', 0, [], [10, 10], 0, 0, 0], 'x'] });
+      const cf = Dk2.parseCoffee({ updated: '2021', items: [
+        [11, 'Kiaguthu', 'Roaster A', 'ケニア', 'ウォッシュト', ['カシス', 'グレープフルーツ'], [35, 30, 50, 12, 20], 2019],
+        [12, 'House Espresso', 'Roaster B', 'ブレンド', '', ['ダークチョコ', 'ナッツ'], [15, 30, 12, 48, 47], 2020],
+        [13, 'Sumatra Lot', 'Roaster B', 'インドネシア', 'スマトラ式', ['杉', 'スパイス'], [20, 20, 12, 40, 50], 2020], [14, '', 'x', 'x', '', [], [10, 10, 10, 10, 10], 2020], [15, 'no t', 'x', 'x', '', [], [], 2020]] });
+      const sw = Dk2.suggest({}, 'wine', D2, { declared: { wine: { sweet: 1, tannin: 5, body: 5 } }, wine: wn }), sc = Dk2.suggest({}, 'coffee', D2, { declared: { coffee: { bitter: 5, body: 5, acid: 1 } }, coffee: cf });
+      const scHad = Dk2.suggest({ k: Dk2.normalizeDrink({ id: 'k', kind: 'coffee', name: 'kiaguthu', date: D2, overall: 4, taste: { acid: 5 } }) }, 'coffee', D2, { coffee: cf });
+      const all2 = (r) => [r.pick, ...r.others];
+      const alpha = all2(sw).find((c) => c.name === 'Alpha Cabernet');
+      ok(wn.items.length === 3 && wn.items[0].t.tannin === 5 && wn.items[0].abv === 14 && wn.items[0].score === 4.1 && wn.items[2].score === null && cf.items.length === 3 && cf.items[0].t.acid === 5 && cf.items[1].year === 2020
+        && sw.pick.src === 'xwines' && all2(sw).length === 3 && alpha.note === '赤・カベルネ・ソーヴィニヨン' && alpha.area === 'チリ・Maipo' && alpha.t.aroma === undefined && alpha.n === 900
+        && sc.pick.src === 'firstbloom' && all2(sc).length === 3 && !all2(scHad).some((c) => c.name === 'Kiaguthu') && all2(scHad).length === 2
+        && Dk2.suggest({}, 'wine', D2).pick.src === 'style' && Dk2.suggest({}, 'coffee', D2, { coffee: { items: [] } }).pick.src === 'style' && Dk2.suggest({}, 'beer', D2, { wine: wn, coffee: cf }).pick.src === 'style',
+        'parseWine / parseCoffee / suggest: ワインと コーヒーも 実在の銘柄から(形の合わないものと 名前の重なりは 捨てる・記録した銘柄は 出さない・銘柄を読めなければ STYLES から・ビールは STYLES のまま)');
+      const iw = Dk2.infoOf(all2(sw).find((c) => c.name === 'Alpha Cabernet')), ib = Dk2.infoOf(all2(sw).find((c) => c.name === 'Gamma Brut')), ic = Dk2.infoOf(all2(sc).find((c) => c.name === 'Kiaguthu')), is = Dk2.infoOf(all2(sc).find((c) => c.name === 'Sumatra Lot')), ie = Dk2.infoOf(all2(sc).find((c) => c.name === 'House Espresso'));
+      ok(iw.about.startsWith('チリ・Maipoの 赤ワイン。品種は カベルネ・ソーヴィニヨン。アルコール 14%。') && iw.about.includes('ボルドー') && iw.photo === 'w-cabernet' && ib.photo === 'w-chardonnay' && ic.about.includes('Roaster A(海外のロースター)が 2019 年ごろに') && ic.about.includes('SL28') && ic.photo === null
+        && is.photo === 'c-mandheling' && ie.photo === null && ie.about.includes('産地は ブレンド') && Dk2.searchName(all2(sc).find((c) => c.name === 'Kiaguthu')) === 'ケニア Kiaguthu' && Dk2.searchName(all2(sc).find((c) => c.name === 'House Espresso')) === 'House Espresso' && Dk2.searchName(alpha) === 'Alpha Cabernet'
+        && Dk2.CREDITS.firstbloom.url.includes('alexcaza/firstbloom-data') && Dk2.CREDITS.xwines.url.includes('rogerioxavier/X-Wines') && Dk2.CREDITS.sakenowa === Dk2.SAKE_CREDIT,
+        'infoOf / searchName / CREDITS: 銘柄の解説(国・産地・品種・度数 / ロースター・年・産地・精製)に 品種 / 産地の解説と 写真を 借りる・コーヒーは 産地を頭に付けて探す・出典の表示');
+      const realW = Dk2.parseWine(await (await fetch('../data/wine.json', { cache: 'no-store' })).json()), realC = Dk2.parseCoffee(await (await fetch('../data/coffee.json', { cache: 'no-store' })).json());
+      const heavy = Dk2.suggest({}, 'wine', D2, { declared: { wine: { sweet: 1, tannin: 5, body: 5 } }, wine: realW }), light = Dk2.suggest({}, 'wine', D2, { declared: { wine: { sweet: 5, tannin: 1, body: 1 } }, wine: realW });
+      const fruity = Dk2.suggest({}, 'coffee', D2, { declared: { coffee: { acid: 5, bitter: 1, aroma: 5 } }, coffee: realC }), deep = Dk2.suggest({}, 'coffee', D2, { declared: { coffee: { acid: 1, bitter: 5, body: 5 } }, coffee: realC });
+      ok(realW.items.length >= 900 && realC.items.length >= 1000 && realW.items.every((x) => x.name && x.maker && Dk2.WINE_AXES.every((k) => x.t[k] >= 1 && x.t[k] <= 5)) && realC.items.every((x) => x.name && x.maker && x.area && Dk2.COFFEE_AXES.every((k) => x.t[k] >= 1 && x.t[k] <= 5))
+        && all2(heavy).every((c) => c.type === 0 && c.t.tannin >= 4 && c.t.body >= 4) && all2(light).every((c) => c.t.tannin <= 2 && c.t.body <= 3) && heavy.others.length === 4
+        && all2(fruity).every((c) => c.t.acid >= 3.5 && c.t.bitter <= 2.5) && all2(deep).every((c) => c.t.acid <= 2.5 && c.t.bitter >= 3.5) && deep.others.length === 4,
+        '同梱のワイン(data/wine.json・X-Wines)と コーヒー(data/coffee.json・Firstbloom Data): 軸がそろっている・重い赤が好みなら 渋みとボディの強い赤、果実味が好みなら 酸味の強い豆、深い味が好みなら 苦味の強い豆が出る');
+    }
+
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');
   } catch (e) {
     fails++; log('EXCEPTION ' + (e && e.stack || e));

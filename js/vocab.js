@@ -196,6 +196,13 @@ export function streak(recs, date) {
   while (dayOf(recs, d).n > 0 && n < 3650) { n++; d = addDays(d, -1); }
   return n;
 }
+/** 日別の取り組み(v0.91・F27-18): date までの days 日ぶん [{ date, n, ok }](古い順・date が最後・学習していない日は 0) */
+export function history(recs, date, days = 14) { return Array.from({ length: days }, (_, i) => { const d = addDays(date, i - (days - 1)); return { date: d, ...dayOf(recs, d) }; }); }
+/** 学習した日の一覧 [{ date, n, ok }](新しい順・max 日まで)と、ぜんぶの合計 { days, n, ok } */
+export function historyList(recs, max = 60) {
+  const all = Object.values(recs || {}).filter((r) => r && !r.deletedAt && typeof r.id === 'string' && /^d:\d{4}-\d{2}-\d{2}$/.test(r.id) && r.n > 0).map((r) => ({ date: r.id.slice(2), n: r.n || 0, ok: Math.min(r.n || 0, r.ok || 0) })).sort((a, b) => (a.date < b.date ? 1 : -1));
+  return { list: all.slice(0, max), total: { days: all.length, n: all.reduce((a, x) => a + x.n, 0), ok: all.reduce((a, x) => a + x.ok, 0) } };
+}
 /** この 7 日の様子 [{ date, n }](古い順・今日が最後) */
 export function week(recs, date) { return Array.from({ length: 7 }, (_, i) => { const d = addDays(date, i - 6); return { date: d, n: dayOf(recs, d).n }; }); }
 

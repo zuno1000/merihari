@@ -41,7 +41,7 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.90.0';
+export const APP_VERSION = '0.91.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -50,6 +50,11 @@ const tabs = document.getElementById('tabs');
 
 store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
 store.init();
+// v0.91(実機 FB「開くたびに 同期の確認で 数秒 操作できない」): 「画面を切り替えて確認」(試験的)から 戻ってきていれば トークンを受け取る。
+// まだで、条件が そろっていれば 確認ページへ移る(leaving = true。この画面は すぐ替わるので、起動の画面だけ出して 何も始めない)
+const authBack = google.takeRedirect();
+const leaving = !authBack && google.trySilentRedirect();
+sync.loadKey();
 
 let tickFn = null;
 const ctx = { version: APP_VERSION, news: loadNews, go, checkUpdate, setTick: (fn) => { tickFn = fn; }, current: () => current, redraw: () => redraw(), openBrief: () => openBrief(ctx, { manual: true }) }; // openBrief(v0.55・F21): ホームの「ブリーフィング ›」と設定から
@@ -140,15 +145,17 @@ const firstRun = !store.state.data.meta.setupAt;
   if (aligned !== store.state.data.entries) { store.state.data.entries = aligned; store.save(); }
 }
 const logged = handleParams();
-go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
-if (!firstRun) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !pomoCheck(ctx, { force: true }) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.73: 閉じている間に終わった ポモドーロは、ここで 確かめてから記録 // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)
+if (leaving) document.body.append(el('div.launch', { role: 'status' }, [el('img', { src: 'icon.svg', alt: '', width: 72, height: 72 }), el('p', 'メリハリ'), el('p.muted.small', '同期の準備をしています…')]));
+else go(firstRun ? 'settings' : (logged ? 'now' : (store.state.local.uiState?.tab || 'now')));
+if (authBack === 'lost') toast('画面を切り替えての確認が 戻らなかったので、切にしました(設定 › Google)');
+if (!firstRun && !leaving) { if (finalizePending()) screens[current](currentArg); if (!checkOpenEntry(ctx) && !pomoCheck(ctx, { force: true }) && !maybeBrief(ctx)) overdueCheck(ctx); } // v0.73: 閉じている間に終わった ポモドーロは、ここで 確かめてから記録 // v0.55・F21: 止め忘れの確認 → ブリーフィング(その枠で初めて開いたとき)→ 期限切れの出口(ブリーフィングを出した回は次に開いたとき)
 
 if (google.isConnected()) {
   google.loadGis().catch(() => {});
   google.fetchBusy().then((changed) => { if (changed && (current === 'now' || current === 'timeline')) redraw(); }).catch(() => {});
 }
 // 自動同期(v0.7・tangoquest 方式): 開いた直後に鍵があれば静かに。無ければ最初のタップで(ユーザー操作の中なので認証ポップアップが通る)
-if (!firstRun) sync.autoSyncOnOpen();
+if (!firstRun && !leaving) sync.autoSyncOnOpen();
 document.addEventListener('click', () => { sync.autoSyncOnGesture(); setTimeout(() => refreshTaskBadge(tabs), 0); }, { capture: true }); // v0.55: タスクを済ませた / 足した直後にタブの数字を合わせる
 
 // 経過時間などの軽い更新(textContent のみ)。復帰時は画面を描き直し、止め忘れを確認
@@ -157,6 +164,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   markActive();
   if (!store.state.data.meta.setupAt) return;
+  if (!document.querySelector('.overlay') && google.trySilentRedirect()) return; // v0.91(試験的): トークンが切れていたら、シートを開いていないときに限り 確認ページへ移って 戻る
   finalizePending();
   const asked = checkOpenEntry(ctx) || pomoCheck(ctx, { force: true }); // v0.73: 閉じていた間に終わった ポモドーロ → 確認のシート
   if (!asked && (current === 'now' || current === 'timeline')) redraw();
@@ -221,8 +229,8 @@ if (ui.DEV) window.M = {
   money,
   ai,
   ui: { timeField: ui.timeField, keepFocus: ui.keepFocus, sheetJustClosed: ui.sheetJustClosed, sortable: ui.sortable },
-  sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
-  google: { busyIntervalsForDate: google.busyIntervalsForDate },
+  sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, parseFile: sync.parseFile, keyPlan: sync.keyPlan, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
+  google: { busyIntervalsForDate: google.busyIntervalsForDate, parseAuthHash: google.parseAuthHash, silentAuthUrl: google.silentAuthUrl, SCOPES: google.SCOPES },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
   store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, normalizeWeather: store.normalizeWeather, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, validateBgmPlay: store.validateBgmPlay, validateFeedMark: store.validateFeedMark, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, validateRecurring: store.validateRecurring, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole, entryRole: store.entryRole, effectiveKind: store.effectiveKind, validateEntry: store.validateEntry, validateTask: store.validateTask, catKinds: store.catKinds },
 };

@@ -224,12 +224,13 @@ export function radar(axes, series, { size = 220, label = 'レーダーチャー
 
 // ---- v0.86・F19-11〜F19-16: おすすめ(実在の日本酒は さけのわデータから)・同じ軸のチャート・気になる・どこで飲めるか・好みの申告・日報の札 ----
 const PREF = () => drinks.normalizePref(S().drinkPref);
-let sakeDb = null, sakeLoading = null;
-/** 日本酒の銘柄(data/sake.json・約 190KB)を 1 度だけ読む。読めたら then(描き直し)。読めなくても おすすめは STYLES から出る */
-function loadSake(then = null) {
-  if (sakeDb) return;
-  if (!sakeLoading) sakeLoading = fetch('data/sake.json').then((r) => { if (!r.ok) throw new Error('sake'); return r.json(); }).then((j) => { sakeDb = drinks.parseSake(j); }).catch(() => { sakeLoading = null; });
-  if (then && sakeLoading) sakeLoading.then(() => { if (sakeDb) then(); });
+/** 銘柄のデータ(v0.86 日本酒 = さけのわ・v0.91 ワイン = X-Wines / コーヒー = Firstbloom Data。150〜230KB ずつ)。その種類を 出すときに 1 度だけ読む。読めなくても おすすめは STYLES から出る */
+const DB_FILES = { sake: ['data/sake.json', drinks.parseSake], wine: ['data/wine.json', drinks.parseWine], coffee: ['data/coffee.json', drinks.parseCoffee] };
+const dbs = { sake: null, wine: null, coffee: null }, dbLoading = {};
+function loadDb(kind, then = null) {
+  if (!DB_FILES[kind] || dbs[kind]) return;
+  if (!dbLoading[kind]) dbLoading[kind] = fetch(DB_FILES[kind][0]).then((r) => { if (!r.ok) throw new Error(kind); return r.json(); }).then((j) => { const d = DB_FILES[kind][1](j); if (d.items.length) dbs[kind] = d; }).catch(() => { dbLoading[kind] = null; });
+  if (then && dbLoading[kind]) dbLoading[kind].then(() => { if (dbs[kind]) then(); });
 }
 let photoDb = null, photoLoading = null;
 /** 関連した写真の一覧(data/drink-photos.json)を 1 度だけ読む。読めたら then(描き直し) */
@@ -244,8 +245,8 @@ let recShown = null; // 「ほかの候補」で選んだもの { key: 日付:�
 function recNow(redraw = null, kind0 = null) {
   const n = now(), kind = kind0 || drinks.kindFor(D(), n.min, PREF());
   if (!kind) return null;
-  if (kind === 'sake' && !sakeDb) loadSake(redraw);
-  return drinks.suggest(D(), kind, n.date, { declared: PREF(), sake: sakeDb });
+  if (DB_FILES[kind] && !dbs[kind]) loadDb(kind, redraw);
+  return drinks.suggest(D(), kind, n.date, { declared: PREF(), ...dbs });
 }
 const shownOf = (r) => { const key = `${now().date}:${r.kind}`; return (recShown && recShown.key === key && [r.pick, ...r.others].find((c) => c.name === recShown.name)) || r.pick; };
 /** おすすめの頭の ひとこと(日と 種類で 言い回しが替わる)。日報の札(drinkBrief)は 文だけ使う */
@@ -275,8 +276,9 @@ export function drinkTile(ctx, rerender = null) {
  * 写真 → 名前と ひとこと → 解説 → チャート → ボタン → ほかの候補。こまかい説明(もとにしたもの・換算の仕方)は 折りたたみ「このおすすめについて」へ。
  */
 function recNodes(r, redraw) {
-  const c = shownOf(r), kind = r.kind, kd = drinks.kindOf(kind), net = c.src === 'sakenowa';
-  const axes = net ? kd.axes.filter(([k]) => drinks.SAKE_AXES.includes(k)) : kd.axes;
+  const c = shownOf(r), kind = r.kind, kd = drinks.kindOf(kind), net = c.src !== 'style', credit = drinks.CREDITS[c.src] || null; // net = 実在の銘柄(v0.91: ワインと コーヒーも)
+  const axes = net ? kd.axes.filter(([k]) => c.t[k] != null) : kd.axes;
+  const sakeDb = dbs.sake;
   const tg = r.target, hasT = axes.some(([k]) => tg.t[k] != null);
   const wished = !!drinks.wishOf(D(), kind, c.name);
   const meta = [c.maker, c.area].filter(Boolean).join('・');
@@ -289,23 +291,27 @@ function recNodes(r, redraw) {
       el('b.dk-rec-name', c.name),
       meta ? el('span.dk-rec-meta', meta) : null,
       c.note ? el('span.dk-rec-note', c.note) : null,
-      net && c.score != null ? el('span.dk-net', [`ネットの人気 ${c.score.toFixed(1)} / 5`, c.rank ? `・全国 ${c.rank} 位` : '']) : null,
+      c.src === 'sakenowa' && c.score != null ? el('span.dk-net', [`ネットの人気 ${c.score.toFixed(1)} / 5`, c.rank ? `・全国 ${c.rank} 位` : '']) : null,
+      c.src === 'xwines' && c.score != null && c.n >= 5 ? el('span.dk-net', `評価の平均 ${c.score.toFixed(1)} / 5(${c.n.toLocaleString()} 件・2012〜21 年)`) : null,
     ].filter(Boolean)),
     info.about ? el('p.dk-about', info.about) : null,
     radar(axes, [{ values: axes.map(([k]) => c.t[k] ?? null), cls: 'top' }, ...(hasT ? [{ values: axes.map(([k]) => tg.t[k] ?? null), cls: 'all' }] : [])], { size: 200, label: `${c.name} の味の目安` }),
     el('p.muted.small.dk-legend', [el('i.rd-key.top'), net ? 'この銘柄 ' : 'この種類 ', ...(hasT ? [el('i.rd-key.all'), 'あなたの好み'] : [])]),
     el('div.row.dk-acts', [
       el('button.btn.sm', { type: 'button', class: `btn sm${wished ? ' on' : ''}`, 'aria-pressed': wished ? 'true' : 'false', onclick: () => { toggleWish(kind, c); redraw(); } }, wished ? '★ 気になる' : '☆ 気になる'),
-      ...drinks.whereLinks(kind, c.name).map((l) => el('button.btn.sm', { type: 'button', onclick: () => window.open(l.url, '_blank', 'noopener') }, l.label)),
+      ...drinks.whereLinks(kind, drinks.searchName(c)).map((l) => el('button.btn.sm', { type: 'button', onclick: () => window.open(l.url, '_blank', 'noopener') }, l.label)),
     ]),
     r.others.length ? el('div.dk-othersbox', [el('span.dk-h', 'ほかの候補'), el('div.chips.small.dk-others', { role: 'group', 'aria-label': 'ほかの候補' }, [r.pick, ...r.others].map((o) => el('button.chip.sm2', { type: 'button', class: `chip sm2${o.name === c.name ? ' on' : ''}`, 'aria-pressed': o.name === c.name ? 'true' : 'false', onclick: () => { recShown = { key: `${now().date}:${kind}`, name: o.name }; redraw(); } }, o.name.replace(/\s*\([^)]*\)/g, ''))))]) : null,
-    net ? el('p.muted.small.dk-credit', [el('a', { href: drinks.SAKE_CREDIT.url, target: '_blank', rel: 'noopener' }, drinks.SAKE_CREDIT.text), 'を利用しています']) : null,
+    c.src === 'firstbloom' ? el('p.muted.small.dk-credit', '2017〜21 年に 海外の店が 売っていた銘柄です。同じものは もう 無いことが多いので、同じ産地・精製・風味の豆を 探す 目安に。') : null,
+    credit ? el('p.muted.small.dk-credit', [el('a', { href: credit.url, target: '_blank', rel: 'noopener' }, credit.text), 'を利用しています']) : null,
     el('details.dk-why', [
       el('summary', `このおすすめについて(${drinks.basisShort(tg)})`),
       el('p.muted.small', `${r.why && c === r.pick ? `好みと同じく ${r.why}。` : ''}${drinks.basisText(tg)}`),
-      el('p.muted.small', net
+      el('p.muted.small', c.src === 'sakenowa'
         ? `チャートは、さけのわの指標(${drinks.SAKE_F.join('・')}${sakeDb && sakeDb.updated ? `・${sakeDb.updated.slice(0, 4)} 年 ${+sakeDb.updated.slice(4)} 月` : ''})から このアプリが換算した目安です。酸味と苦味は 指標に無いので 出していません。`
-        : '味の目安は 一般的な傾向です(産地や 造り手で 変わります)。コーヒーとワインは、銘柄ごとの評価を 自由に使える形で公開している所が無いので、品種・産地の単位で すすめます。'),
+        : c.src === 'xwines' ? '銘柄は、研究用に公開されている X-Wines の 1,007 本(2022 年に 集められたもの)から 選んでいます。ボディと 酸味は データの値、甘みと 渋みは 種類・品種から このアプリが見立てた目安です。香りは 手がかりが無いので 出していません。日本で 買えるかどうかは 分かりません(「ネットで調べる」で 確かめてください)。'
+        : c.src === 'firstbloom' ? '銘柄は、コーヒーの感想アプリ Firstbloom(2017〜21 年)の 公開データ 1,500 銘柄から 選んでいます。チャートは、ロースターが付けた 風味の言葉と 精製から このアプリが見立てた目安です(焙煎の深さは データに無いので 入っていません)。'
+        : '味の目安は 一般的な傾向です(産地や 造り手で 変わります)。銘柄のデータを 読めなかったか、銘柄のデータが無い種類なので、品種・産地の単位で すすめています。'),
       ph ? el('p.muted.small', '写真は 関連する イメージです(その銘柄・その農園の写真では ありません)。') : null,
     ].filter(Boolean)),
   ].filter(Boolean);
@@ -339,8 +345,8 @@ function wishBox(rerender) {
 /** ネットの評価と 自分の評価を 見比べる(日本酒・さけのわに ある銘柄だけ・新しい 2 つ) */
 function compareBox(rerender) {
   if (!drinks.listDrinks(D(), 'sake').length) return null;
-  if (!sakeDb) { loadSake(rerender); return null; }
-  const list = drinks.compareList(D(), sakeDb, 2);
+  if (!dbs.sake) { loadDb('sake', rerender); return null; }
+  const list = drinks.compareList(D(), dbs.sake, 2);
   if (!list.length) return null;
   const axes = drinks.axesOf('sake').filter(([k]) => drinks.SAKE_AXES.includes(k));
   return el('details.group.dk-pref.dk-cmp', [

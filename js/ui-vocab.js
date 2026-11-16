@@ -60,6 +60,50 @@ export function vocabTile(rerender = null) {
   return el('button.qtile.vc', { type: 'button', class: `qtile vc${t.hot ? ' hot' : ''}`, 'aria-label': `英単語(${t.v}・${t.k})`, onclick: () => vocabSheet(rerender) }, [el('span.qt-icowrap', BOOK('qt-ico')), el('span.qt-v', t.v), el('span.qt-k', t.k)]);
 }
 
+/**
+ * 日別の取り組み(v0.91・F27-18・ユーザー要望「取り組みの履歴(日別)を ふり返りなどで 確認できるように」)。
+ * histBars = date までの 14 日の棒(高さ = 解いた数・濃い所 = 正解)。histSheet = 学習した日の一覧(新しい順)。vocabRecap = ふり返りタブの札
+ */
+const md = (k) => `${+k.slice(5, 7)}/${+k.slice(8, 10)}`;
+function histBars(date, days = 14) {
+  const h = vocab.history(R(), date, days), max = Math.max(1, ...h.map((x) => x.n));
+  return el('div.vc-hist', { role: 'img', 'aria-label': `${days} 日の 英単語: ${h.filter((x) => x.n > 0).map((x) => `${md(x.date)} ${x.n} 問(正解 ${x.ok})`).join('・') || '学習した日は ありません'}` }, h.map((x, i) => el('span.vc-hcol', { class: `vc-hcol${x.date === date ? ' cur' : ''}` }, [
+    el('span.vc-hn', x.n > 0 ? String(x.n) : ''),
+    el('span.vc-hbar', { style: { height: `${x.n > 0 ? Math.max(6, Math.round((x.n / max) * 62)) : 0}px` } }, el('i', { style: { height: `${x.n > 0 ? Math.round((x.ok / x.n) * 100) : 0}%` } })),
+    el('span.vc-hd', i === 0 || x.date.slice(8, 10) === '01' || x.date === date ? md(x.date) : String(+x.date.slice(8, 10))),
+  ])));
+}
+export function histSheet() {
+  const n = today(), { list, total } = vocab.historyList(R(), 90);
+  const tile = (k, v, sub) => el('div.sl-tile', [el('span.sl-k', k), el('b.sl-v', v), el('span.sl-s', sub)]);
+  sheet((close) => [
+    el('h2', '英単語の 日別の記録'),
+    el('div.sl-tiles.vc-tiles', [tile('学習した日', `${total.days}`, '日'), tile('解いた', total.n.toLocaleString(), '問'), tile('正解', `${total.n ? Math.round((total.ok / total.n) * 100) : 0}%`, `${total.ok.toLocaleString()} 問`)]),
+    histBars(n.date),
+    el('p.muted.small.vc-hkey', [el('i.k.ok'), '正解 ', el('i.k.ng'), `まちがい・${vocab.streak(R(), n.date)} 日 続いています`]),
+    list.length
+      ? el('ul.vc-hlist', list.map((x) => el('li', [el('b', `${md(x.date)}(${'日月火水木金土'[new Date(`${x.date}T00:00`).getDay()]})`), el('span', `${x.n} 問`), el('span', `正解 ${x.ok}`), el('span.vc-hpct', `${Math.round((x.ok / x.n) * 100)}%`)])))
+      : el('p.muted.small', 'まだ 学習した日が ありません。'),
+    list.length < total.days ? el('p.muted.small', `新しい ${list.length} 日ぶんを 出しています。`) : null,
+    el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => close() }, '閉じる')),
+  ].filter(Boolean));
+}
+/** ふり返りタブの札: その日の 英単語(解いた数・正解)と その日までの 14 日。使っていない / 一度も学習していない なら null */
+export function vocabRecap(date, { isToday = true } = {}) {
+  if (!vocabOn()) return null;
+  const { total } = vocab.historyList(R(), 1);
+  if (!total.days) return null;
+  const d = vocab.dayOf(R(), date);
+  return el('section.group', [
+    el('h2', '英単語'),
+    el('button.card.vc-recap', { type: 'button', 'aria-label': '英単語の 日別の記録を開く', onclick: () => histSheet() }, [
+      el('p.vc-recapline', d.n > 0 ? [el('b', `${d.n} 問`), `・正解 ${d.ok}(${Math.round((d.ok / d.n) * 100)}%)`] : [el('span.muted', isToday ? '今日は まだ 解いていません' : 'この日は 解いていません')]),
+      histBars(date),
+      el('span.vc-recapmore', '日別の記録 ›'),
+    ]),
+  ]);
+}
+
 const dictCache = new Map(); // 'en:word' / 'ja:ことば' → dictFull の結果(画面の間だけ)
 /** 辞書を引く(Google 翻訳の 鍵なしの経路・送るのは その語だけ)。dir = 'en'(英 → 日)/ 'ja'(日 → 英)。取れなければ null */
 async function lookup(q, dir = 'en') {
@@ -112,6 +156,7 @@ function wrapSheet(ses, rerender) {
         ses.missed.length ? el('h3.help-h', `まちがえた語(${ses.missed.length})`) : null,
         ses.missed.length ? el('ul.vc-list', ses.missed.slice(0, 12).map((w) => el('li', [el('b', { lang: 'en' }, w.en), el('span', w.ja)]))) : null,
         ses.missed.length ? el('p.muted.small', 'まちがえた語は、次に開いたとき 先に出ます。') : null,
+        el('div.row', el('button.btn.sm.grow', { type: 'button', onclick: () => histSheet() }, '日別の記録を見る')),
         el('h3.help-h', canRecord ? `学習した時間(${min} 分)を 記録に足しますか?` : '学習した時間'),
         canRecord ? el('div.chips.small', { role: 'radiogroup', 'aria-label': '記録するカテゴリ' }, cats.map((k) => el('button.chip.sm2', { type: 'button', role: 'radio', 'aria-checked': pick === k.id ? 'true' : 'false', class: `chip sm2${pick === k.id ? ' on' : ''}`, onclick: () => { pick = pick === k.id ? null : k.id; draw(); } }, k.name))) : null,
         canRecord ? null : el('p.muted.small', min < 1 ? '1 分に満たないので、時間は 記録しません。' : open ? `いま「${openName}」を 記録中なので、英単語の時間は 足しません(重なるため)。` : '作業のカテゴリが 無いので、時間は 記録しません。'),
@@ -325,6 +370,7 @@ export function vocabSheet(rerender = null, first = 'study') {
       set.missed.length ? el('ul.vc-list', set.missed.slice(0, 20).map((w) => el('li', [el('b', { lang: 'en' }, w.en), el('span', w.ja)]))) : null,
       el('div.vc-week', { role: 'img', 'aria-label': 'この 7 日' }, vocab.week(R(), n.date).map((x) => el('span.vc-day', { class: `vc-day${x.n > 0 ? ' on' : ''}` }, String(+x.date.slice(8, 10))))),
       el('p.muted.small.vc-dayline', `今日 ${d.n} 問(正解 ${d.ok})・${st} 日 続いています・${c.due > 0 ? `復習 あと ${c.due} 語` : 'いま復習する語は ありません'}`),
+      el('div.row', el('button.btn.sm.grow', { type: 'button', onclick: () => histSheet() }, '日別の記録を見る')),
       overall(),
       el('div.row', [el('button.btn.grow', { type: 'button', onclick: () => close() }, 'ひと休み'), el('button.btn.primary.grow', { type: 'button', onclick: () => { begin(); draw(); } }, '次のセットへ')]),
       el('div.vc-next', [el('span.muted.small', '種類を替えて:'), ...vocab.MODES.filter((m) => m !== lastMode).map((m) => el('button.chip.sm2', { type: 'button', onclick: () => { lastMode = m; begin(); draw(); } }, vocab.MODE_LABEL[m]))]),
