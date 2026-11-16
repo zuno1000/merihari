@@ -16,7 +16,7 @@ import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import { bgmStrip, bgmTile } from './ui-bgm.js'; // v0.71: ♪ は「いま知りたいこと」のタイルに
 import { feedTile } from './ui-feed.js'; // v0.34・F17: キャッチアップ(v0.71: ホームは 新着の数のタイルだけ・中身は 一覧のシートと 日報)
-import { buddyHead, buddyActs, buddyOn, buddyName, bubble } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
+import { buddyHead, buddyActs, buddyOn, buddyName, bubble, setHomeHint } from './ui-buddy.js'; // v0.62・F24: アシスタント(ホームに常駐する 1 行・FEATURES.BUDDY)
 import { artStrip, artNeed } from './ui-art.js'; // v0.58・F23: 名画のピース(ホームの 1 行・FEATURES.ART)
 import { questStrip, questNeed } from './ui-quest.js';
 import { vocabTile } from './ui-vocab.js'; // v0.85・F27: 英単語のタイル
@@ -545,8 +545,7 @@ export function renderNow(view, ctx, dateArg = null) {
 let nextPick = null; // { date, key }(自分で選んだもの。key = t:<タスク> / c:<カテゴリ>)
 const pickKey = (c) => (c.taskId ? `t:${c.taskId}` : `c:${c.categoryId}`);
 function nextCard(n, hero, rerender, ctx) {
-  const head = buddyHead(ctx);
-  if (hero) return el('section.nx-card.rec', [head, hero.node].filter(Boolean));
+  if (hero) { setHomeHint(null); return el('section.nx-card.rec', [buddyHead(ctx), hero.node].filter(Boolean)); }
   // v0.82・F24-27(実機 FB「いつ開いても同じで、やらない限り替わらない」): next.suggest が いまの時刻・いつもの時間帯・次の予定までの空き・ごほうびまでの残り で並べ直し、いまだけの ひとこと(hook)を添える。
   //   いちばん上に 30 分 出したまま 始めなかった / ほかのものを始めた 候補は、その日のあいだ 少し下げる(local.nextSkip・端末ごと。いまの予定と もうすぐ期限は 下げない)
   const sk = (() => { const l = store.state.local; if (!l.nextSkip || l.nextSkip.date !== n.date) l.nextSkip = { date: n.date, by: {}, top: null, since: 0 }; return l.nextSkip; })();
@@ -567,6 +566,9 @@ function nextCard(n, hero, rerender, ctx) {
     else if (cat) { top = { kind: 'pick', taskId: null, categoryId: cat.id, title: cat.name, reason: '自分で選んだ作業' }; picked = true; }
     else nextPick = null; // 済んだタスク・消したカテゴリ → おすすめに戻す
   }
+  // v0.90(実機 FB「青い文(あと 20 分で 目標の 4 分の 1 です など)は 無くす。このようなコメントは アシスタントに集約」): カードには 出さず、アシスタントが ホームの吹き出しの話題の 1 つとして言う(止めていれば 出ない)
+  setHomeHint(top && top.hint ? { title: top.title, text: top.hint } : null);
+  const head = buddyHead(ctx);
   const dot = (c) => el('i.dot', { style: { background: catOf(c.categoryId).color }, 'aria-hidden': 'true' });
   const tag = (c) => el('span.nx-tag', { class: `nx-tag${c.kind === 'over' || c.kind === 'soon' || c.kind === 'plan' ? ' hot' : ''}` }, next.NEXT_LABEL[c.kind] || '');
   const begin = (c) => { if (list[0] && c !== list[0]) { skip(list[0]); store.saveLocal(); } startCategory(c.categoryId, null, { taskId: c.taskId }); rerender(); };
@@ -594,7 +596,7 @@ function nextCard(n, hero, rerender, ctx) {
     // v0.79.1(実機 FB「替える の表記を無くし、その場所に 始める を。いま知りたいこと が ひと画面に納まるように」): 名前の箱(タップで 選び直し)の右に「▶ 始める」。大きなボタンの段は無くす
     el('div.nx-line', [
       el('button.nx-pick', { type: 'button', 'aria-label': `${top.title}(タップで 作業するものを替える)`, onclick: choose }, [
-        el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason), top.hook ? el('span.nx-hook', top.hook) : null].filter(Boolean)),
+        el('span.nx-main', [el('b.nx-title', [dot(top), top.title]), el('span.nx-reason', top.reason)]),
       ]),
       el('button.btn.primary.nx-start', { type: 'button', 'aria-label': `${top.title} を始める`, onclick: () => begin(top) }, '▶ 始める'),
     ]),
@@ -1028,8 +1030,8 @@ export function entrySheet(o, rerender) {
   const nm = () => taskName(taskId, cid);
   // v0.33: タスクの選択(planSheet と同じ select)。選ぶとカテゴリのチップもそのタスクのものに(カテゴリの無いタスクなら そのまま)
   const picker = catChipPicker(cid, (v) => { cid = v; drawKind(); });
-  const tasks = linkableTasks();
-  const sel = tasks.length ? el('select', { 'aria-label': 'タスク' }, [el('option', { value: '' }, 'タスクを決めない'), ...tasks.map((t) => el('option', { value: t.id, selected: t.id === taskId }, t.name))]) : null;
+  const tasks = linkableTasks(o.date, taskId); // v0.90: この 2 日ほどに 済ませたタスクも 選べる(完了を押したあとで 記録を足すとき)
+  const sel = tasks.length ? el('select', { 'aria-label': 'タスク' }, [el('option', { value: '' }, 'タスクを決めない'), ...tasks.map((t) => el('option', { value: t.id, selected: t.id === taskId }, linkName(t)))]) : null;
   if (sel) sel.addEventListener('change', () => { taskId = sel.value || null; const t = taskId ? T()[taskId] : null; if (t?.categoryId && t.categoryId !== cid && cats().some((c) => c.id === t.categoryId)) { cid = t.categoryId; picker.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x.dataset.id === cid)); drawKind(); } });
   // v0.23.1: どの記録にもメモ(任意)。予定(busy)の時間なら「予定のメモ」(v0.22・F6-6): 保存すると予定のメモにも残る
   const bn = el('input.text.note-in', { type: 'text', value: o.busyNote || '', placeholder: o.busyAt ? '何の予定?' : 'メモ', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ' });
@@ -1471,15 +1473,27 @@ function categorySheet(e, rerender) {
     groupedChips(cats(), (c) => el('button.chip', { type: 'button', class: `chip cat${c.id === e.categoryId ? ' on' : ''}`, style: { '--c': c.color }, onclick: () => { close(); kindAskSheet(c, (ak) => { commit(log.update(E(), e.id, { categoryId: c.id, asKind: ak }, LCTX), `カテゴリを ${c.name} に変更`); rerender(); }); } }, [el('span.dot', { style: { background: c.color } }), c.name]), { current: e.categoryId }),
   ]);
 }
-/** 記録・予定に紐づけられるタスク(開いているもの・期限の近い順。v0.22: メモは紐づけない)。entrySheet(v0.33)・planSheet・taskLinkSheet で共通 */
-export function linkableTasks() { return plan.linkable(T()); }
+/**
+ * 記録・予定に紐づけられるタスク(開いているもの・期限の近い順。v0.22: メモは紐づけない)。entrySheet(v0.33)・planSheet・taskLinkSheet で共通。
+ * v0.90(実機 FB「タスクの完了を押してから 記録を足すと、そのタスクが消えていて 紐づけられない」): 記録の日付 date を渡すと、その日の前日 0 時 以降(か この 2 日)に 済ませたタスクも 後ろに並ぶ(名前に「(済み)」)。
+ * 予定(planSheet)は これからのことなので 渡さない。keepId = いま紐づいているタスク(済んでいても 一覧に残す)
+ */
+export function linkableTasks(date = null, keepId = null) {
+  if (!date) return plan.linkable(T());
+  const since = Math.min(new Date(`${addDays(date, -1)}T00:00:00`).getTime(), Date.now() - 2 * 864e5);
+  const list = plan.linkable(T(), since);
+  const keep = keepId && T()[keepId] && !T()[keepId].deletedAt && !list.some((t) => t.id === keepId) ? [T()[keepId]] : [];
+  return [...list, ...keep];
+}
+/** 紐づけの一覧での タスクの名前(済んだものには 印) */
+const linkName = (t) => (t.doneAt ? `${t.name}(済み)` : t.name);
 function taskLinkSheet(e, rerender) {
-  const tasks = linkableTasks();
+  const tasks = linkableTasks(e.date, e.taskId); // v0.90: 済ませたばかりのタスクも
   sheet((close) => [
     el('h2', 'タスクを紐づけ'),
     tasks.length ? null : el('p.muted.small', 'タスクがありません。'),
     el('div.col', [
-      ...tasks.map((t) => el('button.btn.block', { type: 'button', class: `btn block${t.id === e.taskId ? ' primary' : ''}`, onclick: () => { commit(log.update(E(), e.id, { taskId: t.id, categoryId: t.categoryId || e.categoryId }, LCTX), `${t.name} への紐づけ`); close(); rerender(); } }, t.name)),
+      ...tasks.map((t) => el('button.btn.block', { type: 'button', class: `btn block${t.id === e.taskId ? ' primary' : ''}`, onclick: () => { commit(log.update(E(), e.id, { taskId: t.id, categoryId: t.categoryId || e.categoryId }, LCTX), `${t.name} への紐づけ`); close(); rerender(); } }, linkName(t))),
       e.taskId ? el('button.btn.block.ghost', { type: 'button', onclick: () => { commit(log.update(E(), e.id, { taskId: null }, LCTX), '紐づけの解除'); close(); rerender(); } }, '紐づけを外す') : null,
     ]),
   ]);

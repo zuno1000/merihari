@@ -159,7 +159,7 @@ document.addEventListener('click', (e) => { if (e.isTrusted && performance.now()
 export const sheetJustClosed = () => performance.now() - lastSheetClose < SHEET_CLICK_GUARD_MS;
 
 /** 下から出るシート。build(close) が返す要素を中に入れる。背景タップで閉じる */
-export function sheet(build, onClose = null, { cls = null } = {}) { // cls(v0.43.1): シートに足すクラス(高さを固定するキャッチアップの一覧など)
+export function sheet(build, onClose = null, { cls = null, full = false } = {}) { // cls(v0.43.1): シートに足すクラス(高さを固定するキャッチアップの一覧など)・full(v0.90): 画面ぜんたいを使う(英単語。下から出る形ではなく 画面が替わる・背景のタップでは閉じない)
   const ov = el('div.overlay', { role: 'dialog', 'aria-modal': 'true' });
   let closed = false;
   const close = () => { if (closed) return; closed = true; lastSheetClose = performance.now(); ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
@@ -167,6 +167,7 @@ export function sheet(build, onClose = null, { cls = null } = {}) { // cls(v0.43
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   document.addEventListener('keydown', onKey);
   const node = el('div.sheet', build(close)); if (cls) node.classList.add(cls);
+  if (full) { ov.classList.add('full'); node.classList.add('full'); }
   ov.appendChild(node);
   document.body.appendChild(ov);
   return close;

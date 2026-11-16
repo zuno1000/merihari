@@ -66,7 +66,15 @@ export function isEligible(t, date) {
 /** 1 回の目安の大きさ(分)(v0.31.3・F5-2 改): 期限つきの目安はこれ以上の塊にまとめる(15 分 × 4 ではなく 30 分 × 2) */
 export const CHUNK_MIN = 30;
 /** 記録・予定に紐づけられるタスク(v0.33・純関数): 開いているもの(消した・済んだは除く)・メモは除く(v0.22)・期限の近い順(期限なしは後ろ) */
-export function linkable(tasks) { return Object.values(tasks || {}).filter((t) => t && !t.deletedAt && !t.doneAt && t.kind !== 'memo').sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0)); }
+export function linkable(tasks, doneSinceMs = null) {
+  const all = Object.values(tasks || {}).filter((t) => t && !t.deletedAt && t.kind !== 'memo');
+  const open = all.filter((t) => !t.doneAt).sort((a, b) => ((a.deadline || '9999') < (b.deadline || '9999') ? -1 : (a.deadline || '9999') > (b.deadline || '9999') ? 1 : 0));
+  if (doneSinceMs == null) return open;
+  // v0.90(実機 FB「タスクの完了を押してから 記録を足そうとすると、そのタスクが 一覧から消えていて 紐づけられない」): doneSinceMs 以降に 済ませたタスクも、開いているもののあとに 並べる(新しく済ませた順・LINK_DONE_MAX 件まで)
+  const done = all.filter((t) => t.doneAt && Date.parse(t.doneAt) >= doneSinceMs).sort((a, b) => Date.parse(b.doneAt) - Date.parse(a.doneAt)).slice(0, LINK_DONE_MAX);
+  return [...open, ...done];
+}
+export const LINK_DONE_MAX = 20;
 /** 設定の塊の大きさ(v0.31.4: settings.goals.chunkMin・設定 › 1日の目標)。無ければ CHUNK_MIN。純関数 */
 export function chunkOf(settings) { const v = +(settings?.goals?.chunkMin); return Number.isFinite(v) && v >= 15 ? v : CHUNK_MIN; }
 /**

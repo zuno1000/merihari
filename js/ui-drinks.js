@@ -7,6 +7,7 @@ import * as photos from './photos.js';
 import { autoSync } from './sync.js';
 import { dateKey, fmtMD, minuteOfDay, effectiveDay } from './time.js';
 import * as buddy from './buddy.js'; // v0.84: 聞く人の名前と 口調
+import { buddyLine, buddyBubble } from './ui-buddy.js'; // v0.90: 台詞は アシスタントの場面から・顔つきの吹き出し(循環 import だが 呼ぶのは 描くときだけ)
 import { FEATURES } from './features.js';
 
 const S = () => store.state.data.settings;
@@ -192,8 +193,16 @@ const B = () => buddy.normalizeBuddy(S().buddy);
 const buddyOn = () => FEATURES.BUDDY && B().enabled;
 /** いまの口調の土台(bright / polite / cool)。足した性格は その土台 */
 const toneNow = () => { const v = buddy.voiceOf(B()); return v && typeof v === 'object' ? (v.base || 'bright') : (v || 'bright'); };
-/** 聞く人の吹き出し(アシスタントを止めていれば 名前なしの見出し) */
-const askBubble = (text, cls = 'dw-q') => el(`div.${cls}`, [buddyOn() ? el('span.bd-name', B().name) : null, el('p', text)].filter(Boolean));
+/**
+ * 聞く人の吹き出し。v0.90(実機 FB「飲み物の アシスタントの台詞が 拡充されていない・アイコンも出して」): 文は アシスタントの場面(drink_rec / drink_pref / drink_what / drink_look / drink_axis / drink_overall)から
+ * 選ぶ(言い回しが いくつかあり、足した性格の口調でも 話す・bump で 言い回しを進める)。顔つきの吹き出しで出す。アシスタントを止めていれば fallback の文だけ
+ */
+const askBubble = (key, vars, fallback, cls = 'dw-q', bump = 0) => {
+  const b = buddyOn() ? buddyBubble(buddyLine(key, vars, bump), 'base', 44) : null;
+  if (b) { b.classList.add('dk-leadsay'); return b; }
+  return el(`div.${cls}`, el('p', fallback));
+};
+const WIZ_KEY = Object.freeze({ what: 'drink_what', look: 'drink_look', axis: 'drink_axis', overall: 'drink_overall' });
 
 /**
  * レーダーチャート(F19-8)。series = [{ values(軸の順・1〜5・null あり), cls('top' | 'all' | 'one') }]。軸の名前は 外側に、目盛りは 1〜5 の輪。
@@ -239,6 +248,11 @@ function recNow(redraw = null, kind0 = null) {
   return drinks.suggest(D(), kind, n.date, { declared: PREF(), sake: sakeDb });
 }
 const shownOf = (r) => { const key = `${now().date}:${r.kind}`; return (recShown && recShown.key === key && [r.pick, ...r.others].find((c) => c.name === recShown.name)) || r.pick; };
+/** おすすめの頭の ひとこと(日と 種類で 言い回しが替わる)。日報の札(drinkBrief)は 文だけ使う */
+const whenNow = () => (now().min < 900 ? '今日' : '今夜');
+const recBump = (kind) => +now().date.slice(8, 10) + drinks.PREF_KINDS.indexOf(kind);
+const leadLine = (kind) => (buddyOn() && buddyLine('drink_rec', { when: whenNow(), kind: drinks.kindName(kind) }, recBump(kind))) || leadOf(kind);
+const leadBubble = (kind) => askBubble('drink_rec', { when: whenNow(), kind: drinks.kindName(kind) }, leadOf(kind), 'dk-lead', recBump(kind));
 const leadOf = (kind) => { const kn = drinks.kindName(kind), day = now().min < 900; return { bright: `${day ? '今日' : '今夜'}の${kn}は、これなんて どう?`, polite: `${day ? '本日' : '今夜'}の${kn}は、こちらは いかがでしょう。`, cool: `${day ? '今日' : '今夜'}の${kn}は これだ。` }[toneNow()]; };
 /** 気になる に入れる / 外す */
 function toggleWish(kind, c) {
@@ -304,7 +318,7 @@ function recBox(rerender) {
   const kn = drinks.kindName(kind), told = !!PREF()[kind];
   return el('section.card.dk-say.dk-recbox', [
     el('div.seg.dk-reckind', { role: 'group', 'aria-label': 'おすすめの種類' }, drinks.PREF_KINDS.map((k) => el('button', { type: 'button', class: k === kind ? 'active' : '', 'aria-pressed': k === kind ? 'true' : 'false', onclick: () => { recKind = k; rerender(); } }, drinks.kindName(k)))),
-    askBubble(leadOf(kind), 'dk-lead'),
+    leadBubble(kind),
     ...recNodes(r, rerender),
     r.again ? el('p.dk-again', [el('span.dk-h', '久しぶりに'), r.again.name, el('b', ` ${drinks.fmtOverall(r.again.overall)}`), el('span.muted.small', `(${r.again.days} 日ぶり)`)]) : null,
     el('div.row', el('button.btn.sm', { type: 'button', onclick: () => prefSheet(kind, rerender) }, told ? `${kn}の好みを 伝え直す` : `${kn}の好みを 伝える`)),
@@ -354,7 +368,7 @@ function prefSheet(kind, rerender) {
     const draw = () => {
       clear(body);
       body.append(
-        askBubble({ bright: `${kn}は、どんな味が 好き? わかる所だけで いいよ。`, polite: `${kn}は、どのような味が お好みですか。わかる所だけで かまいません。`, cool: `${kn}の好みを 教えろ。わかる所だけでいい。` }[toneNow()], 'dk-lead'),
+        askBubble('drink_pref', { kind: kn }, `${kn}は、どのような味が お好みですか。わかる所だけで かまいません。`, 'dk-lead', recBump(kind)),
         ...drinks.axesOf(kind).map(([key, nm]) => el('div.dk-prefrow', [
           el('span.dk-prefname', nm),
           el('div.chips.small', { role: 'radiogroup', 'aria-label': nm }, [1, 2, 3, 4, 5].map((v) => el('button.chip.sm2', { type: 'button', role: 'radio', 'aria-checked': t[key] === v ? 'true' : 'false', class: `chip sm2${t[key] === v ? ' on' : ''}`, onclick: () => { if (t[key] === v) delete t[key]; else t[key] = v; draw(); } }, String(v)))),
@@ -375,7 +389,7 @@ function prefSheet(kind, rerender) {
 export function recSheet(onClose = null) {
   sheet((close) => {
     const body = el('div.dw');
-    const draw = () => { clear(body); const r = recNow(draw); if (!r) { body.append(el('p', 'おすすめは まだ ありません。')); return; } body.append(askBubble(leadOf(r.kind), 'dk-lead'), ...recNodes(r, draw), el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる'))); };
+    const draw = () => { clear(body); const r = recNow(draw); if (!r) { body.append(el('p', 'おすすめは まだ ありません。')); return; } body.append(leadBubble(r.kind), ...recNodes(r, draw), el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる'))); };
     draw();
     return [el('h2', `${now().min < 900 ? '今日' : '今夜'}の一杯`), body];
   }, onClose, { cls: 'dk-sheet' });
@@ -386,7 +400,7 @@ export function drinkBrief(redraw) {
   const r = recNow(redraw);
   if (!r) return null;
   const c = r.pick, wished = !!drinks.wishOf(D(), r.kind, c.name), meta = [c.maker, c.area].filter(Boolean).join('・');
-  return { kicker: `${now().min < 900 ? '今日' : '今夜'}の一杯`, lead: leadOf(r.kind), nodes: [
+  return { kicker: `${now().min < 900 ? '今日' : '今夜'}の一杯`, lead: leadLine(r.kind), nodes: [
     el('button.bd-drink', { type: 'button', 'aria-label': `${c.name} を くわしく見る`, onclick: () => recSheet(redraw) }, [el('b', c.name), meta ? el('span.muted.small', meta) : null, c.note ? el('span.muted.small', c.note) : null].filter(Boolean)),
     el('div.row.bd-songact', [el('button.btn.sm', { type: 'button', onclick: () => { toggleWish(r.kind, c); redraw(); } }, wished ? '★ 気になる' : '☆ 気になる'), el('button.btn.sm.ghost', { type: 'button', onclick: () => recSheet(redraw) }, 'チャートを見る')]),
   ] };
@@ -419,7 +433,7 @@ export function drinkWizard(rerender, preset = null) { // preset(v0.86): 気に�
         skip ? el('button.btn.ghost', { type: 'button', onclick: () => go(i + 1) }, skip) : null,
         el('button.btn.primary.grow', { type: 'button', onclick: onNext }, label),
       ].filter(Boolean));
-      const head = [el('div.dw-step', `${i + 1} / ${steps.length}`), askBubble(drinks.askText(st.step, tone, st.name || ''))];
+      const head = [el('div.dw-step', `${i + 1} / ${steps.length}`), askBubble(WIZ_KEY[st.step] || 'drink_axis', { name: st.name || '' }, drinks.askText(st.step, 'polite', st.name || ''), 'dw-q', i)];
       if (st.step === 'what') {
         const seg = el('div.seg.dk-seg', { role: 'group', 'aria-label': '種類' }, drinks.KINDS.map((k) => el('button', { type: 'button', class: d.kind === k.id ? 'active' : '', 'aria-pressed': d.kind === k.id ? 'true' : 'false', onclick: () => { d.kind = k.id; d.taste = {}; draw(); } }, k.name)));
         const img = blob ? el('img.dk-preview', { alt: '', src: URL.createObjectURL(blob) }) : el('div.dk-nophoto', { 'aria-hidden': 'true' }, cupIcon('dk-ico big'));

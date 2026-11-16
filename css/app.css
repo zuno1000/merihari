@@ -1586,7 +1586,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .nx-title{display:flex;align-items:center;gap:8px;font-size:21px;line-height:1.35;font-weight:700;overflow-wrap:anywhere}
 .nx-title .dot{width:12px;height:12px}
 .nx-reason{font-size:14px;color:var(--muted)}
-.nx-hook{font-size:13px;font-weight:600;color:var(--accent);line-height:1.4} /* v0.82・F24-27: いまだけの ひとこと */
 .nx-at{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .chips.small.dk-filter{margin:18px 0 6px} /* v0.82: 「＋ 飲み物を記録」と 絞り込みのチップの間を空ける */
 .nx-btns{gap:8px;align-items:stretch}
@@ -2031,3 +2030,38 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .btn.vc-del{flex:none;color:var(--danger);font-size:13px}
 .vc-wait{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:12px;padding:8px 10px;font-size:13px}
 .vc-wait span{flex:1}
+/* v0.90: 画面ぜんたいを使うシート(ui.sheet の full)。英単語(.vc-page): 上に 戻る・切り替え・⚙、学習のときは 語のカードが 残りの高さを使い、選択肢は 画面の下 */
+.overlay.full{background:var(--card);align-items:stretch}
+.sheet.full{max-height:none;height:100%;border-radius:0;box-shadow:none;display:flex;flex-direction:column;padding:calc(8px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));overflow:hidden}
+.sheet.full::before{display:none}
+.vc-head{flex:none;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.vc-head .vc-seg{flex:1;min-width:0;margin:0}
+.vc-head .vc-seg button{padding-left:4px;padding-right:4px;white-space:nowrap}
+.vc-title{font-size:17px}
+.vc-back,.vc-gear{flex:none;border:0;background:none;color:var(--accent);font:inherit;font-size:15px;min-height:40px;padding:0 4px;cursor:pointer;display:flex;align-items:center}
+.vc-gear{color:var(--muted);padding:0 6px}
+.vc-gearico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.vc-page .vc-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.vc-line{flex:none;display:flex;align-items:center;gap:10px}
+.vc-modebtn{flex:none;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:13px;font-weight:600;border-radius:999px;padding:0 12px;min-height:32px;cursor:pointer}
+.vc-modebtn:active{background:var(--accent-bg)}
+.vc-caret{font-size:10px;color:var(--muted)}
+.vc-line .vc-count{font-size:12px}
+.vc-talk{flex:none;margin:0}
+.vc-talk .bd-bubble{background:var(--bg);border-color:transparent;padding:6px 12px}
+.vc-talk .bd-bubble::before{background:var(--bg);border-color:transparent}
+.vc-body.quiz .vc-card{flex:1 1 auto;min-height:170px}
+.vc-mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.vc-card .vc-mid .vc-en{margin:0 0 2px}
+.vc-cardtop .vc-say{padding:2px 8px;min-height:28px}
+.vc-body.quiz .vc-opts{flex:none}
+.vc-body.quiz .vc-opt{min-height:54px}
+.vc-pre .vc-recall{min-height:196px}
+.vc-preoff{border:0;background:none;color:var(--muted);font:inherit;font-size:12px;text-decoration:underline;text-underline-offset:3px;min-height:30px;cursor:pointer}
+.vc-modelist{gap:8px}
+.btn.block.vc-moderow{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:10px 14px}
+.vc-modesub{font-size:12px;font-weight:400;opacity:.75}
+.vc-optbox{display:flex;flex-direction:column;gap:4px}
+.vc-optbox+.row .btn{flex:1}
+.vc-optrow span{display:flex;flex-direction:column}
+.sheet .bd-say.dk-leadsay{margin:0 0 4px}

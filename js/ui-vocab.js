@@ -10,6 +10,10 @@
 //    1 語だけなら 辞書を引いて 意味の候補(いくつでも選べる・自分の言葉も足せる)、日本語なら 英語の候補(＋ で そのまま足す)。まとめて貼っても 読める。
 //    一覧は 足した順(直しても 並びが動かない)・品詞のチップ・意味のタップで手直し・削除。意味の無い語は「意味待ち」で 自動で取りに行く。
 //  持って来ていないもの: フレーズ・語根の仲間の誤答・効果音・AI に頼む文・ペースの目標・模試。
+// v0.90(実機 FB「学習 / 単語帳 / マイ単語 と 種類のチップで、最初は 選択肢まで 画面に納まらない・ポップアップではなく 画面を替えてよい・まず 自力で を 切り替えたい・
+//   取り組んでいる間 定期的に アシスタントの声かけを・ふり返りは アイコンつきの 吹き出しで」): 画面ぜんたいを使う(ui.sheet の full)。上の 1 行に 戻る・切り替え・⚙(出題の設定)。
+//   学習の種類は 1 つのボタン(タップで 選ぶシート)に畳み、語のカードが 残りの高さを使って、選択肢は いつも 画面の下(親指の届く所)。
+//   アシスタントは 顔つきの吹き出しで、始めるとき / 続けて正解 / まちがえたとき / 半分 / 4 問ごと に ひとこと(buddy.js の vocab_start / vocab_combo / vocab_miss / vocab_mid / vocab_cheer)。
 // 計算は vocab.js(純関数)。単語帳 data/vocab.json(約 460KB)は シートを開いたときだけ読む。FEATURES.VOCAB で隔離(設定は settings.vocab・既定は 使わない)。進みは data.vocab(同期する)。
 import { el, clear, sheet, svg, toast, confirmSheet } from './ui.js';
 import * as store from './store.js';
@@ -19,7 +23,7 @@ import { FEATURES } from './features.js';
 import { autoSync } from './sync.js';
 import { dateKey, minuteOfDay, effectiveDay, mm as hhmm } from './time.js';
 import { workCategories } from './next.js';
-import { buddyLine, buddyOn, buddyName } from './ui-buddy.js';
+import { buddyLine, buddyOn, buddyBubble } from './ui-buddy.js';
 import { addSpans } from './ui-today.js'; // 学習した時間を 記録に足す(循環 import だが 呼ぶのは シートを閉じるときだけ)
 
 const S = () => store.state.data.settings;
@@ -47,6 +51,7 @@ export function vocabTopic() {
   return vocab.topic(vocab.quick(R(), Date.now()), vocab.dayOf(R(), n.date), n.min, C().n);
 }
 const BOOK = (cls) => svg('svg', { class: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20M9 8h7M9 12h5' })]);
+const GEAR = () => svg('svg', { class: 'vc-gearico', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('circle', { cx: 12, cy: 12, r: 3 }), svg('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' })]); // ホームの 設定の歯車と 同じ形
 const SPEAKER = () => svg('svg', { class: 'vc-spk', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M4 9.5v5h3.5L12 18.5v-13L7.5 9.5zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11' })]);
 /** ホームのタイル(いま知りたいこと): 復習の数 / 今日 解いた数。タップで 学習のシート。使っていなければ null */
 export function vocabTile(rerender = null) {
@@ -101,7 +106,7 @@ function wrapSheet(ses, rerender) {
       clear(body);
       const canRecord = min >= 1 && !open && cats.length > 0;
       body.append(...[
-        el('div.sl-say', [buddyOn() ? el('span.bd-name', buddyName()) : null, el('p', line)].filter(Boolean)),
+        buddyBubble(line, ses.ok * 2 >= ses.n ? 'happy' : 'base', 48) || el('div.sl-say', el('p', line)), // v0.90: 顔つきの吹き出し(止めていれば 文だけ)
         el('div.sl-tiles', [tile('解いた', `${ses.n}問`, `${hhmm(ses.startMin)}〜${hhmm(ses.endMin)}`), tile('正解', `${ses.ok}`, `${Math.round((ses.ok / Math.max(1, ses.n)) * 100)}%`), tile('新しく出た', `${ses.first}`, '語'), tile('覚えた', `${ses.got}`, '語')]),
         el('p.muted.small', `これまでに 覚えた語 ${ses.mastered.toLocaleString()}・${ses.due > 0 ? `いま復習する語 あと ${ses.due}` : 'いま復習する語は ありません'}・${ses.streak} 日 続いています`),
         ses.missed.length ? el('h3.help-h', `まちがえた語(${ses.missed.length})`) : null,
@@ -142,7 +147,11 @@ export function vocabSheet(rerender = null, first = 'study') {
   // マイ単語のメモ欄
   let memoText = '', posFix = {}, look = null, lookSeq = 0, lookTimer = null, addedEn = new Set(), editEn = null, filling = false;
   const refreshDeck = () => { dk = vocab.deck(words, R()); };
-  const say = (text) => (text ? el('div.sl-say', [buddyOn() ? el('span.bd-name', buddyName()) : null, el('p', text)].filter(Boolean)) : null);
+  const say = (text, mood = 'base') => (text ? buddyBubble(text, mood, 44) || el('div.sl-say', el('p', text)) : null);
+  // 学習の間の アシスタントの ひとこと(v0.90): talk = いま出ている文。同じ文のあいだは 同じ要素を使い回す(描き直しで 絵が ちらつかない)
+  let talk = null, talkNode = null, talkId = 0, shownId = -1, combo = 0, quiet = 0;
+  const comment = (key, vars = {}, mood = 'base') => { quiet = 0; if (!buddyOn()) { talk = null; return; } const text = buddyLine(key, vars, ++talkId); talk = text ? { id: talkId, text, mood } : null; };
+  const strip = () => { if (!talk) return null; if (shownId !== talk.id) { talkNode = buddyBubble(talk.text, talk.mood, 40); shownId = talk.id; if (talkNode) talkNode.classList.add('vc-talk'); } return talkNode; };
   const dir = () => C().dir;
   const recOf = (en) => R()[en] || null;
   const seenNow = (en) => { const r = recOf(en); return !!(r && !r.deletedAt && r.s && r.s[2] + r.s[3] > 0); };
@@ -161,6 +170,9 @@ export function vocabSheet(rerender = null, first = 'study') {
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
     set = { n: focus ? focus.length : C().n, i: 0, ok: 0, first: 0, up: 0, got: 0, missed: [], cur: null, tag: null, opts: [], picked: null, recent: [], done: false, myNew: 0, queue: [], focus: focus ? focus.slice() : null, isFocus: !!focus, revealed: true };
     next();
+    combo = 0;
+    const t = !focus && lastMode === 'auto' && answered === 0 ? vocabTopic() : null; // 開いて最初の 1 回は ホームと同じ話題(復習がたまっている / 今日は まだ)
+    if (!set.cur || focus) talk = null; else if (t) comment(t.key, t.vars); else comment('vocab_start', { n: set.n });
   };
   const finish = () => { set.done = true; autoSync(); };
   const advance = () => {
@@ -185,19 +197,56 @@ export function vocabSheet(rerender = null, first = 'study') {
       if (was && b1 > b0) set.up++;
       if (b1 >= vocab.MASTER_BOX && b0 < vocab.MASTER_BOX) { set.got++; tot.got++; buzz([30, 40, 60]); toast(`「${w.en}」を 覚えた! 7 日あけても 思い出せた`); }
     } else { if (!set.missed.some((x) => x.en === w.en)) set.missed.push(w); if (!tot.missed.some((x) => x.en === w.en)) tot.missed.push({ en: w.en, ja: w.ja }); }
+    // v0.90: 合間の声かけ(まちがえたら はげます・3 / 5 / 7 / 10 … 問 続けて正解・半分まで来た・それ以外は 4 問ごとに ひとこと)
+    combo = ok ? combo + 1 : 0; quiet++;
+    if (!ok) comment('vocab_miss', {}, 'worry');
+    else if (vocab.COMBO_AT.includes(combo)) comment('vocab_combo', { n: combo }, 'happy');
+    else if (!set.isFocus && set.n >= 8 && set.i === Math.ceil(set.n / 2)) comment('vocab_mid', { n: set.n - set.i });
+    else if (quiet >= 4) comment('vocab_cheer', {}, 'work');
     if (dir() === 'j2e') speak(w.en); // 意味 → 英語 のときは、答えたあとに 発音を聞かせる
     draw();
     if (C().auto > 0) autoTimer = setTimeout(() => { autoTimer = null; if (body.isConnected && tab === 'study' && !memoEdit) advance(); }, C().auto);
   };
 
   const tabBar = () => el('div.seg.vc-seg', { role: 'tablist', 'aria-label': '英単語の画面' }, TABS.map(([k, name]) => el('button', { type: 'button', role: 'tab', class: tab === k ? 'active' : '', 'aria-selected': tab === k ? 'true' : 'false', onclick: () => { tab = k; showImport = false; draw(); } }, name)));
-  const modeBar = () => {
+  /** 学習の種類を選ぶシート(v0.90: いつも並んでいた 5 つのチップを 1 つのボタンに畳んだ)。選ぶと その種類で 新しい 1 回分 */
+  const modeSheet = () => sheet((cl) => {
     const mc = vocab.modeCounts(R(), dk, Date.now());
-    return el('div.vc-modes', { role: 'group', 'aria-label': '学習の種類' }, vocab.MODES.map((m) => el('button.chip.sm2', {
-      type: 'button', class: `chip sm2${lastMode === m && !set.isFocus ? ' on' : ''}`, 'aria-pressed': lastMode === m && !set.isFocus ? 'true' : 'false',
-      onclick: () => { if (lastMode === m && set && !set.done && set.cur && !set.isFocus) return; lastMode = m; begin(); draw(); },
-    }, [vocab.MODE_LABEL[m], m === 'auto' ? null : el('span.vc-mc', String(mc[m]))])));
-  };
+    return [
+      el('h2', '学習の種類'),
+      el('div.col.vc-modelist', vocab.MODES.map((m) => el('button.btn.block', { type: 'button', class: `btn block vc-moderow${lastMode === m && !set.isFocus ? ' primary' : ''}`, 'aria-pressed': lastMode === m && !set.isFocus ? 'true' : 'false', onclick: () => { cl(); if (lastMode === m && set && !set.done && set.cur && !set.isFocus) return; lastMode = m; begin(); draw(); } }, [el('b', vocab.MODE_LABEL[m]), el('span.vc-modesub', m === 'auto' ? vocab.MODE_HINT.auto : `${vocab.MODE_HINT[m]}・${mc[m].toLocaleString()} 語`)]))),
+      el('div.row', el('button.btn.grow', { type: 'button', onclick: () => cl() }, '閉じる')),
+    ];
+  });
+  const modeBtn = () => el('button.vc-modebtn', { type: 'button', 'aria-label': `学習の種類: ${set.isFocus ? 'ミスの立て直し' : vocab.MODE_LABEL[lastMode]}(タップで替える)`, onclick: modeSheet }, [set.isFocus ? 'ミスの立て直し' : vocab.MODE_LABEL[lastMode], el('span.vc-caret', { 'aria-hidden': 'true' }, '▾')]);
+  /** 出題の設定(v0.90・実機 FB「まず 自力で思い出す を ON / OFF できるように」): 学習の画面の ⚙ から。設定 › 英単語 と 同じ項目 */
+  const optsSheet = () => sheet((cl) => {
+    const box = el('div.vc-optbox');
+    const chip = (label, on, fn) => el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
+    const put = (patch) => { saveConf({ ...C(), ...patch }); paint(); };
+    const paint = () => {
+      const c = C();
+      clear(box);
+      box.append(
+        el('label.row.field.vc-optrow', [el('input', { type: 'checkbox', checked: c.pre, onchange: (e) => put({ pre: e.target.checked }) }), el('span', [el('b', 'まず 自力で 思い出す'), el('span.muted.small', '復習の語は、選択肢を はじめは 伏せます')])]),
+        el('h3.help-h', '出題の向き'),
+        el('div.chips.small', { role: 'group', 'aria-label': '出題の向き' }, vocab.DIRS.map((d) => chip(vocab.DIR_LABEL[d], c.dir === d, () => put({ dir: d })))),
+        el('h3.help-h', '自動で次へ'),
+        el('div.chips.small', { role: 'group', 'aria-label': '自動で次へ' }, vocab.AUTO_CHOICES.map((ms) => chip(vocab.AUTO_LABEL[ms], c.auto === ms, () => put({ auto: ms })))),
+        el('h3.help-h', '1 回の問題数'),
+        el('div.chips.small', { role: 'group', 'aria-label': '1 回の問題数' }, vocab.SET_CHOICES.map((n) => chip(`${n} 問`, c.n === n, () => put({ n })))),
+        el('p.muted.small', '問題数は 次の 1 回分から、ほかは 次の問題から 変わります。'),
+      );
+    };
+    paint();
+    return [el('h2', '出題の設定'), box, el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => cl() }, '閉じる'))];
+  }, () => { if (set && set.cur && !set.picked && !set.revealed && !C().pre) set.revealed = true; if (body.isConnected) draw(); }); // 伏せている最中に オフにしたら その場で 開く
+  /** 学習の画面の 上の 1 行: 種類のボタン・進みの帯・いま何問目 */
+  const quizLine = (d) => el('div.vc-line', [
+    modeBtn(),
+    el('div.vc-bar', { role: 'img', 'aria-label': `${set.i} / ${set.n} 問` }, el('i', { style: { width: `${Math.round((set.i / Math.max(1, set.n)) * 100)}%` } })),
+    el('span.vc-count', `${set.i} / ${set.n}・今日 ${d.n} 問`),
+  ]);
   /** 出せる語が無いときの ひとこと(種類ごと) */
   const emptyText = () => ({ review: 'いま 復習する語は ありません。「新しい語」か「おまかせ」で 進められます。', my: 'マイ単語が まだ ありません。上の「マイ単語」から 足せます。', weak: 'にがての語は いまは ありません。', new: 'まだ出ていない語は もう ありません。ぜんぶ 一度は 出ました。' }[lastMode] || '出せる語が ありません。');
   /** 語の下の段(答えたあと): 意味 → 覚え方メモ → 用例。高さは 答える前から 取っておく */
@@ -220,11 +269,9 @@ export function vocabSheet(rerender = null, first = 'study') {
   };
   const drawQuiz = () => {
     const w = set.cur;
-    if (!w) { body.append(modeBar(), el('p.vc-empty', emptyText()), lastMode === 'auto' ? null : el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => { lastMode = 'auto'; begin(); draw(); } }, 'おまかせで 始める'))); return; }
+    if (!w) { body.append(...[el('div.vc-line', [modeBtn(), el('span.grow')]), el('p.vc-empty', emptyText()), lastMode === 'auto' ? null : el('div.row', el('button.btn.primary.grow', { type: 'button', onclick: () => { lastMode = 'auto'; begin(); draw(); } }, 'おまかせで 始める'))].filter(Boolean)); return; }
     const done = !!set.picked, j2e = dir() === 'j2e', n = today(), d = vocab.dayOf(R(), n.date);
     const st = vocab.statsOf(recOf(w.en));
-    const t = set.i === 0 && !done && !set.isFocus ? vocabTopic() : null;
-    const hello = set.i === 0 && !done ? (set.isFocus ? `まちがえた ${set.n} 語を、もう一度。` : t && buddyOn() && lastMode === 'auto' ? buddyLine(t.key, t.vars) : `${vocab.MODE_LABEL[lastMode]}で ${set.n} 問、いっしょに やってみよう。`) : '';
     const optNode = (c) => {
       const right = done && c.en === w.en, wrong = done && set.picked === c.en && c.en !== w.en;
       const text = j2e ? c.en : c.ja;
@@ -233,23 +280,28 @@ export function vocabSheet(rerender = null, first = 'study') {
         'aria-label': right ? `${text}(正解・次へ)` : text, onclick: () => (done ? advance() : choose(c)),
       }, [el('span.vc-opttext', text), right ? el('span.vc-go', set.i >= set.n ? '結果へ ▶' : '次へ ▶') : null, wrong ? el('span.vc-said', j2e ? vocab.jaHead(c.ja) : c.en) : null].filter(Boolean));
     };
+    // v0.90: 上から 種類と進みの 1 行 → アシスタントの ひとこと → 語のカード(残りの高さを使う)→ 選択肢(いつも 画面の下)
     body.append(...[
-      set.isFocus ? el('p.vc-focus', 'ミスの立て直し') : modeBar(),
-      hello ? say(hello) : null,
+      quizLine(d),
+      strip(),
       el('div.vc-card', [
         el('div.vc-cardtop', [
           done ? posChip(w.pos) : el('span.vc-tag', { class: `vc-tag ${set.tag}` }, vocab.TAG_LABEL[set.tag] || ''),
           done ? el('span.vc-stats', st.mastered ? [el('b.ok', '覚えた'), `・正解 ${st.ok}・ミス ${st.ng}`] : [el('b.ok', `正解 ${st.ok}`), '・', el('b.ng', `ミス ${st.ng}`), '・', el('b.bx', `定着 ${st.box} / ${vocab.MASTER_BOX}`)]) : null,
           el('span.grow'),
-          el('span.vc-count', `${set.isFocus ? '立て直し' : 'セット'} ${set.i} / ${set.n}・今日 ${d.n} 問`),
+          canSpeak() && (!j2e || done) ? el('button.vc-say', { type: 'button', 'aria-label': `${w.en} の発音を聞く`, onclick: () => speak(w.en) }, [SPEAKER(), '発音']) : null,
         ].filter(Boolean)),
-        j2e ? el('b.vc-en.ja', w.ja) : el('b.vc-en', { lang: 'en' }, w.en),
-        answerBlock(w, done, j2e),
-        canSpeak() && (!j2e || done) ? el('button.vc-say', { type: 'button', 'aria-label': `${w.en} の発音を聞く`, onclick: () => speak(w.en) }, [SPEAKER(), '発音']) : null,
-      ].filter(Boolean)),
+        el('div.vc-mid', [
+          j2e ? el('b.vc-en.ja', w.ja) : el('b.vc-en', { lang: 'en' }, w.en),
+          answerBlock(w, done, j2e),
+        ]),
+      ]),
       set.revealed
         ? el('div.vc-opts', set.opts.map(optNode))
-        : el('button.vc-recall', { type: 'button', onclick: () => { set.revealed = true; draw(); } }, [el('b', 'まず 自力で 思い出す'), el('span', `${j2e ? '英語' : '意味'}を(心の中で)言ってから、タップで 選択肢`)]),
+        : el('div.vc-opts.vc-pre', [
+          el('button.vc-recall', { type: 'button', onclick: () => { set.revealed = true; draw(); } }, [el('b', 'まず 自力で 思い出す'), el('span', `${j2e ? '英語' : '意味'}を(心の中で)言ってから、タップで 選択肢`)]),
+          el('button.vc-preoff', { type: 'button', onclick: () => { saveConf({ ...C(), pre: false }); set.revealed = true; toast('「まず 自力で 思い出す」を オフにしました(右上の ⚙ で 戻せます)'); draw(); } }, 'この確認を はさまない(オフにする)'),
+        ]),
     ].filter(Boolean));
   };
   /** ぜんたいの進み(覚えた / 学習中 / これから)の帯 */
@@ -267,7 +319,7 @@ export function vocabSheet(rerender = null, first = 'study') {
     const tile = (k, v, sub) => el('div.sl-tile', [el('span.sl-k', k), el('b.sl-v', v), el('span.sl-s', sub)]);
     body.append(...[
       el('p.vc-donehead', [el('b', set.isFocus ? '立て直し 完了' : 'セット完了'), el('span', `正解 ${set.ok} / ${set.i}`)]),
-      say(line),
+      say(line, set.i && set.ok * 2 >= set.i ? 'happy' : 'base'),
       el('div.sl-tiles.vc-tiles', [tile('はじめて', `${set.first}`, '新しく出た語'), tile('定着が進んだ', `${set.up}`, '段が上がった語'), tile('覚えた', `${set.got}`, '7 日あけて正解')]),
       set.missed.length ? el('div.row', el('button.btn.grow.vc-fix', { type: 'button', onclick: () => { begin(set.missed); draw(); } }, `このセットのミス ${set.missed.length} 語を すぐ立て直す`)) : null,
       set.missed.length ? el('ul.vc-list', set.missed.slice(0, 20).map((w) => el('li', [el('b', { lang: 'en' }, w.en), el('span', w.ja)]))) : null,
@@ -494,7 +546,15 @@ export function vocabSheet(rerender = null, first = 'study') {
     clear(body);
     if (failed) { body.append(el('p', '単語帳を 読めませんでした。通信できる所で、もう一度 開いてください。'), el('div.row', el('button.btn.grow', { type: 'button', onclick: () => close() }, '閉じる'))); return; }
     if (!dk) { body.append(el('p.muted', '単語帳を 読んでいます…')); return; }
-    body.append(tabBar());
+    clear(head);
+    head.append(
+      el('button.vc-back', { type: 'button', 'aria-label': '英単語を 閉じる', onclick: () => close() }, '‹ 戻る'),
+      tabBar(),
+      el('button.vc-gear', { type: 'button', 'aria-label': '出題の設定', onclick: optsSheet }, GEAR()),
+    );
+    const quiz = tab === 'study' && !(set && set.done);
+    body.classList.toggle('quiz', quiz);
+    if (!quiz) body.scrollTop = 0;
     if (tab === 'book') drawBook();
     else if (tab === 'my') drawMy();
     else { if (!set) begin(); if (set.done) drawResult(); else drawQuiz(); }
@@ -509,7 +569,8 @@ export function vocabSheet(rerender = null, first = 'study') {
     const n = today(), c = vocab.counts(R(), dk, Date.now());
     wrapSheet({ ...tot, date: startAt.date, startMin: startAt.min, endMin: minuteOfDay(), mastered: c.mastered, due: c.due, streak: vocab.streak(R(), n.date) }, rerender);
   };
-  const close = sheet(() => [el('h2', '英単語'), body], onClose, { cls: 'vc-sheet' });
+  const head = el('div.vc-head', [el('button.vc-back', { type: 'button', 'aria-label': '英単語を 閉じる', onclick: () => close() }, '‹ 戻る'), el('b.vc-title', '英単語')]);
+  const close = sheet(() => [head, body], onClose, { cls: 'vc-page', full: true }); // v0.90: 画面ぜんたい(下から出るシートを やめた)
   draw();
   loadWords().then(() => { refreshDeck(); if (body.isConnected) draw(); if (vocab.pendingMy(R(), dk).length) fillPending(); }).catch(() => { failed = true; if (body.isConnected) draw(); });
   return close;
@@ -522,7 +583,7 @@ export function sectionVocab(rerender) {
   const chip = (label, on, fn) => el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
   return el('section.card', [
     el('h2', '英単語'),
-    el('p.muted.small', 'ホームの「いま知りたいこと」に 英単語のタイルを出します。タップすると 4 択で 1 回分を解けます。学習の種類(おまかせ / 新しい語 / 復習 / マイ単語 / にがて)は シートの上で選べます。'),
+    el('p.muted.small', 'ホームの「いま知りたいこと」に 英単語のタイルを出します。タップすると 英単語の画面に替わり、4 択で 1 回分を解けます。学習の種類(おまかせ / 新しい語 / 復習 / マイ単語 / にがて)は 画面の左上のボタンで、下の出題の設定は 画面の右上の ⚙ でも 変えられます。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => save({ ...c, enabled: e.target.checked }) }), el('span', 'ホームに 英単語のタイルを出す')]),
     el('h3.help-h', '1 回の問題数'),
     el('div.chips.small', { role: 'group', 'aria-label': '1 回の問題数' }, vocab.SET_CHOICES.map((n) => chip(`${n} 問`, c.n === n, () => save({ ...c, n })))),

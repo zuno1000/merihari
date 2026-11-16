@@ -150,7 +150,7 @@ export function milestone(workMin, targetMin) {
  *     + さっきの続き − 長く続けたばかりのカテゴリ − 選ばれなかった回数 + 2 時間ごとに変わる 小さな揺れ。いまの予定・もうすぐ期限(URGENT)は 並べ直さず 先頭のまま。
  * hook: その候補について いま言えること(ごほうびまで あと数分・節目まで あと数分・この時間は いつも・次の予定まで・続けば ◯日目・さっきの続き・いまから HH:MM まで)から、
  *       20 分ごとに 1 つを選ぶ(同じ 20 分の中では 同じ)。
- * 戻り値 [{ ...候補, score, hook, hooks }]。純関数
+ * 戻り値 [{ ...候補, score, hook, hooks, hint }]。純関数(v0.90: 画面は hook を出さない。hint を アシスタントが ホームの吹き出しで言う)
  */
 export function suggest(opts) {
   const { date, nowMin, entries = {}, settings = null, planBlocks = null, skips = {}, rewards = [] } = opts;
@@ -199,7 +199,9 @@ export function suggest(opts) {
     ].filter(Boolean);
     const span = Math.max(5, Math.min(25, free ? free.min : 25));
     hooks.push(`いまから ${mm((nowMin + span) % 1440)} まで、${span} 分だけ`); // いつでも言える(時刻が入るので 開くたびに違う)
-    return { ...c, score, i, hooks, hook: hooks[pickIndex(`${date}:${slot20}:${key}`, hooks.length)] };
+    // v0.90(実機 FB「次はこれ の 青い文は 無くす。このようなコメントは アシスタントに集約」): カードには もう出さない。hint = アシスタントが 言う分(ごほうびまでの残りは 小説 / 図録の台詞が 別にあるので 除く)
+    const tips = reward ? hooks.slice(1) : hooks;
+    return { ...c, score, i, hooks, hook: hooks[pickIndex(`${date}:${slot20}:${key}`, hooks.length)], hint: tips[pickIndex(`${date}:${slot20}:${key}`, tips.length)] };
   });
   out.sort((a, b) => (URGENT.includes(b.kind) ? 1 : 0) - (URGENT.includes(a.kind) ? 1 : 0) || (URGENT.includes(a.kind) ? a.i - b.i : b.score - a.score || a.i - b.i));
   for (const x of out) delete x.i;

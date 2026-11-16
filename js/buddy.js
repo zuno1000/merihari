@@ -345,6 +345,21 @@ const LINES = Object.freeze({
   vocab_due: { bright: ['英単語の復習が {n}語 たまってるよ。いっしょに やろう?', '{n}語、そろそろ 思い出すころだよ。少しだけ 英単語、どう?'], polite: ['英単語の復習が {n}語あります。ご一緒に いかがですか。', '{n}語が 復習の時期です。少しだけ 英単語を いかがでしょう。'], cool: ['英単語の復習が {n}語ある。やるぞ。', '{n}語、思い出す時期だ。少しでいい。'] },
   vocab_yet: { bright: ['今日の英単語は まだだね。{n}問だけ、いっしょに やってみよう?', '英単語、今日は まだだよ。{n}問なら すぐ終わるよ!'], polite: ['今日の英単語が まだのようです。{n}問だけ、ご一緒に いかがですか。', '英単語は 今日は まだです。{n}問なら すぐに終わります。'], cool: ['今日の英単語が まだだ。{n}問だけ やれ。', '英単語、{n}問だ。すぐ終わる。'] },
   vocab_done: { bright: ['{n}問 おつかれさま! {ok}問 正解だったよ。', '{n}問 やりきったね。{ok}問 正解! まちがえた語は、また あとで出すね。'], polite: ['{n}問、お疲れさまでした。{ok}問 正解です。', '{n}問を終えました。正解は {ok}問です。まちがえた語は、また あとで お出しします。'], cool: ['{n}問 終わりだ。{ok}問 正解。', '{n}問中 {ok}問 正解だ。まちがえた語は また出す。'] },
+  // v0.90(実機 FB「英単語に 取り組んでいる間、定期的に 声かけがあると うれしい」): 始めるとき / 続けて正解({n} = 続いた数)/ まちがえたとき / 半分まで来た({n} = 残り)/ 合間の ひとこと
+  vocab_start: { bright: ['{n}問、いっしょに やってみよう!', 'よし、英単語 {n}問。肩の力を抜いて いこう。', '{n}問だけだよ。わからなくても 気にしないでね。'], polite: ['{n}問、ご一緒します。', '英単語を {n}問。落ち着いて まいりましょう。', '{n}問です。迷ったら 直感で かまいません。'], cool: ['{n}問だ。始めるぞ。', '英単語 {n}問。気負うな。', '{n}問。迷ったら 直感で選べ。'] },
+  vocab_combo: { bright: ['{n}問 つづけて正解! いい調子。', 'すごい、{n}連続だよ!', '{n}問 連続で正解。のってきたね!'], polite: ['{n}問 続けて正解です。よい調子ですね。', '{n}問 連続の正解です。お見事です。', 'これで {n}問 続けて正解です。'], cool: ['{n}連続だ。悪くない。', '{n}問 続けて正解。その調子だ。', '{n}連続。集中できているな。'] },
+  vocab_miss: { bright: ['おしい! いま覚えれば 大丈夫。', 'まちがえた語ほど、あとで よく覚えてるんだよ。', 'だいじょうぶ。この語は また あとで出すね。', 'ここで 出会えて よかったね。次は 思い出せるよ。'], polite: ['惜しいです。いま確かめれば 大丈夫です。', 'まちがえた語ほど、記憶に残ります。', 'ご心配なく。この語は また後ほど お出しします。'], cool: ['気にするな。いま覚えればいい。', 'まちがえた語のほうが 残る。', 'また出す。次で取れ。'] },
+  vocab_mid: { bright: ['半分まで来たよ! あと {n}問。', 'おりかえし! のこり {n}問、この調子で。', 'あと {n}問。ここまで いいペースだよ。'], polite: ['半分まで来ました。あと {n}問です。', '折り返しです。残り {n}問、この調子で まいりましょう。'], cool: ['半分だ。あと {n}問。', '折り返した。残り {n}問だ。'] },
+  vocab_cheer: { bright: ['いいペースだね。その調子!', 'ひとつずつ、ちゃんと積み上がってるよ。', '声に出して読むと、もっと残るよ。', 'あせらなくて いいよ。じっくり いこう。'], polite: ['よいペースです。その調子で。', 'ひとつずつ、着実に積み上がっています。', '声に出して読むと、より残ります。'], cool: ['いいペースだ。続けろ。', '積み上がっている。そのままでいい。', '声に出せ。そのほうが残る。'] },
+  // v0.90(実機 FB「飲み物の アシスタントの台詞が 拡充されていない」): これまで ui-drinks / drinks.ASK に 口調ごと 1 つずつ 直書きだった文を 場面に(足した性格の口調でも 話す・言い回しが替わる)。{when} = 今日 / 今夜・{kind} = 種類の名前・{name} = 味の軸の名前
+  drink_rec: { bright: ['{when}の{kind}は、これなんて どう?', '{when}は この{kind}が 合いそうだよ。', '{kind}なら、{when}は これを おすすめしたいな。', '好みから 選んでみたよ。{when}の{kind}に どうかな。'], polite: ['{when}の{kind}は、こちらは いかがでしょう。', '{when}は、この{kind}が お好みに合いそうです。', 'お好みから 選びました。{when}の{kind}に いかがですか。'], cool: ['{when}の{kind}は これだ。', '{when}は この{kind}にしておけ。', '好みから選んだ。{when}の{kind}だ。'] },
+  drink_pref: { bright: ['{kind}は、どんな味が 好き? わかる所だけで いいよ。', '{kind}の好み、教えてほしいな。ざっくりで 大丈夫!', 'ふだん どんな{kind}を 選んでる? わかる所だけ 教えて。'], polite: ['{kind}は、どのような味が お好みですか。わかる所だけで かまいません。', '{kind}の お好みを お聞かせください。おおよそで 結構です。'], cool: ['{kind}の好みを 教えろ。わかる所だけでいい。', '{kind}は どんな味がいい。ざっくりでいい。'] },
+  drink_what: { bright: ['なにを飲んだの? 名前を教えて!', '今日の一杯は なあに? 名前から 聞かせて。', 'お、なにか飲んだんだね。なんていうの?'], polite: ['何を お飲みになりましたか。名前を お聞かせください。', '本日の一杯は 何でしょう。名前から うかがいます。'], cool: ['何を飲んだ。名前を。', '一杯の名前を 言え。'] },
+  drink_look: { bright: ['味を見る前に、どんな飲み物か ちょっと調べてみる?(とばしても いいよ)', '先に 産地や 造りを 調べておく? あとでも 大丈夫だよ。'], polite: ['味を見る前に、どんな飲み物か 調べておきますか。(とばしても かまいません)', '先に 産地や 造りを お調べしますか。後ほどでも 結構です。'], cool: ['先に 素性を調べるか。とばしてもいい。', '産地と造りを 先に見るか。あとでもいい。'] },
+  drink_axis: { bright: ['{name}は どうだった?', '{name}は どのくらい 感じた?', 'じゃあ、{name}は?'], polite: ['{name}は いかがでしたか。', '{name}は どの程度 感じましたか。', '続いて、{name}は いかがでしょう。'], cool: ['{name}は どうだ。', '{name}は どの程度だ。', '次。{name}は。'] },
+  drink_overall: { bright: ['ぜんぶ ひっくるめて、どうだった?', 'さいごに、ひとことで言うと どうだった?', 'また飲みたい? 全体の感じを 教えて。'], polite: ['全体としては いかがでしたか。', '最後に、全体の印象を お聞かせください。'], cool: ['全体では どうだ。', '最後だ。全体の評価を。'] },
+  // v0.90(実機 FB「次はこれ の 青い文は 無くし、このようなコメントは アシスタントに集約」): 次の作業について いま言えること(next.suggest の hint)を 引いて伝える
+  next_hint: { bright: ['次のことで ひとつ。「{text}」', 'ちょっと 耳より。「{text}」', 'メモを見つけたよ。「{text}」'], polite: ['ひとつ お知らせです。「{text}」', '次の作業について。「{text}」'], cool: ['ひとつ言っておく。「{text}」', '覚えておけ。「{text}」'] },
   habit_done: { bright: ['今日の習慣、ぜんぶ済んでるよ。さすが!', '習慣は ぜんぶ おしまい。今日も続いたね!'], polite: ['今日の習慣は すべて済んでいます。お見事です。'], cool: ['習慣は ぜんぶ済んだ。上出来だ。'] },
   hello_evening: { bright: ['こんばんは! 今日も あと少しだね。', 'こんばんは。午後の灯りも、ちゃんと届いてたよ。'], polite: ['こんばんは。午後の記録をまとめました。', 'お疲れさまでした。午後のぶんをお持ちします。'], cool: ['夜だ。午後のぶんを まとめた。', '午後の記録だ。'] },
   hello: {
@@ -588,7 +603,7 @@ export function learned(lines, key, tone) { const id = toneId(tone); return (Arr
 
 // ---- 性格を足す(v0.67・F24-16・ユーザー要望「性格を自分で追加・その口調のフレーズも自動で」)----
 /** 台詞の束: AI に 1 回で頼む単位(3 回に分ける・1 回の返事を 20 行ほどに)。per = 1 つの場面に頼む数 */
-export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 }, daily: { label: '日常', per: 15 } }); // daily(v0.75): 日常の ひとことを まとめて 15 個
+export const GROUPS = Object.freeze({ home: { label: 'ホーム', per: 2 }, brief: { label: '日報', per: 1 }, review: { label: 'ふり返り', per: 1 }, daily: { label: '日常', per: 15 }, side: { label: '英単語と飲み物', per: 2 } }); // side(v0.90): 英単語の合間の声かけと 飲み物の聞き方・すすめ方 // daily(v0.75): 日常の ひとことを まとめて 15 個
 /** 場面ごとの 台詞の上限(無ければ CUSTOM_PER)。日常の ひとことは 数が欲しいので多め */
 export const SCENE_CAP = Object.freeze({ chat: 100 }); // v0.78: 30 → 100
 export const capOf = (k) => SCENE_CAP[k] || CUSTOM_PER;
@@ -621,6 +636,18 @@ export const SCENES = Object.freeze({
   vocab_due: { g: 'home', when: '英単語の復習がたまっていると知らせて、いっしょに やろうと誘う', v: { n: '復習する語の数' }, need: ['n'] },
   vocab_yet: { g: 'home', when: '夕方になっても 今日の英単語が まだのとき、少しだけ やろうと誘う', v: { n: '1 回の問題の数(例: 20)' }, need: ['n'] },
   vocab_done: { g: 'home', when: '英単語の 1 回分が終わったとき、ねぎらって 正解の数を伝える', v: { n: '解いた問題の数', ok: '正解の数' }, need: ['n', 'ok'] },
+  next_hint: { g: 'home', when: '次にやる作業について、いま言える ひとこと(記録から分かったこと)を、引いて伝える', v: { text: 'その ひとことの文(例: 次の予定まで 1時間あります。「{text}」のように かぎかっこで囲む)' }, need: ['text'] },
+  vocab_start: { g: 'side', when: '英単語の 1 回分を いっしょに始めるときの、気軽な ひとこと', v: { n: '問題の数(例: 20)' }, need: ['n'] },
+  vocab_combo: { g: 'side', when: '英単語で 続けて正解したとき、ほめる', v: { n: '続けて正解した数' }, need: ['n'] },
+  vocab_miss: { g: 'side', when: '英単語で まちがえたとき、責めずに はげます(その語は また あとで出る)' },
+  vocab_mid: { g: 'side', when: '英単語の 1 回分が 半分まで来たと知らせて、はげます', v: { n: '残りの問題の数' }, need: ['n'] },
+  vocab_cheer: { g: 'side', when: '英単語を解いている合間の、短い はげまし(数字は入れない)' },
+  drink_rec: { g: 'side', when: '相手の好みから選んだ 飲み物を 1 つ すすめる(このあとに 銘柄の名前が出る。名前は 入れない)', v: { when: '「今日」か「今夜」', kind: '飲み物の種類(コーヒー・日本酒・ワイン など)' }, need: ['kind'] },
+  drink_pref: { g: 'side', when: 'その飲み物は どんな味が好みかを 尋ねる。わかる所だけでよいと添える', v: { kind: '飲み物の種類(コーヒー・日本酒・ワイン など)' }, need: ['kind'] },
+  drink_what: { g: 'side', when: '相手が飲んだものの 名前を 尋ねる' },
+  drink_look: { g: 'side', when: '味を記録する前に、どんな飲み物かを 調べておくかを 尋ねる。とばしてもよいと添える' },
+  drink_axis: { g: 'side', when: '飲んだものの 味の 1 つ(酸味・甘み など)が どうだったかを 尋ねる', v: { name: '味の名前(酸味・甘み・コク など)' }, need: ['name'] },
+  drink_overall: { g: 'side', when: '飲んだものの 全体の評価を 尋ねる' },
   quest_wait: { g: 'home', when: 'あと何分の作業で 小説の続きが届くかを知らせる', v: { n: '残りの分' }, need: ['n'] },
   art_wait: { g: 'home', when: 'あと何ピースで 絵の次の情報が開くかを知らせる', v: V_ART, need: ['n', 'label'] },
   hello_morning: { g: 'brief', when: '朝の日報の冒頭。あいさつして、昨日の記録をまとめたと伝える' },
@@ -882,7 +909,7 @@ export function removeCustom(b, id) {
 /**
  * ホームでのひとこと(状況から 1 つ・上にあるものほど優先)。
  * st = { min(実効の分), slot, open: { role: 'work' | 'drift' | 'rest' | 'other', min } | null, idleMin(作業時間帯の中で 何も記録していない分 | null), due(今日までのタスクの数), habit(plan.habitNudgeInfo | null・v0.76),
- *        quest: { need, unread, done } | null, art: { need, next, name, allDone } | null, postcard: { place } | null, idleOn(声かけの設定) }
+ *        quest: { need, unread, done } | null, art: { need, next, name, allDone } | null, postcard: { place } | null, idleOn(声かけの設定), hint: { text }(次はこれ の ひとこと・v0.90) | null }
  * 戻り値 { key, text, mood }
  */
 export function homeLine(st, tone = 'bright', seed = 0, lines = []) {
@@ -920,6 +947,7 @@ export function homeLines(st, tone = 'bright', seed = 0, lines = []) {
   if (s.habit && s.habit.name) add(s.habit.kind === 'back' ? 'habit_back' : s.habit.kind === 'done' ? 'habit_done' : 'habit_left', s.habit.kind === 'done' ? 'happy' : s.habit.kind === 'left' ? 'worry' : 'base', { name: s.habit.name });
   if (s.sleep && s.sleep.key) add(s.sleep.key, s.sleep.key === 'sleep_good' ? 'happy' : 'worry', s.sleep.vars || {}); // v0.83・F26: 睡眠の声かけ(夜か、昨夜が短かった日)
   if (s.vocab && s.vocab.key) add(s.vocab.key, 'base', s.vocab.vars || {}); // v0.85・F27: 英単語の声かけ(復習がたまった日・夕方になっても まだの日)
+  if (s.hint && s.hint.text && !s.open) add('next_hint', 'base', { text: s.hint.text }); // v0.90: 「次はこれ」について いま言えること(カードの青い文を やめて ここへ)
   if (s.quest && !s.quest.done && !(s.quest.unread > 0) && first.key !== 'working') add('quest_wait', 'base', { n: s.quest.need });
   if (s.art && !s.art.allDone && s.art.next && first.key !== 'working_art') add('art_wait', 'base', { n: s.art.next.pieces, label: s.art.next.label, kind: s.art.name || '絵' });
   if (s.due > 0) add('due', 'worry', { n: s.due });

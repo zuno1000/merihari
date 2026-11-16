@@ -101,6 +101,9 @@ function avatar(mood, size, cid = B().cur) {
 }
 
 // ---- いまの状況 ----
+/** 「次はこれ」について いま言えること(v0.90・ui-today の nextCard が 描くたびに 渡す。記録中は null)。ホームの吹き出しの話題の 1 つになる */
+let homeHint = null;
+export const setHomeHint = (h) => { homeHint = h && h.text ? h : null; };
 function homeState() {
   const d = store.state.data, s = S(), n = now();
   const o = log.openEntry(d.entries);
@@ -121,7 +124,7 @@ function homeState() {
   // v0.76: 習慣の声かけ(昨日ひと休み / ぜんぶ済み / 夜に まだ)は ここから アシスタントが言う(ホームの「今日がんばること」の 1 行は やめた)
   const hs = plan.goals(d.tasks, d.entries, n.date, n.min, { chunk: plan.chunkOf(s) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && d.tasks[g.taskId]).map((g) => ({ task: d.tasks[g.taskId], stats: plan.habitStats(d.tasks[g.taskId], d.entries, n.date) }));
   const habit = hs.length ? plan.habitNudgeInfo(hs, n.min, windowFor(s, n.date)?.end ?? null) : null;
-  return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle, sleep: sleepTopic(), vocab: vocabTopic() };
+  return { min: n.min, open, idleMin, habit, due: plan.dueTasks(d.tasks, n.date, d.entries).count, quest: q || null, art: a || null, postcard: a && a.postcard ? { place: a.postcard } : null, idleOn: B().idle, sleep: sleepTopic(), vocab: vocabTopic(), hint: homeHint };
 }
 
 /** 吹き出し(顔+名前+1 行)。ブリーフィング(日報)の各ページの先頭にも使う。止めていれば null */
@@ -431,7 +434,12 @@ export function dayGuide(o) {
   }, { label: 'この日のことを もっと聞く', size: 56 });
 }
 /** アシスタントの 1 行(止めていれば '')。トーストなどに */
-export const buddyLine = (key, vars = {}) => (buddyOn() ? buddy.say(key, V(), vars, seed(), ex(key)) : '');
+export const buddyLine = (key, vars = {}, bump = 0) => (buddyOn() ? buddy.say(key, V(), vars, seed() + bump, ex(key)) : ''); // bump(v0.90): 同じ場面を 続けて言うときに 言い回しを進める
+/** 顔つきの吹き出し(v0.90・実機 FB「英単語の ふり返りと 飲み物でも アイコンを出して 吹き出しの形に」): できあいの文 text を そのまま言う。止めていれば null */
+export function buddyBubble(text, mood = 'base', size = 40) {
+  if (!buddyOn() || !text) return null;
+  return el('div.bd-say', [avatar(mood, size), el('div.bd-bubble', [el('span.bd-name', B().name), el('span.bd-text', text)])]);
+}
 
 /**
  * 日報の「おすすめ」のページ(ブリーフィングの 3 ページ目): 気づきの吹き出し → 天気・作業用 BGM・記事 を、時間帯で順と数を変えて出す
@@ -485,7 +493,7 @@ export function recoPage(slot, redraw) {
 export function buddySummary() { const b = B(); return b.enabled ? `${b.name}・${buddy.toneLabel(b, b.tone)}` : '使わない'; }
 
 // ---- 性格を足す(v0.67・F24-16): 名前・説明・土台 → 3 つの束(ホーム / 日報 / ふり返り)ごとに AI に台詞を頼み、返事を検査して その性格の台詞にする ----
-const SAMPLE = Object.freeze({ n: 3, min: 30, place: 'ベルゲン', label: '作者', kind: '絵', text: 'よい一日', name: '午前', pct: 60, avg: '3時間', diff: '40分', day: '月', best: '2時間', date: '11/3' });
+const SAMPLE = Object.freeze({ when: '今夜', ok: 2, time: '23:30', last: '5時間', n: 3, min: 30, place: 'ベルゲン', label: '作者', kind: '絵', text: 'よい一日', name: '午前', pct: 60, avg: '3時間', diff: '40分', day: '月', best: '2時間', date: '11/3' });
 const sample = (s) => s.replace(/\{(\w+)\}/g, (_, k) => (SAMPLE[k] != null ? String(SAMPLE[k]) : ''));
 
 /** 入力欄の下の「◯ / ◯ 字」(v0.77・実機 FB「上限を超えた分が 黙って削られる」): 打つたびに数え、上限に届いたら 色を変える */

@@ -121,6 +121,10 @@ export function counts(recs, dk, now) {
 /** 学習の種類(v0.87・実機 FB「取り組めるのは 復習の単語だけ?」→ 自分で選べるように): おまかせ / 新しい語 / 復習 / マイ単語 / にがて */
 export const MODES = Object.freeze(['auto', 'new', 'review', 'my', 'weak']);
 export const MODE_LABEL = Object.freeze({ auto: 'おまかせ', new: '新しい語', review: '復習', my: 'マイ単語', weak: 'にがて' });
+/** 種類を選ぶシートの 説明(v0.90) */
+export const MODE_HINT = Object.freeze({ auto: '復習と 新しい語を ほどよく まぜる', new: 'まだ出ていない語', review: 'いま 思い出す時期の語', my: '自分で足した語と ☆ の語', weak: 'よく まちがえる語' });
+/** 続けて正解したとき、アシスタントが ほめる数(v0.90) */
+export const COMBO_AT = Object.freeze([3, 5, 7, 10, 15, 20, 25, 30]);
 /** にがて: 出たことがあり まだ覚えていない語のうち、ミスが 2 回以上か 直前にまちがえたもの */
 const isWeak = (r) => seenRec(r) && r.s[0] < MASTER_BOX && (r.s[3] >= 2 || r.s[4] >= 1);
 /** いま出ている語の札: new(新しい語)/ my(まだ出ていないマイ単語)/ weak(にがて)/ review(復習) */
