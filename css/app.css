@@ -1979,3 +1979,11 @@ button.card.vc-recap{display:flex;flex-direction:column;gap:6px;width:100%;text-
 .bgm-x,.bgm-mark,.feed-x,.feed-star,.feed-read{width:36px;height:36px}
 button.vc-poschip{position:relative}
 button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
+/* v0.93.1(実機 FB「コーヒーの銘柄の おすすめで 文字が 枠を はみ出す」): 銘柄の名前は 長い(60 字まで)ので、ホームのタイルは 2 行までで 切る・ほかの所は 枠の中で 折り返す */
+.qtile>*{max-width:100%}
+.qtile .qt-v{overflow:hidden;text-overflow:ellipsis}
+.qtile.dk .qt-v{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-size:12px;line-height:1.3;padding:0 2px}
+.dk-rec,.dk-rec>*,.dk-about,.dk-again,.bd-drink,.bd-drink>*{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.dk-recbox{min-width:0;overflow:hidden}
+.dk-others .chip{overflow-wrap:anywhere}
+.dk-acts{flex-wrap:wrap}
