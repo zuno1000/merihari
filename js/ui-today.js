@@ -11,7 +11,6 @@ import { displayColor } from './palette.js';
 import * as google from './google.js';
 import * as sync from './sync.js';
 import * as money from './money.js';
-import * as kiai from './kiai.js';
 import * as calendar from './calendar.js';
 import * as weather from './weather.js';
 import { bgmStrip, bgmTile } from './ui-bgm.js'; // v0.71: ♪ は「いま知りたいこと」のタイルに
@@ -235,7 +234,7 @@ function stopSheet(o, rerender) {
     const steps = [0, 5, 10, 15, 30].filter((k) => k === 0 || k < all);
     body.replaceChildren(...[
       bubble('work_done', { min }, 'happy'),
-      el('h2.pm-fin-h', 'おつかれさま'),
+      el('h2.pm-fin-h', buddyOn() ? '作業の記録' : 'おつかれさま'), // v0.93: ねぎらいは 上の吹き出しが言う
       el('p.pm-fin-name', name),
       el('div.pm-tiles', [tile('作業', fmtMinJa(min)), tile('時間', `${o.start}–${mm(endMin % 1440)}`)]),
       steps.length > 1 ? el('h3.help-h', 'どこまで やった?') : null,
@@ -288,7 +287,7 @@ export function finalizePending() {
   // 毎週 X 時間型の自動送り(v0.9): 週の終わりを過ぎていたら残り見積を戻し「先週 x/yh」を残す
   const rw = plan.rollWeekly(d.tasks, d.entries, today, LCTX);
   if (JSON.stringify(rw.tasks) !== JSON.stringify(d.tasks)) { d.tasks = rw.tasks; changed = true; }
-  for (const r of rw.rolled) toast(`${d.tasks[r.taskId]?.name || ''}: 先週${fmtMin(r.doneMin)} / ${r.hours}h。今週分に戻しました`);
+  for (const r of rw.rolled) toast(`${d.tasks[r.taskId]?.name || ''}: 先週${fmtMin(r.doneMin)} / ${r.hours}時間。今週分に戻しました`);
   // 繰り返す期限つきタスク(v0.17・F5-9): 済んで期限を過ぎたものは翌週の分として戻す
   const rr = plan.rollRecurring(d.tasks, today, LCTX);
   if (rr.rolled.length) { d.tasks = rr.tasks; changed = true; for (const id of rr.rolled) toast(`${d.tasks[id]?.name || ''}: 来週の分(${fmtMD(d.tasks[id].deadline.slice(0, 10))}まで)が出ました`); }
@@ -466,7 +465,7 @@ export function weatherCard(r, d, state) {
       d ? el('span.wx-label', d.label || '') : null,
     ]),
     chips.length ? el('div.wxchips', chips) : null,
-    d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', 'あす'), weatherIcon(weather.umbrella(d.tomorrow) ? 'umbrella' : weather.iconKey(d.tomorrow.code), 'wx-sm'), /* v0.47.1: あすも傘が要れば傘の絵 */ el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
+    d && d.tomorrow ? el('div.wx-tmr', [el('span.wx-tmr-k', '明日'), weatherIcon(weather.umbrella(d.tomorrow) ? 'umbrella' : weather.iconKey(d.tomorrow.code), 'wx-sm'), /* v0.47.1: あすも傘が要れば傘の絵 */ el('span.wx-tmr-t', [d.tomorrow.label || '', d.tomorrow.tmax != null || d.tomorrow.tmin != null ? `${d.tomorrow.tmax != null ? d.tomorrow.tmax : '–'}° / ${d.tomorrow.tmin != null ? d.tomorrow.tmin : '–'}°` : '', d.tomorrow.pop != null ? `降水 ${d.tomorrow.pop}%` : '', weather.umbrella(d.tomorrow) === 'umbrella' ? '傘' : weather.umbrella(d.tomorrow) === 'folding' ? '折りたたみ傘' : ''].filter(Boolean).join('・'))]) : null, // v0.29.2: 翌日の予報(小さく)。v0.47: 傘が要れば一言
   ]);
 }
 
@@ -514,12 +513,11 @@ export function renderNow(view, ctx, dateArg = null) {
     //   → ③いま知りたいこと(電車・天気・BGM・記事 のタイル)→ ④小説と図録の進み・日報 / ふり返る / 話す。円と内訳・キャッチアップの折りたたみ・BGM の 1 行は 今日のホームから外した(過去の日は これまでどおり 円と内訳)
     ...(isToday ? [
       nextCard(e, hero, rerender, ctx),
-      FEATURES.KIAI ? kiaiBox(v, rerender, isToday) : null, // v0.25・F13: 気合(v0.28 で廃止・FEATURES.KIAI で復活)
       focusBox(e, rerender, ctx), // v0.73: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
       quickRow(ctx, rerender),
       stripRow([questStrip(), artStrip()]), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(横に並ぶ・無効なら無し)
       buddyActs(ctx),
-      S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, 'ブリーフィングをもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(いまの時点で作り直す)
+      S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, '日報をもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(いまの時点で作り直す)
     ] : [
       bgmStrip(date, rerender), breakdown(v, rerender, { isToday, ctx }), // 過去の日: その日に流した BGM の 1 行+円と内訳
     ]),
@@ -691,100 +689,6 @@ function homeKey(n) {
   return (o ? 'rec:' + o.id : 'idle') + (store.state.local.pomo ? ':pm' : '') + ':' + Math.floor(n.min / 5); // v0.73: ポモドーロの始まり / 片づけ でも描き直す
 }
 
-/**
- * 気合(v0.25・F13): 「やる気がいることに、気合を入れて取りかかる(取りかかった)」瞬間の印をワンタップで残す。
- * - 入力は無し。押した瞬間に保存してトースト。記録中ならそのカテゴリを添える(「◯◯ を続ける」)。
- * - 記録中でなければ、そのまま記録のシート(いまから)を開いて「何を始める?」(気合 → 取りかかる の流れ。閉じても印は残る)。
- * - 同じ分に 2 回は 1 回(二重タップ・?kiai の二度開き)。?kiai=1(main.js)からも同じ処理。
- */
-export function pressKiai({ rerender = null, openSheet = true } = {}) {
-  const n = effNow();
-  const o = log.openEntry(E());
-  // v0.25.1: タイムラインの記録は始めない。押した瞬間に時刻だけで保存し、タグ(記録中ならそのカテゴリが既定)とメモは任意のシートで
-  const r = kiai.press(store.state.data.kiai, { date: n.date, min: n.min, categoryId: o ? o.categoryId : null }, LCTX);
-  store.state.data.kiai = r.kiai;
-  if (!r.dup) { store.save(); sync.autoSync(); }
-  const count = kiai.listOf(r.kiai, n.date).length;
-  toast(r.dup ? '気合、入ってます' : `気合、入った(今日${count}回目)`);
-  litKiai();
-  if (rerender) rerender();
-  if (openSheet) kiaiTagSheet(r.rec, rerender || (() => {}), { fresh: !r.dup });
-  return r;
-}
-/** 押した直後のきらめき(1.2 秒)。描き直しても消えないよう時刻で持つ */
-let kiaiLitUntil = 0;
-function litKiai() { kiaiLitUntil = performance.now() + 1200; }
-const KIAI_BOLT = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })]);
-/**
- * ホームの気合のカード(v0.25.1): 上=大きな押し場(丸い稲妻+「気合を入れる」+ひと言)。下=今日の回数と、1 回ごとの小さな札(時刻+タグ)。
- * 札をタップで タグ・メモ を直す。回数をタップで一覧。前の日は下の段だけ(無ければ出さない)。
- */
-function kiaiBox(n, rerender, isToday) {
-  const list = kiai.listOf(store.state.data.kiai, n.date);
-  if (!isToday && !list.length) return null;
-  const lit = isToday && performance.now() < kiaiLitUntil;
-  const sub = list.length ? `${['', 'ひとつ目。', 'ふたつ目。', 'みっつ目。'][Math.min(3, list.length)] || ''}いい調子` : 'やる気がいることに取りかかるとき、押す';
-  const hit = isToday ? el('button.kiai-hit', { type: 'button', 'aria-label': '気合を入れる', onclick: () => pressKiai({ rerender }) }, [
-    el('span.kiai-ico', KIAI_BOLT()),
-    el('span.kiai-txt', [el('b', lit ? '気合、入った' : '気合を入れる'), el('span', lit ? 'タグとメモは任意' : sub)]),
-  ]) : null;
-  const pill = (r) => el('button.kiai-pill', { type: 'button', 'aria-label': `${r.time} の気合を直す`, onclick: () => kiaiTagSheet(r, rerender, { fresh: false }) }, [
-    el('time', r.time.replace(/^0/, '')),
-    r.categoryId ? el('i.dot', { style: { background: catOf(r.categoryId).color } }) : null,
-    el('span', r.categoryId ? catOf(r.categoryId).name : (r.note ? r.note : 'タグなし')),
-  ].filter(Boolean));
-  const pills = el('div.kiai-pills', list.map(pill));
-  const foot = list.length ? el('div.kiai-foot', [
-    el('button.kiai-count', { type: 'button', 'aria-label': `${isToday ? '今日' : 'この日'}の気合の一覧`, onclick: () => kiaiSheet(n, rerender) }, [el('b', String(list.length)), el('span', `回${isToday ? '' : '(この日)'}`)]),
-    pills,
-  ]) : null;
-  if (isToday && list.length > 2) setTimeout(() => { pills.scrollLeft = pills.scrollWidth; }, 0); // いちばん新しい札が見えるように右端へ
-  const card = el('section.kiai-card', { class: `kiai-card${lit ? ' lit' : ''}${isToday ? '' : ' past'}` }, [hit, foot].filter(Boolean));
-  if (lit) setTimeout(() => { if (card.isConnected) { card.classList.remove('lit'); const b = card.querySelector('.kiai-txt b'), s = card.querySelector('.kiai-txt span'); if (b) b.textContent = '気合を入れる'; if (s) s.textContent = kiai.listOf(store.state.data.kiai, n.date).length ? 'いい調子' : 'やる気がいることに取りかかるとき、押す'; } }, Math.max(0, kiaiLitUntil - performance.now()));
-  return card;
-}
-/**
- * タグとメモのシート(v0.25.1): 「何に気合?」。カテゴリのチップをタップ=タグを付けて閉じる(1 タップ)。メモは任意(「保存」)。
- * fresh=押した直後(閉じても印は残る)。既存の札からは「消す」も。
- */
-function kiaiTagSheet(rec0, rerender, { fresh = false } = {}) {
-  sheet((close) => {
-    const rec = store.state.data.kiai[rec0.id] || rec0;
-    let cid = rec.categoryId || null;
-    const noteIn = el('input.text.note-in', { type: 'text', placeholder: 'メモ', maxlength: 200, autocomplete: 'off', 'aria-label': 'メモ', value: rec.note || '' });
-    const save = (patch) => { store.state.data.kiai = kiai.update(store.state.data.kiai, rec.id, patch, LCTX); store.save(); sync.autoSync(); close(); rerender(); };
-    const chips = el('div.chips', { role: 'group', 'aria-label': 'タグ' }, cats().map((c) => el('button.chip', { type: 'button', class: `chip cat${c.id === cid ? ' on' : ''}`, 'aria-pressed': c.id === cid ? 'true' : 'false', style: { '--c': c.color },
-      onclick: () => { cid = c.id === cid ? null : c.id; save({ categoryId: cid, note: noteIn.value.trim() }); toast(cid ? `${c.name} に気合` : 'タグを外しました'); } },
-      [el('span.dot', { style: { background: c.color }, 'aria-hidden': 'true' }), c.name])));
-    return [
-      el('h2', fresh ? '何に気合?' : `${rec.time.replace(/^0/, '')} の気合`),
-      el('p.muted.small', fresh ? `${rec.time.replace(/^0/, '')} に入れた気合。タグもメモも任意です(閉じても残ります)。` : 'タグをタップで付け替え。もう一度タップで外す。'),
-      el('span.chips-cap', 'タグ'),
-      chips,
-      el('div.row.field', [el('span.label', 'メモ'), noteIn]),
-      el('div.row', [
-        fresh ? null : el('button.btn.ghost', { type: 'button', onclick: () => { store.state.data.kiai = kiai.remove(store.state.data.kiai, rec.id, LCTX); store.save(); sync.autoSync(); close(); toast('消しました'); rerender(); } }, '消す'),
-        el('span.grow'),
-        el('button.btn.primary', { type: 'button', onclick: () => save({ note: noteIn.value.trim() }) }, fresh ? 'これでOK' : '保存'),
-      ].filter(Boolean)),
-    ];
-  });
-}
-/** 一覧(v0.25.1): その日の気合を 時刻・タグ・メモ で。行をタップで直す */
-function kiaiSheet(n, rerender) {
-  sheet((close) => {
-    const list = kiai.listOf(store.state.data.kiai, n.date);
-    return [
-      el('h2', `${n.date === effNow().date ? '今日' : md(n.date)}の気合 ${list.length}回`),
-      el('div.list.kiai-list', list.map((r) => el('button.krow', { type: 'button', onclick: () => { close(); kiaiTagSheet(r, rerender, { fresh: false }); } }, [
-        el('time', r.time.replace(/^0/, '')),
-        el('span.ktag', r.categoryId ? [el('i.dot', { style: { background: catOf(r.categoryId).color } }), catOf(r.categoryId).name] : [el('span.muted', 'タグなし')]),
-        el('span.knote', r.note || ''),
-        el('span.chev', { 'aria-hidden': 'true' }, '›'),
-      ]))),
-    ];
-  });
-}
 
 /** 記録中のカード: カテゴリ色・名前・経過(タイマー)・「別のことへ」「終わる」。タップで直す */
 function recordingCard(o, n, rerender) {
@@ -846,7 +750,7 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
     const can = (from != null && n.min - from >= 5) || (!isToday && ctx);
     const onclick = !can ? null : isToday ? () => entrySheet({ date: n.date, start: from, end: n.min, title: '何をしていた?' }, rerender) : () => ctx.go('timeline', n.date);
     list.push(el(can ? 'button.crow.unlogged' : 'div.crow.muted', { type: can ? 'button' : null, onclick }, [
-      el('i.dot', { style: { background: 'var(--track)' } }), el('span.cname', can ? [`未記録`, el('span.ask', isToday ? `${mm(from % 1440)} から何をしていた? ›` : 'タイムラインで埋める ›')] : '未記録'), el('span.cval', fmtMin(un.unloggedMin)),
+      el('i.dot', { style: { background: 'var(--track)' } }), el('span.cname', can ? [`未記録`, el('span.ask', isToday ? `${mm(from % 1440)} から何をしていた? ›` : 'カレンダーで埋める ›')] : '未記録'), el('span.cval', fmtMin(un.unloggedMin)),
       el('span.cbar', el('i', { style: { width: `${Math.min(100, Math.round((un.unloggedMin / max) * 100))}%`, background: 'var(--line)' } })),
     ]));
   }
@@ -867,7 +771,7 @@ function breakdown(n, rerender, { isToday = true, ctx = null } = {}) {
   return el('section.breakdown', [
     wrap,
     goalLines.length ? el('div.goal-lines', goalLines) : null,
-    list.length ? el('div.crows', list) : el('p.muted.small.center', '記録は下の ＋ から。タイムラインの未記録をタップしても足せます。'),
+    list.length ? el('div.crows', list) : el('p.muted.small.center', 'カレンダーのタブの ＋ か、未記録の所をタップして 足せます。'),
   ]);
 }
 

@@ -109,7 +109,7 @@ export function advice(st, nowMin) {
 
 /** ホームのタイルの文字 { v(大きい字), k(小さい字), hot(寝る時刻が近い / 昨夜が短い) }。純関数 */
 export function tileText(st, adv, nowMin) {
-  const h = (m) => { const x = Math.round(m); return `${Math.floor(x / 60)}h${x % 60 ? String(x % 60).padStart(2, '0') : ''}`; };
+  const h = (m) => { const x = Math.round(m); return `${Math.floor(x / 60)}時間${x % 60 ? `${x % 60}分` : ''}`; };
   if (adv.kind === 'none') return { v: '睡眠', k: '記録で 目安', hot: false };
   const evening = nowMin >= 1080;
   if (evening) return { v: `${adv.bedClock} まで`, k: adv.leftMin > 0 ? `寝るまで あと${fmtMinJa(adv.leftMin)}` : '寝る時刻を過ぎています', hot: adv.soon };

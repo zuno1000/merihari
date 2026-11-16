@@ -442,7 +442,6 @@ export function autoSyncOnGesture() {
   syncDrive({ interactive: true }).then((r) => say(r, true)).catch((e) => { console.warn('auto sync', e); toast(`同期できませんでした: ${e.message}`); });
   return true;
 }
-export const gesturePendingGet = () => gesturePending;
 
 /** 全端末のデータ消去(世代 resetAt を上げてから同期し、最後にこの端末を消す) */
 export async function resetEverywhere() {

@@ -25,7 +25,6 @@ function tx(mode, fn) {
 export const putPhoto = (id, blob) => tx('readwrite', (st) => st.put(blob, id));
 export const getPhoto = (id) => tx('readonly', (st) => st.get(id)).then((b) => (b instanceof Blob ? b : null)).catch(() => null);
 export const delPhoto = (id) => tx('readwrite', (st) => st.delete(id)).catch(() => {});
-export const countPhotos = () => tx('readonly', (st) => st.count()).catch(() => 0);
 /** ファイル(画像)を縮小した JPEG の Blob に。向きはブラウザの createImageBitmap(imageOrientation: from-image)に任せる */
 export async function shrink(file, maxEdge = MAX_EDGE, quality = QUALITY) {
   if (!file || !/^image\//.test(file.type || '')) throw new Error('画像を選んでください');

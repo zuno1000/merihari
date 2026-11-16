@@ -2,10 +2,9 @@
 // v0.15.1: 上の切替で 今日 / 7日 / 30日 / すべて。ホームに今日の内訳があるので、ホームからは「7日」で開く(昨日の未読があれば昨日)。
 // 今日: 一言 → 1日の円 → 作業の合計(先週比)→ ことば → くわしく。期間: 一言 → 内訳の円(記録した時間の割合)→ カテゴリ別の棒 → 推移(日/週)→ 目安のふり返り。
 // 図の約束(dataviz): 細いマーク・4px の丸いデータ端・2px の地色の隙間・凡例は2系列以上で必ず・文字は系列色を着ない・表の双子を持つ。
-import { lead } from './ui-buddy.js'; // v0.64・F24-13
+import { lead, bubble } from './ui-buddy.js'; // v0.64・F24-13
 import * as diaryMod from './diary.js';
 import * as planMod from './plan.js';
-import * as kiaiMod from './kiai.js';
 import { el, svg, sheet, toast } from './ui.js';
 import * as store from './store.js';
 import * as log from './log.js';
@@ -87,12 +86,11 @@ function dayView(date, today, nowMin, reopen, close = () => {}) {
   const lead = head;
   return [
     el('div.rep-head', [el('h2', title), r.finalizedAt ? null : el('span.muted.small', isToday ? 'いまの時点' : '未確定')]),
-    el('p.rep-lead', lead),
+    (fb.judged && head && bubble('review_head', { text: String(head).replace(/[。.]$/, '') }, 'happy')) || el('p.rep-lead', lead), // v0.93: 判定の ひとことは アシスタントが言う(止めていれば これまでの見出し)
     sub ? el('p.rep-sub', sub) : null,
     glance(r),
     pieToggle((byKind) => pieFigure(d.entries, date, windowFor(d.settings, date), nowMin, r, { byKind })),
     heroFigure(r, baseWork),
-    kiaiBox(date), // v0.25.1・F13-4: 気合(時刻・タグ・メモ。押した日だけ)
     planFigure(date, nowMin, r), // v0.23・F12-4: 予定を置いた日だけ
     feedbackBox(fb, lead === r.positive[0]),
     diaryExcerptBox(date, { go: (tab, arg) => { close(); hooks.go?.(tab, arg); } }, { dayDone: !!r.finalizedAt || !isToday || (windowFor(d.settings, date) ? nowMin >= windowFor(d.settings, date).end - 120 : true) }), // v0.18: その日の日記の抜粋
@@ -160,7 +158,6 @@ function periodView(range, date, nowMin) {
     el('p.rep-lead', lead),
     rows.length ? pieToggle((byKind) => shareDonut(byKind ? kindRows(ps.byKind) : rows, ps.loggedMin)) : null, // v0.89: 種別は 記録ごとの数え方を反映
     cmp,
-    kiaiPeriod(from, to), // v0.25・F13
     mood,
     rows.length ? catBars(rows, ps.loggedDays) : null,
     rows.length ? trendFigure(trendItems, range === 'all' && ps.days > 42 ? '週ごとの推移' : `${ps.days}日の推移`) : null,
@@ -324,25 +321,6 @@ function deltaText(cur, base, upGood, label = '先週平均比') {
 function delta(cur, base, upGood) {
   if (base == null) return el('span.kpi-delta.muted', '先週の記録なし');
   return deltaText(cur, base, upGood);
-}
-/** 気合(v0.25.1・F13-4): その日の気合を 時刻・タグ・メモ の行で。押していない日は出さない(責めない) */
-function kiaiBox(date) {
-  const list = kiaiMod.listOf(store.state.data.kiai, date);
-  if (!list.length) return null;
-  const row = (r) => el('div.krow', [
-    el('time', r.time.replace(/^0/, '')),
-    el('span.ktag', r.categoryId ? [el('i.dot', { style: { background: displayColor(catOf(r.categoryId).color) } }), catOf(r.categoryId).name] : [el('span.muted', 'タグなし')]),
-    el('span.knote', r.note || ''),
-  ]);
-  return el('section.group.kiai-rep', [el('h2', `気合 ${list.length}回`), el('div.card.kiai-list', list.map(row))]);
-}
-/** 期間の気合(v0.25.1): 回数・押した日数・いちばん多かった日と、タグごとの回数の札。無ければ出さない */
-function kiaiPeriod(from, to) {
-  const sm = kiaiMod.summarize(store.state.data.kiai, from, to);
-  if (!sm.count) return null;
-  const lead = `${sm.count}回(${sm.days}日)${sm.best && sm.best.count >= 2 ? `・いちばん多かった日は${fmtMD(sm.best.date, true)}の${sm.best.count}回` : ''}`;
-  const pills = sm.tags.map((t) => el('span.kiai-pill', [t.id === 'none' ? null : el('i.dot', { style: { background: displayColor(catOf(t.id).color) } }), el('span', t.id === 'none' ? 'タグなし' : catOf(t.id).name), el('b', String(t.count))].filter(Boolean)));
-  return el('section.group.kiai-rep', [el('h2', '気合'), el('div.card', [el('p.small.plan-lead', lead), el('div.kiai-pills.wrap', pills)])]);
 }
 /**
  * パッと見のタイル(v0.24・v0.26.1 設定で選べる・F3-13): settings.tiles('kind:id' / 'cat:id'・選んだ順・null=既定 store.defaultTiles)ごとに、その日の合計(分)。

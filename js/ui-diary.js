@@ -60,8 +60,6 @@ export function scalePicker(key, value, onpick) {
   node.append(el('span.sc-name', sc.label), dots, word);
   return node;
 }
-/** v0.18〜v0.25 の気分の列(互換のために残す。scalePicker('mood') と同じ) */
-export function moodPicker(value, onpick) { return scalePicker('mood', value, onpick); }
 
 /** 自動で伸びる textarea(入力のたびに高さを合わせる)。rows=1から(v0.20: 2行ぶんの空白が「謎の改行」に見えた) */
 function growArea(value, placeholder, oninput) {
@@ -208,7 +206,7 @@ function reflectSheet(o, onClose) {
       { name: '気分', nodes: () => [bubble('wz_scales', {}, 'base'), el('section.card.dcard', el('div.scales', diary.SCALE_KEYS.map((k) => scalePicker(k, draft[k] ?? null, (v) => { draft[k] = v; queue(); }))))] },
       { name: 'よかったこと', nodes: () => { const ta = area('good', 'ひとつだけでも'); return [bubble('diary_ask', {}, 'happy'), el('section.card.dcard', ta), hints('good', fb.good, ta)]; } },
       { name: 'ひっかかったこと', nodes: () => { const ta = area('hard', '気づき。なければ空でいい'); return [bubble('wz_hard', {}, 'base'), el('section.card.dcard', ta), hints('hard', [...(fb.lookBack || []), fb.better], ta)]; } },
-      { name: 'あした', nodes: () => {
+      { name: '明日', nodes: () => {
         const ta = area('tomorrow', 'ひとつだけ'), note = area('note', '自由に');
         const aiTa = aiOn || (draft.ai && draft.ai.trim()) ? area('ai', aiOn ? '「返事を貼り付け」で入ります' : '') : null;
         return [bubble('wz_tomorrow', {}, 'base'),

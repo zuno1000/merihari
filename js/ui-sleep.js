@@ -6,7 +6,7 @@ import * as sleep from './sleep.js';
 import { FEATURES } from './features.js';
 import { autoSync } from './sync.js';
 import { dateKey, minuteOfDay, effectiveDay, fmtMinJa, fmtMD } from './time.js';
-import { buddyLine, buddyOn, buddyName } from './ui-buddy.js';
+import { buddyLine, buddyOn, buddyName, buddyBubble } from './ui-buddy.js';
 
 const S = () => store.state.data.settings;
 const C = () => sleep.normalizeSleep(S().sleep);
@@ -35,7 +35,7 @@ export function sleepTile() {
   return el('button.qtile.sl', { type: 'button', class: `qtile sl${t.hot ? ' hot' : ''}`, 'aria-label': `睡眠(${t.v}・${t.k})`, onclick: () => sleepSheet() }, [el('span.qt-icowrap', MOON('qt-ico')), el('span.qt-v', t.v), el('span.qt-k', t.k)]);
 }
 
-const hLabel = (m) => { const x = Math.round(m); return `${Math.floor(x / 60)}h${x % 60 ? String(x % 60).padStart(2, '0') : ''}`; };
+const hLabel = (m) => { const x = Math.round(m); return `${Math.floor(x / 60)}時間${x % 60 ? `${x % 60}分` : ''}`; }; // v0.93: 「7h05」→「7時間5分」
 const W = 340, PAD_L = 34, PAD_R = 6;
 /** 軸の線と 目盛りの文字 */
 const gridLine = (y, label, cls = 'sl-grid') => [svg('line', { x1: PAD_L, x2: W - PAD_R, y1: y, y2: y, class: cls }), svg('text', { x: PAD_L - 5, y: y + 3.5, class: 'sl-ax', 'text-anchor': 'end' }, label)];
@@ -109,7 +109,7 @@ export function sleepSheet() {
         : `${fmtMD(pd.date, true)}の朝まで: 記録なし${pd.napMin ? `(短い眠り ${fmtMinJa(pd.napMin)})` : ''}`) : '棒をタップすると、その夜の中身が出ます。';
       const recN = x.list.filter((d) => d.min != null).length;
       body.append(...[
-        line ? el('div.sl-say', [el('span.bd-name', buddyName()), el('p', line)]) : null,
+        line ? buddyBubble(line, 'base', 44) : null, // v0.93: 名前だけの箱を やめて 顔つきの吹き出しに
         el('p.sl-fact', { class: `sl-fact${line ? ' muted small' : ''}` }, x.adv.text),
         el('div.sl-tiles', [
           tile('昨夜', st.last ? hLabel(st.last.min) : '–', st.last ? `${sleep.clock(st.last.bed)}〜${sleep.clock(st.last.wake)}` : '記録なし'),

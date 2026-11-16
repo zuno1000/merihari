@@ -10,7 +10,7 @@ import * as sync from './sync.js';
 import * as passkey from './passkey.js';
 import { toast, el } from './ui.js';
 import * as ui from './ui.js';
-import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton, uiBusy, pressKiai } from './ui-today.js';
+import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton, uiBusy } from './ui-today.js';
 import * as kiai from './kiai.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
 import { renderSettings, exportJSONFile } from './ui-settings.js';
@@ -41,7 +41,7 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.92.0';
+export const APP_VERSION = '0.93.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -139,13 +139,12 @@ function handleParams() {
   if (![...q.keys()].length) return false;
   history.replaceState(null, '', location.pathname);
   // v0.24.1: ?ctx=transit|home(v0.3 の外出判定用)は v0.15 の方針転換で使われなくなったので外した
-  const l = q.get('log'), k = q.has('kiai');
-  if (!l && !k) return false;
+  const l = q.get('log');
+  if (!l) return false;
   // v0.25(レビュー B-5): 外部サイトのリンクから ?log=stop を踏まされて記録が止まらないように。ショートカット・ブックマークからは referrer が空
   let ref = null; try { ref = document.referrer ? new URL(document.referrer).origin : null; } catch { ref = null; }
   if (ref && ref !== location.origin) { toast('外部のリンクからの記録は受け付けません'); return false; }
   if (!store.state.data.meta.setupAt) { toast('先に設定を済ませてください'); return false; }
-  if (k) { if (!FEATURES.KIAI) { toast('気合(?kiai=1)は v0.28 で廃止しました'); return false; } pressKiai({ openSheet: true, rerender: () => redraw() }); return true; } // 起動と同時に「気合」(F13)。シートは body に付くので、このあとの go() で消えない。v0.28: FEATURES.KIAI で廃止
   if (l === 'stop') { stopRecording(); return true; }
   const c = store.state.data.settings.categories.find((x) => x.id === l || x.name === l);
   if (!c) { toast(`カテゴリ「${l}」がありません`); return false; }

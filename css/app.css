@@ -1,5 +1,5 @@
-:root{--bg:#f6f7f9;--fg:#222;--muted:#6b7080;--line:#e6e8ec;--card:#fff;--accent:#2f6fc0;--accent-bg:#e4eefb;--danger:#c53030;--danger-bg:#fdeaea;--shadow:none;--radius:14px}
-@media (prefers-color-scheme:dark){:root{--bg:#161718;--fg:#ecebe6;--muted:#a0a3ab;--line:#2c2e32;--card:#1f2124;--accent:#7fb0e8;--accent-bg:#1c2a3a;--danger:#fc8181;--danger-bg:#3a1c1c;--shadow:none}}
+:root{--on-accent:#fff;--bg:#f6f7f9;--fg:#222;--muted:#6b7080;--line:#e6e8ec;--card:#fff;--accent:#2f6fc0;--accent-bg:#e4eefb;--danger:#c53030;--danger-bg:#fdeaea;--shadow:none;--radius:14px}
+@media (prefers-color-scheme:dark){:root{--on-accent:#161718;--bg:#161718;--fg:#ecebe6;--muted:#a0a3ab;--line:#2c2e32;--card:#1f2124;--accent:#7fb0e8;--accent-bg:#1c2a3a;--danger:#fc8181;--danger-bg:#3a1c1c;--shadow:none}}
 *{box-sizing:border-box;touch-action:manipulation}
 [hidden]{display:none !important}
 html{-webkit-text-size-adjust:100%}
@@ -52,7 +52,7 @@ summary{cursor:pointer;list-style-position:inside}
 
 /* ボタン・チップ */
 .btn{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:10px 16px;min-height:46px;cursor:pointer;flex:none;font-weight:500}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
 .btn.primary.grow{min-height:50px;font-size:17px}
 .btn.danger{color:var(--danger);border-color:var(--danger);background:var(--danger-bg)}
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
@@ -145,9 +145,6 @@ button.srow:active{background:var(--accent-bg)}
 .note{margin:0 2px 8px}
 
 /* ---- ヒーロー(状態機械)・タスク ---- */
-.hero-card{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:var(--radius);padding:14px 16px;margin:0 0 12px;box-shadow:var(--shadow)}
-.hero-card.behind{background:#fff8ec}
-@media (prefers-color-scheme:dark){.hero-card.behind{background:#2a2416}}
 .hero-main{display:flex;flex-direction:column;gap:2px;min-width:0}
 .hero-title{font-size:19px;line-height:1.4;font-weight:700}
 .hero-main .sub{font-size:14px;margin-top:2px}
@@ -262,7 +259,7 @@ details.group summary{padding:4px;cursor:pointer}
 .gnote{margin:-2px 4px 6px}
 
 /* ---- v0.6: ＋ボタン・タイムラインの日付・予定の色・使い方 ---- */
-.fab{position:fixed;right:16px;bottom:calc(68px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:28px;line-height:56px;text-align:center;box-shadow:0 4px 14px rgba(43,108,176,.35);cursor:pointer;z-index:6;padding:0;font-family:inherit}
+.fab{position:fixed;right:16px;bottom:calc(68px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);font-size:28px;line-height:56px;text-align:center;box-shadow:0 4px 14px rgba(43,108,176,.35);cursor:pointer;z-index:6;padding:0;font-family:inherit}
 .fab.rec{background:var(--danger);box-shadow:0 4px 14px rgba(197,48,48,.35);font-size:18px}
 .tl-nav{display:flex;align-items:center;gap:6px;margin:0 0 8px;min-height:40px}
 .tl-nav b{font-size:17px}
@@ -300,15 +297,9 @@ p.gap{margin-top:14px}
 .ring-t{font-size:19px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .ring-v{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.01em}
 .ring-s{font-size:12px;color:var(--muted);line-height:1.4}
-.now-hero{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 0 14px}
 .now-sub{font-size:14px;color:var(--muted);text-align:center;margin:0 8px;line-height:1.6}
-.now-btns{display:flex;gap:10px;width:100%;justify-content:center}
-.now-btns .btn{flex:1;max-width:260px;justify-content:center;text-align:center}
-.now-btns .btn.primary{min-height:50px;font-size:17px}
-.now-btns .btn.ghost{flex:0 0 auto}
 .today-head{justify-content:center}
 .now-card.big{border:0}
-.hero-card{border:0}
 .card,.list{border-color:transparent}
 .srow{border-top-color:var(--line)}
 @media (prefers-color-scheme:dark){.card,.list{border-color:var(--line)}}
@@ -323,7 +314,6 @@ p.gap{margin-top:14px}
 .blk.sleep{background:repeating-linear-gradient(135deg,var(--line) 0 4px,transparent 4px 9px);border-left:1px solid var(--line);color:var(--muted)}
 .tl-hour.dim span{color:#b8bcc6}
 .timeline{touch-action:pan-y}
-.now-hero{margin-bottom:18px}
 
 /* ---- v0.11: 時計の文字盤・1日の円・タスク行(タップで開始・⋯で編集)・時刻ボタン ---- */
 .tfield{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);padding:8px 12px;min-height:44px;min-width:6.2em;font-size:17px;font-variant-numeric:tabular-nums;cursor:pointer;font-family:inherit;flex:none;text-align:center}
@@ -365,15 +355,12 @@ p.gap{margin-top:14px}
 .sheet .row.field{margin-top:10px}
 
 /* ---- v0.12: レポートの小ボタン(＋の上)・時計の 1 分刻み・すき間 ---- */
-.fab.fab2{width:44px;height:44px;bottom:calc(68px + 68px + env(safe-area-inset-bottom));right:22px;background:var(--card);color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
-.fab.fab2 svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .clock-fine{fill:var(--card);stroke:var(--accent);stroke-width:2}
 .clock-fine-row{justify-content:center;gap:8px;margin-top:8px}
 .clock-fine-row .btn.sm{min-width:52px;font-variant-numeric:tabular-nums}
 .blk.plan-copy{opacity:.85}
 
 /* ---- v0.12.1: タイムラインの ⋯・タスクの ▶ ---- */
-.tl-nav .tl-menu{font-size:20px;min-width:40px}
 .tplay{width:48px;flex:none;border:0;background:none;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
 .tplay svg{width:28px;height:28px;fill:currentColor}
 .tplay.on{color:var(--danger)}
@@ -386,8 +373,6 @@ p.gap{margin-top:14px}
 .quick .tfield,.sheet .row.field .tfield{min-width:4.6em;padding:8px 8px}
 
 /* ---- v0.14: ホームの簡素化(バッジ)・タイムラインのドラッグ・現在線の色 ---- */
-.fab.fab2.badge{border-color:var(--accent)}
-.fab-badge{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--danger);border:2px solid var(--bg);box-sizing:content-box}
 .ring.tap{cursor:pointer}
 .ring.tap:active .ring-in{transform:scale(.97)}
 .blk{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -450,11 +435,6 @@ button.crow:active{background:var(--accent-bg)}
 .tl.one .blk.gap.future{border:0;background:none;color:var(--muted);z-index:0;align-items:center;justify-content:center}
 .tl.one .blk.gap.future .blk-name{font-size:12px;opacity:.55;font-weight:500}
 .tl.one .blk.gap.future:active{background:var(--accent-bg)}
-.srow.planrow{gap:8px}
-.srow.planrow .ptime{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;flex:none}
-.srow.planrow .pname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.srow.planrow .pst{color:var(--accent);font-size:12px;flex:none;font-weight:600}
-.srow.planrow.done .pname,.srow.planrow.missed .pname{color:var(--muted)}
 .planfig .card{padding:10px 12px}
 .planfig .plan-lead{margin:0 0 8px}
 .planfig .plan-cat{padding:6px 0;border-top:1px solid var(--line)}
@@ -501,9 +481,6 @@ button.crow:active{background:var(--accent-bg)}
 .tl.one .blk.gap{z-index:1}
 .tl.one .blk.drag{z-index:2}
 .quick .qmore{margin-top:10px;display:flex;flex-direction:column;gap:8px}
-.quick .qrow{display:flex;flex-direction:column;gap:4px}
-.quick .qrow .label{font-size:12px}
-.quick .qrow .chips.small{margin-top:0}
 .table.t3 .tr{grid-template-columns:1.6fr 1fr 1fr}
 
 /* ---- v0.15.1: 1 行の自然な改行・目安の促し/▶・パステルのチップ・期間レポート ---- */
@@ -553,12 +530,7 @@ input.text.hex{flex:none;width:7.2em;font-family:ui-monospace,SFMono-Regular,Men
 .label.small,span.small{font-size:13px}
 
 /* ---- v0.15.3: タブバーの ＋・円をタップでレポート・配色プリセット・推移は上下・習慣のカレンダー ---- */
-#tabs .tab-add{flex:0 0 64px;color:#fff;background:var(--accent);border-radius:999px;margin:0 4px;min-height:44px;height:44px;padding:0;align-self:center;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(43,108,176,.25)}
-#tabs .tab-add svg{width:26px;height:26px;fill:#fff;stroke:#fff;stroke-width:2.4;stroke-linecap:round;display:block}
-#tabs .tab-add svg path{fill:none}
-#tabs .tab-add.rec{background:var(--danger);box-shadow:0 2px 10px rgba(197,48,48,.25)}
-#tabs .tab-add:active{transform:scale(.96)}
-.fab,.fab2{display:none}
+.fab{display:none}
 .pie-wrap.tap{cursor:pointer;border-radius:50%}
 .pie-wrap.tap:active{transform:scale(.98)}
 .pie-hint{font-size:11px;color:var(--accent);font-weight:600;margin-top:2px}
@@ -637,7 +609,6 @@ button.srow.goal:first-child{border-top:0}
 .dtext::placeholder{color:color-mix(in srgb,var(--muted) 70%,transparent)}
 .dmore{margin-top:10px}
 .dmore .dtext{margin-top:4px}
-.moods{display:flex;justify-content:space-between;gap:4px;margin:6px 0 2px}
 .mood{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;color:var(--muted);font-family:inherit;font-size:11px;padding:6px 0;cursor:pointer;border-radius:12px}
 .mood i{display:block;width:26px;height:26px;border-radius:50%;background:var(--track);transition:transform .15s,background .15s;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
 .mood.m1 i{background:#c9d2e3}.mood.m2 i{background:#b8c9ea}.mood.m3 i{background:#a9d4ea}.mood.m4 i{background:#a4dec4}.mood.m5 i{background:#ffd98a}
@@ -647,9 +618,6 @@ button.srow.goal:first-child{border-top:0}
 .seeds{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)}
 .seeds .chips.small{margin-top:6px}
 .chip.seed{text-align:left;min-height:32px;padding:5px 10px;font-size:13px;white-space:normal;line-height:1.35;background:var(--bg);border-color:var(--line);color:var(--fg)}
-.chip.seed .seed-dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--accent)}
-.chip.seed.f-tomorrow .seed-dot{background:#a4dec4}
-.chip.seed.f-hard .seed-dot{background:#ffd98a}
 .chip.seed:disabled{opacity:.4}
 .dsave{min-width:4em;text-align:right}
 .drow{padding:10px 12px 10px 14px;gap:12px}
@@ -666,7 +634,7 @@ button.srow.goal:first-child{border-top:0}
 @media (prefers-color-scheme:dark){.mood.m1 i{background:#4b5566}.mood.m2 i{background:#415a86}.mood.m3 i{background:#3b6f86}.mood.m4 i{background:#3b7d62}.mood.m5 i{background:#9a7a2e}.mdot.m1{background:#4b5566}.mdot.m2{background:#415a86}.mdot.m3{background:#3b6f86}.mdot.m4{background:#3b7d62}.mdot.m5{background:#9a7a2e}}
 
 /* ---- v0.19: お金タブ・記録の ＋ はホーム左上とタイムライン右上 ---- */
-.add-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:none;box-shadow:0 2px 10px rgba(43,108,176,.25)}
+.add-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:none;box-shadow:0 2px 10px rgba(43,108,176,.25)}
 .add-btn svg{width:22px;height:22px;fill:#fff;stroke:#fff;stroke-width:2.4;stroke-linecap:round;display:block}
 .add-btn svg path{fill:none}
 .add-btn.rec{background:var(--danger);box-shadow:0 2px 10px rgba(197,48,48,.25)}
@@ -741,46 +709,10 @@ input.date{min-height:44px}
 .aicard .row.between{margin-top:0}
 .aicard .chips.small{margin-top:8px}
 .aicard .chip.sm2{white-space:normal;text-align:left;line-height:1.3;min-height:32px}
-.aireply{white-space:pre-wrap;line-height:1.6;background:var(--bg);border-radius:12px;padding:12px;max-height:50vh;overflow:auto}
 ol.help-ul{padding-left:1.4em;margin:0}
 ol.help-ul li{font-size:14px;line-height:1.6;margin:4px 0}
 /* ---- v0.25: 気合(F13)・レビュー対応(C-2 フォーカス表示・C-6 動きを減らす) ---- */
 /* 気合のカード(v0.25.1): 上=押し場(丸い稲妻+文言)・下=回数と札。カテゴリ色は使わず accent 1 色で「スイッチ」に見せる */
-.kiai-card{border-radius:var(--radius);background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 16%,var(--card)),var(--card) 72%);border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));margin:0 0 12px;overflow:hidden}
-.kiai-hit{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;color:var(--fg);font-family:inherit;text-align:left;padding:12px 14px;min-height:68px;cursor:pointer}
-.kiai-ico{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 38%,transparent);transition:transform .15s,background .15s,box-shadow .15s}
-.kiai-ico svg{width:24px;height:24px;fill:currentColor;display:block}
-.kiai-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
-.kiai-txt b{font-size:17px;letter-spacing:.01em}
-.kiai-txt span{font-size:12px;color:var(--muted)}
-.kiai-hit:active .kiai-ico{transform:scale(.9)}
-.kiai-card.lit .kiai-ico{background:#f2a63a;transform:scale(1.1) rotate(-8deg);box-shadow:0 0 0 8px color-mix(in srgb,#f2a63a 22%,transparent)}
-.kiai-card.lit .kiai-txt b{color:#c97a12}
-@media (prefers-color-scheme:dark){.kiai-card.lit .kiai-txt b{color:#f2a63a}}
-.kiai-foot{display:flex;align-items:center;gap:10px;padding:8px 14px 10px;border-top:1px solid color-mix(in srgb,var(--accent) 18%,var(--line));background:color-mix(in srgb,var(--card) 70%,transparent)}
-.kiai-card.past .kiai-foot{border-top:0}
-.kiai-count{flex:none;display:inline-flex;align-items:baseline;gap:2px;border:0;background:none;color:var(--accent);font-family:inherit;padding:4px 0;min-height:32px;cursor:pointer}
-.kiai-count b{font-size:20px;font-variant-numeric:tabular-nums;line-height:1}
-.kiai-count span{font-size:12px;font-weight:600}
-.kiai-pills{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0}
-.kiai-pills::-webkit-scrollbar{display:none}
-.kiai-pills.wrap{flex-wrap:wrap;overflow:visible;margin-top:6px}
-.kiai-pill{flex:none;display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:0 10px;min-height:32px;font-size:12px;background:var(--card);border:1px solid var(--line);color:var(--fg);font-family:inherit;cursor:pointer;white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis}
-.kiai-pill .dot,.krow .dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
-.kiai-pill time{font-variant-numeric:tabular-nums;color:var(--muted)}
-.kiai-pill b{font-variant-numeric:tabular-nums}
-.kiai-list{display:flex;flex-direction:column;padding:0}
-.krow{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:var(--fg);font-family:inherit;font-size:14px;text-align:left;padding:10px 12px;min-height:44px;border-top:1px solid var(--line);cursor:default}
-button.krow{cursor:pointer}
-.kiai-list .krow:first-child{border-top:0}
-.krow time{flex:none;width:3.4em;font-variant-numeric:tabular-nums;color:var(--muted)}
-.krow .ktag{flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:600;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.krow .knote{flex:1;min-width:0;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.krow .chev{color:var(--muted);font-size:20px;line-height:1;flex:none}
-.kiai-rep .card{padding:0 12px}
-.kiai-rep .card .plan-lead{padding-top:10px}
-.kiai-rep .card .kiai-pills.wrap{padding-bottom:10px}
-@media (prefers-reduced-motion:reduce){.kiai-card.lit .kiai-ico{transform:none}}
 button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-visible,input[type=checkbox]:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 
@@ -864,8 +796,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .rtop .rep-sub{margin:0 0 10px}
 .rtop .glance{margin:0 0 6px}
 .rtop .srow.rlink{margin:0 -14px;width:calc(100% + 28px);border-top:1px solid var(--line);min-height:44px}
-.dtomorrow{padding-top:6px}
-.dtomorrow .dfield{margin-top:4px}
 
 /* ---- v0.28(実機 FB ①②③④⑦⑧): ホームは 円と棒だけ・上の 1 行は 3 列(日付が中心)・歯車の赤い点・設定の先頭「同期」・月のカレンダーのシートを共通に ---- */
 .hgrid{display:grid;grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr);align-items:center;gap:4px;min-height:40px;margin:0 0 6px} /* v0.53(実機 FB「電車の印が日付に重なる」): 両端は中身の幅を下回らない(余れば等分して日付は中央・足りなければ日付が少し寄る) */
@@ -965,7 +895,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 
 /* ---- v0.29・F15 / v0.29.1: 天気(ホーム右上の印+天気アプリ風のシート)・設定の検索結果 ---- */
 .wx-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
-.today-head .wxbtn{padding:4px;min-width:36px}
 .wx-h{margin:0 0 10px}
 .wxcards{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
 .wxcard{border-radius:16px;padding:14px 16px 12px;background:var(--bg);display:flex;flex-direction:column;gap:6px;--wx:var(--muted)}
@@ -1004,11 +933,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* ---- v0.29.4: ふり返りの「AI」の節・明日を決める(予定の札・期限のタスクは 2 行) ---- */
 .aisec .dfield{margin-top:0}
 .aisec .airow{margin-top:10px;gap:8px}
-.srow.plan-cta{margin:10px 0 0;border-radius:var(--radius);background:var(--card);border-top:0;gap:10px;padding:12px 14px}
-.srow.plan-cta .pc-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.srow.plan-cta .pc-main b{font-size:15px}
-.srow.plan-cta .pc-sub{font-size:12px;color:var(--muted)}
-.srow.plan-cta .pc-act{flex:none;color:var(--accent);font-weight:600;font-size:13px;white-space:nowrap}
 .dl-h{margin:14px 4px 6px;font-size:12px;color:var(--muted);font-weight:600}
 .srow.goal.dlrow{padding:10px 10px 10px 14px}
 .srow.goal.dlrow .gname{font-size:15px}
@@ -1021,7 +945,7 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .asrow{margin-top:6px}
 .chip.aswork{gap:6px}
 .chip.aswork .aw-mark{font-size:11px;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);color:var(--muted);flex:none;line-height:1}
-.chip.aswork.on .aw-mark{background:var(--accent);color:#fff}
+.chip.aswork.on .aw-mark{background:var(--accent);color:var(--on-accent)}
 .countas .chip.on{font-weight:600}
 .blk-tag{font-size:10px;color:var(--accent);background:var(--accent-bg);padding:0 5px;border-radius:999px;white-space:nowrap;flex:none;line-height:1.5;align-self:flex-start}
 .blk>*{flex:none} /* v0.46: 縦 flex で名前・時間が縮んで札と重ならないように(はみ出す分は overflow:hidden で切る) */
@@ -1053,24 +977,17 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .mdpanel .mdgo{justify-content:flex-end;padding:4px 10px 2px}
 .mdpanel[hidden]{display:none}
 /* v0.34: キャッチアップ(F17) ─ ホームの折りたたみ・記事の行 */
-.feed-box{margin-top:4px}
-.feed-box summary{display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;list-style:none}
-.feed-box summary::-webkit-details-marker{display:none}
-.feed-box summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transition:transform .15s;flex:none;width:12px;text-align:center}
-.feed-box[open] summary::before{transform:rotate(90deg)}
 .feed-h{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em;white-space:nowrap;flex:none}
-.feed-n{font-size:12px;margin-left:auto;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .feed-row{display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);padding:0 4px 0 0}
 .feed-row:first-child{border-top:0}
 .feed-open{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;padding:10px 0 10px 14px;color:var(--fg);text-decoration:none;font:inherit}
 .feed-tag{flex:none;font-size:10px;color:var(--accent);background:var(--accent-bg);padding:1px 6px;border-radius:999px;margin-top:3px;white-space:nowrap;line-height:1.5}
-.feed-tag.hit{background:var(--accent);color:#fff}
+.feed-tag.hit{background:var(--accent);color:var(--on-accent)}
 .feed-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .feed-title{font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .feed-sub{font-size:11px}
 .feed-x{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;font-family:inherit}
 .feed-x:active{background:var(--accent-bg)}
-.feed-more{justify-content:flex-end;margin-top:6px}
 .sheet .feed-list{margin-top:10px}
 .feed-hrow{flex-wrap:wrap;gap:6px 10px}
 .feed-hrow .feed-open{flex-direction:column;gap:2px;padding:4px 0;flex:1 1 180px}
@@ -1088,14 +1005,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .srcbox .srcgroup{margin:2px 0 4px}
 .srcbox h4.help-h{margin:8px 0 2px;font-size:12px}
 /* v0.36: キャッチアップ ─ 2 列のカード(Discover 風)とサムネイル */
-.feed-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:2px 0 4px}
-.feed-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
-.feed-card-open{display:flex;flex-direction:column;gap:0;flex:1;min-width:0;padding:0 0 10px;color:var(--fg);text-decoration:none;font:inherit}
-.feed-card .feed-main{padding:8px 10px 0;gap:3px}
-.feed-card .feed-title{font-size:13px;line-height:1.35;-webkit-line-clamp:3}
-.feed-card .feed-sub{font-size:10.5px}
-.feed-card .feed-tag{align-self:flex-start;margin-top:0}
-.feed-card .feed-x{position:absolute;top:4px;right:4px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);color:var(--fg);font-size:16px;backdrop-filter:blur(4px)}
 .feed-thumb{display:grid;place-items:center;aspect-ratio:16/9;width:100%;background:hsl(var(--fh) 55% 88%);overflow:hidden}
 .feed-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .feed-thumb.noimg{background:linear-gradient(135deg,hsl(var(--fh) 60% 90%),hsl(var(--fh) 50% 78%))}
@@ -1108,11 +1017,7 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* v0.37: 日本語の題名のときの原題・要旨の 1 文 */
 .feed-orig{font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .feed-lead{font-size:11.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.feed-card .feed-lead{font-size:11px}
 /* v0.38: ホームのキャッチアップ ─ ジャンルと気になる語のチップ・☆ ブックマーク */
-.feed-gchips,.feed-kchips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 2px 6px;margin:0 -2px;-webkit-overflow-scrolling:touch}
-.feed-gchips::-webkit-scrollbar,.feed-kchips::-webkit-scrollbar{display:none}
-.feed-gchips .chip,.feed-kchips .chip{flex:none;white-space:nowrap}
 .kwchip{display:inline-flex;align-items:stretch;flex:none;border:1.5px solid var(--line);border-radius:999px;background:var(--card);overflow:hidden;min-height:34px}
 .kwchip.on{border-color:var(--accent);background:var(--accent-bg)}
 .kwchip .kwtap{border:0;background:none;color:var(--fg);font:inherit;font-size:12px;padding:0 4px 0 12px;cursor:pointer;white-space:nowrap}
@@ -1122,17 +1027,12 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-star{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;font-family:inherit}
 .feed-star.on{color:#e0a800}
 .feed-star:active{background:var(--accent-bg)}
-.feed-card .feed-star{position:absolute;top:4px;right:36px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);backdrop-filter:blur(4px);font-size:15px}
 .chip.star.on{color:#7a5600;background:#fff1c7;border-color:#e0a800}
 @media (prefers-color-scheme:dark){.chip.star.on{background:#3a2f12;color:#f3d57a}.feed-star.on{color:#e6c062}}
 /* v0.38: カードの幅を原題(nowrap)が押し広げないように。カードには原題を出さない(行だけ) */
-.feed-card .feed-orig{display:none}
 .feed-main{min-width:0;max-width:100%}
 .feed-main > *{min-width:0;max-width:100%}
-.feed-card-open,.feed-card .feed-main{width:100%}
 /* v0.39: チップの横スクロールは横だけ(日付のスワイプと混ざらない)・ジャンルごとの語 */
-.feed-gchips,.feed-kchips{touch-action:pan-x}
-.feed-box{touch-action:pan-y}
 .kwgroup{margin:4px 0 8px}
 .kwgroup .row.field{margin-top:6px}
 .kwbox{margin:6px 0 10px}
@@ -1140,10 +1040,8 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .feed-read{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;font-family:inherit;opacity:.6}
 .feed-read.on{color:#2f8f5b;opacity:1;font-weight:700}
 .feed-read:active{background:var(--accent-bg)}
-.feed-card .feed-read{position:absolute;top:4px;right:36px;width:28px;height:28px;background:color-mix(in srgb,var(--card) 75%,transparent);backdrop-filter:blur(4px);font-size:14px;opacity:1}
-.feed-card .feed-star{right:68px}
-.feed-card.read .feed-title,.feed-row.read .feed-title{opacity:.55;font-weight:500}
-.feed-card.read .feed-thumb img,.feed-row.read .feed-thumb img{opacity:.6}
+.feed-row.read .feed-title{opacity:.55;font-weight:500}
+.feed-row.read .feed-thumb img{opacity:.6}
 @media (prefers-color-scheme:dark){.feed-read.on{color:#7fd1a3}}
 .mgg h2{font-size:14px;color:var(--fg);margin:0}
 .mgg .list{margin-top:6px}
@@ -1166,10 +1064,7 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 .gorder .catrow{padding:4px 8px 4px 0}
 .gorder .chip{pointer-events:none}
 /* v0.47: 傘(ホーム右上の天気の印・シートのチップ)。傘が要る日は印が傘の絵+点になる */
-.today-head .wxbtn.need-umbrella,.today-head .wxbtn.need-folding{color:var(--accent)}
-.gear .wx-badge{background:var(--accent)}
-.gear .wx-badge.folding{background:color-mix(in srgb,var(--accent) 55%,var(--bg))}
-.wxchip.umb{background:var(--accent);color:#fff;font-weight:600;font-size:13px;padding:5px 12px}
+.wxchip.umb{background:var(--accent);color:var(--on-accent);font-weight:600;font-size:13px;padding:5px 12px}
 .wxchip.umb.folding{background:color-mix(in srgb,var(--accent) 70%,var(--bg))}
 .wx-chip-ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .wxcard .wx-big.wx-big-umbrella{stroke:var(--accent)}
@@ -1205,9 +1100,6 @@ button:focus-visible,[role=button]:focus-visible,a:focus-visible,summary:focus-v
 /* v0.50・F18: 次の電車 */
 .tr-ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .tr-ico.sm{width:18px;height:18px;flex:none}
-.today-head .trbtn{padding:2px 4px;min-width:36px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:0} /* v0.53: 「◯分」は絵の下(横に並べると日付に重なる) */
-.today-head .trbtn .tr-ico{width:20px;height:20px}
-.today-head .trbtn .tr-wait{font-size:9px;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;white-space:nowrap}
 .trchips{margin:0 0 10px}
 .trcards{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
 .trcard{border-radius:16px;padding:12px 14px;background:var(--bg);display:flex;flex-direction:column;gap:8px}
@@ -1244,13 +1136,6 @@ textarea.text.trtimes{width:100%;box-sizing:border-box;font-family:ui-monospace,
 .dk-prefcard{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .dk-prefcard p{margin:0}
 .dk-best b{font-variant-numeric:tabular-nums}
-.dk-axes{display:flex;flex-direction:column;gap:6px}
-.dk-axis{display:grid;grid-template-columns:3.2em 1fr 2.4em;align-items:center;gap:8px;font-size:13px}
-.dk-ax-bar{position:relative;height:10px;background:var(--track);border-radius:5px;overflow:hidden}
-.dk-ax-bar i{position:absolute;left:0;top:0;height:100%;border-radius:5px;display:block}
-.dk-ax-bar i.all{background:color-mix(in srgb,var(--accent) 30%,transparent)}
-.dk-ax-bar i.top{background:var(--accent)}
-.dk-ax-val{text-align:right;font-variant-numeric:tabular-nums}
 .dk-legend{font-size:11px}
 .dk-lines{margin:0;padding-left:1.2em;font-size:14px;line-height:1.6}
 .dk-seg{margin:4px 0 10px}
@@ -1310,10 +1195,7 @@ textarea.text.dk-note{width:100%;box-sizing:border-box;font-size:15px;line-heigh
 .br-track{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .br-track i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .brief-sug{display:flex;flex-direction:column;gap:6px}
-.bs-row{display:flex;align-items:baseline;gap:8px;font-size:14px;line-height:1.45}
 .bs-k{flex:none;font-size:11px;font-weight:600;color:var(--muted);background:var(--bg);border-radius:6px;padding:2px 7px;white-space:nowrap}
-.bs-row.hot .bs-k{background:var(--accent);color:var(--card)}
-.bs-row.hot .bs-t{font-weight:600}
 .bs-t{min-width:0}
 
 /* v0.56・F22 連載小説 / v0.58・F23 ピースの図録(v0.61: 暗い板をやめ、明るい紙と額の見た目に。配色はアプリの変数に合わせ、ダークでも同じ作り)。
@@ -1399,7 +1281,6 @@ button.a-thumb{cursor:pointer}
 .a-thumb.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .a-thumb.cur{color:var(--accent);border-style:dashed;font-size:11px;background:var(--accent-bg)}
 /* v0.59・F24: アシスタント(ブリーフィングの中の 1 節) */
-.buddy-next{margin-top:6px!important}
 .buddy .brief-sug:empty{display:none}
 /* v0.60: タスクの追加の「期限」の行(日付・時刻・なし をそのまま出す) */
 .qwhen{gap:8px;margin:10px 0 2px;align-items:center}
@@ -1432,7 +1313,7 @@ button.a-thumb{cursor:pointer}
 .bd-talk{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 .bd-log{display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow-y:auto}
 .bd-msg{max-width:86%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
-.bd-msg.me{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.bd-msg.me{align-self:flex-end;background:var(--accent);color:var(--on-accent);border-bottom-right-radius:4px}
 .bd-msg.ai{align-self:flex-start;background:var(--bg);border:1px solid var(--line);border-bottom-left-radius:4px}
 @media (prefers-color-scheme:dark){.bd-msg.me{color:#161718}}
 .bd-note{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
@@ -1503,7 +1384,7 @@ button.a-thumb{cursor:pointer}
 .hp-steps{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}
 .hp-steps li{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
 .hp-steps li:first-child{border-top:0}
-.hp-num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}
+.hp-num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}
 .hp-body{flex:1;min-width:0}
 .hp-body b{display:block;font-size:15px;line-height:1.4}
 .hp-body p{margin:3px 0 0;font-size:14px;line-height:1.7;color:var(--fg)}
@@ -1552,12 +1433,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .bd-songact{gap:8px}
 .brief .bd-say{margin-bottom:12px}
 /* v0.66・F24-15: アシスタントを中心に ─ ホームのカード(.bd-homecard)・ふり返りタブの 見るカード(.dview)・一緒にふり返るシート(.reflect) */
-.bd-homecard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin:0 0 14px;display:flex;flex-direction:column;gap:10px}
-.bd-homecard .bd-home{margin:0}
-.bd-homecard .bd-bubble{background:var(--bg);border-color:transparent}
-.bd-homecard .bd-bubble::before{background:var(--bg);border-color:transparent}
-.bd-homecard .q-row{margin:0}
-.bd-homecard .q-strip{background:var(--bg);border-color:transparent}
 .bd-quick{display:flex;gap:8px}
 .bd-act{flex:1;min-height:40px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .bd-act:active{background:var(--accent-bg)}
@@ -1640,7 +1515,6 @@ button.bd-bubble:active{background:var(--accent-bg)}
 .pm-note{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .pm-song{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pm-sets{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.pm-sk{font-size:12px;color:var(--muted);margin-right:2px}
 .pm-sets .chip.sm2{min-width:40px;min-height:36px;justify-content:center}
 .pm-total{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
 .nx-links{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
@@ -1848,7 +1722,7 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .dw-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:15px;text-align:left;border-radius:12px;padding:6px 12px;cursor:pointer}
 .dw-opt.on{border-color:var(--accent);background:var(--accent-bg)}
 .dw-n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
-.dw-opt.on .dw-n{background:var(--accent);color:#fff}
+.dw-opt.on .dw-n{background:var(--accent);color:var(--on-accent)}
 .dw-nav{margin-top:4px}
 
 /* v0.85・F27: 英単語(ホームのタイル .qtile.vc・シート .vc-sheet)。正解は 緑の枠、まちがいは 赤の枠(色だけに頼らず 太さも変える) */
@@ -1858,11 +1732,9 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .sheet.vc-sheet{max-height:92vh;max-height:92dvh;overflow:auto}
 .vc-body{display:flex;flex-direction:column;gap:10px}
 .vc-body p{margin:0}
-.vc-top{align-items:center;gap:10px}
 .vc-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
 .vc-bar{flex:1;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
 .vc-bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
-.vc-gap{min-height:46px}
 .vc-card{background:var(--bg);border-radius:16px;padding:18px 12px 20px;display:flex;flex-direction:column;align-items:center;gap:4px}
 .vc-pos{font-size:12px;color:var(--muted)}
 .vc-en{font-size:30px;line-height:1.25;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere}
@@ -1875,14 +1747,13 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .vc-tiles{grid-template-columns:repeat(3,1fr)}
 .vc-week{display:flex;gap:6px;justify-content:center}
 .vc-day{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);border:1.5px solid var(--line);font-variant-numeric:tabular-nums}
-.vc-day.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.vc-day.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
 .vc-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .vc-list li{display:flex;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.5}
 .vc-list li b{flex:none;max-width:45%;overflow-wrap:anywhere}
 .vc-list li span{flex:1;min-width:0;color:var(--muted)}
 .vc-list.my li{align-items:center}
 .vc-list li .vc-st{flex:none;font-size:11px;font-variant-numeric:tabular-nums}
-.vc-tabs{margin-top:2px}
 .vc-steps{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.6}
 .vc-ta{width:100%;min-height:64px;font-size:12px}
 .vc-note{min-height:1.5em}
@@ -1909,15 +1780,12 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .vc-seg2{margin:8px 0 0}
 .vc-modes{display:flex;flex-wrap:wrap;gap:6px}
 .vc-modes .chip{flex:none;white-space:nowrap}
-.vc-mc{margin-left:5px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.vc-modes .chip.on .vc-mc{color:inherit;opacity:.8}
 .vc-cardtop{display:flex;align-items:center;gap:8px}
 .vc-tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--line);color:var(--fg)}
 .vc-tag.new{background:color-mix(in srgb,var(--accent) 18%,var(--card));color:var(--accent)}
 .vc-tag.my{background:color-mix(in srgb,#b8860b 22%,var(--card))}
 .vc-tag.weak{background:var(--danger-bg);color:var(--danger)}
 .vc-en.ja{font-size:20px;line-height:1.5}
-.vc-sub{font-size:15px;color:var(--muted);text-align:center;overflow-wrap:anywhere}
 .vc-say{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;padding:6px 10px;min-height:32px;cursor:pointer;border-radius:999px}
 .vc-say:active{background:var(--line)}
 .vc-spk{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -1997,7 +1865,6 @@ input.text.hex,textarea.text.trtimes,textarea.text.dk-note,textarea.text.bd-ta{f
 .vc-recall{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;border:1.5px dashed var(--line);border-radius:16px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer;padding:14px}
 .vc-recall b{font-size:17px}
 .vc-recall span{font-size:13px;color:var(--muted)}
-.vc-focus{font-size:13px;font-weight:700;color:var(--danger)}
 .vc-donehead{display:flex;align-items:baseline;gap:10px}
 .vc-donehead b{font-size:18px}
 .vc-donehead span{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -2104,3 +1971,11 @@ button.card.vc-recap{display:flex;flex-direction:column;gap:6px;width:100%;text-
 .savebar p{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .savebar .row{margin:0;gap:8px}
 .savebar .btn{background:#fff;color:#222;border-color:#fff}
+/* v0.93(点検): ダーク配色で 青い地(--accent は 明るい水色になる)の上の 白い文字が 読みにくかった → 文字の色を --on-accent に(上の :root)。英単語の 緑の文字にも ダーク用の色 */
+@media (prefers-color-scheme:dark){.vc-list li .vc-st.ok,.vc-stats .ok,.vc-pnote.book{color:#6fd3a0}}
+/* v0.93(点検): 押せる所の高さを 36px 以上に(品詞のチップは 見た目は そのまま、押せる範囲だけ 広げる) */
+.vc-memo,.vc-say,.vc-cardtop .vc-say,.vc-preoff,.vc-modebtn,.ktab,.dk-others .chip,.gh .btn.sm.ghost,.qpill,.bd-re{min-height:36px}
+.pie-box .seg.pie-seg-toggle button{height:36px;line-height:36px}
+.bgm-x,.bgm-mark,.feed-x,.feed-star,.feed-read{width:36px;height:36px}
+button.vc-poschip{position:relative}
+button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}

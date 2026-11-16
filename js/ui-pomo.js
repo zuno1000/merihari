@@ -11,7 +11,7 @@ import * as sync from './sync.js';
 import * as bgm from './bgm.js';
 import { bgmOn, suggestBgm, playSuggested, playBgm, NOTE_ICON } from './ui-bgm.js';
 import { addSpans, catOf } from './ui-today.js';
-import { bubble } from './ui-buddy.js';
+import { bubble, buddyOn } from './ui-buddy.js';
 import { dateKey, minuteOfDay, effectiveDay, fmtMinJa } from './time.js';
 import { FEATURES } from './features.js';
 
@@ -149,7 +149,7 @@ export function finishSheet(run, stopMs, after) {
     const record = () => { const n = addSpans(list.map(toEntry)); finish(n ? `作業 ${fmtMinJa(sm.workMin)} を記録しました` : '記録するものは ありませんでした'); };
     body.replaceChildren(...[
       bubble('pomo_done', { n: sm.sets || maxSets || 1, min: sm.workMin }, 'happy'),
-      el('h2.pm-fin-h', early ? 'ここまで。おつかれさま' : 'タイマー終了。おつかれさま'),
+      el('h2.pm-fin-h', buddyOn() ? (early ? 'ここまで' : 'タイマー終了') : (early ? 'ここまで。おつかれさま' : 'タイマー終了。おつかれさま')), // v0.93: ねぎらいは 上の吹き出しが言う(二重に言わない)
       el('div.pm-tiles', [tile('作業', fmtMinJa(sm.workMin)), tile('セット', `${sm.sets} / ${run.sets}`), tile('時間', list.length ? `${fmt(list[0].startMs).hm}–${fmt(list[list.length - 1].endMs).hm}` : '–')]),
       maxSets ? el('h3.help-h', 'どこまで できた?') : el('p.muted', '1 分に満たないので、記録するものは ありません。'),
       maxSets ? el('p.muted.small', 'まだ記録には入れていません。タイマーどおりに いかなかったら、できた分に直してから 記録してください(あとで カレンダーからも直せます)。') : null,
@@ -181,7 +181,7 @@ export function pomoCard(act) {
   const color = catOf(run.categoryId).color;
   if (pomo.phaseAt(run, Date.now()).kind === 'done') {
     return { node: el('section.now-card.big.pm-card.done', { style: { borderLeftColor: color } }, [
-      el('div.pm-side', [el('span.pm-ph', 'タイマー終了'), el('div.pm-name', [el('b', name), el('span.sub.muted', 'おつかれさま。記録は まだ入れていません')]),
+      el('div.pm-side', [el('span.pm-ph', 'タイマー終了'), el('div.pm-name', [el('b', name), el('span.sub.muted', '記録は まだ入れていません')]),
         el('div.row.pm-btns', el('button.btn.sm.primary', { type: 'button', onclick: () => finishSheet(run, null, act.rerender) }, '記録を決める'))]),
     ]), tick: () => {} };
   }

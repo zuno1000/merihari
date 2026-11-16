@@ -113,13 +113,13 @@ export function sumMin(list) {
   return (list || []).reduce((a, x) => a + Math.max(0, x.end - x.start), 0);
 }
 
-/** 分 → '1h20m' / '45m' / '0m' */
+/** 分 → '1時間20分' / '45分' / '0分'(v0.93・ユーザー指定: 時間の書き方は「1時間20分」に そろえる。v0.92 までは '1h20m')。fmtMinJa と同じ */
 export function fmtMin(min) {
   const m = Math.max(0, Math.round(min));
   const h = Math.floor(m / 60), r = m % 60;
-  if (h && r) return `${h}h${r}m`;
-  if (h) return `${h}h`;
-  return `${r}m`;
+  if (h && r) return `${h}時間${r}分`;
+  if (h) return `${h}時間`;
+  return `${r}分`;
 }
 
 /** 分 → '1時間20分' / '45分' */

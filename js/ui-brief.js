@@ -176,7 +176,7 @@ export function openBrief(ctx, { manual = false } = {}) {
     const go = (p) => { page = p; draw(); if (body.parentNode) body.parentNode.scrollTop = 0; };
     clear(body);
     body.append(...[
-      el('div.brief-top', [el('h2', reportTitle(manual ? 'now' : b.slot) || (manual ? 'ブリーフィング' : b.title)), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
+      el('div.brief-top', [el('h2', reportTitle(manual ? 'now' : b.slot) || (manual ? '日報' : b.title)), el('span.brief-step', `${page + 1} / ${pages.length}・${pages[page].name}`)]),
       ...pages[page].nodes,
       el('div.row.brief-nav', [
         el('button.btn.ghost', { type: 'button', disabled: page === 0, 'aria-label': '前のページ', onclick: () => go(page - 1) }, '‹ 戻る'),

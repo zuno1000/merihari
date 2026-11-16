@@ -14,7 +14,7 @@ export const NOON_MIN = 720, EVENING_MIN = 1140;
 /** 昼のブリーフィングが「午前」ではなく「ここまで」を見る境(14:00 以降に初めて開いたら、午後の分も入れる) */
 export const NOON_LATE_MIN = 840;
 export const SLOTS = Object.freeze(['morning', 'noon', 'evening', 'bed']);
-export const SLOT_TITLE = Object.freeze({ morning: '朝のブリーフィング', noon: '昼のブリーフィング', evening: '夜のブリーフィング', bed: '寝る前のブリーフィング' });
+export const SLOT_TITLE = Object.freeze({ morning: '朝の日報', noon: '昼の日報', evening: '夜の日報', bed: '寝る前の日報' });
 /**
  * 寝る前の枠(v0.76・ユーザー要望「寝る前(24 時など)にも 日報を」): settings.brief.bed = 22:00 / 23:00 / 24:00 の分(既定 23:00 は持たない)・0 = 出さない。
  * 24:00 は 1 日の切れ目が 0 時より後のときだけ届く(切れ目の前は 前の日の 24:xx)
@@ -94,7 +94,7 @@ export function longestDrift(entries, date, from, to, nowMin, settings = null) {
 }
 
 /** 提案の札(kind → 見出し)。画面はこの札+短い 1 行で出す(v0.55.1・実機 FB「文字が多すぎる」) */
-export const SUGGEST_LABEL = Object.freeze({ now: 'いま', switch: '切り替え', first: '最初の一歩', due: '期限', habit: '習慣', plan: '予定', goal: '目標', time: '残り時間', tmr: 'あした' });
+export const SUGGEST_LABEL = Object.freeze({ now: 'いま', switch: '切り替え', first: '最初の一歩', due: '期限', habit: '習慣', plan: '予定', goal: '目標', time: '残り時間', tmr: '明日' });
 
 /**
  * ブリーフィングの中身。opts = { slot, date(実効の日), nowMin(実効の分), entries, tasks, settings, planBlocks }
@@ -159,13 +159,13 @@ export function build({ slot, date, nowMin, entries = {}, tasks = {}, settings =
     if (pb.length) sug.push({ pri: 3, kind: 'plan', text: `${pb.length}件・最初は ${pb[0].start} ${nameOf(pb[0].categoryId)}` });
     if (goalWork != null) sug.push({ pri: 4, kind: 'goal', text: `作業 ${fmtMinJa(goalWork)}` });
   } else if (sl === 'bed') { // 寝る前(v0.76): 今日 1 日 → 残りのタスク(明日が期限も)→ あしたへ。急かす提案(切り替え・最初の一歩)は出さない
-    taskTitle = '残りのタスク'; suggestTitle = 'あしたへ';
+    taskTitle = '残りのタスク'; suggestTitle = '明日へ';
     range('今日', 0, Infinity);
     const day = rangeTotals(entries, date, 0, nowMin, nowMin, settings);
     progress = { workMin: day.work, targetMin: goalWork != null ? goalWork : SOLID_WORK_MIN, goal: goalWork != null };
     if (due.tomorrow.length) sug.push({ pri: 2, kind: 'tmr', text: `明日が期限 ${due.tomorrow.length}件・最初は「${due.tomorrow[0].name}」` });
     const pb = planBlocksOf(planBlocks, addDays(date, 1));
-    if (pb.length) sug.push({ pri: 3, kind: 'plan', text: `あしたの予定 ${pb.length}件・最初は ${pb[0].start} ${nameOf(pb[0].categoryId)}` });
+    if (pb.length) sug.push({ pri: 3, kind: 'plan', text: `明日の予定 ${pb.length}件・最初は ${pb[0].start} ${nameOf(pb[0].categoryId)}` });
   } else {
     const noon = sl === 'noon';
     const late = noon && nowMin >= NOON_LATE_MIN;

@@ -9,7 +9,7 @@
 - 流用元: `~/PersonalVault/Projects/nokorijikan/nokorijikan/ptm/app.js`(GIS・freeBusy・暗号化・merge・freeMs・breakVerdict)
 
 ## 変えない約束(仕様書 §2)
-画面は 今日/タスク/設定 の3つだけ・毎日の操作はワンタップ・主役は1つ・責めない・
+画面は ホーム / カレンダー / お金 / タスク / ふり返り の 5 タブ+設定(これ以上 増やさない)・毎日の操作はワンタップ・主役は1つ・責めない・
 カレンダーは free/busy のみ・Drive は端末側暗号化(パスフレーズは sessionStorage。v0.91 から、そこから作った 取り出せない鍵を IndexedDB に・トークンを 期限まで localStorage に 覚える「静かに同期する」が 既定で 入 = F7-11)・提案はルールベース・外部依存は GIS のみ。
 
 ## 技術
@@ -21,6 +21,7 @@
 - 飲み物のおすすめに添える 写真 `data/drinks/*.jpg`・`data/drink-photos.json` は `python -I tools/drink_photo_fetch.py`(Wikimedia Commons・CC0 / PD / CC BY / CC BY-SA・撮影者とライセンスを credit に)。その銘柄の写真ではなく イメージなので、**銘柄のラベルや 名入れが写った写真は 使わない**・取り込んだら 画像を見て 産地 / 品種と 合っているか 確かめる。鍵は `drinks.STYLE_PHOTO` と そろえる。解説は `drinks.STYLE_ABOUT`。
 - 英単語(F27・`FEATURES.VOCAB` で隔離・既定は 使わない)の単語帳 `data/vocab.json` は `python -I tools/vocab_build.py ../tangoquest/js/words.js` が tangoquest(同じ作者の英単語アプリ・`~/personal/tangoquest`)の単語帳から作る。en は 進みの鍵なので 変えない。SW の ASSETS には入れない。復習の規則(`vocab.apply`)・出題の選び方(`vocab.nextWord`)・誤答(`vocab.buildChoices`)・メモ欄の読み取り(`vocab.parseMemo`)は tangoquest の `srsApply`・`pickWord`・`buildChoices`・`mywParse` と同じに保つ(画面の作りも LEXICA に合わせてある。変えるときは 元の理由を tangoquest のノートで確かめる)。引き継ぎの形(`vocab.parseExport`)は tangoquest の `meriExport`(js/sync.js)と そろえる。外部への通信は マイ単語の辞書引き(translate.googleapis.com)だけ 足した。
 - 状況についての ひとこと(はげまし・知らせ・聞く文)は 画面に直書きせず、アシスタントの場面(`buddy.js` の `LINES` と `SCENES`)にして `buddyLine` / `buddyBubble`(顔つきの吹き出し)で出す(v0.90・ユーザー方針「コメントは アシスタントに集約」)。口調ごとに 2 つ以上の言い回し。止めているときは 出さないか 事務的な文だけ。
+- 表記(v0.93・ユーザー指定): 時間は「1時間20分」(`time.fmtMin`。「1h20m」と書かない)・「明日」「次」は 漢字・朝昼夜のシートは「日報」(「ブリーフィング」と書かない。コードの名前は brief のまま)・タブの名前は「カレンダー」(画面の文で「タイムライン」と書かない)。文の中で 設定の場所を言うときは 設定の一覧の 行の名前を そのまま使う。青い地(`--accent`)の上の文字は `--on-accent`。押せる所は 高さ 36px 以上。
 - ユーザー文字列は textContent で描画。innerHTML にユーザー入力を入れない。
 - 純関数は `window.M` に載せ `tests/index.html`(iframe 方式・localhost ガード・try/finally・ネガティブコントロール1件)で検証。
 - 版: `APP_VERSION`(js/main.js)・`news.json` の先頭(設定 › 更新履歴)・`sw.js` の CACHE 名を同じコミットで更新(tests が一致を確認)。

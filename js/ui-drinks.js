@@ -192,7 +192,7 @@ const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
 const B = () => buddy.normalizeBuddy(S().buddy);
 const buddyOn = () => FEATURES.BUDDY && B().enabled;
 /** いまの口調の土台(bright / polite / cool)。足した性格は その土台 */
-const toneNow = () => { const v = buddy.voiceOf(B()); return v && typeof v === 'object' ? (v.base || 'bright') : (v || 'bright'); };
+const toneNow = () => { if (!buddyOn()) return 'polite'; const v = buddy.voiceOf(B()); return v && typeof v === 'object' ? (v.base || 'bright') : (v || 'bright'); }; // v0.93: アシスタントを止めているときは キャラクターの口調にしない(ていねいな文)
 /**
  * 聞く人の吹き出し。v0.90(実機 FB「飲み物の アシスタントの台詞が 拡充されていない・アイコンも出して」): 文は アシスタントの場面(drink_rec / drink_pref / drink_what / drink_look / drink_axis / drink_overall)から
  * 選ぶ(言い回しが いくつかあり、足した性格の口調でも 話す・bump で 言い回しを進める)。顔つきの吹き出しで出す。アシスタントを止めていれば fallback の文だけ
@@ -254,7 +254,7 @@ const whenNow = () => (now().min < 900 ? '今日' : '今夜');
 const recBump = (kind) => +now().date.slice(8, 10) + drinks.PREF_KINDS.indexOf(kind);
 const leadLine = (kind) => (buddyOn() && buddyLine('drink_rec', { when: whenNow(), kind: drinks.kindName(kind) }, recBump(kind))) || leadOf(kind);
 const leadBubble = (kind) => askBubble('drink_rec', { when: whenNow(), kind: drinks.kindName(kind) }, leadOf(kind), 'dk-lead', recBump(kind));
-const leadOf = (kind) => { const kn = drinks.kindName(kind), day = now().min < 900; return { bright: `${day ? '今日' : '今夜'}の${kn}は、これなんて どう?`, polite: `${day ? '本日' : '今夜'}の${kn}は、こちらは いかがでしょう。`, cool: `${day ? '今日' : '今夜'}の${kn}は これだ。` }[toneNow()]; };
+const leadOf = (kind) => { const kn = drinks.kindName(kind), day = now().min < 900; return { bright: `${day ? '今日' : '今夜'}の${kn}は、これなんて どう?`, polite: `${day ? '今日' : '今夜'}の${kn}の おすすめです。`, cool: `${day ? '今日' : '今夜'}の${kn}は これだ。` }[toneNow()]; };
 /** 気になる に入れる / 外す */
 function toggleWish(kind, c) {
   const w = drinks.wishOf(D(), kind, c.name);

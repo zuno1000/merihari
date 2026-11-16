@@ -196,7 +196,7 @@ function notebook(redraw) {
   const st = buddy.stamps(a ? a.doneWorks : []);
   return el('div.bd-note', [
     el('p.bd-h', `${buddy.roleOf(B()).title} Lv.${lv.level}`),
-    el('div.bd-skills', buddy.LEVELS.map((l, i) => el('div', { class: `bd-skill${i < lv.level ? ' on' : ''}` }, [el('b', i < lv.level ? '✓' : `${l.h}h`), el('span', l.name)]))),
+    el('div.bd-skills', buddy.LEVELS.map((l, i) => el('div', { class: `bd-skill${i < lv.level ? ' on' : ''}` }, [el('b', i < lv.level ? '✓' : `${l.h}時間`), el('span', l.name)]))),
     lv.next ? el('p.muted.small', `あと ${fmtMin(lv.next.needMin)} の作業で「${lv.next.name}」を言えるようになります`) : null,
     el('p.bd-h', `旅した土地のスタンプ ${st.length ? `${st.length} か国` : ''}`),
     st.length ? el('div.bd-stamps', st.map((x) => el('span.bd-stamp', { title: x.last }, [el('b', x.country), el('i', `× ${x.n}`)])))
@@ -467,7 +467,7 @@ export function recoPage(slot, redraw) {
     const d = (local.weatherCache || {})[r.id]?.data || null;
     loadWeather(r, () => redraw());
     const tmr = (slot === 'evening' || slot === 'bed') && d && d.tomorrow;
-    if (d) parts.weather = el('div.bd-wx', [weatherCard(tmr ? { ...r, name: `${r.name}・あす` } : r, tmr ? { ...d.tomorrow, tomorrow: null } : d, 'ok')]);
+    if (d) parts.weather = el('div.bd-wx', [weatherCard(tmr ? { ...r, name: `${r.name}・明日` } : r, tmr ? { ...d.tomorrow, tomorrow: null } : d, 'ok')]);
   }
   if (bgmOn()) {
     const sg = suggestBgm(slot);

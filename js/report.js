@@ -295,7 +295,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
   let judged = false, verdict = null, head = null; // head: 判定の見出しだけ(v0.24: レポートで大きく・理由は小さく)
   if (!agg.dayDone) verdict = null; // 途中は判定しない(いまの時点の文は positive[0])
   else if (agg.coverage < 0.5) verdict = `記録が作業時間帯の${Math.round(agg.coverage * 100)}%なので、この日の判定は控えます。`;
-  else if (!hasBase && !dailyGs.length && !hasGoal && !solid) verdict = `比べる材料がまだ少ない日です(先週の記録${agg.baselineDays}日)。設定 › 目標 で1日の目標を決めると、それと比べます。`;
+  else if (!hasBase && !dailyGs.length && !hasGoal && !solid) verdict = `比べる材料がまだ少ない日です(先週の記録${agg.baselineDays}日)。設定 › 1日の目標 で目標を決めると、それと比べます。`;
   else {
     judged = true;
     head = score >= 2 ? 'よい一日でした。' : score === 1 ? '少し良い一日でした。' : score === 0 ? 'いつもどおりの一日でした。' : score === -1 ? '少し控えめな一日でした。' : 'ゆっくりめの一日でした。';
@@ -313,7 +313,7 @@ export function dayFeedback(agg, { tasks = {}, entries = {}, date, settings = nu
     const shortWork = goalWork != null && agg.workMin < goalWork ? goalWork - agg.workMin : 0;
     if (fit) better = `${drift}${fmtMinJa(agg.driftMin)}のうち${fmtMinJa(r5(fit.targetMin - fit.doneMin))}を ${fit.name} に回せば、目安に届いていました。`;
     else if (shortWork > 0 && spare >= 30 && shortWork <= spare) better = `${drift}${fmtMinJa(agg.driftMin)}のうち${fmtMinJa(r5(shortWork))}を作業に回せば、目標の${fmtMinJa(goalWork)}に届いていました。`;
-    else if (agg.unloggedMin >= 60 && agg.coverage < 0.8) better = `未記録が${fmtMinJa(agg.unloggedMin)}あります。タイムラインの「この時間は?」で埋めると、ふり返りが正確になります。`;
+    else if (agg.unloggedMin >= 60 && agg.coverage < 0.8) better = `未記録が${fmtMinJa(agg.unloggedMin)}あります。カレンダーの「この時間は?」で埋めると、ふり返りが正確になります。`;
     else { const z = unmet.find((g) => g.kind === 'deadline' && g.doneMin === 0); if (z) better = `${z.name}は今日手つかずでした(今日の目安${fmtMinJa(z.targetMin)})。残りは明日からの日数で割り直します。`; }
   }
   // 明日は(途中なら「今日はあと」): 期限つきの明日の分 → 届かなかった毎日 → 今週の残り(毎週)→ 近い期限の未着手 / ふれていないやりたいこと

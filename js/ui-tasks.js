@@ -21,11 +21,11 @@ const S = () => store.state.data.settings;
 const E = () => store.state.data.entries;
 const alive = (t) => t && !t.deletedAt;
 
-/** 分 → '1.5h' / '30m' */
+/** 分 → '1.5時間' / '30分' */
 export function fmtH(min) {
-  if (min < 60) return `${Math.round(min)}m`;
+  if (min < 60) return `${Math.round(min)}分`;
   const h = min / 60;
-  return `${h >= 10 ? Math.round(h) : Math.round(h * 10) / 10}h`;
+  return `${h >= 10 ? Math.round(h) : Math.round(h * 10) / 10}時間`;
 }
 const fmtDeadline = (key, today) => (!key ? '期限なし' : key === today ? '期限 今日' : key === addDays(today, 1) ? '期限 明日' : `期限${fmtMD(key)}`);
 
@@ -242,7 +242,7 @@ export function renderTasks(view, ctx, listKey = null) {
     const recurTag = t.recur === 'weekly' && t.deadline ? `毎週${DAY_JA[weekday(t.deadline.slice(0, 10))]}曜` : null;
     if (t.kind === 'memo') meta.push(t.note ? t.note : 'メモ・タップして種類を決める');
     else if (t.repeat?.type === 'daily') meta.push(t.noTime ? '毎日(時間なし)' : `毎日${fmtMinJa(t.repeat.min)}`, `今日${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtMinJa(g?.doneMin || 0) + (g?.checked ? '・済' : '')}`, streakText(t));
-    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週${t.repeat.hours}h`, `今週${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
+    else if (t.repeat?.type === 'weekly') meta.push(t.noTime ? '毎週(時間なし)' : `毎週${t.repeat.hours}時間`, `今週${t.noTime ? (g?.checked ? '済' : 'まだ') : fmtH(g?.doneMin || 0) + (g?.checked ? '・済' : '')}${t.lastWeek && !t.noTime ? `(先週${fmtH(t.lastWeek.doneMin)})` : ''}`, streakText(t));
     else if (t.kind === 'wish') meta.push(g?.lastDate ? `最後${fmtMD(g.lastDate)}${plan.daysBetween(g.lastDate, today) >= 2 ? `(${plan.daysBetween(g.lastDate, today)}日ぶり)` : ''}` : 'まだ手つかず', `この7日${fmtH(g?.doneMin || 0)}`, FEATURES.TASK_START ? '▶ で15分だけ' : null);
     else {
       meta.push(fmtDeadline(plan.deadlineKey(t, today), today) + (plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : ''));

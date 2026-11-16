@@ -5,7 +5,6 @@
 export const CATALOG_URL = 'data/bgm.json';
 export const GENRES = ['lofi', 'jazz', 'piano', 'nature', 'game', 'synthwave', 'classical', 'celtic', 'fantasy', 'japanese', 'edm', 'kawaii'];
 export const GENRE_LABELS = { lofi: 'Lo-fi', jazz: 'ジャズ', piano: 'ピアノ', nature: '自然音', game: 'ゲーム', synthwave: 'シンセウェーブ', classical: 'クラシック', celtic: 'ケルト', fantasy: 'ファンタジー', japanese: '和風', edm: 'EDM', kawaii: 'かわいい' };
-export const MOOD_LABELS = { calm: 'リラックス', focus: '集中', night: '夜', morning: '朝', rain: '雨', epic: '壮大', fantasy: '幻想的' };
 /** 重み(todaybgm と同じ考え方。channel: 同じチャンネルを聞いたことがあれば控えめ・👎 のチャンネルは強く下げる。short: 20 分未満は作業用には短い) */
 export const W = Object.freeze({ genre: 3.0, affinity: 2.5, time: 1.0, channel: 0.6, dislike: 1.5, short: 0.5, eps: 1.0 });
 export const POOL = 7;          // 抽選に入れる上位の件数

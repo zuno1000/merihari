@@ -7,7 +7,7 @@ import { deadlineMin } from './plan.js';
 
 /** 答えられる種類(上にあるものほど先に当てる) */
 export const INTENTS = Object.freeze(['shopping', 'tomorrow', 'near', 'tasks', 'habits', 'plan', 'progress', 'next']);
-export const INTENT_LABEL = Object.freeze({ shopping: '買い物', tomorrow: 'あしたのタスク', near: 'この先の期限', tasks: '今日のタスク', habits: '習慣', plan: '今日の予定', progress: '今日の進み', next: 'つぎにやること' });
+export const INTENT_LABEL = Object.freeze({ shopping: '買い物', tomorrow: '明日のタスク', near: 'この先の期限', tasks: '今日のタスク', habits: '習慣', plan: '今日の予定', progress: '今日の進み', next: 'つぎにやること' });
 /** ワンタップで聞ける質問(入力欄の下のチップ) */
 export const ASK_CHIPS = Object.freeze(['今日のタスクは?', '買うものは?', '次に何をやるといい?', '今日の進みは?', '今週の期限は?']);
 

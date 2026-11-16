@@ -73,7 +73,7 @@ const summary = {
   feed() { const c = feed.normalizeFeed(S().feed); if (!c.enabled) return '使わない'; const f = feed.feedNow(); const nk = feed.allWords(c).length; return `ホームに出す・${c.genres.length ? c.genres.map((g) => feed.genreName(f, g)).join(' / ') : 'ジャンルは全部'}・${c.n} 件ずつ${nk ? `・気になる語 ${nk}` : ''}${c.off.length ? `・取得元 ${c.off.length} つ OFF` : ''}`; },
   train() { const t = train.normalizeTrain(S().train); return t.enabled && t.lines.length ? `ホームに印・${t.lines.map((l) => l.name).slice(0, 2).join(' / ')}${t.lines.length > 2 ? ' …' : ''}` : t.lines.length ? `${t.lines.length} 路線(印は出さない)` : '使わない'; }, // v0.50・F18
   weather() { const w = S().weather || {}; return w.enabled && w.regions?.length ? `ホームに印・${w.regions.map((r) => r.name.split('・')[0]).slice(0, 3).join(' / ')}${w.regions.length > 3 ? ' …' : ''}` : '使わない'; },
-  goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}h` : `${m}m`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
+  goals() { const g = S().goals || {}; const f = (m) => (m % 60 === 0 ? `${m / 60}時間` : `${m}分`); const base = [g.workMin > 0 ? `作業${f(g.workMin)}` : null, g.driftMax != null ? `ダラダラ ${f(g.driftMax)} まで` : null].filter(Boolean).join('・') || '決めていない(先週の平均と比べる)'; return g.chunkMin && g.chunkMin !== 30 ? `${base}・目安は${f(g.chunkMin)}ずつ` : base; },
 };
 
 // ---- 編集部品(ウィザードと項目画面で共有) ----
@@ -105,14 +105,14 @@ function sectionWindow() {
     seg({ simple: '平日 / 土日', each: '曜日ごと' }, simple ? 'simple' : 'each', (v) => { simple = v === 'simple'; if (simple) { for (const k of WEEKDAYS) s.window[k] = s.window.mon.slice(); for (const k of WEEKEND) s.window[k] = s.window.sat.slice(); store.touchSettings(); } draw(); }),
     body,
     el('details', [el('summary.muted.small', 'くわしく'),
-      el('div.row.field', [el('span.label', 'タイムラインの1日の始まり'), select(dsOpts, mm(dayStartMin(s)), (v) => { s.dayStart = v; store.touchSettings(); })]),
+      el('div.row.field', [el('span.label', 'カレンダーの1日の始まり'), select(dsOpts, mm(dayStartMin(s)), (v) => { s.dayStart = v; store.touchSettings(); })]),
       el('p.muted.small', '2:00にすると、タイムラインは2:00〜翌2:00を1日として描きます(26時に寝る人向け)。記録の日付は変わりません。')]));
 }
 function sectionLogging() {
   const s = S();
   return card('記録のすき間', '作業を終えてから次を始めるまでの数分(水を飲む・トイレ・ちょっとスマホ)は、次の記録に含めて空白にしません。時計で直したときの数分のずれも同じです。',
     el('div.row.field', [numInput(s.gapAbsorbMin, 0, 60, (v) => { s.gapAbsorbMin = v; store.touchSettings(); }), el('span.unit', '分まで(0で無効)')]),
-    el('p.muted.small', 'それより長い空白はタイムラインに「この時間は?」として残ります。'),
+    el('p.muted.small', 'それより長い空白はカレンダーに「この時間は?」として残ります。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!s.startFromLast, onchange: (e) => { s.startFromLast = e.target.checked; store.touchSettings(); } }), el('span', '記録を始めるとき、最後の記録の終わりから数える')]),
     el('p.muted.small', 'オンにすると、「いまから」でカテゴリやタスクをタップしたとき、今日の最後の記録が終わった時刻から記録します(すき間の長さに関係なく)。'));
 }
@@ -126,7 +126,7 @@ function sectionGoals() {
   const workList = [60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480, 540, 600, 660, 720];
   const driftList = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240];
   const drift = (s.kinds || []).filter((k) => k.drift).map((k) => k.name).join('・') || 'ダラダラ';
-  return card('1日の目標', '決めると、レポート「今日」のふり返りは先週の平均ではなく、この目標と比べて書きます。ホームの円の下にも「作業 ◯ / 目標 ◯」の細いメーターが出ます。決めなくても使えます(先週の平均と比べます)。',
+  return card('1日の目標', '決めると、レポート「今日」のふり返りは先週の平均ではなく、この目標と比べて書きます。ホームの「今日の作業」の行にも「作業 ◯ / 目標 ◯」が出ます。決めなくても使えます(先週の平均と比べます)。',
     el('div.row.field', [el('span.label', '作業の合計の目標'), select(opts(workList), s.goals.workMin == null ? '' : String(s.goals.workMin), (v) => { s.goals.workMin = v === '' ? null : +v; store.touchSettings(); })]),
     el('p.muted.small', '「作業として数える」種別のカテゴリ(研究・授業など)の1日の合計。'),
     el('div.row.field', [el('span.label', `${drift}の上限`), select(opts(driftList), s.goals.driftMax == null ? '' : String(s.goals.driftMax), (v) => { s.goals.driftMax = v === '' ? null : +v; store.touchSettings(); })]),
@@ -482,8 +482,8 @@ function sectionWeather(rerender) {
   const remove = (r) => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); };
   // v0.29.3: 地域も ≡ で並べ替え(先頭の地域がホームの印の絵になる)。行のタップで 消す
   const rows = w.regions.length ? catList(w.regions, { tagOf: (r) => `${r.lat}, ${r.lon}`, onEdit: (r) => confirmSheet(`「${r.name}」を消しますか?`, null, '消す', () => remove(r), true), onMove: (from, to) => { const arr = w.regions.slice(); const [x] = arr.splice(from, 1); arr.splice(to, 0, x); w.regions = arr; save(); rerender(); } }) : null;
-  return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホーム右上(歯車の左)に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
-    el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに天気の印を出す')]),
+  return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホームの「いま知りたいこと」に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに天気のタイルを出す')]),
     el('h3.help-h', `地域(${w.regions.length} / ${weather.MAX_REGIONS})`),
     rows || el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
     rows ? el('p.muted.small', '先頭の地域の天気がホームの印の絵になります。≡ で並べ替え、行をタップで消す。') : null,
@@ -510,15 +510,15 @@ function sectionBgm(rerender) {
   const rows = recent.length ? el('div.list', recent.map((p) => { const song = cat ? cat.songs.find((x) => x.id === p.id) : null; return el('div.srow.plain.bgm-row', [
     el('button.bgm-open', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [el('span.bgm-title', song ? song.t : p.id), el('span.muted.small', `${p.date}${song && song.g.length ? '・' + song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・') : ''}`)]),
     rateChips(p, rerender)]); })) : null;
-  return card('作業用 BGM', '任意の機能です。ホーム右上の ♪ をタップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。同じ曲は二度すすめません。曲の一覧(todaybgm のカタログ)はアプリに入っていて、選ぶのに通信はしません。',
+  return card('作業用 BGM', '任意の機能です。ホームの「いま知りたいこと」の ♪ のタイルをタップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。同じ曲は二度すすめません。曲の一覧(todaybgm のカタログ)はアプリに入っていて、選ぶのに通信はしません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!b.enabled, onchange: (e) => { b.enabled = e.target.checked; save(); rerender(); } }), el('span', 'ホームに ♪ を出す')]),
     el('h3.help-h', '好みのジャンル'),
     chips,
     el('p.muted.small', '選んだジャンルを多めに。何も選ばなければ全部から。流したあとの「好き / ちがう」も次の選び方に効きます(好きと言った曲に近いジャンルやムードを多めに、ちがうと言った曲のチャンネルは控えめに)。時間帯でも変わります(朝は明るめ・昼は集中・夕方はリラックス・夜は静か。作業の記録中は集中)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.app !== false, onchange: (e) => { b.app = e.target.checked; save(); } }), el('span', 'YouTube アプリで開く')]),
     el('p.muted.small', 'iPhone / Android で YouTube アプリを開きます。iPhone は最初に「"YouTube"で開きますか?」と聞かれることがあるので「開く」を。アプリが無い・開かないときは この設定を外すとブラウザで開きます(自動でブラウザに切り替えることはしません)。'),
-    el('label.row.field', [el('input', { type: 'checkbox', checked: b.strip !== false, onchange: (e) => { b.strip = e.target.checked; save(); } }), el('span', 'ホームに 今日の曲を出す')]),
-    el('p.muted.small', '流した日だけ、記録中のカードの下に 1 行(題名・好き / ちがう)。行の × でその日だけ消せます。外すと出しません(ふり返りの「今日の BGM」には残ります)。'),
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.strip !== false, onchange: (e) => { b.strip = e.target.checked; save(); } }), el('span', '過去の日のホームに その日の曲を出す')]),
+    el('p.muted.small', '流した日だけ、その日のホーム(カレンダーから開く 過去の日)に 1 行(題名・好き / ちがう)。行の × でその日だけ消せます。外すと出しません(ふり返りの「今日の BGM」には残ります)。'),
     b.enabled ? el('div.row', { style: { marginTop: '10px' } }, [el('button.btn', { type: 'button', onclick: () => playBgm(rerender) }, '1 曲ためす')]) : null,
     el('h3.help-h', `聞いた曲(${st.heard} / ${st.total || '…'})`),
     rows || el('p.muted.small', 'まだありません。ホームの ♪ をタップすると ここに残ります。'),
@@ -591,7 +591,7 @@ function sectionFeed(rerender) {
   const rows = recent.length ? el('div.list', recent.map((m) => { const x = f ? f.items.find((y) => y.id === m.id) : null; return el('div.srow.plain.feed-hrow', [
     x ? el('a.feed-open', { href: x.u, target: '_blank', rel: 'noopener noreferrer' }, [el('span.feed-title', x.t), el('span.muted.small', `${m.date}・${x.s || feed.hostOf(x.u)}`)]) : el('span.feed-open', [el('span.feed-title.muted', '(一覧から消えた記事)'), el('span.muted.small', m.date)]),
     el('button.btn.sm.ghost', { type: 'button', onclick: () => { unmark(m.id); rerender(); } }, 'もう一度出す')]); })) : null;
-  return card('キャッチアップ', '任意の機能です。研究・趣味など複数のジャンルの新しい記事(論文・ニュース)を、ホームの「キャッチアップ」(折りたたみ)に数件ずつ出します。タップするとそのサイトを開き、開いた記事は次から出ません。',
+  return card('キャッチアップ', '任意の機能です。研究・趣味など複数のジャンルの新しい記事(論文・ニュース)を、ホームの「いま知りたいこと」のタイル(新着の数)から 一覧で出します。タップするとそのサイトを開き、開いた記事は次から出ません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!c.enabled, onchange: (e) => { c.enabled = e.target.checked; save(); rerender(); } }), el('span', 'ホームに「キャッチアップ」を出す')]),
     el('h3.help-h', 'ジャンル'),
     gchips,
@@ -658,18 +658,18 @@ function sectionBrief(rerender, ctx) {
   const s = S();
   const b = s.brief || (s.brief = { enabled: true });
   const local = store.state.local;
-  return card('ブリーフィング', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りと今日のタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること、寝る前は 今日 1 日のまとめ。ふり返りは 上のチップで 全体 / 午前 / 午後 / 夜 / 昨日 に替えられます(自分で開いたときは 全体から)。タスクはその場で ✓ にできます。',
-    el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled !== false, onchange: (e) => { b.enabled = e.target.checked; store.touchSettings(); sync.autoSync(); rerender(); } }), el('span', '開いたときにブリーフィングを出す')]),
-    el('h3.help-h', '寝る前の日報(今日 1 日のまとめ と あしたのこと)'),
+  return card('日報', '朝・昼 12 時以降・19 時以降に、その時間帯で初めて開いたとき 1 回ずつ出ます。朝は昨日のふり返りと今日のタスク、昼は午前のふり返りと残りのタスク、夜は午後のふり返りと残りの時間でやること、寝る前は 今日 1 日のまとめ。ふり返りは 上のチップで 全体 / 午前 / 午後 / 夜 / 昨日 に替えられます(自分で開いたときは 全体から)。タスクはその場で ✓ にできます。',
+    el('label.row.field', [el('input', { type: 'checkbox', checked: b.enabled !== false, onchange: (e) => { b.enabled = e.target.checked; store.touchSettings(); sync.autoSync(); rerender(); } }), el('span', '開いたときに日報を出す')]),
+    el('h3.help-h', '寝る前の日報(今日 1 日のまとめ と 明日のこと)'),
     el('div.chips.small', { role: 'group', 'aria-label': '寝る前の日報の時刻' }, [[0, '出さない'], ...brief.BED_CHOICES.filter((m) => m < 1440 || dayCut(s, dateKey()) > 0).map((m) => [m, `${m / 60}:00 から`])].map(([m, label]) => {
       const on = (brief.bedOf(s) || 0) === m;
       return el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { if (m === brief.BED_DEFAULT) delete b.bed; else b.bed = m; store.touchSettings(); sync.autoSync(); rerender(); } }, label);
     })),
-    el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => ctx.openBrief() }, 'いまのブリーフィングを見る')]),
+    el('div.row', [el('button.btn.sm', { type: 'button', onclick: () => ctx.openBrief() }, 'いまの日報を見る')]),
     el('h3.help-h', 'やり残しの数字'),
     el('p.muted.small', '期限切れと 24 時間以内が期限のタスクが残っていると、タスクのタブに赤い数字が出ます(いつも)。下を有効にすると、ホーム画面のアプリのアイコンにも同じ数字を出します(この端末だけ・最後に開いたときの数・iPhone は通知の許可が要ります)。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!local.appBadge, disabled: !appBadgeSupported(), onchange: async (e) => { if (e.target.checked) { const ok = await enableAppBadge(); if (!ok) e.target.checked = false; else toast('アイコンに数字を出します'); } else disableAppBadge(); } }), el('span', appBadgeSupported() ? 'アプリのアイコンにも数字を出す' : 'アプリのアイコンにも数字を出す(この端末 / ブラウザは未対応)')]),
-    el('p.muted.small', 'アプリを閉じている間に届く通知は、サーバーを持たないこのアプリからは出せません。決まった時刻に気づきたいときは、iPhone の「ショートカット」› オートメーション ›「時刻」で 12:00 や 19:00 を選び、アクションに「通知を表示」(本文は「メリハリを開く」など)を置いて「すぐに実行」にします。通知が来たら、ホーム画面のメリハリのアイコンから開くと、その時間帯のブリーフィングが出ます(ホーム画面に追加したアプリは「App を開く」の候補に出ないので、自動では開けません。v0.61.1 で案内を直しました)。'),
+    el('p.muted.small', 'アプリを閉じている間に届く通知は、サーバーを持たないこのアプリからは出せません。決まった時刻に気づきたいときは、iPhone の「ショートカット」› オートメーション ›「時刻」で 12:00 や 19:00 を選び、アクションに「通知を表示」(本文は「メリハリを開く」など)を置いて「すぐに実行」にします。通知が来たら、ホーム画面のメリハリのアイコンから開くと、その時間帯の日報が出ます(ホーム画面に追加したアプリは「App を開く」の候補に出ないので、自動では開けません。v0.61.1 で案内を直しました)。'),
   );
 }
 
@@ -732,7 +732,7 @@ const SECTIONS = {
   train: { title: '電車', build: (re) => sectionTrain(re) }, // v0.50・F18
   bgm: { title: '作業用 BGM', build: (re) => sectionBgm(re) },
   feed: { title: 'キャッチアップ', build: (re) => sectionFeed(re) },
-  brief: { title: '日報(ブリーフィング)', build: (re, ctx) => sectionBrief(re, ctx) }, // v0.55・F21
+  brief: { title: '日報', build: (re, ctx) => sectionBrief(re, ctx) }, // v0.55・F21
   ...(FEATURES.QUEST ? { quest: { title: '連載小説', build: (re) => sectionQuest(re) } } : {}), // v0.56・F22
   ...(FEATURES.ART ? { art: { title: 'ピースの図録', build: (re) => sectionArt(re) } } : {}), // v0.58・F23
   ...(FEATURES.BUDDY ? { buddy: { title: 'アシスタント', build: (re) => sectionBuddy(re) } } : {}), // v0.62・F24
@@ -853,7 +853,7 @@ export function renderSettings(view, ctx, section = null) {
     group('記録のきほん', [
       srow('作業時間帯', summary.window(), open('window')),
       srow('1日の目標', summary.goals(), open('goals')),
-      srow('すき間', summary.logging(), open('logging')),
+      srow('記録のすき間', summary.logging(), open('logging')),
       FEATURES.POMO ? srow('ポモドーロ', (() => { const p = pomo.normalizePomo(S().pomo); return p.enabled ? `${p.work} 分 × ${p.sets} セット・休憩 ${p.rest} 分${p.notify ? '・通知' : ''}` : '使わない'; })(), open('pomo')) : null,
     ]),
     group('カテゴリと色', [
@@ -863,7 +863,7 @@ export function renderSettings(view, ctx, section = null) {
     ]),
     group('ふり返り', [
       srow('レポートのタイル', summary.tiles(), open('tiles')),
-      srow('日報(ブリーフィング)', `${S().brief?.enabled === false ? '出さない' : `朝・昼・夜${brief.bedOf(S()) ? '・寝る前' : ''}の初回`}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
+      srow('日報', `${S().brief?.enabled === false ? '出さない' : `朝・昼・夜${brief.bedOf(S()) ? '・寝る前' : ''}の初回`}${store.state.local.appBadge ? '・アイコンに数字' : ''}`, open('brief')), // v0.55・F21
     ]),
     group('アシスタントと ごほうび', [
       FEATURES.BUDDY ? srow('アシスタント', buddySummary(), open('buddy')) : null,
