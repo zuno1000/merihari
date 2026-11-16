@@ -294,15 +294,14 @@ function recNodes(r, redraw) {
       c.src === 'sakenowa' && c.score != null ? el('span.dk-net', [`ネットの人気 ${c.score.toFixed(1)} / 5`, c.rank ? `・全国 ${c.rank} 位` : '']) : null,
       c.src === 'xwines' && c.score != null && c.n >= 5 ? el('span.dk-net', `評価の平均 ${c.score.toFixed(1)} / 5(${c.n.toLocaleString()} 件・2012〜21 年)`) : null,
     ].filter(Boolean)),
-    info.about ? el('p.dk-about', info.about) : null,
+    info.about ? el('p.dk-about', drinks.tidy(info.about)) : null, // v0.92: 説明の段落は 字のあいだの空白を 取る(折り返しと 重なって 不自然に見えていた)
     radar(axes, [{ values: axes.map(([k]) => c.t[k] ?? null), cls: 'top' }, ...(hasT ? [{ values: axes.map(([k]) => tg.t[k] ?? null), cls: 'all' }] : [])], { size: 200, label: `${c.name} の味の目安` }),
     el('p.muted.small.dk-legend', [el('i.rd-key.top'), net ? 'この銘柄 ' : 'この種類 ', ...(hasT ? [el('i.rd-key.all'), 'あなたの好み'] : [])]),
     el('div.row.dk-acts', [
       el('button.btn.sm', { type: 'button', class: `btn sm${wished ? ' on' : ''}`, 'aria-pressed': wished ? 'true' : 'false', onclick: () => { toggleWish(kind, c); redraw(); } }, wished ? '★ 気になる' : '☆ 気になる'),
-      ...drinks.whereLinks(kind, drinks.searchName(c)).map((l) => el('button.btn.sm', { type: 'button', onclick: () => window.open(l.url, '_blank', 'noopener') }, l.label)),
+      ...[...drinks.whereLinks(kind, drinks.searchName(c)), drinks.photoLink(kind, c)].filter(Boolean).map((l) => el('button.btn.sm', { type: 'button', onclick: () => window.open(l.url, '_blank', 'noopener') }, l.label)),
     ]),
     r.others.length ? el('div.dk-othersbox', [el('span.dk-h', 'ほかの候補'), el('div.chips.small.dk-others', { role: 'group', 'aria-label': 'ほかの候補' }, [r.pick, ...r.others].map((o) => el('button.chip.sm2', { type: 'button', class: `chip sm2${o.name === c.name ? ' on' : ''}`, 'aria-pressed': o.name === c.name ? 'true' : 'false', onclick: () => { recShown = { key: `${now().date}:${kind}`, name: o.name }; redraw(); } }, o.name.replace(/\s*\([^)]*\)/g, ''))))]) : null,
-    c.src === 'firstbloom' ? el('p.muted.small.dk-credit', '2017〜21 年に 海外の店が 売っていた銘柄です。同じものは もう 無いことが多いので、同じ産地・精製・風味の豆を 探す 目安に。') : null,
     credit ? el('p.muted.small.dk-credit', [el('a', { href: credit.url, target: '_blank', rel: 'noopener' }, credit.text), 'を利用しています']) : null,
     el('details.dk-why', [
       el('summary', `このおすすめについて(${drinks.basisShort(tg)})`),

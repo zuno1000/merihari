@@ -141,7 +141,7 @@ function wrapSheet(ses, rerender) {
   const open = log.openEntry(store.state.data.entries);
   const openName = open ? (S().categories.find((x) => x.id === open.categoryId) || {}).name || '記録' : '';
   let pick = cats.some((x) => x.id === c.categoryId) ? c.categoryId : null;
-  const line = buddyOn() ? buddyLine('vocab_done', { n: ses.n, ok: ses.ok }) : vocab.resultText(ses.n, ses.ok);
+  const line = buddyOn() ? buddyLine('vocab_done', { n: ses.n, ok: ses.ok }, Math.floor(Math.random() * 1000)) : vocab.resultText(ses.n, ses.ok);
   const tile = (k, v, sub) => el('div.sl-tile', [el('span.sl-k', k), el('b.sl-v', v), el('span.sl-s', sub)]);
   sheet((close) => {
     const body = el('div.vc-body');
@@ -195,7 +195,10 @@ export function vocabSheet(rerender = null, first = 'study') {
   const say = (text, mood = 'base') => (text ? buddyBubble(text, mood, 44) || el('div.sl-say', el('p', text)) : null);
   // 学習の間の アシスタントの ひとこと(v0.90): talk = いま出ている文。同じ文のあいだは 同じ要素を使い回す(描き直しで 絵が ちらつかない)
   let talk = null, talkNode = null, talkId = 0, shownId = -1, combo = 0, quiet = 0;
-  const comment = (key, vars = {}, mood = 'base') => { quiet = 0; if (!buddyOn()) { talk = null; return; } const text = buddyLine(key, vars, ++talkId); talk = text ? { id: talkId, text, mood } : null; };
+  // v0.92(実機 FB「英単語の アシスタントのフレーズは なるべく 種類豊富に」): 言い回しの番号は 場面ごとに 進める(ぜんぶの場面で 1 つの番号を 進めていたので、場面によっては 同じ文に 当たりやすかった)。始まりは 開くたびに ばらばら
+  const saidN = {}, saidOff = Math.floor(Math.random() * 1000);
+  const turnOf = (key) => saidOff + (saidN[key] = (saidN[key] || 0) + 1);
+  const comment = (key, vars = {}, mood = 'base') => { quiet = 0; if (!buddyOn()) { talk = null; return; } const text = buddyLine(key, vars, turnOf(key)); talk = text ? { id: ++talkId, text, mood } : null; };
   const strip = () => { if (!talk) return null; if (shownId !== talk.id) { talkNode = buddyBubble(talk.text, talk.mood, 40); shownId = talk.id; if (talkNode) talkNode.classList.add('vc-talk'); } return talkNode; };
   const dir = () => C().dir;
   const recOf = (en) => R()[en] || null;
@@ -213,7 +216,7 @@ export function vocabSheet(rerender = null, first = 'study') {
   };
   const begin = (focus = null) => {
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
-    set = { n: focus ? focus.length : C().n, i: 0, ok: 0, first: 0, up: 0, got: 0, missed: [], cur: null, tag: null, opts: [], picked: null, recent: [], done: false, myNew: 0, queue: [], focus: focus ? focus.slice() : null, isFocus: !!focus, revealed: true };
+    set = { n: focus ? focus.length : C().n, i: 0, ok: 0, first: 0, up: 0, got: 0, missed: [], cur: null, tag: null, opts: [], picked: null, recent: [], done: false, myNew: 0, queue: [], focus: focus ? focus.slice() : null, isFocus: !!focus, revealed: true, doneTurn: turnOf('vocab_done') };
     next();
     combo = 0;
     const t = !focus && lastMode === 'auto' && answered === 0 ? vocabTopic() : null; // 開いて最初の 1 回は ホームと同じ話題(復習がたまっている / 今日は まだ)
@@ -360,7 +363,7 @@ export function vocabSheet(rerender = null, first = 'study') {
   };
   const drawResult = () => {
     const n = today(), d = vocab.dayOf(R(), n.date), st = vocab.streak(R(), n.date), c = vocab.counts(R(), dk, Date.now());
-    const line = set.i ? (buddyOn() ? buddyLine('vocab_done', { n: set.i, ok: set.ok }) : vocab.resultText(set.i, set.ok)) : emptyText();
+    const line = set.i ? (buddyOn() ? buddyLine('vocab_done', { n: set.i, ok: set.ok }, set.doneTurn) : vocab.resultText(set.i, set.ok)) : emptyText();
     const tile = (k, v, sub) => el('div.sl-tile', [el('span.sl-k', k), el('b.sl-v', v), el('span.sl-s', sub)]);
     body.append(...[
       el('p.vc-donehead', [el('b', set.isFocus ? '立て直し 完了' : 'セット完了'), el('span', `正解 ${set.ok} / ${set.i}`)]),

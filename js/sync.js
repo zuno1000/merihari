@@ -398,6 +398,7 @@ export function attentionReasons(s) {
   if (s.connected && s.pending && (!s.lastSyncAt || s.now - s.lastSyncAt > AUTO_INTERVAL_MS)) out.push('sync');
   if (s.connected && s.inDay !== false && (!s.busyFetchedAt || !(s.busyAgeMin < 60))) out.push('busy');
   if (s.exportDue) out.push('export');
+  if (s.storage === 'warn' || s.storage === 'full') out.push('storage'); // v0.92: 端末の置き場所が 70% を超えた
   return out;
 }
 export function autoSyncDecision(s) {

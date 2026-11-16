@@ -2277,8 +2277,8 @@ document.getElementById('app').addEventListener('load', async () => {
         && Dk2.suggest({}, 'wine', D2).pick.src === 'style' && Dk2.suggest({}, 'coffee', D2, { coffee: { items: [] } }).pick.src === 'style' && Dk2.suggest({}, 'beer', D2, { wine: wn, coffee: cf }).pick.src === 'style',
         'parseWine / parseCoffee / suggest: ワインと コーヒーも 実在の銘柄から(形の合わないものと 名前の重なりは 捨てる・記録した銘柄は 出さない・銘柄を読めなければ STYLES から・ビールは STYLES のまま)');
       const iw = Dk2.infoOf(all2(sw).find((c) => c.name === 'Alpha Cabernet')), ib = Dk2.infoOf(all2(sw).find((c) => c.name === 'Gamma Brut')), ic = Dk2.infoOf(all2(sc).find((c) => c.name === 'Kiaguthu')), is = Dk2.infoOf(all2(sc).find((c) => c.name === 'Sumatra Lot')), ie = Dk2.infoOf(all2(sc).find((c) => c.name === 'House Espresso'));
-      ok(iw.about.startsWith('チリ・Maipoの 赤ワイン。品種は カベルネ・ソーヴィニヨン。アルコール 14%。') && iw.about.includes('ボルドー') && iw.photo === 'w-cabernet' && ib.photo === 'w-chardonnay' && ic.about.includes('Roaster A(海外のロースター)が 2019 年ごろに') && ic.about.includes('SL28') && ic.photo === null
-        && is.photo === 'c-mandheling' && ie.photo === null && ie.about.includes('産地は ブレンド') && Dk2.searchName(all2(sc).find((c) => c.name === 'Kiaguthu')) === 'ケニア Kiaguthu' && Dk2.searchName(all2(sc).find((c) => c.name === 'House Espresso')) === 'House Espresso' && Dk2.searchName(alpha) === 'Alpha Cabernet'
+      ok(iw.about.startsWith('チリ・Maipo の赤ワイン。品種はカベルネ・ソーヴィニヨン。アルコール度数 14%。カベルネ・ソーヴィニヨンは、フランスの') && iw.about.includes('ボルドー') && iw.photo === 'w-cabernet' && ib.photo === 'w-chardonnay' && ic.about.startsWith('ケニア産の豆(ウォッシュト精製)。2019 年ごろに、海外のロースター Roaster A が扱っていた銘柄です。') && ic.about.endsWith('同じ産地・精製の豆を探す目安にしてください。') && !/[ぁ-ん一-龠] [ぁ-ん一-龠]/.test(ic.about) && ic.about.includes('SL28') && ic.photo === null
+        && is.photo === 'c-mandheling' && ie.photo === null && ie.about.startsWith('複数の産地の豆のブレンド。') && Dk2.searchName(all2(sc).find((c) => c.name === 'Kiaguthu')) === 'ケニア Kiaguthu' && Dk2.searchName(all2(sc).find((c) => c.name === 'House Espresso')) === 'House Espresso' && Dk2.searchName(alpha) === 'Alpha Cabernet'
         && Dk2.CREDITS.firstbloom.url.includes('alexcaza/firstbloom-data') && Dk2.CREDITS.xwines.url.includes('rogerioxavier/X-Wines') && Dk2.CREDITS.sakenowa === Dk2.SAKE_CREDIT,
         'infoOf / searchName / CREDITS: 銘柄の解説(国・産地・品種・度数 / ロースター・年・産地・精製)に 品種 / 産地の解説と 写真を 借りる・コーヒーは 産地を頭に付けて探す・出典の表示');
       const realW = Dk2.parseWine(await (await fetch('../data/wine.json', { cache: 'no-store' })).json()), realC = Dk2.parseCoffee(await (await fetch('../data/coffee.json', { cache: 'no-store' })).json());
@@ -2288,6 +2288,26 @@ document.getElementById('app').addEventListener('load', async () => {
         && all2(heavy).every((c) => c.type === 0 && c.t.tannin >= 4 && c.t.body >= 4) && all2(light).every((c) => c.t.tannin <= 2 && c.t.body <= 3) && heavy.others.length === 4
         && all2(fruity).every((c) => c.t.acid >= 3.5 && c.t.bitter <= 2.5) && all2(deep).every((c) => c.t.acid <= 2.5 && c.t.bitter >= 3.5) && deep.others.length === 4,
         '同梱のワイン(data/wine.json・X-Wines)と コーヒー(data/coffee.json・Firstbloom Data): 軸がそろっている・重い赤が好みなら 渋みとボディの強い赤、果実味が好みなら 酸味の強い豆、深い味が好みなら 苦味の強い豆が出る');
+    }
+
+    { // v0.92: 説明の文の体裁 / 写真を探す / 英単語の台詞の数 / 置き場所の使い具合
+      const Dk3 = M.drinks, cfx = Dk3.parseCoffee({ items: [[1, 'Kiaguthu', 'Roaster A', 'ケニア', 'ウォッシュト', ['カシス', 'レモン'], [35, 30, 50, 12, 20], 2019], [2, 'Sumatra Lot', 'Roaster B', 'インドネシア', 'スマトラ式', [], [20, 20, 12, 40, 50], 2020]] });
+      const sx = Dk3.suggest({}, 'coffee', '2026-11-16', { coffee: cfx }), kx = [sx.pick, ...sx.others].find((c) => c.name === 'Kiaguthu'), lx = [sx.pick, ...sx.others].find((c) => c.name === 'Sumatra Lot');
+      ok(Dk3.tidy('小さな農園が 手で摘んで育てる。\n年に 2 回 収穫できる。 Pop Coffee  Works が 扱う') === '小さな農園が手で摘んで育てる。年に 2 回収穫できる。 Pop Coffee Works が扱う' && Dk3.tidy(null) === '' && Dk3.procLabel('ウォッシュト') === 'ウォッシュト精製' && Dk3.procLabel('スマトラ式') === 'スマトラ式' && Dk3.procLabel('') === ''
+        && kx.area === 'ケニア・ウォッシュト精製' && kx.note === '風味: カシス・レモン' && kx.country === 'ケニア' && lx.area === 'インドネシア・スマトラ式' && lx.note === '' && Dk3.searchName(kx) === 'ケニア Kiaguthu',
+        'tidy / procLabel / コーヒーの札: 説明の段落は 日本語の字のあいだの空白と 改行を取る(英数字の となりは 残す)・2 行目は 産地と精製、3 行目は 風味');
+      const pl = Dk3.photoLink('coffee', kx), pw = Dk3.photoLink('wine', { src: 'xwines', name: 'Alpha Cabernet', maker: 'Alpha' });
+      ok(pl.label === '写真を探す' && pl.url === `https://www.google.com/search?tbm=isch&q=${encodeURIComponent('Roaster A Kiaguthu coffee')}` && pw.url.endsWith(encodeURIComponent('Alpha Cabernet wine')) && Dk3.photoLink('coffee', { src: 'style', name: 'ケニア' }) === null && Dk3.photoLink('wine', null) === null,
+        'photoLink: 実在の銘柄だけ、画像の検索を 外で開く入口(品種・産地の単位の おすすめには 出さない)');
+      const B3 = M.buddy, vk = ['vocab_due', 'vocab_yet', 'vocab_done', 'vocab_start', 'vocab_combo', 'vocab_miss', 'vocab_mid', 'vocab_cheer'];
+      const distinct = (k, t) => new Set(Array.from({ length: 60 }, (_, i) => B3.say(k, t, { n: 7, ok: 5 }, i))).size;
+      ok(vk.every((k) => B3.TONES.every((t) => distinct(k, t) >= 6)) && B3.TONES.every((t) => distinct('vocab_cheer', t) >= 10 && distinct('vocab_miss', t) >= 9)
+        && vk.every((k) => B3.TONES.every((t) => Array.from({ length: 60 }, (_, i) => B3.say(k, t, { n: 7, ok: 5 }, i)).every((s) => s && !/[{}]/.test(s)))),
+        '英単語の台詞: どの場面も 口調ごとに 6 通り以上(合間の ひとことは 10 以上・ミスは 9 以上)・差し込みが 残らない');
+      const St3 = M.store, Sy3 = M.sync, base3 = { connected: true, pending: false, lastSyncAt: 1, now: 2, busyFetchedAt: 1, busyAgeMin: 1, inDay: true, exportDue: false };
+      ok(St3.storageLevel(0) === 'ok' && St3.storageLevel(St3.QUOTA_CHARS * 0.69) === 'ok' && St3.storageLevel(St3.QUOTA_CHARS * 0.7) === 'warn' && St3.storageLevel(St3.QUOTA_CHARS * 0.9) === 'full' && St3.storageLevel(100, 100) === 'full' && St3.QUOTA_CHARS === 2600000
+        && eq(Sy3.attentionReasons({ ...base3, storage: 'warn' }), ['storage']) && eq(Sy3.attentionReasons({ ...base3, storage: 'full', exportDue: true }), ['export', 'storage']) && eq(Sy3.attentionReasons({ ...base3, storage: 'ok' }), []) && eq(Sy3.attentionReasons(base3), []),
+        'storageLevel / attentionReasons: 端末の置き場所が 70% で 知らせ・90% で いっぱい(歯車の赤い点と 設定の お知らせに出る)');
     }
 
     ok(false === true, 'ネガティブコントロール(これは必ず FAIL する)');

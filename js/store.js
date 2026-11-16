@@ -489,25 +489,81 @@ export const nowISO = () => {
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function writeJSON(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 
-export const state = { data: null, local: null, onSaveError: null };
+export const state = { data: null, local: null, onSaveError: null, onSaveOk: null, saveFailed: false, loadBroken: null };
+
+/**
+ * v0.92(ユーザーの方針「いちばん避けたいのは データが消えること」): 端末の保存先(localStorage)が いっぱいのとき・読めないときの 守り。
+ * - 置き場所の上限は ブラウザごとに 約 5MB。Safari は 文字数 × 2 バイトで数えるので、文字数では 約 260 万(QUOTA_CHARS)。storageLevel で 70% から 知らせる。
+ * - 書けなかったとき(save): いまある保存は そのまま残る(上書きは 全部か無しか)。捨ててよい控え(記事と 予定の キャッシュ)を消して もう一度 書く。
+ *   それでも だめなら state.saveFailed = true・onSaveError(消えない知らせ)。変更は メモリの中に あるので、同期と 書き出しは できる(pendingSync は メモリの上で 立てる)。
+ * - 読めなかったとき(init): 保存されていた文字列を 別の鍵(KEY + '.broken')に 退避してから 始める。退避も できなければ state.loadBroken = 'locked' で 上書きを止める。
+ */
+export const QUOTA_CHARS = 2600000;
+/** 置き場所の使い具合(純関数): 文字数 → 'ok' | 'warn'(70% 以上)| 'full'(90% 以上) */
+export function storageLevel(chars, quota = QUOTA_CHARS) { const r = (+chars || 0) / quota; return r >= 0.9 ? 'full' : r >= 0.7 ? 'warn' : 'ok'; }
+/** いま 使っている文字数(この アプリの localStorage ぜんぶ・鍵の名前も含む)。読めなければ 0 */
+export function usedChars() {
+  try { let n = 0; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); n += k.length + (localStorage.getItem(k) || '').length; } return n; } catch { return 0; }
+}
+/** 捨ててよい控えを消す(また取り直せるもの)。消したものが あれば true */
+function freeCaches() {
+  const l = state.local;
+  if (!l || (!l.feedCache && !l.busyCache)) return false;
+  l.feedCache = null; l.busyCache = null;
+  try { writeJSON(LOCAL_KEY, l); } catch { /* ignore */ }
+  return true;
+}
 
 export function init() {
-  state.data = migrate(readJSON(KEY));
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); } catch { raw = null; }
+  let parsed = null;
+  state.loadBroken = null;
+  if (raw) {
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!parsed || typeof parsed !== 'object') { // 壊れていて 読めない: 上書きする前に 退避
+      parsed = null;
+      try { localStorage.setItem(`${KEY}.broken`, raw); state.loadBroken = 'kept'; } catch { state.loadBroken = 'locked'; }
+    }
+  }
+  state.data = migrate(parsed);
   state.local = Object.assign(defaultLocal(), readJSON(LOCAL_KEY) || {});
+  state.saveFailed = false; failed.data = false; failed.local = false;
   refreshItemSnap();
   return state;
 }
 
 export function save() {
-  try {
-    writeJSON(KEY, state.data);
-    state.saveSeq = (state.saveSeq || 0) + 1; // v0.16: 同期の途中(アップロード中)に保存があったかを sync が見る
-    refreshItemSnap();
-    if (state.local && !state.local.pendingSync) { state.local.pendingSync = true; writeJSON(LOCAL_KEY, state.local); }
-  } catch (e) { state.onSaveError?.(e); }
+  state.saveSeq = (state.saveSeq || 0) + 1; // v0.16: 同期の途中(アップロード中)に保存があったかを sync が見る
+  refreshItemSnap();
+  let err = null;
+  if (state.loadBroken === 'locked') err = new Error('前のデータを読めず、退避も できていないので 上書きを止めています');
+  else {
+    try { writeJSON(KEY, state.data); }
+    catch (e) { err = e; if (freeCaches()) { try { writeJSON(KEY, state.data); err = null; } catch (e2) { err = e2; } } }
+  }
+  if (err) { // 書けていない: 変更は メモリの中。同期には 乗せる
+    if (state.local) state.local.pendingSync = true;
+    mark('data', err);
+    return;
+  }
+  mark('data', null);
+  if (state.local && !state.local.pendingSync) { state.local.pendingSync = true; saveLocal(); }
 }
 export function saveLocal() {
-  try { writeJSON(LOCAL_KEY, state.local); } catch (e) { state.onSaveError?.(e); }
+  let err = null;
+  try { writeJSON(LOCAL_KEY, state.local); }
+  catch (e) { err = e; if (state.local && (state.local.feedCache || state.local.busyCache)) { state.local.feedCache = null; state.local.busyCache = null; try { writeJSON(LOCAL_KEY, state.local); err = null; } catch (e2) { err = e2; } } }
+  mark('local', err);
+}
+/** 書けた / 書けなかった の印(data = 記録など・local = この端末だけの状態)。どちらかが 書けていない間は state.saveFailed。直ったら onSaveOk */
+const failed = { data: false, local: false };
+function mark(kind, err) {
+  const was = failed.data || failed.local;
+  failed[kind] = !!err;
+  state.saveFailed = failed.data || failed.local;
+  if (err) state.onSaveError?.(err);
+  else if (was && !state.saveFailed) state.onSaveOk?.();
 }
 /**
  * 設定の項目(カテゴリ・種別・配色セット)ごとの updatedAt(v0.15.7・F7-6): 同期で id ごとに新しい方を選ぶための印。

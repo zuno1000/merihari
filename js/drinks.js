@@ -337,10 +337,26 @@ export function parseCoffee(raw) {
 const CAND = {
   sake: (x) => ({ name: x.name, maker: x.maker, area: x.area, note: [sakeWords(x.f), ...x.tags.slice(0, 3)].filter(Boolean).join('・'), t: x.t, src: 'sakenowa', ref: x.ref, score: x.score, rank: x.rank, f: x.f }),
   wine: (x) => ({ name: x.name, maker: x.maker, area: [x.area, x.region].filter(Boolean).join('・'), note: [WINE_TYPES[x.type], ...x.grapes].join('・'), t: x.t, src: 'xwines', ref: x.ref, score: x.score, rank: null, n: x.n, f: null, type: x.type, grapes: x.grapes, abv: x.abv, country: x.area }),
-  coffee: (x) => ({ name: x.name, maker: x.maker, area: x.area, note: [x.proc, ...x.words].filter(Boolean).join('・'), t: x.t, src: 'firstbloom', ref: x.ref, score: null, rank: null, f: null, proc: x.proc, year: x.year }),
+  // v0.92: 札の 2 行目は「産地・精製」、3 行目は「風味: …」(精製と 風味の言葉を ひとつづきに 並べていたのを 分けた)。country = 産地の国(解説と 探す言葉に使う)
+  coffee: (x) => ({ name: x.name, maker: x.maker, area: [x.area, procLabel(x.proc)].filter(Boolean).join('・'), note: x.words.length ? `風味: ${x.words.join('・')}` : '', t: x.t, src: 'firstbloom', ref: x.ref, score: null, rank: null, f: null, proc: x.proc, year: x.year, country: x.area }),
 };
+/** 精製の呼び方(「ウォッシュト精製」「スマトラ式」) */
+export const procLabel = (p) => (!p ? '' : /式$|発酵$|^デカフェ$/.test(p) ? p : `${p}精製`);
+/**
+ * 説明の文の体裁(v0.92・実機 FB「紹介に 謎の空白や改行が含まれる」): 日本語の字と字の あいだの 空白を 取り、続いた空白と 改行を 1 つに。英数字の となりの 空白は 残す。
+ * このアプリの 短い文は 読みやすさのために 空白で区切っているが、長い説明の段落では 行の折り返しと 重なって 不自然に見える。
+ */
+const JP = '[\\u3000-\\u30ff\\u3400-\\u9fff\\uff00-\\uffef]';
+const JP_GAP = new RegExp(`(${JP})[ \\t]+(?=${JP})`, 'g');
+export const tidy = (s) => String(s || '').replace(/\s+/g, ' ').replace(JP_GAP, '$1').trim();
 /** 探すときの言葉(コーヒーは 銘柄の名前だけでは 見つからないので 産地を頭に) */
-export const searchName = (c) => (c && c.src === 'firstbloom' && c.area && c.area !== 'ブレンド' && !c.name.includes(c.area) ? `${c.area} ${c.name}` : (c && c.name) || '');
+export const searchName = (c) => (c && c.src === 'firstbloom' && c.country && c.country !== 'ブレンド' && !c.name.includes(c.country) ? `${c.country} ${c.name}` : (c && c.name) || '');
+/** その銘柄の 写真を探す入口(v0.92・ユーザー要望「銘柄ごとの写真が あると嬉しい」): 画像の検索を 外のページで開くだけ(銘柄の写真は 権利の はっきりしたものが無く、アプリには 入れていない)。実在の銘柄だけ */
+export function photoLink(kind, c) {
+  if (!c || !c.src || c.src === 'style' || !c.name) return null;
+  const q = c.src === 'firstbloom' ? `${c.maker} ${c.name} coffee` : c.src === 'xwines' ? `${c.name} wine` : `${c.name} ${c.maker || ''} 日本酒`;
+  return { label: '写真を探す', url: `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q.replace(/\s+/g, ' ').trim())}` };
+}
 
 /** 名前を そろえる(見比べ・重なりの判定用): 空白を取り、英字は小文字に */
 export const nameKey = (s) => String(s || '').replace(/[\s\u3000]/g, '').toLowerCase();
@@ -488,13 +504,13 @@ export function infoOf(c) {
   if (!c) return { about: '', photo: null };
   if (c.src === 'xwines') {
     const g = (c.grapes || [])[0], st = g && GRAPE_STYLE[g] && (GRAPE_STYLE[g][1] === c.type || (GRAPE_STYLE[g][1] === 1 && c.type === 2)) ? GRAPE_STYLE[g][0] : null;
-    const head = `${c.area ? `${c.area}の ` : ''}${WINE_TYPES[c.type] || ''}ワイン。${c.grapes && c.grapes.length ? `品種は ${c.grapes.join('、')}。` : ''}${c.abv ? `アルコール ${c.abv}%。` : ''}`;
-    return { about: `${head}${st ? `${g}: ${STYLE_ABOUT[st]}` : ''}`, photo: (st && STYLE_PHOTO[st]) || null };
+    const head = `${c.area ? `${c.area} の` : ''}${WINE_TYPES[c.type] || ''}ワイン。${c.grapes && c.grapes.length ? `品種は${c.grapes.join('、')}。` : ''}${c.abv ? `アルコール度数 ${c.abv}%。` : ''}`;
+    return { about: tidy(`${head}${st ? `${g}は、${STYLE_ABOUT[st]}` : ''}`), photo: (st && STYLE_PHOTO[st]) || null };
   }
   if (c.src === 'firstbloom') {
-    const st = (c.proc === 'スマトラ式' && c.area === 'インドネシア' ? 'マンデリン(深煎り)' : ORIGIN_STYLE[c.area]) || null;
-    const head = `${c.maker}(海外のロースター)が ${c.year ? `${c.year} 年ごろに ` : ''}売っていた銘柄。産地は ${c.area}${c.proc ? `、精製は ${c.proc}` : ''}。`;
-    return { about: `${head}${st ? STYLE_ABOUT[st] : ''}`, photo: (st && STYLE_PHOTO[st]) || null };
+    const st = (c.proc === 'スマトラ式' && c.country === 'インドネシア' ? 'マンデリン(深煎り)' : ORIGIN_STYLE[c.country]) || null;
+    const head = `${c.country === 'ブレンド' ? '複数の産地の豆のブレンド' : `${c.country}産の豆`}${c.proc ? `(${procLabel(c.proc)})` : ''}。${c.year ? `${c.year} 年ごろに、` : ''}海外のロースター ${c.maker} が扱っていた銘柄です。`;
+    return { about: tidy(`${head}${st ? STYLE_ABOUT[st] : ''}同じ銘柄は、もう売っていないことが多いので、同じ産地・精製の豆を探す目安にしてください。`), photo: (st && STYLE_PHOTO[st]) || null };
   }
   if (c.src === 'sakenowa' && Array.isArray(c.f)) {
     const top = c.f.indexOf(Math.max(...c.f));

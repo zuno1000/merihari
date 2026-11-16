@@ -380,11 +380,13 @@ export function attentionItems() {
     connected: google.isConnected(), pending: !!local.pendingSync, lastSyncAt: local.lastSyncAt || 0, now: Date.now(),
     busyFetchedAt: f.fetchedAt || 0, busyAgeMin: f.fetchedAt ? f.ageMin : Infinity, inDay: !w || n.min < w.end,
     exportDue: shouldRemindExport({ firstDate: report.firstLoggedDate(store.state.data.entries), today: n.date, lastExportAt: local.lastExportAt || 0, now: Date.now() }),
+    storage: store.state.saveFailed ? 'full' : store.storageLevel(store.usedChars()),
   });
   const items = [];
   for (const r of reasons) {
     if (r === 'sync') items.push({ key: 'sync', label: '未同期の変更あり', value: 'いますぐ同期', run: doSync });
     else if (r === 'busy') items.push({ key: 'busy', label: (!f.fetchedAt ? '予定は未取得' : `予定は${Math.floor(f.ageMin / 60)}時間前のもの`) + (f.error ? '(前回失敗)' : ''), value: '更新', run: async (re) => { try { toast('予定を取得中…'); await google.fetchBusy({ force: true, interactive: true }); toast('予定を更新しました'); } catch (e) { toast(e.message); } re(); } });
+    else if (r === 'storage') items.push({ key: 'storage', label: store.state.saveFailed ? 'この端末に 保存できていません' : `端末の置き場所が ${Math.round((store.usedChars() / store.QUOTA_CHARS) * 100)}% です`, value: '控えを書き出す', run: (re) => { exportJSONFile(); re(); } });
     else if (r === 'export') items.push({ key: 'export', label: local.lastExportAt ? '控え(JSON)の書き出しから30日' : '控え(JSON)をまだ書き出していません', value: '書き出す', run: (re) => { exportJSONFile(); re(); } });
   }
   return items;
@@ -830,7 +832,8 @@ export function renderSettings(view, ctx, section = null) {
     try { const list = await ctx.news(); clear(newsBox); newsBox.append(...list.map((n) => el('div.srow.plain', [el('span.lbl', `v${n.v}`), el('span.val.left', n.text)]))); newsLoaded = true; }
     catch (e) { clear(newsBox); newsBox.append(el('div.srow.plain', el('span.val.left', `読めませんでした: ${e.message}`))); }
   };
-  const dataBytes = (() => { try { return (localStorage.getItem(store.KEY) || '').length; } catch { return 0; } })(); // v0.25(レビュー A-4): 文字数 ≒ バイト(UTF-16 で 2 倍だが目安)
+  const usedPct = Math.round((store.usedChars() / store.QUOTA_CHARS) * 100); // v0.92: 置き場所の使い具合(Safari の数え方 = 文字数 × 2 バイトで 約 5MB)
+  const dataBytes = (() => { try { return (localStorage.getItem(store.KEY) || '').length * 2; } catch { return 0; } })(); // v0.25(レビュー A-4): 文字数 ≒ バイト(UTF-16 で 2 倍だが目安)
   const fmtKB = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.round(n / 1024)}KB`);
   // v0.28(実機 FB ①「どこを押せばすぐに同期できるのか」): 先頭に「同期」。接続済みなら「いますぐ同期」(状態つき・未同期なら赤い点)、未接続なら「Google に接続」。お知らせ(予定が古い・控えの書き出し)もここ
   const att = attentionItems();
@@ -878,7 +881,7 @@ export function renderSettings(view, ctx, section = null) {
     ]),
     group('お金', [srow('予算・カテゴリ', summary.money(), open('money'))]),
     group('データ', [
-      srow('書き出し(JSON)', `${store.state.local.lastExportAt ? `最後 ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も'}・いま ${fmtKB(dataBytes)} / 約 5MB`, () => {
+      srow('書き出し(JSON)', `${store.state.local.lastExportAt ? `最後 ${fmtTs(store.state.local.lastExportAt)}` : 'まだ一度も'}・いま ${fmtKB(dataBytes)} / 約 5MB(${usedPct}%)`, () => {
         exportJSONFile();
         ctx.go('settings');
       }),

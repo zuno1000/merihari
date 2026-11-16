@@ -13,7 +13,7 @@ import * as ui from './ui.js';
 import { renderNow, renderTimeline, startCategory, stopRecording, checkOpenEntry, finalizePending, openAdd, refreshAddButton, uiBusy, pressKiai } from './ui-today.js';
 import * as kiai from './kiai.js';
 import { renderTasks, overdueCheck } from './ui-tasks.js';
-import { renderSettings } from './ui-settings.js';
+import { renderSettings, exportJSONFile } from './ui-settings.js';
 import { renderDiary } from './ui-diary.js';
 import * as diary from './diary.js';
 import * as uiReport from './ui-report.js';
@@ -41,15 +41,30 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.91.0';
+export const APP_VERSION = '0.92.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
 const view = document.getElementById('view');
 const tabs = document.getElementById('tabs');
 
-store.state.onSaveError = (e) => toast('保存に失敗: ' + e.message);
+// v0.92: この端末に 書けなかったときは、消えない知らせ(画面の上の帯)を出す。変更は メモリの中に あるので、同期か 書き出しで 外へ逃がせる
+let saveBar = null;
+const showSaveBar = (text) => {
+  if (!saveBar) {
+    saveBar = el('div.savebar', { role: 'alert' }, [el('p.savebar-t'), el('div.row', [
+      el('button.btn.sm', { type: 'button', onclick: () => { toast('同期中…'); sync.syncDrive({ interactive: true }).then((r) => { toast(r === 'skip' ? '同期を見送りました' : '同期しました(Drive に あります)'); }).catch((e) => toast(`同期できませんでした: ${e.message}`)); } }, 'いますぐ同期'),
+      el('button.btn.sm', { type: 'button', onclick: () => exportJSONFile() }, '書き出す(JSON)'),
+    ])]);
+    document.body.append(saveBar);
+  }
+  saveBar.querySelector('.savebar-t').textContent = text;
+};
+store.state.onSaveError = (e) => { console.error('save', e); showSaveBar(store.state.loadBroken === 'locked' ? '前のデータを 読めませんでした。上書きを 止めています。アプリを 閉じずに、設定 › データ から 状況を 確かめてください。' : 'この端末に 保存できていません(置き場所が いっぱい)。いまの変更は アプリを閉じると 消えます。閉じる前に 同期か 書き出しを。'); };
+store.state.onSaveOk = () => { if (saveBar) { saveBar.remove(); saveBar = null; } toast('保存できるようになりました'); };
 store.init();
+if (store.state.loadBroken) setTimeout(() => showSaveBar(store.state.loadBroken === 'kept' ? '保存されていたデータを 読めなかったので、別の場所に 退避して 新しく始めました。同期していれば「いますぐ同期」で 戻せます。' : '前のデータを 読めませんでした。上書きを 止めています。'), 0);
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch { /* ignore */ } // ブラウザの 自動の掃除の 対象から 外してもらう(できる所だけ)
 // v0.91(実機 FB「開くたびに 同期の確認で 数秒 操作できない」): 「画面を切り替えて確認」(試験的)から 戻ってきていれば トークンを受け取る。
 // まだで、条件が そろっていれば 確認ページへ移る(leaving = true。この画面は すぐ替わるので、起動の画面だけ出して 何も始めない)
 const authBack = google.takeRedirect();
@@ -232,5 +247,5 @@ if (ui.DEV) window.M = {
   sync: { merge: sync.merge, mergeSettings: sync.mergeSettings, pruneTombstones: sync.pruneTombstones, encrypt: sync.encrypt, decrypt: sync.decrypt, readHint: sync.readHint, autoSyncDecision: sync.autoSyncDecision, parseFile: sync.parseFile, keyPlan: sync.keyPlan, cmpStamp: sync.cmpStamp, passIssue: sync.passIssue, attentionReasons: sync.attentionReasons },
   google: { busyIntervalsForDate: google.busyIntervalsForDate, parseAuthHash: google.parseAuthHash, silentAuthUrl: google.silentAuthUrl, SCOPES: google.SCOPES },
   passkey: { wrap: passkey.wrap, unwrap: passkey.unwrap },
-  store: { SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, normalizeWeather: store.normalizeWeather, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, validateBgmPlay: store.validateBgmPlay, validateFeedMark: store.validateFeedMark, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, validateRecurring: store.validateRecurring, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole, entryRole: store.entryRole, effectiveKind: store.effectiveKind, validateEntry: store.validateEntry, validateTask: store.validateTask, catKinds: store.catKinds },
+  store: { storageLevel: store.storageLevel, QUOTA_CHARS: store.QUOTA_CHARS, SCHEMA: store.SCHEMA, SCALAR_FIELDS: store.SCALAR_FIELDS, defaultTiles: store.defaultTiles, kindGroups: store.kindGroups, needsKindFilter: store.needsKindFilter, normalizeWeather: store.normalizeWeather, KIND_FILTER_MIN: store.KIND_FILTER_MIN, moveItem: store.moveItem, validatePlanBlock: store.validatePlanBlock, validateKiai: store.validateKiai, validateBgmPlay: store.validateBgmPlay, validateFeedMark: store.validateFeedMark, defaultSettings: store.defaultSettings, defaultData: store.defaultData, migrate: store.migrate, validateImport: store.validateImport, validateDiary: store.validateDiary, validateMoney: store.validateMoney, defaultMoneyCategories: store.defaultMoneyCategories, validateWant: store.validateWant, validateRecurring: store.validateRecurring, busyNoteKey: store.busyNoteKey, validateBusyNote: store.validateBusyNote, KEY: store.KEY, LOCAL_KEY: store.LOCAL_KEY, defaultLocal: store.defaultLocal, CATEGORY_KINDS: store.CATEGORY_KINDS, defaultKinds: store.defaultKinds, defaultCategories: store.defaultCategories, kindRole: store.kindRole, catRole: store.catRole, entryRole: store.entryRole, effectiveKind: store.effectiveKind, validateEntry: store.validateEntry, validateTask: store.validateTask, catKinds: store.catKinds },
 };

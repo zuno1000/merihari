@@ -19,6 +19,7 @@ import collections
 import csv
 import io
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -70,6 +71,17 @@ MILK = {"Milk chocolate", "Chocolate"}
 def get(name):
     raw = subprocess.run(["curl", "-sS", "-f", "-L", "-m", "120", "-A", UA, RAW + name], check=True, capture_output=True).stdout
     return list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
+
+
+def tidy_name(s, roaster=False):
+    """名前の体裁を そろえる(v0.92・実機 FB「謎の空白や改行」): 空白と改行を 1 つに・頭の (記号) を外す・ぜんぶ大文字の語(4 文字以上・数字なし)は 頭だけ大文字に・ぜんぶ小文字の名前は 語の頭を大文字に"""
+    s = " ".join(str(s).replace("\u00a0", " ").split())
+    s = re.sub(r"^\([^)]{1,8}\)\s*", "", s).strip(" -–—,;:")
+    if roaster:
+        s = s.rstrip(".")
+    words = [w.capitalize() if len(w) >= 4 and w.isalpha() and w.isupper() else w for w in s.split(" ")]
+    s = " ".join(words)
+    return s.title() if s.islower() else s
 
 
 def spread(values):
@@ -126,7 +138,7 @@ def groups_of(note, by_id):
 
 def main():
     notes = {r["id"]: r for r in get("tasting_notes_202312201327.csv")}
-    roasters = {r["id"]: r["label"].strip() for r in get("roasters_202312201330.csv")}
+    roasters = {r["id"]: tidy_name(r["label"], roaster=True) for r in get("roasters_202312201330.csv")}
     countries = {r["id"]: r["name"].strip() for r in get("countries_202312201327.csv")}
     regions = {r["id"]: r for r in get("coffee_regions_202312201327.csv")}
     processes = {r["id"]: r["label"].strip() for r in get("cleaning_processes_202312201327.csv")}
@@ -144,7 +156,7 @@ def main():
 
     rows, seen = [], set()
     for r in sorted(get("product_releases.csv"), key=lambda x: x["release_created_at"], reverse=True):
-        rid, name, roaster = r["product_release_id"], " ".join(r["product_name"].split()), roasters.get(r["roaster_id"], "")
+        rid, name, roaster = r["product_release_id"], tidy_name(r["product_name"]), roasters.get(r["roaster_id"], "")
         ids = rel_notes.get(rid, [])
         key = (roaster.lower(), name.lower())
         if not name or not roaster or len(name) > 60 or len(ids) < 2 or not origin.get(rid) or key in seen:
