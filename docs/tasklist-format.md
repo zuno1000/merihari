@@ -60,6 +60,7 @@
 
 - 資格の学習計画のページから: `python -I tools/tasklist_from_planpage.py <index.html> --checks checks.json --url <ページの URL> > shikaku.json`
 - Markdown のチェックリスト(Obsidian など)から: `python -I tools/tasklist_from_md.py <note.md> --id kenkyu --title 研究のタスク --short 研究 > kenkyu.json`
+  - 見出しが 日付で始まれば(`### 11/20（金）— …`)その下の行は その日の分。担当の印 `[C]` `[S]` `[M]` は 札に なり、`--only M,S` で 絞れます。
 
 置き方(PC で):
 

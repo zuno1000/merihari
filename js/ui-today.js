@@ -475,7 +475,7 @@ const stripRow = (strips) => { const xs = strips.filter(Boolean); return xs.leng
 
 // ================= ホーム =================
 /**
- * ホーム(v0.95・F2-10): 今日は ①アシスタントの ひとこと(topCard・記録中は そのカード)②今日やること(focusBox)③知っておくこと ④すぐ使う ⑤今日を良くする(tileGroup)⑥日報 / ふり返る / 話す。過去の日は 円と内訳(breakdown)。
+ * ホーム(v0.95・F2-10): 今日は ①アシスタントの ひとこと(topCard・記録中は そのカード)②今日やること(focusBox)③今日のコンディション ④はじめる ⑤今日のお楽しみ(tileGroup)⑥日報 / ふり返る / 話す。過去の日は 円と内訳(breakdown)。
  * 以下は v0.28 のときの説明(過去の日のホームに残る): 円と棒だけ。上の 1 行(カレンダー・‹ 日付 ›・歯車)→ 記録中のカード → 今日の内訳(円+カテゴリ別の棒・未記録の行から「何をしていた?」)。
  * v0.28 で外したもの: 気合のカード(FEATURES.KIAI)・今日のタスク・今日の予定・「今日をふり返る」・同期と書き出しの 1 行(→ 歯車の赤い点と 設定 の先頭)。
  * 秒の更新は textContent だけ、状態が変わったら描き直す。
@@ -510,15 +510,15 @@ export function renderNow(view, ctx, dateArg = null) {
     if (Math.abs(dx) >= 70 && Math.abs(dy) < 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) goDate(addDays(date, -1)); else if (!isToday) goDate(addDays(date, 1)); } // 左へスワイプ=前の日・右へ=次の日
   } }, [
     head,
-    // v0.95(ユーザー要望「次はこれ は 廃止。ホームは 今日やること / 知っておく情報 / すぐ使う機能 / 今日を良くする情報 が 一目で 分かる 固定の 4 区画に」): ①アシスタントの ひとこと(記録中は そのカード)→ ②今日やること → ③知っておくこと(電車・天気・睡眠)→ ④すぐ使う(記録・ポモドーロ・BGM・英単語)→ ⑤今日を良くする(今日の一杯・記事・小説と図録)。以下は v0.71 の説明:
+    // v0.95(ユーザー要望「次はこれ は 廃止。ホームは 今日やること / 知っておく情報 / はじめる機能 / 今日のお楽しみ情報 が 一目で 分かる 固定の 4 区画に」): ①アシスタントの ひとこと(記録中は そのカード)→ ②今日やること → ③今日のコンディション(電車・天気・睡眠)→ ④はじめる(記録・ポモドーロ・BGM・英単語)→ ⑤今日のお楽しみ(今日の一杯・記事・小説と図録)。以下は v0.71 の説明:
     // v0.71(ユーザー要望「開けば 次に何をやるか分かり、すぐ取りかかりたくなる画面に」): 今日は ①次はこれ(アシスタントの顔と吹き出し・記録中は そのカード)→ ②今日がんばること(作業の進み・期限のタスク・習慣)
     //   → ③いま知りたいこと(電車・天気・BGM・記事 のタイル)→ ④小説と図録の進み・日報 / ふり返る / 話す。円と内訳・キャッチアップの折りたたみ・BGM の 1 行は 今日のホームから外した(過去の日は これまでどおり 円と内訳)
     ...(isToday ? [
       topCard(hero, ctx),
       focusBox(e, rerender, ctx), // 今日やること: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
-      tileGroup('知っておくこと', [trainTile(ctx), weatherTile(ctx), sleepTile()]),
-      tileGroup('すぐ使う', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender), bgmTile(rerender), vocabTile(rerender)]),
-      tileGroup('今日を良くする', [drinkTile(ctx, rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ')], stripRow([questStrip(), artStrip()])), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(無効なら無し)
+      tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile()]),
+      tileGroup('はじめる', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender), bgmTile(rerender), vocabTile(rerender)]),
+      tileGroup('今日のお楽しみ', [drinkTile(ctx, rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ')], stripRow([questStrip(), artStrip()])), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(無効なら無し)
       buddyActs(ctx),
       S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, '日報をもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(いまの時点で作り直す)
     ] : [
@@ -539,7 +539,7 @@ export function renderNow(view, ctx, dateArg = null) {
 }
 /**
  * ① いちばん上のカード(v0.95・F2-10): アシスタントの顔と吹き出し(止めていれば無し)。記録中 / タイマー中は その下に そのカード。
- * v0.71〜v0.94 の「次はこれ」(すすめる 1 つと「▶ 始める」)は 廃止(ユーザー判断 2026-11-19「あまり 利用していない」)。始めるのは「すぐ使う」の 記録 / ポモドーロ のタイルか 右下の ＋。
+ * v0.71〜v0.94 の「次はこれ」(すすめる 1 つと「▶ 始める」)は 廃止(ユーザー判断 2026-11-19「あまり 利用していない」)。始めるのは「はじめる」の 記録 / ポモドーロ のタイルか 右下の ＋。
  */
 function topCard(hero, ctx) {
   const head = buddyHead(ctx);
@@ -550,12 +550,12 @@ const TILE_ICON = {
   rec: () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'qt-ico' }, [svg('circle', { cx: 12, cy: 12, r: 9 }), svg('path', { d: 'M10 8.5v7l6-3.5z' })]),
   pomo: () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'qt-ico' }, [svg('circle', { cx: 12, cy: 13.5, r: 7.5 }), svg('path', { d: 'M12 9.5v4l2.5 1.5M9.5 3h5M12 3v3' })]),
 };
-/** 「すぐ使う」の 記録のタイル(v0.95): タップで 記録のシート(カテゴリを選ぶと いまから 記録が始まる。時刻を決めて足すことも)。右下の ＋ と 同じ入口 */
+/** 「はじめる」の 記録のタイル(v0.95): タップで 記録のシート(カテゴリを選ぶと いまから 記録が始まる。時刻を決めて足すことも)。右下の ＋ と 同じ入口 */
 function recordTile(rerender) {
   return el('button.qtile.rc', { type: 'button', 'aria-label': '記録を始める', onclick: () => chipsSheet(effNow(), rerender) }, [TILE_ICON.rec(), el('span.qt-v', '記録する'), el('span.qt-k', 'いまから')]);
 }
 /**
- * 「すぐ使う」の ポモドーロのタイル(v0.95・ユーザー要望「ポモドーロは タイルの 1 つとして 残す」)。使っていなければ null。
+ * 「はじめる」の ポモドーロのタイル(v0.95・ユーザー要望「ポモドーロは タイルの 1 つとして 残す」)。使っていなければ null。
  * タップ →「なにを やる?」(期限の近いタスクや 今日の予定 = next.candidates と、作業のカテゴリ)→ 選ぶと ui-pomo.startSheet(セット数を見てから 始める)
  */
 function pomoTile(n, rerender) {
@@ -660,7 +660,7 @@ function weatherTile(ctx) {
 }
 /**
  * タイルの 1 区画(v0.95・F2-10): 見出しと 横に並ぶタイル(使っているものだけ)。1 つも無ければ 区画ごと 出さない。5 つ以上は 3 列の 2 段。extra は タイルの下に足す行(小説と図録)。
- * 区画は 3 つ: 知っておくこと(電車・天気・睡眠)/ すぐ使う(記録・ポモドーロ・BGM・英単語)/ 今日を良くする(今日の一杯・記事)。v0.71〜v0.94 は「いま知りたいこと」の 1 区画だった
+ * 区画は 3 つ: 今日のコンディション(電車・天気・睡眠)/ はじめる(記録・ポモドーロ・BGM・英単語)/ 今日のお楽しみ(今日の一杯・記事)。v0.71〜v0.94 は「いま知りたいこと」の 1 区画だった
  */
 function tileGroup(title, tiles, extra = null) {
   const xs = tiles.filter(Boolean);

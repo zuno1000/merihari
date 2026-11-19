@@ -484,7 +484,7 @@ function sectionWeather(rerender) {
   const remove = (r) => { w.regions = w.regions.filter((x) => x !== r); if (!w.regions.length) w.enabled = false; const lc = store.state.local; if (lc.weatherCache) { delete lc.weatherCache[r.id]; store.saveLocal(); } save(); rerender(); };
   // v0.29.3: 地域も ≡ で並べ替え(先頭の地域がホームの印の絵になる)。行のタップで 消す
   const rows = w.regions.length ? catList(w.regions, { tagOf: (r) => `${r.lat}, ${r.lon}`, onEdit: (r) => confirmSheet(`「${r.name}」を消しますか?`, null, '消す', () => remove(r), true), onMove: (from, to) => { const arr = w.regions.slice(); const [x] = arr.splice(from, 1); arr.splice(to, 0, x); w.regions = arr; save(); rerender(); } }) : null;
-  return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホームの「知っておくこと」に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
+  return card('天気と服装', '任意の機能です。地域を登録して「ホームに天気の印を出す」にすると、ホームの「今日のコンディション」に天気の印が出て、タップすると 地域ごとに 天気・最高 / 最低気温・降水確率・服装の一言(ルールベース)が見られます。データは Open-Meteo(無料・キー不要)から取り、取れないときは何も出しません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!w.enabled, disabled: !w.regions.length, onchange: (e) => { w.enabled = e.target.checked; save(); } }), el('span', 'ホームに天気のタイルを出す')]),
     el('h3.help-h', `地域(${w.regions.length} / ${weather.MAX_REGIONS})`),
     rows || el('p.muted.small', 'まだありません。下で地名を検索して登録します。'),
@@ -519,7 +519,7 @@ function nfcBlock(b, plays, save, rerender) {
     row('fav', bgm.NFC_LABELS.fav, ids.length ? `「好き」を付けた曲から(いま ${ids.length} 曲)` : 'まだ ありません。流した曲に「好き」を 付けてください'),
     row(null, '1 枚で えらぶ', 'かざすと 3 つの気分が 出て、タップで 流れます'),
     el('p.muted.small', '入れ方(iPhone): ショートカット › オートメーション › ＋ › NFC › タグを かざして 名前を付ける ›「すぐに実行」› 新規の空のオートメーション ›「URL を開く」に コピーした URL を 貼る。タグに 書き込む必要は ありません。'),
-    el('p.muted.small', '知っておくこと: ①ジャンルを 変えたとき・「好き」の曲が 増えたときは、URL を コピーし直して 入れ替えてください(URL の中に 入っています)。②タグから流した曲は、アプリの「聞いた曲」には 残りません(iPhone では アプリと Safari の 置き場所が 別のため)。同じ曲が 続かないようには そのページが 覚えます。③かざすたびに Safari の タブが 1 つ 残ります。'),
+    el('p.muted.small', '今日のコンディション: ①ジャンルを 変えたとき・「好き」の曲が 増えたときは、URL を コピーし直して 入れ替えてください(URL の中に 入っています)。②タグから流した曲は、アプリの「聞いた曲」には 残りません(iPhone では アプリと Safari の 置き場所が 別のため)。同じ曲が 続かないようには そのページが 覚えます。③かざすたびに Safari の タブが 1 つ 残ります。'),
   ];
 }
 function sectionBgm(rerender) {
@@ -536,7 +536,7 @@ function sectionBgm(rerender) {
   const rows = recent.length ? el('div.list', recent.map((p) => { const song = cat ? cat.songs.find((x) => x.id === p.id) : null; return el('div.srow.plain.bgm-row', [
     el('button.bgm-open', { type: 'button', 'aria-label': 'もう一度 YouTube で開く', onclick: () => reopen(p.id) }, [el('span.bgm-title', song ? song.t : p.id), el('span.muted.small', `${p.date}${song && song.g.length ? '・' + song.g.map((g) => bgm.GENRE_LABELS[g] || g).join('・') : ''}`)]),
     rateChips(p, rerender)]); })) : null;
-  return card('作業用 BGM', '任意の機能です。ホームの「すぐ使う」の ♪ のタイルをタップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。同じ曲は二度すすめません。曲の一覧(todaybgm のカタログ)はアプリに入っていて、選ぶのに通信はしません。',
+  return card('作業用 BGM', '任意の機能です。ホームの「はじめる」の ♪ のタイルをタップすると、好みに合う「まだ聞いていない」曲を 1 つ選んで YouTube(アプリかブラウザ)で開き、そのまま流れます。同じ曲は二度すすめません。曲の一覧(todaybgm のカタログ)はアプリに入っていて、選ぶのに通信はしません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!b.enabled, onchange: (e) => { b.enabled = e.target.checked; save(); rerender(); } }), el('span', 'ホームに ♪ を出す')]),
     el('h3.help-h', '好みのジャンル'),
     chips,
@@ -618,7 +618,7 @@ function sectionFeed(rerender) {
   const rows = recent.length ? el('div.list', recent.map((m) => { const x = f ? f.items.find((y) => y.id === m.id) : null; return el('div.srow.plain.feed-hrow', [
     x ? el('a.feed-open', { href: x.u, target: '_blank', rel: 'noopener noreferrer' }, [el('span.feed-title', x.t), el('span.muted.small', `${m.date}・${x.s || feed.hostOf(x.u)}`)]) : el('span.feed-open', [el('span.feed-title.muted', '(一覧から消えた記事)'), el('span.muted.small', m.date)]),
     el('button.btn.sm.ghost', { type: 'button', onclick: () => { unmark(m.id); rerender(); } }, 'もう一度出す')]); })) : null;
-  return card('キャッチアップ', '任意の機能です。研究・趣味など複数のジャンルの新しい記事(論文・ニュース)を、ホームの「今日を良くする」のタイル(新着の数)から 一覧で出します。タップするとそのサイトを開き、開いた記事は次から出ません。',
+  return card('キャッチアップ', '任意の機能です。研究・趣味など複数のジャンルの新しい記事(論文・ニュース)を、ホームの「今日のお楽しみ」のタイル(新着の数)から 一覧で出します。タップするとそのサイトを開き、開いた記事は次から出ません。',
     el('label.row.field', [el('input', { type: 'checkbox', checked: !!c.enabled, onchange: (e) => { c.enabled = e.target.checked; save(); rerender(); } }), el('span', 'ホームに「キャッチアップ」を出す')]),
     el('h3.help-h', 'ジャンル'),
     gchips,

@@ -632,7 +632,7 @@ export function sectionVocab(rerender) {
   const chip = (label, on, fn) => el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
   return el('section.card', [
     el('h2', '英単語'),
-    el('p.muted.small', 'ホームの「すぐ使う」に 英単語のタイルを出します。タップすると 英単語の画面に替わり、4 択で 1 回分を解けます。学習の種類(おまかせ / 新しい語 / 復習 / マイ単語 / にがて)は 画面の左上のボタンで、下の出題の設定は 画面の右上の ⚙ でも 変えられます。'),
+    el('p.muted.small', 'ホームの「はじめる」に 英単語のタイルを出します。タップすると 英単語の画面に替わり、4 択で 1 回分を解けます。学習の種類(おまかせ / 新しい語 / 復習 / マイ単語 / にがて)は 画面の左上のボタンで、下の出題の設定は 画面の右上の ⚙ でも 変えられます。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => save({ ...c, enabled: e.target.checked }) }), el('span', 'ホームに 英単語のタイルを出す')]),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.pre, onchange: (e) => save({ ...c, pre: e.target.checked }) }), el('span', 'まず 自力で 思い出す(復習の語は、選択肢を はじめは 伏せます)')]),
     el('h3.help-h', '出題の向き'),
