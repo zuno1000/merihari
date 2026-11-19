@@ -1,0 +1,26 @@
+/* merihari ─ nfc.css: NFC タグから開く 小さなページ(bgm.html・v0.94・F16-8)。アプリ本体の app.css は 読まない(軽く・速く) */
+:root { --bg: #f5f7fa; --card: #ffffff; --ink: #1b2430; --muted: #5d6b7a; --line: #d9e0e7; --accent: #1f6feb; --on-accent: #ffffff; --soft: #e6effd; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #12161b; --card: #1b222a; --ink: #e6ebf0; --muted: #98a5b3; --line: #2c3742; --accent: #6ea8ff; --on-accent: #0d1420; --soft: #1c2b44; color-scheme: dark; }
+}
+* { box-sizing: border-box; touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif; font-size: 16px; line-height: 1.6; }
+main { max-width: 480px; margin: 0 auto; padding: calc(20px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 15px; font-weight: 600; margin: 0; color: var(--muted); }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.now { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.now .mood { font-size: 13px; font-weight: 700; color: var(--accent); }
+.now .title { font-size: 18px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.btn { display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); min-height: 44px; font-weight: 600; }
+.moods { display: flex; flex-direction: column; gap: 10px; }
+.moods.big .pick { min-height: 96px; }
+.pick { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 60px; padding: 10px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pick b { font-size: 17px; }
+.pick span { font-size: 13px; color: var(--muted); }
+.pick.on { border-color: var(--accent); background: var(--soft); }
+.pick:disabled { opacity: .5; cursor: default; }
+.btn:focus-visible, .pick:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }

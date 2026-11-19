@@ -1072,11 +1072,12 @@ document.getElementById('app').addEventListener('load', async () => {
     {
       const B = M.bgm;
       const song = (id, g, m, d = 60, c = 'ch') => ({ id, t: 'T' + id, g, m, d, c });
+      const NFCD = { focus: ['lofi', 'piano', 'classical', 'nature'], hype: ['edm', 'synthwave', 'kawaii'] };
       const cat = { updated: '2026-08-15', songs: [song('aaaaaa01', ['lofi'], ['focus', 'calm'], 90, 'c1'), song('aaaaaa02', ['jazz'], ['calm', 'night'], 120, 'c2'), song('aaaaaa03', ['lofi'], ['focus'], 60, 'c1'), song('aaaaaa04', ['piano'], ['morning', 'calm'], 45, 'c3'), song('aaaaaa05', ['edm'], ['focus'], 10, 'c4'), song('aaaaaa06', ['lofi'], ['calm'], 100, 'c5')] };
       ok(B.STAY_MS === 3000 && B.CATALOG_URL === 'data/bgm.json' && B.GENRES.length === 12 && Object.keys(B.GENRE_LABELS).length === 12 && B.POOL === 7 && B.PER_GENRE === 2, 'bgm: カタログは同梱(data/bgm.json)・12 ジャンル・抽選は上位 7(同じジャンル 2 まで)');
       ok(B.timeSlotMood(6) === 'morning' && B.timeSlotMood(12) === 'focus' && B.timeSlotMood(19) === 'calm' && B.timeSlotMood(23) === 'night' && B.timeSlotMood(2) === 'night', 'timeSlotMood: 5〜11 朝・11〜17 集中・17〜22 リラックス・それ以外 夜');
-      ok(eq(B.normalizeBgm(null), { enabled: false, genres: [], app: true, strip: true }) && eq(B.normalizeBgm({ enabled: true, genres: ['lofi', 'nope', 'lofi', 7, 'jazz'], app: false, strip: false }), { enabled: true, genres: ['lofi', 'jazz'], app: false, strip: false }) && B.normalizeBgm({ enabled: 'yes' }).enabled === false, 'normalizeBgm: enabled は true だけ・ジャンルは存在するものだけ(重複なし)・app と strip(ホームの行)の既定は true');
-      ok(S.SCALAR_FIELDS.includes('bgm') && eq(S.defaultSettings().bgm, { enabled: false, genres: [], app: true, strip: true }) && eq(S.migrate({ schema: 1, settings: { bgm: { enabled: true, genres: ['piano'] } } }).settings.bgm, { enabled: true, genres: ['piano'], app: true, strip: true }), 'bgm は設定として項目ごとに同期(SCALAR_FIELDS)・既定は無効・migrate で検証');
+      ok(eq(B.normalizeBgm(null), { enabled: false, genres: [], app: true, strip: true, nfc: NFCD }) && eq(B.normalizeBgm({ enabled: true, genres: ['lofi', 'nope', 'lofi', 7, 'jazz'], app: false, strip: false }), { enabled: true, genres: ['lofi', 'jazz'], app: false, strip: false, nfc: NFCD }) && B.normalizeBgm({ enabled: 'yes' }).enabled === false, 'normalizeBgm: enabled は true だけ・ジャンルは存在するものだけ(重複なし)・app と strip(ホームの行)の既定は true');
+      ok(S.SCALAR_FIELDS.includes('bgm') && eq(S.defaultSettings().bgm, { enabled: false, genres: [], app: true, strip: true, nfc: NFCD }) && eq(S.migrate({ schema: 1, settings: { bgm: { enabled: true, genres: ['piano'] } } }).settings.bgm, { enabled: true, genres: ['piano'], app: true, strip: true, nfc: NFCD }), 'bgm は設定として項目ごとに同期(SCALAR_FIELDS)・既定は無効・migrate で検証');
       const plays = { aaaaaa01: { id: 'aaaaaa01', at: '2026-10-29T10:00:00+09:00', date: '2026-10-29', rating: 1, updatedAt: '2026-10-29T10:00:00+09:00', deletedAt: null }, aaaaaa02: { id: 'aaaaaa02', at: '2026-10-28T10:00:00+09:00', date: '2026-10-28', rating: -1, updatedAt: '2026-10-28T10:00:00+09:00', deletedAt: null }, gone: { id: 'aaaaaa04', at: '2026-10-27T10:00:00+09:00', date: '2026-10-27', rating: null, updatedAt: '2', deletedAt: '2026-10-27T11:00:00+09:00' } };
       const hd = B.heard(plays);
       ok(hd.has('aaaaaa01') && hd.has('aaaaaa02') && !hd.has('aaaaaa04') && hd.size === 2, 'heard: 聞いた曲の id(消したものは数えない)');
@@ -1120,6 +1121,29 @@ document.getElementById('app').addEventListener('load', async () => {
       const mm2 = M.sync.merge(ma, mb);
       ok(mm2.bgm.aaaaaa01.rating === -1 && mm2.bgm.aaaaaa03 && Object.keys(mm2.bgm).length === 2 && Object.keys(M.sync.pruneTombstones({ ...S.defaultData(), bgm: { aaaaaa01: { id: 'aaaaaa01', at: '1', updatedAt: '1', deletedAt: '2026-01-01T00:00:00+09:00' } } }, '2026-10-30T00:00:00+09:00').bgm).length === 0, 'sync.merge: 聞いた BGM は動画 id ごとに updatedAt の新しい方・古い tombstone は pruneTombstones で消える');
       ok(sw.includes(`'./js/bgm.js'`) && sw.includes(`'./js/ui-bgm.js'`) && /const DATA = \['\.\/data\/bgm\.json', '\.\/data\/feed\.json'\]/.test(sw) && !/ASSETS = \[[^\]]*bgm\.json/.test(sw), 'sw.js: bgm.js / ui-bgm.js は ASSETS・data/bgm.json は DATA(先読み+裏で更新・版と一緒に固定しない)');
+      // v0.94・F16-8: NFC タグから 気分で 1 曲
+      ok(eq(B.NFC_MOODS, ['focus', 'hype', 'fav']) && B.NFC_PAGE === 'bgm.html' && eq(B.normalizeNfc(null), NFCD) && eq(B.normalizeNfc({ focus: ['jazz', 'nope', 'jazz'], hype: [] }), { focus: ['jazz'], hype: NFCD.hype }) && eq(B.normalizeBgm({ nfc: { hype: ['game'] } }).nfc, { focus: NFCD.focus, hype: ['game'] }), 'normalizeNfc: 気分ごとのジャンル(知らないものは捨てる・空は 既定に戻す)・settings.bgm.nfc に入る');
+      {
+        const pl = (id, at, rating) => ({ id, at, date: at.slice(0, 10), rating, updatedAt: at, deletedAt: null });
+        const many = { a: pl('aaaaaa01', '2026-11-01T10:00:00+09:00', 1), b: pl('aaaaaa02', '2026-11-03T10:00:00+09:00', 1), c: pl('aaaaaa03', '2026-11-02T10:00:00+09:00', 1), d: pl('aaaaaa04', '2026-11-04T10:00:00+09:00', -1), e: pl('aaaaaa05', '2026-11-05T10:00:00+09:00', null), f: { ...pl('aaaaaa06', '2026-11-06T10:00:00+09:00', 1), deletedAt: 'x' } };
+        ok(eq(B.favIds(many), ['aaaaaa02', 'aaaaaa03', 'aaaaaa01']) && eq(B.favIds({ a: many.a, d: many.d, e: many.e }), ['aaaaaa01', 'aaaaaa05']) && eq(B.favIds(many, 2), ['aaaaaa02', 'aaaaaa03']) && eq(B.favIds(null), []), 'favIds: 好き を新しい順に(消したものは除く)・3 曲に満たなければ ちがう 以外の 聞いた曲を足す・n 件まで');
+        const u0 = B.nfcUrl('https://x.test/merihari/bgm.html?old=1#h', 'focus');
+        const u1 = B.nfcUrl('https://x.test/merihari/bgm.html', 'fav', { nfc: { focus: ['jazz'] }, ids: ['aaaaaa01', 'bad id', 'aaaaaa02'], app: false });
+        const u2 = B.nfcUrl('https://x.test/merihari/bgm.html', null);
+        ok(u0 === 'https://x.test/merihari/bgm.html?m=focus' && u1 === 'https://x.test/merihari/bgm.html?m=fav&f=jazz&ids=aaaaaa01.aaaaaa02&a=0' && u2 === 'https://x.test/merihari/bgm.html' && B.nfcUrl('b.html', 'nope') === 'b.html', 'nfcUrl: 気分・既定と違うジャンル・好きな曲の id・a=0 だけを書く(気分なし = 選ぶ画面)');
+        const q1 = B.parseNfc(new URL(u1).search), q0 = B.parseNfc('?m=dance&h=edm.zzz&ids=aaaaaa01.aaaaaa01.<b>&x=1');
+        ok(q1.mood === 'fav' && eq(q1.genres, { focus: ['jazz'], hype: NFCD.hype }) && eq(q1.ids, ['aaaaaa01', 'aaaaaa02']) && q1.app === false && q0.mood === null && eq(q0.genres, { focus: NFCD.focus, hype: ['edm'] }) && eq(q0.ids, ['aaaaaa01']) && q0.app === true && B.parseNfc('').mood === null, 'parseNfc: nfcUrl の逆(知らない気分は null・知らないジャンルと 形の合わない id は捨てる)');
+        const cf = B.nfcCandidates(cat, B.parseNfc('?m=focus'), 'focus').map((s) => s.id), ch = B.nfcCandidates(cat, B.parseNfc(''), 'hype').map((s) => s.id), cv = B.nfcCandidates(cat, B.parseNfc('?ids=aaaaaa02.zzzzzz99'), 'fav');
+        ok(eq(cf, ['aaaaaa01', 'aaaaaa03', 'aaaaaa04', 'aaaaaa06']) && eq(ch, ['aaaaaa05']) && eq(cv.map((s) => s.id), ['aaaaaa02', 'zzzzzz99']) && cv[0].t === 'Taaaaaa02' && cv[1].t === '' && B.nfcCandidates(cat, B.parseNfc(''), 'fav').length === 0, 'nfcCandidates: 集中 / 上げる は ジャンルが合う曲・好きな曲は URL の id(カタログに無くても 流せる)');
+        const qf = B.parseNfc('?m=focus');
+        const first = B.nfcPick(cat, qf, 'focus', {}, () => 0), skip = B.nfcPick(cat, qf, 'focus', { aaaaaa01: 5, aaaaaa03: 6, aaaaaa04: 7 }, () => 0.99);
+        const again = B.nfcPick(cat, qf, 'focus', { aaaaaa01: 50, aaaaaa03: 6, aaaaaa04: 7, aaaaaa06: 80 }, () => 0);
+        ok(first.song.id === 'aaaaaa01' && first.repeat === false && skip.song.id === 'aaaaaa06' && skip.repeat === false && again.song.id === 'aaaaaa03' && again.repeat === true && B.nfcPick(cat, B.parseNfc(''), 'fav', {}) === null && B.nfcPick({ songs: [] }, qf, 'focus') === null, 'nfcPick: まだ流していない曲から・ぜんぶ流したら 昔に流した方から(repeat)・候補なしは null');
+        const hm = B.nfcHeard({ aaaaaa01: 5, 'bad id': 9, aaaaaa02: 'x', aaaaaa03: 7 }, 'aaaaaa04', 10, 2);
+        ok(eq(hm, { aaaaaa04: 10, aaaaaa03: 7 }) && eq(B.nfcHeard(null, null, 0), {}), 'nfcHeard: 流した印を足す・壊れた値は捨てる・新しい方から max 件');
+        const page = await (await fetch('../bgm.html', { cache: 'no-store' })).text(), nfcJs = await (await fetch('../js/nfc.js', { cache: 'no-store' })).text();
+        ok(sw.includes(`'./bgm.html'`) && sw.includes(`'./css/nfc.css'`) && sw.includes(`'./js/nfc.js'`) && sw.includes(`asset === './bgm.html' ? asset : './index.html'`) && page.includes(`script-src 'self'`) && page.includes('js/nfc.js') && !/innerHTML|store\.js|sync\.js/.test(nfcJs), 'bgm.html: SW の ASSETS・画面の遷移でも そのページを返す・CSP は self だけ・アプリの記録には触らない・innerHTML を使わない');
+      }
       const real = await B.loadCatalog();
       ok(real && real.songs.length >= 600 && real.songs.every((s) => /^[A-Za-z0-9_-]{6,20}$/.test(s.id) && typeof s.t === 'string' && Array.isArray(s.g) && Array.isArray(s.m)) && new Set(real.songs.map((s) => s.id)).size === real.songs.length && real.songs.every((s) => s.g.every((g) => B.GENRES.includes(g))), `同梱のカタログ: ${real && real.songs.length} 曲・id の形・重複なし・ジャンルは 12 のどれか`);
     }

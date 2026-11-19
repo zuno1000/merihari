@@ -1987,3 +1987,8 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .dk-recbox{min-width:0;overflow:hidden}
 .dk-others .chip{overflow-wrap:anywhere}
 .dk-acts{flex-wrap:wrap}
+/* v0.94・F16-8: 設定 › 作業用 BGM の「NFC タグで流す」。気分の名前と ひとこと(左)・URL を コピー / ためす(右)。狭ければ ボタンは 下の行へ */
+.nfc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0 6px; }
+.nfc-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 160px; }
+.nfc-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+.nfc-btns .btn { min-height: 36px; display: inline-flex; align-items: center; text-decoration: none; }

@@ -496,6 +496,30 @@ function sectionWeather(rerender) {
  * 作業用 BGM(v0.32・F16・任意): ホームの ♪ をタップ → まだ聞いていない曲を 1 つ選んで YouTube で開く。好みのジャンル(複数・無ければおまかせ)と「YouTube アプリで開く」は設定(同期する・SCALAR_FIELDS の bgm)。
  * 聞いた曲と 好き / ちがう は data.bgm(同期する)。カタログは同梱(data/bgm.json・todaybgm から)で通信しない。
  */
+/**
+ * NFC タグで流す(v0.94・F16-8): タグに かざす → 気分に合う 1 曲。タグ(か ショートカット)に入れる URL を ここで作る。
+ * 開くのは アプリとは別の 小さなページ bgm.html。iPhone では アプリの記録を そのページから 読めないので、気分ごとのジャンルと 好きな曲の id は URL に 入れて渡す。
+ */
+function nfcBlock(b, plays, save, rerender) {
+  const base = new URL(bgm.NFC_PAGE, location.href).href;
+  const ids = bgm.favIds(plays);
+  const urlOf = (mood) => bgm.nfcUrl(base, mood, { nfc: b.nfc, ids, app: b.app !== false });
+  const copy = async (mood) => { try { await navigator.clipboard.writeText(urlOf(mood)); toast('URL を コピーしました'); } catch { toast('コピーできませんでした'); } };
+  const genreChips = (mood) => el('div.chips.small', { role: 'group', 'aria-label': `${bgm.NFC_LABELS[mood]} のジャンル` }, bgm.GENRES.map((g) => { const on = b.nfc[mood].includes(g); return el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { b.nfc = { ...b.nfc, [mood]: on ? b.nfc[mood].filter((x) => x !== g) : [...b.nfc[mood], g] }; save(); rerender(); } }, bgm.GENRE_LABELS[g] || g); }));
+  const row = (mood, label, note) => el('div.nfc-row', [el('span.nfc-main', [el('b', label), el('span.muted.small', note)]), el('span.nfc-btns', [el('button.btn.sm', { type: 'button', 'aria-label': `${label} の URL を コピー`, onclick: () => copy(mood) }, 'URL を コピー'), el('a.btn.sm', { href: urlOf(mood), target: '_blank', rel: 'noopener', 'aria-label': `${label} を ためす` }, 'ためす')])]);
+  return [
+    el('h3.help-h', 'NFC タグで流す'),
+    el('p.muted.small', 'NFC タグに iPhone を かざすと、気分に合う 1 曲が YouTube で 流れます。タグごとに 気分を 1 つ 割り当てるか、1 枚で 3 つから 選ぶ画面を 開くか を 選べます。下の URL を コピーして、ショートカットの オートメーションに 入れてください。'),
+    row('focus', bgm.NFC_LABELS.focus, bgm.NFC_HINTS.focus),
+    genreChips('focus'),
+    row('hype', bgm.NFC_LABELS.hype, bgm.NFC_HINTS.hype),
+    genreChips('hype'),
+    row('fav', bgm.NFC_LABELS.fav, ids.length ? `「好き」を付けた曲から(いま ${ids.length} 曲)` : 'まだ ありません。流した曲に「好き」を 付けてください'),
+    row(null, '1 枚で えらぶ', 'かざすと 3 つの気分が 出て、タップで 流れます'),
+    el('p.muted.small', '入れ方(iPhone): ショートカット › オートメーション › ＋ › NFC › タグを かざして 名前を付ける ›「すぐに実行」› 新規の空のオートメーション ›「URL を開く」に コピーした URL を 貼る。タグに 書き込む必要は ありません。'),
+    el('p.muted.small', '知っておくこと: ①ジャンルを 変えたとき・「好き」の曲が 増えたときは、URL を コピーし直して 入れ替えてください(URL の中に 入っています)。②タグから流した曲は、アプリの「聞いた曲」には 残りません(iPhone では アプリと Safari の 置き場所が 別のため)。同じ曲が 続かないようには そのページが 覚えます。③かざすたびに Safari の タブが 1 つ 残ります。'),
+  ];
+}
 function sectionBgm(rerender) {
   const s = S();
   s.bgm = bgm.normalizeBgm(s.bgm);
@@ -520,6 +544,7 @@ function sectionBgm(rerender) {
     el('label.row.field', [el('input', { type: 'checkbox', checked: b.strip !== false, onchange: (e) => { b.strip = e.target.checked; save(); } }), el('span', '過去の日のホームに その日の曲を出す')]),
     el('p.muted.small', '流した日だけ、その日のホーム(カレンダーから開く 過去の日)に 1 行(題名・好き / ちがう)。行の × でその日だけ消せます。外すと出しません(ふり返りの「今日の BGM」には残ります)。'),
     b.enabled ? el('div.row', { style: { marginTop: '10px' } }, [el('button.btn', { type: 'button', onclick: () => playBgm(rerender) }, '1 曲ためす')]) : null,
+    ...nfcBlock(b, plays, save, rerender),
     el('h3.help-h', `聞いた曲(${st.heard} / ${st.total || '…'})`),
     rows || el('p.muted.small', 'まだありません。ホームの ♪ をタップすると ここに残ります。'),
     rows ? el('p.muted.small', '題名をタップで もう一度開く。') : null,

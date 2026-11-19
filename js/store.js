@@ -114,7 +114,7 @@ export function defaultSettings() {
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
-    bgm: { enabled: false, genres: [], app: true, strip: true }, // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
+    bgm: normalizeBgm(null), // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
     feed: { enabled: false, genres: [], kw: {}, n: 5, off: [], img: true, repo: '', hue: {}, order: [] }, // v0.34・F17(v0.35: off=OFF にした取得元 id・v0.36: img=記事の画像・v0.39: kw={ '*':[共通の語], genre:[語] }・v0.41: repo=自分だけの取得元リポジトリ owner/repo・空なら公開のカタログ): キャッチアップ(任意)。ホームの折りたたみ・ジャンル(空=全部)・気になる語・1 回の件数。開いた / 読まない の印は data.feed
     train: { enabled: false, lines: [] }, // v0.50・F18: 次の電車(任意)。路線 [{ id, name, src:'odpt'|'manual', station, direction, railway, operator, tables?(手入力) }](5 つまで・同期する)。ODPT の時刻表の控えは local.trainCache(端末内・30 日)・トークンは local.odptKey(端末内)
     buddy: { enabled: true, name: 'リブ', tone: 'bright', idle: true, lines: [], custom: [], chars: [{ id: 'main', name: 'リブ', tone: 'bright' }], cur: 'main' }, // chars / cur(v0.68・F24-17): キャラクター [{ id, name, tone }] と 選んでいる id(name / tone は その写し)。 custom(v0.67・F24-16): 足した性格 [{ id, label, hint, base, set }]。 lines(v0.63): 覚えた台詞 [{ k, t, s }]。 v0.62・F24: アシスタント(名前・口調 bright / polite / cool・ホームで声をかける)。絵は端末の IndexedDB、会話の控えは local.buddy

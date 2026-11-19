@@ -24,7 +24,7 @@ export function timeSlotMood(hour) {
 export function normalizeBgm(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const genres = [...new Set((Array.isArray(o.genres) ? o.genres : []).filter((g) => typeof g === 'string' && GENRES.includes(g)))].slice(0, MAX_GENRES);
-  return { enabled: o.enabled === true, genres, app: o.app !== false, strip: o.strip !== false };
+  return { enabled: o.enabled === true, genres, app: o.app !== false, strip: o.strip !== false, nfc: normalizeNfc(o.nfc) }; // v0.94: nfc = NFC タグの 気分ごとのジャンル
 }
 /** その日に流した曲(古い順・消したものは除く)。ふり返りの「今日の BGM」とホームの 1 行(末尾が最新)に */
 export function playsOf(plays, date) {
@@ -190,4 +190,77 @@ export function openSong(id, { app = true, nav = null, opener = null, onStay = n
   } else if (app && plat === 'android') go(url);
   else open(url);
   return url;
+}
+
+// ---- v0.94・F16-8: NFC タグ(ショートカット・ブックマーク)から 気分で 1 曲 ----
+// アプリ本体とは別の 小さなページ bgm.html(js/nfc.js)が、URL の指示だけで 曲を選んで YouTube を開く。
+// iPhone では ホーム画面のアプリと Safari の置き場所が 別なので、アプリの記録(聞いた曲・好き)は このページから 読めない → 要るものは URL に 持たせる(好きな曲の id・気分ごとのジャンル)。
+export const NFC_PAGE = 'bgm.html';
+export const NFC_MOODS = ['focus', 'hype', 'fav'];
+export const NFC_LABELS = { focus: '静かに集中', hype: '気分を上げる', fav: '好きな曲' };
+export const NFC_HINTS = { focus: '勉強や 作業に。静かめの曲', hype: 'テンションを 上げたいとき', fav: 'くつろぐとき。聞いたことのある 好きな曲' };
+export const NFC_DEFAULT = Object.freeze({ focus: ['lofi', 'piano', 'classical', 'nature'], hype: ['edm', 'synthwave', 'kawaii'] });
+export const NFC_MAX_IDS = 40;
+export const NFC_HEARD_MAX = 300;
+const ID_RE = /^[A-Za-z0-9_-]{6,20}$/;
+const genreList = (v, fallback) => { const l = [...new Set((Array.isArray(v) ? v : []).filter((g) => typeof g === 'string' && GENRES.includes(g)))]; return l.length ? l : [...fallback]; };
+/** 気分ごとのジャンル(設定 settings.bgm.nfc)を正規化(純関数)。空や 壊れた値は 既定に戻す */
+export function normalizeNfc(raw) {
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return { focus: genreList(o.focus, NFC_DEFAULT.focus), hype: genreList(o.hype, NFC_DEFAULT.hype) };
+}
+/** 「好きな曲」に使う id(純関数): 好き を付けた曲を 新しい順に。3 曲に満たなければ、聞いた曲のうち ちがう を付けていないものを 足す。n 件まで */
+export function favIds(plays, n = NFC_MAX_IDS) {
+  const list = Object.values(plays || {}).filter((p) => alive(p) && ID_RE.test(String(p.id))).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  const liked = list.filter((p) => p.rating === 1).map((p) => p.id);
+  const rest = liked.length >= 3 ? [] : list.filter((p) => p.rating !== 1 && p.rating !== -1).map((p) => p.id);
+  return [...new Set([...liked, ...rest])].slice(0, n);
+}
+/** タグに書く URL(純関数)。mood が null なら 3 つから選ぶ画面。既定と同じジャンルは 書かない。app=false は a=0(ブラウザで開く) */
+export function nfcUrl(base, mood, { nfc = null, ids = [], app = true } = {}) {
+  const g = normalizeNfc(nfc);
+  const q = [];
+  if (NFC_MOODS.includes(mood)) q.push(`m=${mood}`);
+  for (const [k, key] of [['f', 'focus'], ['h', 'hype']]) if (g[key].join('.') !== NFC_DEFAULT[key].join('.')) q.push(`${k}=${g[key].join('.')}`);
+  const l = (Array.isArray(ids) ? ids : []).filter((x) => ID_RE.test(String(x))).slice(0, NFC_MAX_IDS);
+  if (l.length) q.push(`ids=${l.join('.')}`);
+  if (app === false) q.push('a=0');
+  return String(base || NFC_PAGE).split(/[?#]/)[0] + (q.length ? '?' + q.join('&') : '');
+}
+/** URL の ? 以降を読む(純関数)。知らない気分は null(= 選ぶ画面)・知らないジャンルと 形の合わない id は 捨てる */
+export function parseNfc(search) {
+  const q = new URLSearchParams(String(search || '').replace(/^[^?]*\?/, '').replace(/#.*$/, ''));
+  const split = (k) => String(q.get(k) || '').split('.').filter(Boolean);
+  const m = q.get('m');
+  return { mood: NFC_MOODS.includes(m) ? m : null, genres: normalizeNfc({ focus: split('f'), hype: split('h') }), ids: [...new Set(split('ids').filter((x) => ID_RE.test(x)))].slice(0, NFC_MAX_IDS), app: q.get('a') !== '0' };
+}
+/** その気分の 候補(純関数)。fav は URL の id(カタログから消えた曲も 流せる・題名は 空)。ほかは ジャンルが 1 つでも合う曲 */
+export function nfcCandidates(catalog, q, mood) {
+  const songs = Array.isArray(catalog?.songs) ? catalog.songs : [];
+  if (mood === 'fav') { const byId = new Map(songs.map((s) => [s.id, s])); return (q?.ids || []).map((id) => byId.get(id) || { id, t: '', g: [], m: [], d: null, c: '' }); }
+  const sel = q?.genres?.[mood] || NFC_DEFAULT[mood] || [];
+  return songs.filter((s) => s.g.some((g) => sel.includes(g)));
+}
+/**
+ * 気分に合う 1 曲(純関数・rnd を注入)。heard = { id: 流した時刻(ms) }(このページが 自分で覚えた分)。
+ * まだ流していない曲から 選ぶ(集中は ムードが focus / calm の曲を 2 倍の重みで)。ぜんぶ流していれば、昔に流した方の半分から(repeat: true)。候補が無ければ null
+ */
+export function nfcPick(catalog, q, mood, heard = {}, rnd = Math.random) {
+  const cands = nfcCandidates(catalog, q, mood);
+  if (!cands.length) return null;
+  const h = heard && typeof heard === 'object' ? heard : {};
+  let pool = cands.filter((s) => !h[s.id]);
+  const repeat = !pool.length;
+  if (repeat) { const sorted = [...cands].sort((a, b) => h[a.id] - h[b.id]); pool = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2))); }
+  const w = pool.map((s) => (mood === 'focus' && s.m.some((x) => x === 'focus' || x === 'calm') ? 2 : 1));
+  let x = Math.max(0, Math.min(0.999999, rnd())) * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) { x -= w[i]; if (x < 0) return { song: pool[i], repeat }; }
+  return { song: pool[pool.length - 1], repeat };
+}
+/** 流した印を足す(純関数)。壊れた値は捨て、新しい方から max 件だけ 残す */
+export function nfcHeard(prev, id, now, max = NFC_HEARD_MAX) {
+  const o = {};
+  for (const [k, v] of Object.entries(prev && typeof prev === 'object' && !Array.isArray(prev) ? prev : {})) if (ID_RE.test(k) && Number.isFinite(v) && v > 0) o[k] = v;
+  if (ID_RE.test(String(id))) o[id] = now;
+  return Object.fromEntries(Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, max));
 }
