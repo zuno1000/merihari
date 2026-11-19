@@ -1992,3 +1992,11 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .nfc-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 160px; }
 .nfc-btns { display: flex; gap: 6px; flex: 0 0 auto; }
 .nfc-btns .btn { min-height: 36px; display: inline-flex; align-items: center; text-decoration: none; }
+/* v0.95・F2-10: ホームの 固定の 4 区画。タイルの区画(.quick-box)が 3 つに 増えたので 間を 詰める・記録(.rc)と ポモドーロ(.pm)のタイルの色 */
+.home .quick-box{margin-bottom:12px}
+.home .quick-box .q-row{margin-top:8px}
+.qtile.rc{--tc:var(--accent)}
+.qtile.pm{--tc:#d2553f}
+@media (prefers-color-scheme:dark){.qtile.pm{--tc:#f0907c}}
+.home .qtile{min-height:64px;padding:8px 4px 7px}
+.home .qtile .qt-ico{width:22px;height:22px}

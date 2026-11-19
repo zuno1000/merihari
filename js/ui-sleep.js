@@ -140,7 +140,7 @@ export function sectionSleep(rerender) {
   const save = (next) => { S().sleep = next; store.touchSettings(); autoSync(); rerender(); };
   return el('section.card', [
     el('h2', '睡眠'),
-    el('p.muted.small', '睡眠の記録から、昨夜の長さ・7 日の平均・寝た時刻と起きた時刻を出し、今夜 寝る時刻の目安を ホームの「いま知りたいこと」に出します。アシスタントも、夜と 眠りが短かった日に ひとこと言います。'),
+    el('p.muted.small', '睡眠の記録から、昨夜の長さ・7 日の平均・寝た時刻と起きた時刻を出し、今夜 寝る時刻の目安を ホームの「知っておくこと」に出します。アシスタントも、夜と 眠りが短かった日に ひとこと言います。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => save({ ...c, enabled: e.target.checked }) }), el('span', 'ホームに 睡眠のタイルを出す')]),
     el('h3.help-h', '目安の睡眠時間'),
     el('div.chips.small', { role: 'group', 'aria-label': '目安の睡眠時間' }, sleep.TARGET_CHOICES.map((m) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.targetMin === m ? ' on' : ''}`, 'aria-pressed': c.targetMin === m ? 'true' : 'false', onclick: () => save({ ...c, targetMin: m }) }, hLabel(m)))),
