@@ -2000,3 +2000,22 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 @media (prefers-color-scheme:dark){.qtile.pm{--tc:#f0907c}}
 .home .qtile{min-height:64px;padding:8px 4px 7px}
 .home .qtile .qt-ico{width:22px;height:22px}
+/* v0.96・F28: 外部のタスクリスト(タスクのタブの区画 .ext-box)。メリハリのタスクの行より 小さく・静かに(一覧を 圧迫しない) */
+.ext-card{padding:12px 14px;margin:0 0 8px;display:flex;flex-direction:column;gap:2px}
+.ext-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.ext-h{font-size:15px;margin:0}
+.ext-count{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ext-goals{margin:0;font-size:12px;color:var(--muted)}
+.ext-sep{margin:8px 0 0;font-size:12px;font-weight:700;color:var(--muted)}
+.ext-row{display:grid;grid-template-columns:36px 1fr;align-items:start;gap:6px;border-top:1px solid var(--line);padding:6px 0}
+.ext-sep+.ext-row{border-top:0}
+.ext-row .check{margin-top:2px}
+.ext-t{border:0;background:none;color:var(--fg);font:inherit;text-align:left;padding:4px 0;min-height:36px;display:flex;flex-direction:column;gap:1px;cursor:pointer;min-width:0}
+.ext-name{font-size:14px;line-height:1.45;overflow-wrap:anywhere}
+.ext-meta{font-size:12px;color:var(--muted)}
+.ext-row.done .ext-name{color:var(--muted);text-decoration:line-through}
+.ext-late{margin-top:8px;border-top:1px solid var(--line)}
+.ext-late summary{font-size:13px;color:var(--muted);padding:10px 0;min-height:36px;cursor:pointer}
+.ext-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.ext-open{color:var(--accent);font-size:13px;font-weight:600;text-decoration:none;min-height:36px;display:inline-flex;align-items:center}
+.fx-row.ext .tname{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:14px;line-height:1.4}

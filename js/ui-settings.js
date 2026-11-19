@@ -11,6 +11,8 @@ import * as passkey from './passkey.js';
 import * as report from './report.js';
 import * as weather from './weather.js';
 import * as bgm from './bgm.js';
+import * as extLib from './ext.js';
+import { sectionExt, lists as extLists } from './ui-ext.js'; // v0.96・F28
 import { playBgm, rateChips, reopen } from './ui-bgm.js';
 import * as feed from './feed.js';
 import { FEATURES } from './features.js';
@@ -757,6 +759,7 @@ const SECTIONS = {
   train: { title: '電車', build: (re) => sectionTrain(re) }, // v0.50・F18
   bgm: { title: '作業用 BGM', build: (re) => sectionBgm(re) },
   feed: { title: 'キャッチアップ', build: (re) => sectionFeed(re) },
+  ext: { title: '外部のタスクリスト', build: (re) => sectionExt(re, card) }, // v0.96・F28
   brief: { title: '日報', build: (re, ctx) => sectionBrief(re, ctx) }, // v0.55・F21
   ...(FEATURES.QUEST ? { quest: { title: '連載小説', build: (re) => sectionQuest(re) } } : {}), // v0.56・F22
   ...(FEATURES.ART ? { art: { title: 'ピースの図録', build: (re) => sectionArt(re) } } : {}), // v0.58・F23
@@ -903,6 +906,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('電車', summary.train(), open('train')),
       srow('作業用 BGM', summary.bgm(), open('bgm')),
       srow('キャッチアップ', summary.feed(), open('feed')),
+      FEATURES.EXT ? srow('外部のタスクリスト', extLib.summaryLine(S().ext, extLists()), open('ext')) : null,
     ]),
     group('お金', [srow('予算・カテゴリ', summary.money(), open('money'))]),
     group('データ', [

@@ -21,6 +21,7 @@ import { questStrip } from './ui-quest.js';
 import { vocabTile } from './ui-vocab.js'; // v0.85・F27: 英単語のタイル
 import { sleepTile } from './ui-sleep.js'; // v0.83・F26: 睡眠のタイル
 import { drinkTile } from './ui-drinks.js'; // v0.84・F19-9: 今日の一杯 // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
+import { homeRows as extRows } from './ui-ext.js'; // v0.96・F28: 外部のタスクリストの 今日の分
 import { trainTile } from './ui-train.js'; // v0.50・F18: 次の電車(v0.71: 「いま知りたいこと」のタイル)
 import * as next from './next.js'; // v0.71: 作業の進み(progress)・候補(candidates・v0.95 からは「なにを やる?」のシートだけ)
 import { pomoOn, pomoCard, startSheet } from './ui-pomo.js';
@@ -596,20 +597,22 @@ function focusBox(n, rerender, ctx) {
     el('span.fx-pk', [el('span', ['今日の作業 ', el('b', fmtMinJa(pg.workMin)), ` / ${pg.goal ? '目標 ' : ''}${fmtMinJa(pg.targetMin)}`]), el('span.fx-more', 'レポート ›')]),
     el('div.br-track', el('i', { style: { width: `${Math.round(pg.rate * 100)}%` } })),
   ]);
-  const line = ({ cls = '', on = false, checkLabel, onCheck, name, color = null, meta, metaCls = '', tag, hot = false, open }) => el('div.fx-row', { class: `fx-row${cls}` }, [
+  const line = ({ cls = '', on = false, checkLabel, onCheck, name, color = null, meta, metaCls = '', tag, hot = false, open, openLabel = null }) => el('div.fx-row', { class: `fx-row${cls}` }, [
     el('button.check', { type: 'button', class: `check${on ? ' on' : ''}`, 'aria-label': checkLabel, onclick: onCheck }, on ? '✓' : ''),
-    el('button.fx-t', { type: 'button', 'aria-label': `${name}(タスクを開く)`, onclick: open }, [el('span.tname', [color ? el('i.dot', { style: { background: color }, 'aria-hidden': 'true' }) : null, name].filter(Boolean)), el('span.tmeta', { class: `tmeta${metaCls}` }, meta)]),
+    el('button.fx-t', { type: 'button', 'aria-label': openLabel || `${name}(タスクを開く)`, onclick: open }, [el('span.tname', [color ? el('i.dot', { style: { background: color }, 'aria-hidden': 'true' }) : null, name].filter(Boolean)), el('span.tmeta', { class: `tmeta${metaCls}` }, meta)]),
     el('span.nx-tag', { class: `nx-tag${hot ? ' hot' : ''}` }, tag),
   ]);
   // タスク: 今日が期限 → 期限切れ
   const due = plan.dueTasks(T(), n.date, E(), { nowMin: n.min }); // v0.82・F5-18: 24 時間以内が期限(明日の この時刻までの 時刻つきも)
   const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
   const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
-  const TASK_MAX = 3, ROW_MAX = 5; // v0.95: 一目で 読める量に(あふれた分は タスクのタブへ)
+  const TASK_MAX = 3, ROW_MAX = 6; // v0.95: 一目で 読める量に(あふれた分は タスクのタブへ)。v0.96: 外部のリストの分が入るので 6 行まで
   const rows = all.slice(0, TASK_MAX).map(([t, over]) => {
     const tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
     return line({ cls: over ? '' : ' today', checkLabel: `${t.name} を完了にする`, onCheck: () => done(t), name: t.name, color: catOf(t.categoryId || 'other').color, meta: over ? `${fmtMD(t.deadline.slice(0, 10))}${tm} が期限でした` : `${plan.dueWord(t, n.date)} まで`, metaCls: over ? ' over' : '', tag: over ? '期限切れ' : '期限', hot: !over && !!tm, open: () => ctx.go('tasks') });
   });
+  // v0.96・F28: 外部のタスクリストの 今日の分(タスクのあと・習慣の前)。✓ は 端末だけの 軽い印・名前のタップで 元のページ
+  for (const x of extRows(n.date, rerender)) rows.push(line({ cls: x.done ? ' ext done' : ' ext today', on: x.done, checkLabel: x.checkLabel, onCheck: x.onCheck, name: x.name, meta: x.meta, tag: x.tag, open: x.open, openLabel: `${x.name}(元のページを開く)` }));
   // 習慣(v0.49・F5-15): ✓=済んだの印(明日はまた出る)・今日(今週)の分 / 目安・◯日続いてる・今週 m/n 日
   const gs = plan.goals(T(), E(), n.date, n.min, { chunk: plan.chunkOf(S()) }).filter((g) => (g.kind === 'daily' || g.kind === 'weekly') && T()[g.taskId]);
   const habits = gs.map((g) => ({ g, task: T()[g.taskId], stats: plan.habitStats(T()[g.taskId], E(), n.date) }));

@@ -9,6 +9,7 @@ export const SCHEMA = 1;
 import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 import { normalizeRegion, MAX_REGIONS } from './weather.js';
 import { normalizeBgm } from './bgm.js';
+import { normalizeExt } from './ext.js';
 import { normalizeArt } from './art.js';
 import { normalizeBuddy } from './buddy.js'; // v0.62・F24(buddy.js は store の entryRole を関数の中でしか使わないので、循環しても動く) // v0.58・F23(art.js は何も import しないので循環しない)
 import { normalizeFeed } from './feed.js';
@@ -114,7 +115,8 @@ export function defaultSettings() {
     kindSchema: 1,           // 1: 授業・バイトを「決まった作業」へ移した印
     palette: null,           // v0.15.3: 適用中の配色セット id(組み込み pastel/soft/vivid/pt2/mono か自分のセット。null=既定。選ぶと旧既定色の自動置き換えをしない)
     palettes: [],            // v0.15.4: 自分の配色セット [{ id, name, colors: { categoryId: '#rrggbb' } }]
-    bgm: normalizeBgm(null), // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
+    bgm: normalizeBgm(null),
+    ext: normalizeExt(null), // v0.96・F28: 外部のタスクリスト(任意)。enabled と 読むファイルの paths。中身の写しは local.extCache・印は local.extMarks // v0.32・F16: 作業用 BGM(任意)。ホームの ♪・好みのジャンル・YouTube アプリで開く。聞いた曲は data.bgm
     feed: { enabled: false, genres: [], kw: {}, n: 5, off: [], img: true, repo: '', hue: {}, order: [] }, // v0.34・F17(v0.35: off=OFF にした取得元 id・v0.36: img=記事の画像・v0.39: kw={ '*':[共通の語], genre:[語] }・v0.41: repo=自分だけの取得元リポジトリ owner/repo・空なら公開のカタログ): キャッチアップ(任意)。ホームの折りたたみ・ジャンル(空=全部)・気になる語・1 回の件数。開いた / 読まない の印は data.feed
     train: { enabled: false, lines: [] }, // v0.50・F18: 次の電車(任意)。路線 [{ id, name, src:'odpt'|'manual', station, direction, railway, operator, tables?(手入力) }](5 つまで・同期する)。ODPT の時刻表の控えは local.trainCache(端末内・30 日)・トークンは local.odptKey(端末内)
     buddy: { enabled: true, name: 'リブ', tone: 'bright', idle: true, lines: [], custom: [], chars: [{ id: 'main', name: 'リブ', tone: 'bright' }], cur: 'main' }, // chars / cur(v0.68・F24-17): キャラクター [{ id, name, tone }] と 選んでいる id(name / tone は その写し)。 custom(v0.67・F24-16): 足した性格 [{ id, label, hint, base, set }]。 lines(v0.63): 覚えた台詞 [{ k, t, s }]。 v0.62・F24: アシスタント(名前・口調 bright / polite / cool・ホームで声をかける)。絵は端末の IndexedDB、会話の控えは local.buddy
@@ -134,7 +136,7 @@ export function defaultSettings() {
   };
 }
 /** 同期で項目ごとに新しい方を採るスカラー設定(v0.17) */
-export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed', 'train', 'brief', 'quest', 'art', 'buddy', 'pomo', 'sleep', 'vocab', 'drinkPref'];
+export const SCALAR_FIELDS = ['window', 'dayStart', 'gapAbsorbMin', 'startFromLast', 'goals', 'budget', 'tiles', 'weather', 'bgm', 'feed', 'train', 'brief', 'quest', 'art', 'buddy', 'pomo', 'sleep', 'vocab', 'drinkPref', 'ext'];
 /** 天気の設定を正規化(v0.29・F15): enabled は true のときだけ true、地域は 5 つまで・id 必須(無ければ付ける)・name 40 字・緯度経度の範囲。純関数 */
 export function normalizeWeather(raw) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -263,6 +265,7 @@ function normalizeSettings(raw) {
   s.tiles = Array.isArray(raw.tiles) ? raw.tiles.filter((x) => typeof x === 'string' && TILE_KEY.test(x)).slice(0, 6) : null;
   s.weather = normalizeWeather(raw.weather); // v0.29・F15
   s.bgm = normalizeBgm(raw.bgm); // v0.32・F16
+  s.ext = normalizeExt(raw.ext); // v0.96・F28
   s.feed = normalizeFeed(raw.feed); // v0.34・F17
   s.train = normalizeTrain(raw.train); // v0.50・F18
   s.quest = { enabled: !(isObj(raw.quest) && raw.quest.enabled === false), since: isObj(raw.quest) && typeof raw.quest.since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.quest.since) ? raw.quest.since : null, book: isObj(raw.quest) && typeof raw.quest.book === 'string' && /^[a-z0-9_-]{1,40}$/.test(raw.quest.book) ? raw.quest.book : 'haeotoko' }; // v0.56・F22: 解読(既定は有効・quest.normalizeQuest と同じ形。v0.57: book)
@@ -508,8 +511,8 @@ export function usedChars() {
 /** 捨ててよい控えを消す(また取り直せるもの)。消したものが あれば true */
 function freeCaches() {
   const l = state.local;
-  if (!l || (!l.feedCache && !l.busyCache)) return false;
-  l.feedCache = null; l.busyCache = null;
+  if (!l || (!l.feedCache && !l.busyCache && !l.extCache)) return false;
+  l.feedCache = null; l.busyCache = null; l.extCache = null; // v0.96: 外部のタスクリストの写しも 取り直せる
   try { writeJSON(LOCAL_KEY, l); } catch { /* ignore */ }
   return true;
 }
@@ -553,7 +556,7 @@ export function save() {
 export function saveLocal() {
   let err = null;
   try { writeJSON(LOCAL_KEY, state.local); }
-  catch (e) { err = e; if (state.local && (state.local.feedCache || state.local.busyCache)) { state.local.feedCache = null; state.local.busyCache = null; try { writeJSON(LOCAL_KEY, state.local); err = null; } catch (e2) { err = e2; } } }
+  catch (e) { err = e; if (state.local && (state.local.feedCache || state.local.busyCache || state.local.extCache)) { state.local.feedCache = null; state.local.busyCache = null; state.local.extCache = null; try { writeJSON(LOCAL_KEY, state.local); err = null; } catch (e2) { err = e2; } } }
   mark('local', err);
 }
 /** 書けた / 書けなかった の印(data = 記録など・local = この端末だけの状態)。どちらかが 書けていない間は state.saveFailed。直ったら onSaveOk */

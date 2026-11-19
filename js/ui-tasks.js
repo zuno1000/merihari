@@ -9,6 +9,7 @@
 import { el, clear, toast, sheet, confirmSheet, svg, timeField, keepFocus } from './ui.js';
 import * as store from './store.js';
 import * as plan from './plan.js';
+import { extSection } from './ui-ext.js'; // v0.96・F28: 外部のタスクリスト(既存の一覧とは 分けた区画)
 import { dateKey, addDays, minuteOfDay, weekday, fmtMin, fmtMinJa, fmtMD, effectiveDay, DAY_JA } from './time.js';
 import { startCategory, catOf, entrySheet, groupedChips } from './ui-today.js';
 import * as log from './log.js';
@@ -306,6 +307,7 @@ export function renderTasks(view, ctx, listKey = null) {
     FEATURES.TASK_ESTIMATE ? section('今日', todayList, tasks.some((t) => !t.doneAt) ? '期限から逆算して、今日やる分があるものはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。')
       : section('24時間以内が期限', todayList, tasks.some((t) => !t.doneAt) ? '24 時間以内が期限のタスクはありません。' : '上の欄に書くと、ここに並びます。種類(タスク / 習慣 / やりたいこと / メモ)はあとからでも変えられます。', 'due-today'), // v0.47: 「今日が期限」・行は強く
     FEATURES.TASK_ESTIMATE ? null : section('1週間以内が期限', weekList, `1週間以内(${fmtMD(weekEnd)}まで)が期限のタスクはありません。`), // v0.47: 明日が期限の行は row() が .due-tmr を付ける
+    extSection(today, rerender),
     el('section.group', [el('h2', 'リスト'), el('div.ltiles', LISTS.map(tile))]),
   ].filter(Boolean));
 }
