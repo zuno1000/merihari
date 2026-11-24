@@ -33,6 +33,7 @@ import * as brief from './brief.js';
 import * as reply from './reply.js';
 import * as ext from './ext.js'; // v0.96・F28: 外部のタスクリスト
 import * as jacket from './jacket.js'; // v0.97・F29: アルバムジャケット
+import * as rpg from './rpg.js'; // v0.98・F30: ステータス(試作)
 import * as next from './next.js'; // v0.71: 次はこれ
 import * as sleep from './sleep.js'; // v0.83・F26
 import * as vocab from './vocab.js'; // v0.85・F27
@@ -43,7 +44,7 @@ import * as art from './art.js';
 import * as buddy from './buddy.js';
 import { TOPICS as HELP_TOPICS, TABS as HELP_TABS, FIRST as HELP_FIRST } from './ui-help.js'; // v0.70
 import { maybeBrief, openBrief, refreshTaskBadge } from './ui-brief.js';
-export const APP_VERSION = '0.97.0';
+export const APP_VERSION = '0.98.0';
 /** 更新履歴(v0.25: news.json に分離・レビュー A-6。設定 › 更新履歴 を開いたときだけ読む。版の上げ方: APP_VERSION・news.json の先頭・sw.js の CACHE を同じコミットで) */
 export async function loadNews() { const r = await fetch('news.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('更新履歴を読めません'); return r.json(); }
 
@@ -226,6 +227,7 @@ if (ui.DEV) window.M = {
   kiai,
   ext, // v0.96・F28
   jacket, // v0.97・F29
+  rpg, // v0.98・F30
   train, // v0.50・F18
   drinks, // v0.51・F19
   shopping, // v0.52・F20
