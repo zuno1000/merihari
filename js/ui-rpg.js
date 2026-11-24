@@ -1,17 +1,19 @@
 // merihari ─ ui-rpg.js: ステータス(v0.98・F30・試作・FEATURES.RPG)の画面。計算は rpg.js(純関数)。
 // 入口は 3 つだけ: rpgTile(ホームの「今日のコンディション」のタイル)・sectionRpg(設定の項目)・rpgSummary(設定の一覧の右側)。
-// シート: 今週のキャラクター(絵・二つ名と 職業・Lv と 経験値)→ HP / MP → 今日の動き → スキル → 決まり(折りたたみ)。
+// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP → 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
+//   → 発展アビリティ → スキル(発現したものと これからのもの)→ 今日の動き → 得意分野(カテゴリごとの時間・折りたたみ)→ 決まり(折りたたみ)。
 // 何も 保存しない(記録・タスクから そのつど 計算)。出すのは 数字と 名前だけ(はげましや 注意の文は 書かない = アシスタントの場面は 足していない)。
 import { el, sheet, svg } from './ui.js';
 import * as store from './store.js';
 import * as rpg from './rpg.js';
 import { FEATURES } from './features.js';
 import { autoSync } from './sync.js';
-import { dateKey, minuteOfDay, effectiveDay, fmtMin } from './time.js';
+import { dateKey, minuteOfDay, effectiveDay, fmtMin, addDays } from './time.js';
 
 const S = () => store.state.data.settings;
 const C = () => rpg.normalizeRpg(S().rpg);
 const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
+const prevDay = (k) => addDays(k, -1);
 export const rpgOn = () => FEATURES.RPG && !!store.state.data.meta.setupAt && C().enabled;
 export const rpgSummary = () => (C().enabled ? '有効(試作)' : '使わない');
 
@@ -21,7 +23,7 @@ const workOf = (e) => store.entryRole(S(), e).work;
 /** いまの様子(記録・タスクから 計算) */
 function snapshot() {
   const n = now(), E = store.state.data.entries, T = store.state.data.tasks;
-  return { n, p: rpg.progress(E, T, n.date, n.min, classOf, workOf), v: rpg.vitals(E, n.date, n.min, classOf), ch: rpg.character(E, n.date, n.min, classOf) };
+  return { n, g: rpg.growth(E, T, n.date, n.min, classOf, workOf), v: rpg.vitals(E, n.date, n.min, classOf), ch: rpg.character(E, n.date, n.min, classOf) };
 }
 
 const SHIELD = (cls) => svg('svg', { class: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [svg('path', { d: 'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z' }), svg('path', { d: 'M12 8l1.2 2.5 2.8.4-2 2 .5 2.8-2.5-1.3-2.5 1.3.5-2.8-2-2 2.8-.4z' })]);
@@ -29,7 +31,7 @@ const SHIELD = (cls) => svg('svg', { class: cls, viewBox: '0 0 24 24', 'aria-hid
 export function rpgTile() {
   if (!rpgOn()) return null;
   const x = snapshot();
-  return el('button.qtile.rp', { type: 'button', 'aria-label': `ステータス(レベル ${x.p.lv}・HP ${x.v.hp}・MP ${x.v.mp})`, onclick: () => rpgSheet() }, [el('span.qt-icowrap', SHIELD('qt-ico')), el('span.qt-v', `Lv ${x.p.lv}`), el('span.qt-k', `HP ${x.v.hp}・MP ${x.v.mp}`)]);
+  return el('button.qtile.rp', { type: 'button', 'aria-label': `ステータス(レベル ${x.g.lv}・HP ${x.v.hp}・MP ${x.v.mp})`, onclick: () => rpgSheet() }, [el('span.qt-icowrap', SHIELD('qt-ico')), el('span.qt-v', `Lv ${x.g.lv}`), el('span.qt-k', `HP ${x.v.hp}・MP ${x.v.mp}`)]);
 }
 
 const SKIN = '#f2d2b0', INK = '#3a3340', GOLD = '#e8b84a', STEEL = '#aab3c2', WOOD = '#8a5a34';
@@ -70,51 +72,69 @@ function avatar(ch, color) {
 const bar = (rate, cls) => { const f = el('i'); f.style.width = `${Math.round(Math.max(0, Math.min(1, rate)) * 100)}%`; return el('span.rp-bar', { class: `rp-bar ${cls}`, 'aria-hidden': 'true' }, f); };
 const vital = (key, name, v, v0) => el('div.rp-vital', [el('span.rp-vk', [el('b', key), el('span', name)]), bar(v / 100, key.toLowerCase()), el('span.rp-vv', [el('b', String(v)), el('span', ` / 100(今日 ${rpg.signed(v - v0)})`)])]);
 
+/** 基本アビリティの 1 行: 名前 → ランクの文字 → 値(今日の伸び)→ その段の中の 進み → 何で 伸びるか */
+const abilityRow = (a) => el('div.rp-ab', { class: `rp-ab${a.value >= rpg.RANK_UP ? ' hi' : ''}` }, [
+  el('span.rp-an', a.name),
+  el('b.rp-ar', { 'aria-label': `ランク ${a.rank}` }, a.rank),
+  el('span.rp-av2', [el('b', String(a.value)), a.today > 0 ? el('span.rp-up', `+${a.today}`) : null]),
+  bar((a.value % 100) / 100, 'ab'),
+  el('span.rp-ah', rpg.ABILITY_HINT[a.key]),
+]);
+/** スキルの 1 行: 発現したものは 名前と 中身、まだのものは「？？？」と いまの進み */
+const skillRow = (k) => el('div.rp-sk', { class: `rp-sk${k.got ? ' got' : ''}` }, [
+  el('span.rp-kn', k.got ? `【${k.name}】` : '【？？？】'),
+  el('span.rp-kd', `${k.desc} ${Math.min(k.have, k.got ? k.have : k.need)} / ${k.need} ${k.unit}`),
+  k.got ? null : bar(k.have / k.need, 'sk'),
+]);
+
 /** ステータスのシート */
 export function rpgSheet() {
   sheet((close) => {
-    const x = snapshot(), p = x.p, v = x.v, ch = x.ch;
-    const top = ch.top ? catOf(ch.top) : null;
-    const parts = [p.parts.workMin ? `作業 ${fmtMin(p.parts.workMin)}` : null, p.parts.playMin ? `趣味など ${fmtMin(p.parts.playMin)}` : null, p.parts.tasks ? `タスク ${p.parts.tasks} 件` : null, p.parts.habits ? `習慣 ${p.parts.habits} つ` : null].filter(Boolean);
+    const x = snapshot(), g = x.g, v = x.v, ch = x.ch;
+    const top = ch.top ? catOf(ch.top) : null, ta = g.abilities.find((a) => a.key === g.top);
     const moves = v.today.filter((m) => m.min >= 5 && (m.hp || m.mp)).slice(0, 5);
-    const skills = p.skills.slice(0, 6);
+    const got = g.skills.filter((k) => k.got), rest = g.skills.filter((k) => !k.got).sort((a, b) => b.have / b.need - a.have / a.need);
+    const feat = `偉業(1 日に 作業 ${fmtMin(rpg.FEAT_WORK)} か タスク ${rpg.FEAT_TASKS} 件)`;
+    const last = g.ups.length ? g.ups[g.ups.length - 1] : null;
+    const cond = g.ready
+      ? (g.featToday ? '条件が そろいました。日が 変わると Lv が 上がります。' : `資格あり(${ta.name} ${ta.rank} ${ta.value})。あとは ${feat}。`)
+      : `ランクアップの条件: どれかが D(${rpg.RANK_UP})以上 + その日に ${feat}。いま いちばん 高いのは ${ta.name} ${ta.rank} ${ta.value}。`;
     return [
       el('div.rp-head', [el('h2', 'ステータス'), el('span.rp-tag', '試作'), el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: close }, '閉じる')]),
       el('div.rp-hero', [
         avatar(ch, top && top.color),
         el('div.rp-who', [
           el('span.rp-title', ch.title),
-          el('b.rp-lv', [`Lv ${p.lv}`, p.up > 0 ? el('span.rp-up', `今日 +${p.up}`) : null]),
-          bar(p.rate, 'xp'),
-          el('span.rp-sub', `次の Lv まで あと ${p.left} XP・今日 +${p.todayXp} XP`),
+          el('b.rp-lv', [`Lv ${g.lv}`, el('span.rp-tier', g.tier), last && last.date === prevDay(x.n.date) ? el('span.rp-up', 'ランクアップ') : null]),
+          el('span.rp-sub', `基本アビリティの 合計 ${g.total}`),
         ]),
       ]),
-      el('p.rp-note', top ? `今週 いちばん 長かったのは ${top.name}(${fmtMin(ch.topMin)})。動いた日は ${ch.days} 日。` : 'この 7 日の記録が まだ 少ないので、旅人の姿です。'),
+      el('p.rp-note', cond),
       el('section.rp-box', [vital('HP', '体力', v.hp, v.hp0), vital('MP', '気力', v.mp, v.mp0)]),
+      el('section.rp-box', [el('h3', '基本アビリティ'), el('div.rp-rows', g.abilities.map(abilityRow))]),
+      g.dev.length ? el('section.rp-box', [el('h3', '発展アビリティ'), el('div.rp-devs', g.dev.map((d) => el('span.rp-dev', [el('b', d.name), d.n > 1 ? ` ×${d.n}` : null])))]) : null,
+      el('section.rp-box', [
+        el('h3', `スキル ${got.length} / ${g.skills.length}`),
+        el('div.rp-rows', [...got, ...rest].map(skillRow)),
+      ]),
       el('section.rp-box', [
         el('h3', '今日の動き'),
         moves.length ? el('div.rp-rows', moves.map((m) => el('div.rp-row', [el('span.rp-rn', rpg.CLASS_LABELS[m.cls] || m.cls), el('span.rp-rt', fmtMin(m.min)), el('span.rp-rd', `HP ${rpg.signed(m.hp)}・MP ${rpg.signed(m.mp)}`)]))) : el('p.muted.small', '今日の記録は まだ ありません。'),
-        parts.length ? el('p.rp-xp', `今日の経験値 +${p.todayXp}: ${parts.join('・')}`) : null,
       ]),
-      el('section.rp-box', [
-        el('h3', 'スキル'),
-        skills.length ? el('div.rp-rows', skills.map((s) => { const c = catOf(s.id); return el('div.rp-skill', [
-          el('span.rp-sn', [el('i.dot', { style: { background: c.color || 'var(--muted)' }, 'aria-hidden': 'true' }), c.name]),
-          el('b.rp-sl', [`Lv ${s.lv}`, s.up > 0 ? el('span.rp-up', `+${s.up}`) : null]),
-          bar(s.rate, 'sk'),
-          el('span.rp-st', `計 ${fmtMin(s.min)}${s.todayMin ? `(今日 +${fmtMin(s.todayMin)})` : ''}`),
-        ]); })) : el('p.muted.small', '作業や 趣味を 記録すると、カテゴリごとに スキルが 育ちます。'),
-        p.skills.length > skills.length ? el('p.muted.small', `ほか ${p.skills.length - skills.length} つ`) : null,
-      ]),
+      g.cats.length ? el('details.rp-how', [
+        el('summary', '得意分野(カテゴリごとの時間)'),
+        el('div.rp-rows', g.cats.slice(0, 8).map((c) => { const cat = catOf(c.id); return el('div.rp-row', [el('span.rp-sn', [el('i.dot', { style: { background: cat.color || 'var(--muted)' }, 'aria-hidden': 'true' }), cat.name]), el('span.rp-rt', fmtMin(c.min)), el('span')]); })),
+      ]) : null,
       el('details.rp-how', [
         el('summary', '数字の 決まり'),
-        el('p.muted.small', '何も 保存せず、記録と タスクから そのつど 計算しています(記録を 直すと 数字も 変わります)。'),
-        el('p.muted.small', `経験値: 作業の記録 1 分 = ${rpg.XP_WORK}・趣味や 運動の記録 1 分 = ${rpg.XP_PLAY}・タスクの完了 = ${rpg.XP_TASK}・習慣の印 = ${rpg.XP_HABIT}。Lv が 1 つ 上がるのに 要るのは ${rpg.LV_STEP} × いまの Lv。スキルは カテゴリごとの 記録の時間で、${rpg.SKILL_STEP} 分 × いまの Lv。`),
+        el('p.muted.small', '何も 保存せず、記録と タスクを 日付の順に たどって そのつど 計算しています(記録を 直すと 数字も 変わります)。'),
+        el('p.muted.small', `基本アビリティ: 値は 0〜999 を I・H・G・F・E・D・C・B・A・S の 10 段(100 ごと)で 書きます(1000 から SS・1100 から SSS)。魔力 = 頭の作業 ${rpg.GAIN.min} 分で 1。力 = 体の作業 ${rpg.GAIN.min} 分で 1・運動 ${rpg.GAIN.sportMin} 分で 1。耐久 = 睡眠 1 時間で 1(1 日 8 時間まで)・習慣の印 ${rpg.GAIN.habit}。器用 = タスクの完了 ${rpg.GAIN.task}・趣味 ${rpg.GAIN.min} 分で 1。敏捷 = 期限までに 済ませたタスク ${rpg.GAIN.onTime}・12 時より前に 始めた作業 ${rpg.GAIN.min} 分で 1。`),
+        el('p.muted.small', `Lv: 基本アビリティの どれかが D(${rpg.RANK_UP})以上に なり、その日に ${feat}を 果たすと、日が 変わったときに Lv が 1 つ 上がります。上がると 基本アビリティは I の 0 から 始まり、その Lv で いちばん 伸びたものが 発展アビリティ(力 = 剛体・耐久 = 不屈・器用 = 多芸・敏捷 = 先手・魔力 = 探究)に 残ります。同じ Lv の中では、合計が 500 未満 = ロー・1000 未満 = ミッド・それ以上 = ハイ。`),
         el('p.muted.small', `HP / MP: 直近 ${rpg.VITAL_DAYS} 日の記録を 順に たどります。1 時間あたり ─ ${['mind', 'body', 'sleep', 'rest', 'play', 'sport', 'drift', 'move', 'life', 'none'].map((k) => `${rpg.CLASS_LABELS[k]} HP ${rpg.signed(rpg.RATES[k][0])} / MP ${rpg.signed(rpg.RATES[k][1])}`).join('、')}。記録の無い 3 時間以上は 少し 回復(HP・MP ${rpg.signed(rpg.RATES.blank[0])})。`),
         el('p.muted.small', '体を使うか どうかは カテゴリの名前から 見立てています(バイト・家事 = 体の作業、運動・筋トレ = 運動、ほかの作業 = 頭の作業、作業いがい = 趣味)。'),
         el('p.muted.small', '今週のキャラクター: この 7 日で 頭の作業が 多ければ 賢者、体の作業なら 戦士、どちらも 3 割以上なら 魔法戦士、趣味なら 吟遊詩人、運動なら 武闘家、合わせて 5 時間に 届かなければ 旅人。二つ名は 動いた日数・時間帯・睡眠から。服の色は いちばん 長かった カテゴリの色です。'),
       ]),
-    ];
+    ].filter(Boolean);
   }, null, { cls: 'rp-sheet' });
 }
 
@@ -124,7 +144,7 @@ export function sectionRpg(rerender) {
   const save = (next) => { S().rpg = rpg.normalizeRpg(next); store.touchSettings(); autoSync(); rerender(); };
   return el('section.card', [
     el('h2', 'ステータス(試作)'),
-    el('p.muted.small', '記録と タスクから、RPG のように レベル・スキル・HP(体力)・MP(気力)と、今週のキャラクターを 出します。ホームの「今日のコンディション」に タイルが 出て、タップで くわしく 見られます。試作なので、式や 見え方は 変わることが あります。'),
+    el('p.muted.small', '記録と タスクから、RPG のように Lv・基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S のランクで)・スキル・HP(体力)・MP(気力)と、今週のキャラクターを 出します。ホームの「今日のコンディション」に タイルが 出て、タップで くわしく 見られます。試作なので、式や 見え方は 変わることが あります。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => save({ ...c, enabled: e.target.checked }) }), el('span', 'ホームに ステータスのタイルを出す')]),
     el('p.muted.small', '何も 保存しません(記録から そのつど 計算)。記録の しかたも 変わりません。数字の 決まりは シートの下の「数字の 決まり」に あります。'),
     el('div.row', el('button.btn.sm', { type: 'button', onclick: () => rpgSheet() }, 'ステータスを開く')),
