@@ -103,21 +103,21 @@ export function spans(entries, baseDate, nowAbs, classOf, from = 0) {
 
 /**
  * HP / MP(純関数): 直近 days 日の記録を たどる。today = 今日の日付・nowMin = いまの分。
- * 戻り値 { hp, mp, hp0, mp0(今日の 0:00 の値), today:[{ cls, min, hp, mp }](今日の 増減を 種類ごとに・時間の長い順) }
+ * 戻り値 { hp, mp, hp0, mp0(今日の 0:00 の値), today:[{ cls, min, hp, mp }](今日の 増減を 種類ごとに・時間の長い順), curve:[{ t, hp, mp }](今日の 動き) }
  */
 export function vitals(entries, today, nowMin, classOf, { days = VITAL_DAYS, start = VITAL_START } = {}) {
-  const t0 = dayNum(today); if (t0 == null) return { hp: start, mp: start, hp0: start, mp0: start, today: [] };
+  const t0 = dayNum(today); if (t0 == null) return { hp: start, mp: start, hp0: start, mp0: start, today: [], curve: [] };
   const baseKey = new Date((t0 - days) * 86400000).toISOString().slice(0, 10);
   const nowAbs = days * 1440 + Math.max(0, nowMin), todayAbs = days * 1440;
   const list = spans(entries, baseKey, nowAbs, classOf);
   let hp = start, mp = start, hp0 = null, mp0 = null, at = 0;
-  const by = {};
+  const by = {}, curve = []; // curve(v0.99.1): 今日の 0:00 からの HP / MP の 動き [{ t(分), hp, mp }](線の もと)
   const run = (a, b, cls) => {
     if (b <= a) return;
     if (a < todayAbs && b > todayAbs) { run(a, todayAbs, cls); run(todayAbs, b, cls); return; }
-    if (a >= todayAbs && hp0 == null) { hp0 = hp; mp0 = mp; }
+    if (a >= todayAbs && hp0 == null) { hp0 = hp; mp0 = mp; curve.push({ t: 0, hp, mp }); }
     const r = RATES[cls] || RATES.none, h = (b - a) / 60, nh = clamp(hp + r[0] * h), nm = clamp(mp + r[1] * h);
-    if (a >= todayAbs) { const o = by[cls] || (by[cls] = { cls, min: 0, hp: 0, mp: 0 }); o.min += b - a; o.hp += nh - hp; o.mp += nm - mp; }
+    if (a >= todayAbs) { const o = by[cls] || (by[cls] = { cls, min: 0, hp: 0, mp: 0 }); o.min += b - a; o.hp += nh - hp; o.mp += nm - mp; curve.push({ t: b - todayAbs, hp: nh, mp: nm }); }
     hp = nh; mp = nm;
   };
   const gap = (a, b) => run(a, b, b - a >= LONG_GAP ? 'blank' : 'none');
@@ -125,7 +125,7 @@ export function vitals(entries, today, nowMin, classOf, { days = VITAL_DAYS, sta
   if (nowAbs > at) gap(at, nowAbs);
   if (hp0 == null) { hp0 = hp; mp0 = mp; }
   const rd = (v) => Math.round(v);
-  return { hp: rd(hp), mp: rd(mp), hp0: rd(hp0), mp0: rd(mp0), today: Object.values(by).map((o) => ({ cls: o.cls, min: o.min, hp: rd(o.hp), mp: rd(o.mp) })).sort((p, q) => q.min - p.min) };
+  return { hp: rd(hp), mp: rd(mp), hp0: rd(hp0), mp0: rd(mp0), today: Object.values(by).map((o) => ({ cls: o.cls, min: o.min, hp: rd(o.hp), mp: rd(o.mp) })).sort((p, q) => q.min - p.min), curve };
 }
 
 /**

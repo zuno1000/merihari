@@ -1,7 +1,7 @@
 // merihari ─ ui-rpg.js: ステータス(v0.98・F30・試作・FEATURES.RPG)の画面。計算は rpg.js(純関数)。
 // 入口は 3 つだけ: rpgTile(ホームの「今日のコンディション」のタイル)・sectionRpg(設定の項目)・rpgSummary(設定の一覧の右側)。
-// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP → 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
-//   → 発展アビリティ → スキル(発現したものと これからのもの)→ 今日の動き → 得意分野(カテゴリごとの時間・折りたたみ)→ 決まり(折りたたみ)。
+// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP → 今日の動き(v0.99.1: HP / MP の 線と、種類ごとの 増減の 棒)→ 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
+//   → 発展アビリティ → スキル(発現したものと これからのもの)→ 得意分野(カテゴリごとの時間・折りたたみ)→ 決まり(折りたたみ)。
 // 何も 保存しない(記録・タスクから そのつど 計算)。出すのは 数字と 名前だけ(はげましや 注意の文は 書かない = アシスタントの場面は 足していない)。
 import { el, sheet, svg } from './ui.js';
 import * as store from './store.js';
@@ -87,12 +87,62 @@ const skillRow = (k) => el('div.rp-sk', { class: `rp-sk${k.got ? ' got' : ''}` }
   k.got ? null : bar(k.have / k.need, 'sk'),
 ]);
 
+/**
+ * 今日の HP / MP の 動き(線・v0.99.1・実機 FB「今日の動きを もう少し 視覚的に」): 横は 0 時〜24 時、縦は 0〜100(HP と MP は 同じ 目盛り)。
+ * 線は 2 本(HP・MP)で、右の端に いまの値を 書く。図に 触れると その時刻の 値を 下に 出す。
+ */
+function vitalChart(v, nowMin) {
+  const pts = v.curve; if (pts.length < 2) return null;
+  const W = 340, H = 124, L = 26, R = 46, T = 8, B = 20, xMax = Math.max(1440, nowMin, pts[pts.length - 1].t);
+  const X = (t) => L + (t / xMax) * (W - L - R), Y = (val) => T + ((100 - val) / 100) * (H - T - B);
+  const line = (k) => pts.map((p) => `${X(p.t).toFixed(1)},${Y(p[k]).toFixed(1)}`).join(' ');
+  const end = pts[pts.length - 1], k = [];
+  for (const g of [0, 50, 100]) { k.push(svg('line', { x1: L, x2: W - R, y1: Y(g), y2: Y(g), class: 'rp-grid' })); k.push(svg('text', { x: L - 5, y: Y(g) + 3.5, class: 'rp-ax', 'text-anchor': 'end' }, String(g))); }
+  for (const h of [0, 6, 12, 18, 24]) k.push(svg('text', { x: X(h * 60), y: H - 5, class: 'rp-ax', 'text-anchor': 'middle' }, `${h}時`));
+  const cross = svg('line', { x1: 0, x2: 0, y1: T, y2: H - B, class: 'rp-cross' }); cross.style.display = 'none';
+  k.push(cross, svg('polyline', { points: line('hp'), class: 'rp-line hp' }), svg('polyline', { points: line('mp'), class: 'rp-line mp' }));
+  // 右の端の 印と 値(2 つが 近いときは 上下に 離す)
+  let yh = Y(end.hp), ym = Y(end.mp);
+  if (Math.abs(yh - ym) < 13) { const mid = (yh + ym) / 2, up = yh <= ym; yh = mid + (up ? -6.5 : 6.5); ym = mid + (up ? 6.5 : -6.5); }
+  k.push(svg('circle', { cx: X(end.t), cy: Y(end.hp), r: 4, class: 'rp-dot hp' }), svg('circle', { cx: X(end.t), cy: Y(end.mp), r: 4, class: 'rp-dot mp' }));
+  k.push(svg('text', { x: X(end.t) + 8, y: yh + 4, class: 'rp-endl' }, `HP ${Math.round(end.hp)}`), svg('text', { x: X(end.t) + 8, y: ym + 4, class: 'rp-endl' }, `MP ${Math.round(end.mp)}`));
+  const node = svg('svg', { class: 'rp-chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `今日の HP と MP の 動き(HP ${v.hp0} → ${v.hp}・MP ${v.mp0} → ${v.mp})` }, k);
+  const read = el('p.rp-read', '図に 触れると その時刻の 値が 出ます。');
+  const at = (t) => { // その時刻の 値(点の 間は まっすぐ つなぐ)
+    let i = 1; while (i < pts.length - 1 && pts[i].t < t) i++;
+    const a = pts[i - 1], b = pts[i], f = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 1;
+    return { hp: a.hp + (b.hp - a.hp) * f, mp: a.mp + (b.mp - a.mp) * f };
+  };
+  const move = (ev) => {
+    const r = node.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W;
+    const t = Math.max(0, Math.min(end.t, ((px - L) / (W - L - R)) * xMax)), p = at(t);
+    cross.setAttribute('x1', X(t)); cross.setAttribute('x2', X(t)); cross.style.display = '';
+    read.textContent = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')} ─ HP ${Math.round(p.hp)}・MP ${Math.round(p.mp)}`;
+  };
+  node.addEventListener('pointerdown', move); node.addEventListener('pointermove', move);
+  const key = (cls, name) => el('span.rp-key', [el('i', { class: cls, 'aria-hidden': 'true' }), name]);
+  return el('div.rp-chartbox', [el('div.rp-legend', [key('hp', 'HP 体力'), key('mp', 'MP 気力')]), node, read]);
+}
+/** 増減の 棒(まん中が 0・右が 回復・左が 消耗)。max = いちばん 大きい 増減(棒の 長さの もと) */
+function dvBar(val, max, cls) {
+  const w = max > 0 ? Math.min(50, (Math.abs(val) / max) * 50) : 0, f = el('i', { class: val < 0 ? 'neg' : 'pos' });
+  f.style.width = `${w}%`; f.style.left = `${val < 0 ? 50 - w : 50}%`;
+  return el('span.rp-dv', { class: `rp-dv ${cls}`, 'aria-hidden': 'true' }, f);
+}
+/** 今日の動きの 1 行: 種類と 時間 → HP と MP の 増減を 棒と 数字で */
+const moveRow = (m, max) => el('div.rp-mv', [
+  el('span.rp-mn', [el('b', rpg.CLASS_LABELS[m.cls] || m.cls), el('span', fmtMin(m.min))]),
+  el('span.rp-ml', 'HP'), dvBar(m.hp, max, 'hp'), el('span.rp-mvv', rpg.signed(m.hp)),
+  el('span.rp-ml', 'MP'), dvBar(m.mp, max, 'mp'), el('span.rp-mvv', rpg.signed(m.mp)),
+]);
+
 /** ステータスのシート */
 export function rpgSheet() {
   sheet((close) => {
     const x = snapshot(), g = x.g, v = x.v, ch = x.ch;
     const top = ch.top ? catOf(ch.top) : null, ta = g.abilities.find((a) => a.key === g.top);
-    const moves = v.today.filter((m) => m.min >= 5 && (m.hp || m.mp)).slice(0, 5);
+    const moves = v.today.filter((m) => m.min >= 5 && (m.hp || m.mp)).slice(0, 6);
+    const mvMax = Math.max(1, ...moves.map((m) => Math.max(Math.abs(m.hp), Math.abs(m.mp))));
     const got = g.skills.filter((k) => k.got), rest = g.skills.filter((k) => !k.got).sort((a, b) => b.have / b.need - a.have / a.need);
     const feat = `偉業(1 日に 作業 ${fmtMin(rpg.FEAT_WORK)} か タスク ${rpg.FEAT_TASKS} 件)`;
     const last = g.ups.length ? g.ups[g.ups.length - 1] : null;
@@ -111,15 +161,16 @@ export function rpgSheet() {
       ]),
       el('p.rp-note', cond),
       el('section.rp-box', [vital('HP', '体力', v.hp, v.hp0), vital('MP', '気力', v.mp, v.mp0)]),
+      el('section.rp-box', [
+        el('h3', '今日の動き'),
+        vitalChart(v, x.n.min),
+        moves.length ? el('div.rp-rows', [el('div.rp-mvh', [el('span', '← 消耗'), el('span', '回復 →')]), ...moves.map((m) => moveRow(m, mvMax))]) : el('p.muted.small', '今日の記録は まだ ありません。'),
+      ]),
       el('section.rp-box', [el('h3', '基本アビリティ'), el('div.rp-rows', g.abilities.map(abilityRow))]),
       g.dev.length ? el('section.rp-box', [el('h3', '発展アビリティ'), el('div.rp-devs', g.dev.map((d) => el('span.rp-dev', [el('b', d.name), d.n > 1 ? ` ×${d.n}` : null])))]) : null,
       el('section.rp-box', [
         el('h3', `スキル ${got.length} / ${g.skills.length}`),
         el('div.rp-rows', [...got, ...rest].map(skillRow)),
-      ]),
-      el('section.rp-box', [
-        el('h3', '今日の動き'),
-        moves.length ? el('div.rp-rows', moves.map((m) => el('div.rp-row', [el('span.rp-rn', rpg.CLASS_LABELS[m.cls] || m.cls), el('span.rp-rt', fmtMin(m.min)), el('span.rp-rd', `HP ${rpg.signed(m.hp)}・MP ${rpg.signed(m.mp)}`)]))) : el('p.muted.small', '今日の記録は まだ ありません。'),
       ]),
       g.cats.length ? el('details.rp-how', [
         el('summary', '得意分野(カテゴリごとの時間)'),

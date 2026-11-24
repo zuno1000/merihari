@@ -3,7 +3,7 @@
 // 今日のお楽しみ に 入口。押すと 音楽再生アプリのような 画面が ぜんたいに開き、次へ で ランダムに 次のジャケット、戻る で 前のジャケット、再生で YouTube アプリ」。
 // もと: iTunes Search API(https://itunes.apple.com/search・無料・鍵なし・CORS 可)。結果の artworkUrl100 の「100x100」を 大きい数に 替えると、
 // その大きさ(無ければ 持っている いちばん大きい画像)が 返る。3000 を 頼むと 最大(作品により 1400〜3000px)。
-// ランダム: API に「ランダム」は 無いので、語(SEEDS か 設定の 好みの語)を 1 つ えらび、結果の 何件目からか(offset)も ずらして 取り、混ぜて 並べる。
+// ランダム: API に「ランダム」は 無いので、語(SEEDS か 設定の 好みの語)を 3 つ えらび、結果の 何件目からか(offset)も ずらして 取り、語ごとに 4 枚ずつを 順ぐりに 並べる(v0.99.1)。
 // 画像は 端末にも Drive にも 置かない(見るたびに Apple から 取る)。この端末に 残すのは 見た順の 控え(local.jacket・名前と URL だけ)。
 export const SEARCH_URL = 'https://itunes.apple.com/search';
 export const VIEW_PX = 1200;   // 画面に出す大きさ(iPhone の 390pt × 3 倍 で 足りる)
@@ -11,6 +11,7 @@ export const SAVE_PX = 3000;   // 保存するとき 頼む大きさ(持って�
 export const THUMB_PX = 200;   // 検索の一覧
 export const PAGE = 50;        // 1 回に取る件数
 export const OFFSETS = Object.freeze([0, 50, 100, 150]);
+export const SEEDS_PER_FILL = 3, PER_SEED = 4; // v0.99.1: 1 回の 取得は 3 つの語から 4 枚ずつ(同じ語の ジャケットが 続かないように)
 export const HIST_MAX = 40;    // この端末に 控える 見た順
 export const MAX_WORDS = 20;
 export const COUNTRIES = Object.freeze({ JP: '日本', US: 'アメリカ' });
@@ -120,10 +121,28 @@ export async function search(term, opts = {}) {
   if (!r.ok) throw new Error(`jacket ${r.status}`);
   return parseResults(await r.json());
 }
-/** ランダムの 1 回分を 取る(副作用: fetch): ずらした所に 無ければ 先頭から 取り直す。seen(見た id の Set)は 除く */
-export async function randomBatch({ words = [], country = 'JP', seen = null, rand = Math.random } = {}) {
-  const seed = pickSeed(words, rand);
-  let list = await search(seed.term, { country, offset: seed.offset });
-  if (!list.length && seed.offset) list = await search(seed.term, { country });
-  return shuffle(seen ? list.filter((x) => !seen.has(x.id)) : list, rand);
+/**
+ * いくつかの語の 結果を 混ぜる(純関数・v0.99.1・実機 FB「Time で始まる ジャケットが 10 個以上 続いた」):
+ * 語ごとに per 枚だけ 取り、1 枚ずつ 順ぐりに 並べる(同じ語の ジャケットが 隣り合わない)。重複と seen(見た id の Set)は 除く
+ */
+export function mixBatches(lists, per = PER_SEED, seen = null) {
+  const used = new Set(), cols = (Array.isArray(lists) ? lists : []).map((l) => { const out = []; for (const x of (Array.isArray(l) ? l : [])) { if (out.length >= per) break; if (!x || used.has(x.id) || (seen && seen.has(x.id))) continue; used.add(x.id); out.push(x); } return out; });
+  const out = [];
+  for (let i = 0; i < per; i++) for (const c of cols) if (c[i]) out.push(c[i]);
+  return out;
+}
+/**
+ * ランダムの 1 回分を 取る(副作用: fetch): 語を n 個(かぶらないように)えらび、それぞれ ずらした所から 取って 混ぜてから mixBatches。
+ * ずらした所に 無ければ 先頭から 取り直す。1 つの語が 失敗しても ほかの語の分は 返す(ぜんぶ 失敗なら 投げる)
+ */
+export async function randomBatch({ words = [], country = 'JP', seen = null, rand = Math.random, n = SEEDS_PER_FILL } = {}) {
+  const seeds = [];
+  for (let i = 0; i < n * 4 && seeds.length < n; i++) { const s = pickSeed(words, rand); if (!seeds.some((x) => x.term === s.term)) seeds.push(s); }
+  const res = await Promise.allSettled(seeds.map(async (seed) => {
+    let list = await search(seed.term, { country, offset: seed.offset });
+    if (!list.length && seed.offset) list = await search(seed.term, { country });
+    return shuffle(list, rand);
+  }));
+  if (res.every((r) => r.status === 'rejected')) throw res[0] ? res[0].reason : new Error('jacket');
+  return mixBatches(res.filter((r) => r.status === 'fulfilled').map((r) => r.value), PER_SEED, seen);
 }

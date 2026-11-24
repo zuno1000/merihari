@@ -2128,3 +2128,33 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .rp-sk.got .rp-kn{color:var(--fg)}
 .rp-kd{font-size:12px;color:var(--muted)}
 .rp-sk .rp-bar{height:4px;margin-top:2px}
+/* v0.99.1・F30: 今日の動きの 図(.rp-chart: HP / MP の 線・同じ 0〜100 の 目盛り)と、種類ごとの 増減の 棒(.rp-dv: まん中が 0・右が 回復・左が 消耗)。文字は 文字の色・色は 印だけ */
+.rp-chartbox{margin:2px 0 8px}
+.rp-legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:2px}
+.rp-key{display:inline-flex;align-items:center;gap:5px}
+.rp-key i{width:14px;height:3px;border-radius:2px;display:inline-block;background:var(--rp-hp)}
+.rp-key i.mp{background:var(--rp-mp)}
+.rp-chart{width:100%;height:auto;display:block;touch-action:pan-y}
+.rp-grid{stroke:var(--line);stroke-width:1}
+.rp-ax{font-size:9.5px;fill:var(--muted)}
+.rp-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--rp-hp)}
+.rp-line.mp{stroke:var(--rp-mp)}
+.rp-dot{fill:var(--rp-hp);stroke:var(--bg);stroke-width:2}
+.rp-dot.mp{fill:var(--rp-mp)}
+.rp-endl{font-size:10.5px;font-weight:600;fill:var(--fg)}
+.rp-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.rp-read{font-size:12px;color:var(--muted);margin:2px 0 0;min-height:18px;font-variant-numeric:tabular-nums}
+.rp-mvh{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:0 34px 0 calc(38% + 30px)}
+.rp-mv{display:grid;grid-template-columns:38% 22px 1fr 30px;align-items:center;gap:3px 4px;padding:6px 0}
+.rp-mv+.rp-mv{border-top:1px solid var(--line)}
+.rp-mn{grid-row:1 / span 2;display:flex;flex-direction:column;min-width:0}
+.rp-mn b{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-mn span{font-size:12px;color:var(--muted)}
+.rp-ml{font-size:11px;color:var(--muted)}
+.rp-mvv{font-size:12px;font-variant-numeric:tabular-nums;text-align:right}
+.rp-dv{position:relative;display:block;height:10px;background:var(--track);border-radius:5px}
+.rp-dv::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.rp-dv i{position:absolute;top:1px;bottom:1px;background:var(--rp-hp)}
+.rp-dv.mp i{background:var(--rp-mp)}
+.rp-dv i.pos{border-radius:0 4px 4px 0}
+.rp-dv i.neg{border-radius:4px 0 0 4px}
