@@ -115,6 +115,28 @@ export function favList(map) {
   for (const r of Object.values(map && typeof map === 'object' ? map : {})) { if (!r || typeof r !== 'object' || r.deletedAt) continue; const x = normalizeItem(r); if (x) out.push({ ...x, at: typeof r.at === 'string' ? r.at : '' }); }
   return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? -1 : 1));
 }
+/**
+ * 印刷の 型(v0.104・F29-10・ユーザー要望「ミニ CD 風キーホルダーの 表紙などを すぐ 印刷できるように。テンプレに 配置する形で」): 寸法は mm。
+ * ユーザーの テンプレ(ミニCDテンプレ.pptx)から 読み取った 数字: ジャケット = 81 × 40.5(まん中で 山折り。左が 裏表紙・右が 表紙)/
+ * バックインレイ = 105 × 37(左から 内側 48.5・外側 48.5・背 4・帯の側 4。折るのは 48.5 / 97 / 101 の 所)/ ディスク = 直径 37・穴 6。A4 縦に 3 組まで
+ */
+export const PRINT = Object.freeze({ page: Object.freeze({ w: 210, h: 297 }), margin: 12, gap: 8, rowGap: 6, perPage: 3, jacket: Object.freeze({ w: 81, h: 40.5 }), inlay: Object.freeze({ w: 105, h: 37, folds: Object.freeze([48.5, 97, 101]) }), disc: Object.freeze({ d: 37, hole: 6 }) });
+/** n 組ぶんの 置き場所(純関数・mm・紙の 左上から): [{ jacket:{ x, y, w, h, fold }, disc:{ x, y, d, hole }, inlay:{ x, y, w, h, folds } }](perPage まで) */
+export function printLayout(n) {
+  const P = PRINT, k = Math.max(0, Math.min(P.perPage, Math.floor(Number.isFinite(n) ? n : 0))), blockH = P.jacket.h + P.rowGap + P.inlay.h, out = [];
+  for (let i = 0; i < k; i++) {
+    const x = P.margin, y = P.margin + i * (blockH + P.gap);
+    out.push({ jacket: { x, y, w: P.jacket.w, h: P.jacket.h, fold: P.jacket.w / 2 }, disc: { x: x + P.jacket.w + P.gap, y: y + (P.jacket.h - P.disc.d) / 2, d: P.disc.d, hole: P.disc.hole }, inlay: { x, y: y + P.jacket.h + P.rowGap, w: P.inlay.w, h: P.inlay.h, folds: [...P.inlay.folds] } });
+  }
+  return out;
+}
+/** 背に 入れる文字(純関数): 「アーティスト ─ アルバム名」 */
+export const spineText = (it) => [it?.artist, it?.name].filter(Boolean).join(' ─ ').slice(0, 60);
+/** 印刷に 並べる 一覧に 1 枚 足す(純関数): 同じものは 足さない・perPage まで。戻り値は 新しい 配列 */
+export function printAdd(list, item) {
+  const cur = (Array.isArray(list) ? list : []).map(normalizeItem).filter(Boolean), it = normalizeItem(item);
+  return !it || cur.some((x) => x.id === it.id) || cur.length >= PRINT.perPage ? cur : [...cur, it];
+}
 /** YouTube で 探す語(純関数): 「アーティスト アルバム名」 */
 export const youtubeQuery = (it) => [it?.artist, it?.name].filter(Boolean).join(' ').slice(0, 200);
 /** YouTube の 検索結果の URL(純関数): plat = 'ios' / 'android' / 'other'・app = アプリで開くか */

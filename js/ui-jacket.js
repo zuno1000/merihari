@@ -4,6 +4,7 @@
 // 再生は YouTube で「アーティスト アルバム名」の 検索結果を開く(動画の id は 分からないので)。アプリで開くかは 作業用 BGM の設定(settings.bgm.app)に そろえる。
 // 保存は 大きい画像(jacket.SAVE_PX を 頼む)を 取って、スマホは 共有シート(「画像を保存」)・PC は ダウンロード。
 // 画像は 端末に 置かない。見た順の控え(local.jacket)だけ この端末に 残す(同期しない)。
+// 印刷(v0.104・F29-10): 「印刷」→ ミニ CD 風キーホルダーの 型(ジャケット・バックインレイ・ディスク)に 3 組まで 並べ、A4 の 等倍で window.print()。寸法は jacket.PRINT(mm)。
 // お気に入り(v0.102・F29-9): ジャケットの下の ☆ で 付け外し・右上の ★ で 一覧。置くのは 題名と 画像の場所だけ(data.jacket・同期する)。data は 描くたびに 取り直す(同期が 入れ替えるので)。
 import { el, clear, sheet, svg, toast } from './ui.js';
 import * as store from './store.js';
@@ -24,6 +25,35 @@ const NEXT = () => ico('jk-ico', [svg('path', { d: 'M17 5v14M5 5l9 7-9 7z' })], 
 const PLAY = () => ico('jk-ico big', [svg('path', { d: 'M8 5l12 7-12 7z' })], true);
 const FIND = () => ico('jk-ico sm', [svg('circle', { cx: 11, cy: 11, r: 6 }), svg('path', { d: 'M16 16l4 4' })]);
 const DOWN = () => ico('jk-ico sm', [svg('path', { d: 'M12 4v11M7 11l5 5 5-5M5 20h14' })]);
+const PRN = () => ico('jk-ico sm', [svg('path', { d: 'M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M7 14h10v6H7z' })]);
+const mm = (v) => `${v}mm`;
+/**
+ * 印刷する 1 枚の 紙(A4 縦・mm で 置く): items = ジャケットの 配列(3 つまで)・back = 裏の面('text' = 題名の文字 / 'art' = 同じ絵)。
+ * 実線 = 切り取り・点線 = 山折り。右の 余白に 50mm の ものさし(印刷の 倍率が 100% かを 確かめる)
+ */
+function printPage(items, back) {
+  const at = (cls, x, y, w, h, kids = null) => el(`div.${cls}`, { style: { left: mm(x), top: mm(y), width: mm(w), height: mm(h) } }, kids);
+  const art = (it) => el('img', { src: jacket.artUrl(it.art, jacket.VIEW_PX), alt: '' });
+  const text = (it) => el('div.pr-text', [el('b', it.name), el('span', it.artist), el('small', [it.year, it.genre].filter(Boolean).join('・'))]);
+  const face = (it) => (back === 'art' ? art(it) : text(it));
+  const kids = [];
+  jacket.printLayout(items.length).forEach((L, i) => {
+    const it = items[i], j = L.jacket, d = L.disc, n = L.inlay, f = n.folds;
+    kids.push(at('pr-part', j.x, j.y, j.w, j.h, [at('pr-seg', 0, 0, j.fold, j.h, face(it)), at('pr-seg', j.fold, 0, j.w - j.fold, j.h, art(it)), at('pr-fold', j.fold, 0, 0, j.h)]));
+    kids.push(at('pr-label', j.x, j.y + j.h + 1, j.w, 3, 'ジャケット(左: 裏表紙・右: 表紙)'));
+    kids.push(at('pr-part.disc', d.x, d.y, d.d, d.d, [art(it), at('pr-hole', (d.d - d.hole) / 2, (d.d - d.hole) / 2, d.hole, d.hole)]));
+    kids.push(at('pr-label', d.x, d.y + d.d + 1, d.d, 3, 'ディスク'));
+    kids.push(at('pr-part', n.x, n.y, n.w, n.h, [
+      at('pr-seg', 0, 0, f[0], n.h, back === 'art' ? art(it) : null), at('pr-seg', f[0], 0, f[1] - f[0], n.h, face(it)),
+      at('pr-seg.spine', f[1], 0, f[2] - f[1], n.h, el('span', jacket.spineText(it))), at('pr-seg.spine', f[2], 0, n.w - f[2], n.h, el('span', it.name)),
+      ...f.map((x) => at('pr-fold', x, 0, 0, n.h)),
+    ]));
+    kids.push(at('pr-label', n.x, n.y + n.h + 1, n.w, 3, 'バックインレイ(左: 内側・右: 外側と 背)'));
+  });
+  const P = jacket.PRINT, rx = P.margin + P.jacket.w + P.gap + P.disc.d + P.gap;
+  kids.push(at('pr-rule', rx, P.margin, 50, 2), at('pr-label', rx, P.margin + 3, 52, 14, '↑ この線が 50mm なら 等倍です。実線で 切り、点線で 山折り。'));
+  return el('div.pr-page', { style: { width: mm(P.page.w), height: mm(P.page.h) } }, kids);
+}
 const STAR = (on) => ico('jk-ico sm', [svg('path', { d: 'M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z' })], on);
 /** お気に入りの 置き場(いまの データから 毎回 取る) */
 const F = () => store.state.data.jacket || (store.state.data.jacket = {});
@@ -53,6 +83,7 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
   const nextBtn = el('button.jk-btn', { type: 'button', 'aria-label': '次のジャケット', onclick: () => step(1) }, NEXT());
   const saveBtn = el('button.jk-pill', { type: 'button', onclick: () => save() }, [DOWN(), saveLabel]);
   const favBtn = el('button.jk-pill.fav', { type: 'button', onclick: () => toggleFav() });
+  const printBtn = el('button.jk-pill', { type: 'button', 'aria-label': 'ミニ CD の 型で 印刷する', onclick: () => { const c = cur(); if (c) prList = jacket.printAdd(prList, c); setMode('print'); } }, [PRN(), el('span', '印刷')]);
   const amLink = el('a.jk-pill', { target: '_blank', rel: 'noopener' }, 'Apple Music で 見る');
   art.addEventListener('load', () => art.classList.remove('loading'));
   art.addEventListener('error', () => { art.classList.remove('loading'); status.textContent = '画像を 読めませんでした。'; });
@@ -61,7 +92,7 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
     el('div.jk-artwrap', art),
     el('div.jk-text', [title, artist, meta]),
     el('div.jk-ctrl', [prevBtn, playBtn, nextBtn]),
-    el('div.jk-row', [favBtn, saveBtn, amLink]),
+    el('div.jk-row', [favBtn, saveBtn, printBtn, amLink]),
     status,
     el('p.jk-credit', '画像と情報: Apple(iTunes Search API)'),
   ]);
@@ -72,6 +103,8 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
     grid,
   ]);
   const favGrid = el('div.jk-grid'), favPane = el('div.jk-finder', [favGrid]);
+  const prPane = el('div.jk-finder.pr-pane');
+  let prList = [], prBack = 'text'; // 印刷に 並べる ジャケット(3 つまで)と 裏の面
   const body = el('div.jk-body');
   const findBtn = el('button.jk-top', { type: 'button', 'aria-label': 'ジャケットを 探す', onclick: () => setMode(mode === 'find' ? 'play' : 'find') }, FIND());
   const listBtn = el('button.jk-top', { type: 'button', 'aria-label': 'お気に入りの 一覧', onclick: () => setMode(mode === 'fav' ? 'play' : 'fav') }, STAR(true));
@@ -103,9 +136,42 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
       el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '', loading: 'lazy', decoding: 'async' }), el('span.jk-cn', it.name), el('span.jk-ca', it.artist),
     ])));
   }
+  /** 印刷の画面: 並べる ジャケット(外せる)→ お気に入りから 足す → 裏の面 → 縮めた 見本 → 印刷する */
+  function drawPrint() {
+    const P = jacket.PRINT, favs = jacket.favList(F()).filter((x) => !prList.some((y) => y.id === x.id));
+    const chip = (label, on, fn) => el('button.jk-pill', { type: 'button', class: `jk-pill${on ? ' solid' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
+    const view = el('div.pr-view');
+    if (prList.length) {
+      const page = printPage(prList, prBack); view.append(page);
+      requestAnimationFrame(() => { const k = view.clientWidth / page.offsetWidth; if (k > 0 && Number.isFinite(k)) { page.style.transform = `scale(${k})`; view.style.height = `${page.offsetHeight * k}px`; } });
+    }
+    clear(prPane).append(
+      el('div.jk-form', [el('button.jk-pill', { type: 'button', onclick: () => setMode('play') }, '‹ 戻る'), el('b.pr-h', 'ミニ CD の 型で 印刷')]),
+      el('p.jk-note.left', `ジャケット ${P.jacket.w}×${P.jacket.h}mm・バックインレイ ${P.inlay.w}×${P.inlay.h}mm・ディスク ${P.disc.d}mm を、A4 に ${P.perPage} 組まで 並べます。`),
+      el('div.pr-picks', prList.length ? prList.map((it) => el('button.pr-pick', { type: 'button', 'aria-label': `${it.name} を 外す`, onclick: () => { prList = prList.filter((x) => x.id !== it.id); drawPrint(); } }, [el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '' }), el('span', it.name), el('i', { 'aria-hidden': 'true' }, '×')])) : el('p.jk-note.left', '並べる ジャケットが ありません。下の お気に入りから 足してください。')),
+      prList.length < P.perPage && favs.length ? el('div.pr-add', [el('p.jk-note.left', 'お気に入りから 足す'), el('div.pr-thumbs', favs.slice(0, 30).map((it) => el('button', { type: 'button', 'aria-label': `${it.name} を 足す`, onclick: () => { prList = jacket.printAdd(prList, it); drawPrint(); } }, el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '', loading: 'lazy' }))))]) : null,
+      el('div.jk-row.left', [el('span.jk-note.left', '裏の面'), chip('題名の文字', prBack === 'text', () => { prBack = 'text'; drawPrint(); }), chip('同じ絵', prBack === 'art', () => { prBack = 'art'; drawPrint(); })]),
+      view,
+      el('div.jk-row', [el('button.jk-pill.solid', { type: 'button', disabled: !prList.length, onclick: () => doPrint() }, [PRN(), el('span', '印刷する')])]),
+      el('p.jk-note.left', '印刷の 設定で 用紙は A4・倍率は 100%(「用紙に 合わせる」を 切る)に してください。紙の 右上の 線が 50mm なら 等倍です。'),
+    );
+  }
+  async function doPrint() {
+    if (!prList.length) return;
+    document.querySelectorAll('.pr-root').forEach((n) => n.remove());
+    const root = el('div.pr-root', printPage(prList, prBack));
+    document.body.append(root);
+    // 画像が そろってから(読み込みの 合図を 待つ。隠した所の img.decode() は 終わらないことが あるので 使わない)。長くても 5 秒で 進む
+    const ready = (im) => (im.complete ? Promise.resolve() : new Promise((res) => { im.addEventListener('load', res, { once: true }); im.addEventListener('error', res, { once: true }); }));
+    await Promise.race([Promise.all([...root.querySelectorAll('img')].map(ready)), new Promise((res) => setTimeout(res, 5000))]);
+    const done = () => { window.removeEventListener('afterprint', done); root.remove(); };
+    window.addEventListener('afterprint', done);
+    try { window.print(); } catch { toast('この端末では 印刷を 開けませんでした'); done(); }
+  }
   function paint() {
     const c = cur();
     paintFav();
+    printBtn.disabled = !c;
     blob = null; blobFor = null; saveLabel.textContent = '保存';
     prevBtn.disabled = st.idx <= 0;
     playBtn.disabled = saveBtn.disabled = !c;
@@ -121,7 +187,8 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
   function setMode(m) {
     mode = m;
     findBtn.classList.toggle('on', m === 'find'); listBtn.classList.toggle('on', m === 'fav');
-    clear(body).append(m === 'find' ? finder : m === 'fav' ? favPane : player);
+    clear(body).append(m === 'find' ? finder : m === 'fav' ? favPane : m === 'print' ? prPane : player);
+    if (m === 'print') drawPrint();
     if (m === 'find') { drawGrid(); if (!results) input.focus(); }
     if (m === 'fav') drawFav();
     if (m === 'play') paintFav();

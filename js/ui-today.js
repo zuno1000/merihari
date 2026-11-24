@@ -518,9 +518,11 @@ export function renderNow(view, ctx, dateArg = null) {
     ...(isToday ? [
       topCard(hero, ctx),
       focusBox(e, rerender, ctx), // 今日やること: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
-      tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile()], rpgStrip()), // v0.102: ステータスは タイルの 並びから 出して 下の 帯に(4 つ 並ぶと 窮屈)
-      tileGroup('はじめる', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender), bgmTile(rerender), vocabTile(rerender)]),
-      tileGroup('今日のお楽しみ', [drinkTile(ctx, rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ'), jacketTile()], stripRow([questStrip(), artStrip()])), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(無効なら無し)
+      // v0.104(実機 FB「ボタンが 多く カラフルで ごちゃごちゃし始めた。全体を シンプルに。ネストが 深くなっても よい」): 色は 抑え(タイルごとの 色を やめる)、
+      //   コンディションは 1 枚に まとめ、はじめる は 記録と ポモドーロだけ。BGM・英単語(作業の おとも)と お楽しみは、メニューの 行から 開く シートへ
+      tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile()], rpgStrip(), 'cond'),
+      tileGroup('はじめる', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender)], null, 'start'),
+      homeMenu(ctx, rerender),
       buddyActs(ctx),
       S().brief?.enabled !== false && ctx.openBrief && !buddyOn() ? el('button.btn.sm.ghost.brief-link', { type: 'button', onclick: () => ctx.openBrief() }, '日報をもう一度 ›') : null, // v0.55・F21: 閉じたあとでも見直せる(いまの時点で作り直す)
     ] : [
@@ -664,10 +666,31 @@ function weatherTile(ctx) {
  * タイルの 1 区画(v0.95・F2-10): 見出しと 横に並ぶタイル(使っているものだけ)。1 つも無ければ 区画ごと 出さない。5 つ以上は 3 列の 2 段。extra は タイルの下に足す行(小説と図録)。
  * 区画は 3 つ: 今日のコンディション(電車・天気・睡眠)/ はじめる(記録・ポモドーロ・BGM・英単語)/ 今日のお楽しみ(今日の一杯・記事)。v0.71〜v0.94 は「いま知りたいこと」の 1 区画だった
  */
-function tileGroup(title, tiles, extra = null) {
+function tileGroup(title, tiles, extra = null, cls = '') {
   const xs = tiles.filter(Boolean);
   if (!xs.length && !extra) return null;
-  return el('section.group.quick-box', [el('h2', title), xs.length ? el('div.quick-row', { class: `quick-row${xs.length > 4 ? ' two' : ''}` }, xs) : null, extra].filter(Boolean));
+  return el('section.group.quick-box', { class: `group quick-box${cls ? ` ${cls}` : ''}` }, [el('h2', title), xs.length ? el('div.quick-row', { class: `quick-row${xs.length > 4 ? ' two' : ''}` }, xs) : null, extra].filter(Boolean));
+}
+/**
+ * ホームの メニュー(v0.104・F2-11): 「作業の おとも」(BGM・英単語)と「今日のお楽しみ」(今日の一杯・記事・ジャケット・小説と図録)を、1 行ずつの 入口に。
+ * 行の 右には いまの様子を 短く(タイルの 大きい文字を 2 つまで)。押すと シートが 開き、中に これまでの タイルが 並ぶ。使っているものが 無い行は 出さない
+ */
+function homeMenu(ctx, rerender) {
+  const aid = () => [bgmTile(rerender), vocabTile(rerender)].filter(Boolean);
+  const fun = () => tileGroup('今日のお楽しみ', [drinkTile(ctx, rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ'), jacketTile()], stripRow([questStrip(), artStrip()]));
+  const brief = (nodes) => nodes.map((t) => (t.querySelector('.qt-v, .q-s-label')?.textContent || '').trim()).filter(Boolean).slice(0, 2).join('・');
+  const open = (title, build) => sheet((close) => {
+    const box = el('div.home-more', build());
+    box.addEventListener('click', (ev) => { if (ev.target.closest('button')) close(); }); // タイルを 押したら(その先の シートや 画面が 開いたあとで)この一覧は 閉じる
+    return [el('div.row', [el('h2.grow', title), el('button.btn.sm.ghost', { type: 'button', onclick: close }, '閉じる')]), box];
+  }, null, { cls: 'home-more-sheet' });
+  const row = (label, val, fn) => el('button.home-row', { type: 'button', 'aria-label': `${label}を 開く`, onclick: fn }, [el('span.hr-l', label), el('span.hr-v', val), el('span.hr-c', { 'aria-hidden': 'true' }, '›')]);
+  const a0 = aid(), f0 = fun();
+  const rows = [
+    a0.length ? row('作業の おとも', a0.map((t) => (t.querySelector('.qt-k')?.textContent || '').trim()).filter(Boolean).join('・'), () => open('作業の おとも', () => [el('div.quick-row', aid())])) : null,
+    f0 ? row('今日のお楽しみ', brief([...f0.querySelectorAll('.qtile, .q-strip')]), () => open('今日のお楽しみ', () => [...fun().children].filter((n) => n.tagName !== 'H2'))) : null,
+  ].filter(Boolean);
+  return rows.length ? el('section.group.home-menu', rows) : null;
 }
 /** 描き直しが要る状態のキー: 記録中の id / 直近の記録の終わり / 分(内訳は分ごとに動く) */
 function homeKey(n) {
