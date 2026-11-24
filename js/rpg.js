@@ -205,7 +205,7 @@ export function vitals(entries, today, nowMin, classOf, { days = VITAL_DAYS, sta
 /**
  * 成長(純関数): これまでの ぜんぶの記録と タスクを 日付の順に たどる。classOf(entry) → 種類・workOf(entry) → 作業に 数えるか。
  * 戻り値 { lv, tier, total, abilities:[{ key, name, value, rank, today }], top, ready(どれかが D 以上), featToday, dev:[{ key, name, n }], ups:[{ date, lv, top }],
- *          skills:[{ id, name, desc, need, unit, have, got, rank, prev, next }], trials:[{ id, name, desc, need, unit, have, rate, got }](今週の 3 つ), trialDaysLeft, cats:[{ id, min }](時間の 多い順) }
+ *          skills:[{ id, name, desc, need, unit, have, got, rank, prev, next }], trials:[{ id, name, desc, need, unit, have, rate, got }](今週の 3 つ), trialDaysLeft, owned:{ moods, jobs, trials:{ id: 回数 } }(集めた 二つ名・職業・果たした試練), cats:[{ id, min }](時間の 多い順) }
  */
 export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials = true } = {}) { // trials: false は テスト用(試練を 偉業に 数えない)
   const t0 = dayNum(today), days = {}, cat = {};
@@ -229,6 +229,7 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials 
   const ab = { str: 0, end: 0, dex: 0, agi: 0, mag: 0 }, dev = {}, ups = [];
   const cnt = { dawn: 0, moon: 0, chain: 0, long: 0, promise: 0, sleep: 0, habit: 0, trial: 0 };
   let lv = 1, before = null, run = 0, prev = null;
+  const ownMood = new Set(['free']), ownJob = new Set(['traveler']), cleared = {}; // 集めたもの(v0.101): 週の 過ごし方で 手に入る 二つ名と 職業・果たした試練の 回数
   let wkMon = null, wk = newWeek(), wkGot = new Set(), wkTrials = []; // 今週の試練: 週が 替わるたびに 集計と 3 つを 取り直す
   const topOf = () => ABILITIES.reduce((a, x) => (ab[x.key] > ab[a] ? x.key : a), ABILITIES[0].key);
   for (const k of Object.keys(days).sort()) {
@@ -245,7 +246,8 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials 
     const mon = monOf(d);
     if (mon !== wkMon) { wkMon = mon; wk = newWeek(); wkGot = new Set(); wkTrials = pickTrials(mon); }
     addWeek(wk, o, d);
-    for (const tr of wkTrials) if (!wkGot.has(tr.id) && tr.val(wk) >= tr.need) { wkGot.add(tr.id); cnt.trial++; if (trials) o.featTrial = true; } // 試練を 果たした日は 偉業
+    for (const tr of wkTrials) if (!wkGot.has(tr.id) && tr.val(wk) >= tr.need) { wkGot.add(tr.id); cnt.trial++; cleared[tr.id] = (cleared[tr.id] || 0) + 1; if (trials) o.featTrial = true; } // 試練を 果たした日は 偉業
+    ownMood.add(weekMood(wk)); ownJob.add(weekJob(wk));
     if (k < today) { // 更新は 日が 変わったとき: 資格(D 以上)と その日の 偉業が そろえば Lv が 上がり、アビリティは 0 から
       const top = topOf();
       if (ab[top] >= RANK_UP && (o.work >= FEAT_WORK || o.done >= FEAT_TASKS || o.featTrial)) { lv++; dev[top] = (dev[top] || 0) + 1; ups.push({ date: k, lv, top }); for (const x of ABILITIES) ab[x.key] = 0; }
@@ -262,6 +264,7 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials 
     dev: ABILITIES.filter((x) => dev[x.key]).map((x) => ({ key: x.key, name: DEV[x.key], n: dev[x.key] })), ups,
     skills: SKILLS.map((k) => { const h = have[k.id] || 0, r = skillRank(h, k.need); return { ...k, have: h, got: r.rank != null, rank: r.rank, prev: r.prev, next: r.next }; }),
     trials: wkTrials.map((tr) => trialState(tr, wk)), trialDaysLeft: curMon == null ? 0 : 6 - (t0 - curMon),
+    owned: { moods: [...ownMood], jobs: [...ownJob], trials: cleared },
     cats: Object.entries(cat).map(([id, min]) => ({ id, min })).sort((a, b) => b.min - a.min),
   };
 }
@@ -306,9 +309,53 @@ export function character(entries, today, nowMin, classOf) {
   const mood = !active ? 'free' : days.size >= 6 ? 'steady' : early >= active * 0.5 ? 'dawn' : late >= active * 0.4 ? 'moon' : sleepMin >= 7 * 60 * 7 ? 'rested' : 'free';
   return { job, mood, title: `${MOODS[mood]} ${JOBS[job]}`, top: top ? top[0] : null, topMin: top ? top[1] : 0, activeMin: active, days: days.size };
 }
-/** 設定 settings.rpg を正規化(純関数): enabled(既定は 入) */
+/** その週の集計から 職業(純関数・character と 同じ 決まり) */
+export function weekJob(w) {
+  const by = { mind: w.mind, body: w.body, play: w.play, sport: w.sport }, active = w.mind + w.body + w.play + w.sport;
+  if (active < 300) return 'traveler';
+  if (by.mind >= active * 0.3 && by.body >= active * 0.3) return 'knight';
+  return { mind: 'sage', body: 'warrior', play: 'bard', sport: 'monk' }[Object.entries(by).sort((a, b) => b[1] - a[1])[0][0]];
+}
+/** その週の集計から 二つ名(純関数): 作業を 記録した日が 6 日以上 = たゆまぬ / 午前に 始めた作業が 半分以上 = 朝焼けの / 22 時からの 作業が 4 割以上 = 月夜の / 睡眠が 49 時間以上 = よく眠る / ほか = 気ままな */
+export function weekMood(w) {
+  if (!(w.work > 0)) return w.sleep >= 2940 ? 'rested' : 'free';
+  return w.workDays >= 6 ? 'steady' : w.morning >= w.work * 0.5 ? 'dawn' : w.night >= w.work * 0.4 ? 'moon' : w.sleep >= 2940 ? 'rested' : 'free';
+}
+/** 試練を 果たすと 手に入る 二つ名 */
+export const trialTitle = (tr) => ({ twin: '二兎を 追う', step: '一歩ずつの' }[tr.id] || `${tr.name}の`);
+/**
+ * 集められる 二つ名の 一覧(v0.101・ユーザー要望「形容詞と 職業の 肩書きを 変えられる・集められるように」): 週の 過ごし方の 5 つ + 試練の 24(果たすと 手に入る)。
+ * key は 過ごし方 = MOODS の鍵・試練 = 't:' + 試練の id。how は 手に入れ方
+ */
+export const ADJ = Object.freeze([
+  { key: 'free', text: MOODS.free, how: 'はじめから' },
+  { key: 'steady', text: MOODS.steady, how: '作業を 記録した日が 6 日以上の週' },
+  { key: 'dawn', text: MOODS.dawn, how: '午前に 始めた作業が 半分以上の週' },
+  { key: 'moon', text: MOODS.moon, how: '夜の作業が 4 割以上の週' },
+  { key: 'rested', text: MOODS.rested, how: '1 日 7 時間以上 寝た週' },
+  ...TRIALS.map((t) => ({ key: `t:${t.id}`, text: trialTitle(t), how: `試練「${t.name}」を 果たす` })),
+]);
+export const JOB_HOW = Object.freeze({ traveler: 'はじめから', sage: '頭の作業が 多い週', warrior: '体の作業が 多い週', knight: '頭と 体の作業が どちらも 3 割以上の週', bard: '趣味が 多い週', monk: '運動が 多い週' });
+/** 持っている 二つ名か / 職業か(純関数): auto = 今週の キャラクター(いまの 二つ名と 職業は いつでも 使える) */
+export function ownsAdj(key, owned, auto) {
+  if (key === auto?.mood) return true;
+  return String(key).startsWith('t:') ? (owned?.trials?.[String(key).slice(2)] || 0) > 0 : !!owned?.moods?.includes(key);
+}
+export const ownsJob = (key, owned, auto) => key === auto?.job || !!owned?.jobs?.includes(key);
+/**
+ * 出す 肩書き(純関数): えらんだもの(sel.adj / sel.job)を 持っていれば それ、無ければ 今週の おまかせ。
+ * 戻り値 { adj, job, mood(絵の 後ろの印: 過ごし方の 二つ名なら その鍵・試練のものは 'free'), title, autoAdj, autoJob }
+ */
+export function resolveTitle(sel, auto, owned) {
+  const a = ADJ.find((x) => x.key === sel?.adj && ownsAdj(x.key, owned, auto)) || null;
+  const j = sel?.job && Object.hasOwn(JOBS, sel.job) && ownsJob(sel.job, owned, auto) ? sel.job : null;
+  const adj = a ? a.key : auto.mood, job = j || auto.job;
+  return { adj, job, mood: Object.hasOwn(MOODS, adj) ? adj : 'free', title: `${a ? a.text : MOODS[auto.mood]} ${JOBS[job]}`, autoAdj: !a, autoJob: !j };
+}
+/** 設定 settings.rpg を正規化(純関数): enabled(既定は 入)・adj / job(えらんだ 二つ名と 職業の鍵。null = 今週の おまかせ) */
 export function normalizeRpg(raw) {
-  return { enabled: !(raw && typeof raw === 'object' && !Array.isArray(raw) && raw.enabled === false) };
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return { enabled: o.enabled !== false, adj: ADJ.some((x) => x.key === o.adj) ? o.adj : null, job: typeof o.job === 'string' && Object.hasOwn(JOBS, o.job) ? o.job : null };
 }
 /** 増減の書き方(純関数): +12 / −7 / ±0 */
 export const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');

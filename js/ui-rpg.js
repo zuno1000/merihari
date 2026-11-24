@@ -1,9 +1,10 @@
 // merihari ─ ui-rpg.js: ステータス(v0.98・F30・試作・FEATURES.RPG)の画面。計算は rpg.js(純関数)。
 // 入口は 3 つだけ: rpgTile(ホームの「今日のコンディション」のタイル)・sectionRpg(設定の項目)・rpgSummary(設定の一覧の右側)。
-// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP(押すと 下に 今日の動き: HP / MP の 線と、種類ごとの 増減の 棒・v0.100)→ 今週の試練(週替わりの 3 つ・v0.100)→ 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
+// シート(v0.99 で アビリティの形に): キャラクター(絵か 自分の画像・二つ名と 職業 = 押すと 集めたものから 替えられる(v0.101)・Lv と ロー / ミッド / ハイ)→ HP / MP(押すと 下に 今日の動き: HP / MP の 線と、種類ごとの 増減の 棒・v0.100)→ 今週の試練(週替わりの 3 つ・v0.100)→ 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
 //   → 発展アビリティ → スキル(発現したものと これからのもの)→ 得意分野(カテゴリごとの時間・折りたたみ)→ 決まり(折りたたみ)。
 // 何も 保存しない(記録・タスクから そのつど 計算)。出すのは 数字と 名前だけ(はげましや 注意の文は 書かない = アシスタントの場面は 足していない)。
-import { el, sheet, svg } from './ui.js';
+import { el, clear, sheet, svg, toast } from './ui.js';
+import * as photos from './photos.js'; // v0.101: アイコンの画像(端末の IndexedDB・同期しない)
 import * as store from './store.js';
 import * as rpg from './rpg.js';
 import { FEATURES } from './features.js';
@@ -16,6 +17,7 @@ const now = () => effectiveDay(S(), dateKey(), minuteOfDay());
 const prevDay = (k) => addDays(k, -1);
 export const rpgOn = () => FEATURES.RPG && !!store.state.data.meta.setupAt && C().enabled;
 export const rpgSummary = () => (C().enabled ? '有効(試作)' : '使わない');
+const AV_ID = 'rpg:avatar'; // アイコンの画像の 置き場所(photos.js)
 
 const catOf = (id) => S().categories.find((c) => c.id === id) || { id, name: String(id || ''), kind: null };
 const classOf = (e) => rpg.classify(catOf(e.categoryId), store.entryRole(S(), e));
@@ -144,44 +146,74 @@ const moveRow = (m, max) => el('div.rp-mv', [
 
 /** ステータスのシート */
 export function rpgSheet() {
+  let open = false, pick = false, photoUrl = null; // open = 今日の動き・pick = 肩書きと アイコンを 替える所
   sheet((close) => {
+   const body = el('div.rp-body');
+   const setPhoto = (blob) => { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = blob ? URL.createObjectURL(blob) : null; draw(); };
+   const saveSel = (patch) => { S().rpg = rpg.normalizeRpg({ ...C(), ...patch }); store.touchSettings(); autoSync(); draw(); };
+   /** 肩書き(二つ名と 職業)と アイコンを 替える所: 集めたものから えらぶ。まだのものは 手に入れ方を 折りたたみに */
+   const chooser = (g, ch, who) => {
+    const chip = (label, on, fn) => el('button.chip.sm2', { type: 'button', class: `chip sm2${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
+    const adjs = rpg.ADJ.filter((a) => rpg.ownsAdj(a.key, g.owned, ch)), noAdj = rpg.ADJ.filter((a) => !rpg.ownsAdj(a.key, g.owned, ch));
+    const jobs = Object.keys(rpg.JOBS).filter((k) => rpg.ownsJob(k, g.owned, ch)), noJob = Object.keys(rpg.JOBS).filter((k) => !rpg.ownsJob(k, g.owned, ch));
+    const file = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      try { const blob = await photos.shrink(f, 320, 0.85); await photos.putPhoto(AV_ID, blob); setPhoto(blob); toast('アイコンを 替えました'); } catch (err) { toast(err && err.message ? err.message : '画像を 読めませんでした'); }
+    } });
+    return el('section.rp-box.rp-pick', [
+      el('h3', `二つ名 ${adjs.length} / ${rpg.ADJ.length}`),
+      el('div.chips.small', { role: 'group', 'aria-label': '二つ名' }, [chip(`おまかせ(${rpg.MOODS[ch.mood]})`, who.autoAdj, () => saveSel({ adj: null })), ...adjs.map((a) => chip(a.text, !who.autoAdj && who.adj === a.key, () => saveSel({ adj: a.key })))]),
+      el('h3', `職業 ${jobs.length} / ${Object.keys(rpg.JOBS).length}`),
+      el('div.chips.small', { role: 'group', 'aria-label': '職業' }, [chip(`おまかせ(${rpg.JOBS[ch.job]})`, who.autoJob, () => saveSel({ job: null })), ...jobs.map((k) => chip(rpg.JOBS[k], !who.autoJob && who.job === k, () => saveSel({ job: k })))]),
+      noAdj.length + noJob.length ? el('details.rp-how', [
+        el('summary', `まだのもの ${noAdj.length + noJob.length}(手に入れ方)`),
+        el('div.rp-rows', [...noJob.map((k) => el('p.muted.small', `職業「${rpg.JOBS[k]}」: ${rpg.JOB_HOW[k]}`)), ...noAdj.map((a) => el('p.muted.small', `二つ名「${a.text}」: ${a.how}`))]),
+      ]) : null,
+      el('h3', 'アイコン'),
+      el('div.row', [file, el('button.btn.sm', { type: 'button', onclick: () => file.click() }, '画像を 選ぶ'), photoUrl ? el('button.btn.sm.ghost', { type: 'button', onclick: async () => { await photos.delPhoto(AV_ID); setPhoto(null); } }, '絵に 戻す') : null]),
+      el('p.muted.small', '二つ名と 職業は 同期します。アイコンの画像は この端末だけに 置きます。'),
+    ]);
+   };
+   const draw = () => {
     const x = snapshot(), g = x.g, v = x.v, ch = x.ch;
-    const top = ch.top ? catOf(ch.top) : null, ta = g.abilities.find((a) => a.key === g.top);
+    const top = ch.top ? catOf(ch.top) : null, who = rpg.resolveTitle(C(), ch, g.owned);
     const moves = v.today.filter((m) => m.min >= 5 && (m.hp || m.mp)).slice(0, 6);
     const mvMax = Math.max(1, ...moves.map((m) => Math.max(Math.abs(m.hp), Math.abs(m.mp))));
     const got = g.skills.filter((k) => k.got), rest = g.skills.filter((k) => !k.got).sort((a, b) => b.have / b.need - a.have / a.need);
     const feat = `偉業(1 日に 作業 ${fmtMin(rpg.FEAT_WORK)} か タスク ${rpg.FEAT_TASKS} 件、または 今週の試練を 1 つ 果たす)`;
     const trGot = g.trials.filter((t) => t.got).length;
-    let open = false; // 今日の動き は HP / MP の枠を 押すと 開く(v0.100・ユーザー要望)
     const last = g.ups.length ? g.ups[g.ups.length - 1] : null;
-    const cond = g.ready
-      ? (g.featToday ? '条件が そろいました。日が 変わると Lv が 上がります。' : `資格あり(${ta.name} ${ta.rank} ${ta.value})。あとは ${feat}。`)
-      : `ランクアップの条件: どれかが D(${rpg.RANK_UP})以上 + その日に ${feat}。いま いちばん 高いのは ${ta.name} ${ta.rank} ${ta.value}。`;
-    return [
+    const clearedIds = rpg.TRIALS.filter((t) => g.owned.trials[t.id] > 0);
+    const nodes = [
       el('div.rp-head', [el('h2', 'ステータス'), el('span.rp-tag', '試作'), el('span.grow'), el('button.btn.sm.ghost', { type: 'button', onclick: close }, '閉じる')]),
       el('div.rp-hero', [
-        avatar(ch, top && top.color),
+        photoUrl ? el('img.rp-av.photo', { src: photoUrl, alt: 'アイコン' }) : avatar({ job: who.job, mood: who.mood, title: who.title }, top && top.color),
         el('div.rp-who', [
-          el('span.rp-title', ch.title),
+          el('button.rp-title.rp-tbtn', { type: 'button', 'aria-expanded': pick ? 'true' : 'false', 'aria-label': `${who.title}(肩書きと アイコンを 替える)`, onclick: () => { pick = !pick; draw(); } }, [el('span', who.title), el('span.rp-edit', pick ? '閉じる ▴' : '替える ▾')]),
           el('b.rp-lv', [`Lv ${g.lv}`, el('span.rp-tier', g.tier), last && last.date === prevDay(x.n.date) ? el('span.rp-up', 'ランクアップ') : null]),
           el('span.rp-sub', `基本アビリティの 合計 ${g.total}`),
         ]),
       ]),
-      el('p.rp-note', cond),
+      pick ? chooser(g, ch, who) : null,
       (() => {
-        const more = el('span.rp-more', '今日の動き ▾');
-        const detail = el('section.rp-box.rp-detail', { hidden: true }, [
+        const more = el('span.rp-more', open ? '今日の動き ▴' : '今日の動き ▾');
+        const detail = el('section.rp-box.rp-detail', { hidden: !open }, [
           el('h3', '今日の動き'),
           vitalChart(v, x.n.min),
           moves.length ? el('div.rp-rows', [el('div.rp-mvh', [el('span', '← 消耗'), el('span', '回復 →')]), ...moves.map((m) => moveRow(m, mvMax))]) : el('p.muted.small', '今日の記録は まだ ありません。'),
         ]);
-        const btn = el('button.rp-box.rp-vbtn', { type: 'button', 'aria-expanded': 'false', 'aria-label': `HP ${v.hp}・MP ${v.mp}(今日の動きを 開く)`, onclick: () => { open = !open; detail.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); more.textContent = open ? '今日の動き ▴' : '今日の動き ▾'; } },
+        const btn = el('button.rp-box.rp-vbtn', { type: 'button', 'aria-expanded': open ? 'true' : 'false', 'aria-label': `HP ${v.hp}・MP ${v.mp}(今日の動きを 開く)`, onclick: () => { open = !open; detail.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); more.textContent = open ? '今日の動き ▴' : '今日の動き ▾'; } },
           [vital('HP', '体力', v.hp, v.hp0), vital('MP', '気力', v.mp, v.mp0), more]);
         return [btn, detail];
       })(),
       g.trials.length ? el('section.rp-box', [
         el('h3', `今週の試練 ${trGot} / ${g.trials.length}・${g.trialDaysLeft ? `あと ${g.trialDaysLeft} 日` : '今日まで'}`),
         el('div.rp-rows', g.trials.map(trialRow)),
+        el('details.rp-how', [
+          el('summary', `これまでに 果たした試練 ${clearedIds.length} / ${rpg.TRIALS.length} 種類`),
+          clearedIds.length ? el('div.rp-devs', clearedIds.map((t) => el('span.rp-dev', [el('b', t.name), g.owned.trials[t.id] > 1 ? ` ×${g.owned.trials[t.id]}` : null]))) : el('p.muted.small', 'まだ ありません。'),
+          el('p.muted.small', '果たした試練は 記録から 数え直しているので、消えません。果たすと その試練の 二つ名(例: 朝駆けの)が 手に入り、上の 肩書きの「替える」から えらべます。'),
+        ]),
       ]) : null,
       el('section.rp-box', [el('h3', '基本アビリティ'), el('div.rp-rows', g.abilities.map(abilityRow))]),
       g.dev.length ? el('section.rp-box', [el('h3', '発展アビリティ'), el('div.rp-devs', g.dev.map((d) => el('span.rp-dev', [el('b', d.name), d.n > 1 ? ` ×${d.n}` : null])))]) : null,
@@ -204,7 +236,12 @@ export function rpgSheet() {
         el('p.muted.small', '今週のキャラクター: この 7 日で 頭の作業が 多ければ 賢者、体の作業なら 戦士、どちらも 3 割以上なら 魔法戦士、趣味なら 吟遊詩人、運動なら 武闘家、合わせて 5 時間に 届かなければ 旅人。二つ名は 動いた日数・時間帯・睡眠から。服の色は いちばん 長かった カテゴリの色です。'),
       ]),
     ].flat().filter(Boolean);
-  }, null, { cls: 'rp-sheet' });
+    clear(body).append(...nodes);
+   };
+   photos.getPhoto(AV_ID).then((b) => { if (b) setPhoto(b); }).catch(() => {});
+   draw();
+   return [body];
+  }, () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, { cls: 'rp-sheet' });
 }
 
 /** 設定 › ステータス(試作) */

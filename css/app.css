@@ -2173,3 +2173,11 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .rp-tr .rp-bar{grid-area:b;height:4px}
 .rp-kn{display:flex;align-items:baseline;gap:4px}
 .rp-kr{font-family:Georgia,"Times New Roman",serif;font-size:17px;line-height:1;color:var(--accent)}
+/* v0.101・F30: 肩書きは ボタン(.rp-tbtn・押すと 替える所 .rp-pick)・自分の画像の アイコン(.rp-av.photo) */
+.rp-tbtn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;border:0;background:none;font:inherit;font-size:15px;font-weight:600;color:var(--fg);text-align:left;padding:0;cursor:pointer}
+.rp-edit{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+.rp-av.photo{border-radius:50%;object-fit:cover;background:var(--accent-bg)}
+.rp-pick h3{margin-top:8px}
+.rp-pick h3:first-child{margin-top:0}
+.rp-pick .chips{margin-bottom:4px}
+.rp-pick .row{margin:4px 0}
