@@ -4,6 +4,7 @@
 // 再生は YouTube で「アーティスト アルバム名」の 検索結果を開く(動画の id は 分からないので)。アプリで開くかは 作業用 BGM の設定(settings.bgm.app)に そろえる。
 // 保存は 大きい画像(jacket.SAVE_PX を 頼む)を 取って、スマホは 共有シート(「画像を保存」)・PC は ダウンロード。
 // 画像は 端末に 置かない。見た順の控え(local.jacket)だけ この端末に 残す(同期しない)。
+// お気に入り(v0.102・F29-9): ジャケットの下の ☆ で 付け外し・右上の ★ で 一覧。置くのは 題名と 画像の場所だけ(data.jacket・同期する)。data は 描くたびに 取り直す(同期が 入れ替えるので)。
 import { el, clear, sheet, svg, toast } from './ui.js';
 import * as store from './store.js';
 import * as jacket from './jacket.js';
@@ -23,6 +24,9 @@ const NEXT = () => ico('jk-ico', [svg('path', { d: 'M17 5v14M5 5l9 7-9 7z' })], 
 const PLAY = () => ico('jk-ico big', [svg('path', { d: 'M8 5l12 7-12 7z' })], true);
 const FIND = () => ico('jk-ico sm', [svg('circle', { cx: 11, cy: 11, r: 6 }), svg('path', { d: 'M16 16l4 4' })]);
 const DOWN = () => ico('jk-ico sm', [svg('path', { d: 'M12 4v11M7 11l5 5 5-5M5 20h14' })]);
+const STAR = (on) => ico('jk-ico sm', [svg('path', { d: 'M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z' })], on);
+/** お気に入りの 置き場(いまの データから 毎回 取る) */
+const F = () => store.state.data.jacket || (store.state.data.jacket = {});
 
 /** ホームの「今日のお楽しみ」のタイル: タップで ジャケットの画面。最後に見た 1 枚が あれば その題名。使っていなければ null */
 export function jacketTile() {
@@ -48,6 +52,7 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
   const playBtn = el('button.jk-btn.play', { type: 'button', 'aria-label': 'YouTube で 流す', onclick: () => play() }, PLAY());
   const nextBtn = el('button.jk-btn', { type: 'button', 'aria-label': '次のジャケット', onclick: () => step(1) }, NEXT());
   const saveBtn = el('button.jk-pill', { type: 'button', onclick: () => save() }, [DOWN(), saveLabel]);
+  const favBtn = el('button.jk-pill.fav', { type: 'button', onclick: () => toggleFav() });
   const amLink = el('a.jk-pill', { target: '_blank', rel: 'noopener' }, 'Apple Music で 見る');
   art.addEventListener('load', () => art.classList.remove('loading'));
   art.addEventListener('error', () => { art.classList.remove('loading'); status.textContent = '画像を 読めませんでした。'; });
@@ -56,7 +61,7 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
     el('div.jk-artwrap', art),
     el('div.jk-text', [title, artist, meta]),
     el('div.jk-ctrl', [prevBtn, playBtn, nextBtn]),
-    el('div.jk-row', [saveBtn, amLink]),
+    el('div.jk-row', [favBtn, saveBtn, amLink]),
     status,
     el('p.jk-credit', '画像と情報: Apple(iTunes Search API)'),
   ]);
@@ -66,13 +71,41 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
     el('form.jk-form', { onsubmit: (e) => { e.preventDefault(); find(input.value); } }, [input, el('button.jk-pill.solid', { type: 'submit' }, '探す')]),
     grid,
   ]);
+  const favGrid = el('div.jk-grid'), favPane = el('div.jk-finder', [favGrid]);
   const body = el('div.jk-body');
   const findBtn = el('button.jk-top', { type: 'button', 'aria-label': 'ジャケットを 探す', onclick: () => setMode(mode === 'find' ? 'play' : 'find') }, FIND());
+  const listBtn = el('button.jk-top', { type: 'button', 'aria-label': 'お気に入りの 一覧', onclick: () => setMode(mode === 'fav' ? 'play' : 'fav') }, STAR(true));
   let close = () => {};
-  const head = el('div.jk-head', [el('button.jk-top.txt', { type: 'button', onclick: () => close() }, '‹ 閉じる'), el('b.jk-name', 'ジャケット'), findBtn]);
+  const head = el('div.jk-head', [el('button.jk-top.txt', { type: 'button', onclick: () => close() }, '‹ 閉じる'), el('b.jk-name', 'ジャケット'), listBtn, findBtn]);
 
+  function paintFav() {
+    const c = cur(), on = !!c && jacket.isFav(F(), c.id);
+    favBtn.disabled = !c; favBtn.classList.toggle('on', on); favBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    favBtn.setAttribute('aria-label', on ? 'お気に入りから 外す' : 'お気に入りに 入れる');
+    clear(favBtn).append(STAR(on), el('span', on ? 'お気に入り' : 'お気に入りに'));
+  }
+  function toggleFav() {
+    const c = cur(); if (!c) return;
+    const map = F(), now = store.nowISO();
+    if (jacket.isFav(map, c.id)) map[c.id] = { ...map[c.id], updatedAt: now, deletedAt: now };
+    else {
+      if (jacket.favList(map).length >= jacket.FAV_MAX) { toast(`お気に入りは ${jacket.FAV_MAX} 枚までです`); return; }
+      const rec = jacket.favRecord(c, now); if (!rec) return;
+      map[c.id] = rec;
+    }
+    store.save(); autoSync(); paintFav();
+  }
+  function drawFav() {
+    const list = jacket.favList(F());
+    clear(favGrid);
+    if (!list.length) { favGrid.append(el('p.jk-note', 'お気に入りは まだ ありません。ジャケットの下の「お気に入りに」を 押すと、ここに 並びます。')); return; }
+    favGrid.append(el('p.jk-note.left', `お気に入り ${list.length} 枚`), ...list.map((it) => el('button.jk-cell', { type: 'button', 'aria-label': `${it.name}(${it.artist})`, onclick: () => { showItem(it); setMode('play'); } }, [
+      el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '', loading: 'lazy', decoding: 'async' }), el('span.jk-cn', it.name), el('span.jk-ca', it.artist),
+    ])));
+  }
   function paint() {
     const c = cur();
+    paintFav();
     blob = null; blobFor = null; saveLabel.textContent = '保存';
     prevBtn.disabled = st.idx <= 0;
     playBtn.disabled = saveBtn.disabled = !c;
@@ -87,9 +120,11 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
   }
   function setMode(m) {
     mode = m;
-    findBtn.classList.toggle('on', m === 'find');
-    clear(body).append(m === 'find' ? finder : player);
+    findBtn.classList.toggle('on', m === 'find'); listBtn.classList.toggle('on', m === 'fav');
+    clear(body).append(m === 'find' ? finder : m === 'fav' ? favPane : player);
     if (m === 'find') { drawGrid(); if (!results) input.focus(); }
+    if (m === 'fav') drawFav();
+    if (m === 'play') paintFav();
   }
   function showItem(it) {
     st = jacket.histPush(st, it); seen.add(it.id); persist();
@@ -179,14 +214,14 @@ export function sectionJacket(rerender) {
   words.value = c.words.join('、');
   return el('section.card', [
     el('h2', 'アルバムジャケット'),
-    el('p.muted.small', 'ホームの「今日のお楽しみ」に「ジャケット」のタイルを出します。開くと、アルバムのジャケットを 大きく 1 枚ずつ 見られます。次へ で ランダムに 次の 1 枚、前へ で 戻る、再生で YouTube、保存で 大きい画像を 端末に。右上の 虫めがねで 探せます。'),
+    el('p.muted.small', 'ホームの「今日のお楽しみ」に「ジャケット」のタイルを出します。開くと、アルバムのジャケットを 大きく 1 枚ずつ 見られます。次へ で ランダムに 次の 1 枚、前へ で 戻る、再生で YouTube、保存で 大きい画像を 端末に。右上の 虫めがねで 探せます。気に入った 1 枚は「お気に入りに」で 残せて、右上の ★ から 一覧で 見られます。'),
     el('label.row.field', [el('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => save({ ...c, enabled: e.target.checked }) }), el('span', 'ホームに ジャケットのタイルを出す')]),
     el('h3.help-h', '好みの語(任意)'),
     el('p.muted.small', 'アーティスト名や ジャンルを「、」で区切って 入れると、ランダムの 半分が そこから 出ます(20 個まで)。'),
     words,
     el('h3.help-h', '探す国'),
     el('div.chips.small', { role: 'group', 'aria-label': '探す国' }, Object.entries(jacket.COUNTRIES).map(([k, name]) => el('button.chip.sm2', { type: 'button', class: `chip sm2${c.country === k ? ' on' : ''}`, 'aria-pressed': c.country === k ? 'true' : 'false', onclick: () => save({ ...c, country: k }) }, name))),
-    el('p.muted.small', '画像と情報は Apple の iTunes Search API から、見るたびに 取ります(通信します)。端末に残るのは 見た順の控え(題名と 画像の場所・40 枚まで)だけで、同期は しません。画像の大きさは 作品によって 違います(保存のときに 出ます)。'),
+    el('p.muted.small', `画像と情報は Apple の iTunes Search API から、見るたびに 取ります(通信します)。端末に残るのは 見た順の控え(題名と 画像の場所・40 枚まで・同期しません)と、お気に入り(題名と 画像の場所・${jacket.FAV_MAX} 枚まで・同期します)だけで、画像そのものは 置きません。画像の大きさは 作品によって 違います(保存のときに 出ます)。`),
     el('div.row', el('button.btn.sm', { type: 'button', onclick: () => jacketScreen() }, 'ジャケットを開く')),
   ]);
 }

@@ -5,6 +5,7 @@
 // その大きさ(無ければ 持っている いちばん大きい画像)が 返る。3000 を 頼むと 最大(作品により 1400〜3000px)。
 // ランダム: API に「ランダム」は 無いので、語(SEEDS か 設定の 好みの語)を 3 つ えらび、結果の 何件目からか(offset)も ずらして 取り、語ごとに 4 枚ずつを 順ぐりに 並べる(v0.99.1)。
 // 画像は 端末にも Drive にも 置かない(見るたびに Apple から 取る)。この端末に 残すのは 見た順の 控え(local.jacket・名前と URL だけ)。
+// お気に入り(v0.102・F29-9・ユーザー要望「★ と 一覧」): data.jacket(id → 題名・アーティスト・画像の場所・付けた時刻)。画像は 置かない。記録と 同じく 同期する(id ごとに 新しい方・外したものは deletedAt)。
 export const SEARCH_URL = 'https://itunes.apple.com/search';
 export const VIEW_PX = 1200;   // 画面に出す大きさ(iPhone の 390pt × 3 倍 で 足りる)
 export const SAVE_PX = 3000;   // 保存するとき 頼む大きさ(持っている いちばん大きい画像が 返る)
@@ -14,6 +15,7 @@ export const OFFSETS = Object.freeze([0, 50, 100, 150]);
 export const SEEDS_PER_FILL = 3, PER_SEED = 4; // v0.99.1: 1 回の 取得は 3 つの語から 4 枚ずつ(同じ語の ジャケットが 続かないように)
 export const HIST_MAX = 40;    // この端末に 控える 見た順
 export const MAX_WORDS = 20;
+export const FAV_MAX = 300;     // お気に入りの 上限
 export const COUNTRIES = Object.freeze({ JP: '日本', US: 'アメリカ' });
 /** ランダムの もとになる語(ジャンルと ありふれた言葉。どれも 結果が 150 件を 超える) */
 export const SEEDS = Object.freeze([
@@ -99,6 +101,19 @@ export function histPush(state, item) {
 export function histStep(state, dir) {
   const s = normalizeHist(state), i = s.idx + (dir < 0 ? -1 : 1);
   return i >= 0 && i < s.hist.length ? { hist: s.hist, idx: i } : null;
+}
+/** お気に入りの 1 件(純関数): ジャケット it に 付けた時刻を 添える。だめなら null */
+export function favRecord(it, nowISO) {
+  const x = normalizeItem(it);
+  return x ? { ...x, at: String(nowISO || '').slice(0, 40), updatedAt: String(nowISO || '').slice(0, 40), deletedAt: null } : null;
+}
+/** お気に入りか(純関数): map = data.jacket */
+export const isFav = (map, id) => { const r = map && Object.hasOwn(map, id) ? map[id] : null; return !!r && typeof r === 'object' && !r.deletedAt; };
+/** お気に入りの 一覧(純関数): 外していないものを 付けた時刻の 新しい順に(同じなら id の順)。壊れた 1 件は 飛ばす */
+export function favList(map) {
+  const out = [];
+  for (const r of Object.values(map && typeof map === 'object' ? map : {})) { if (!r || typeof r !== 'object' || r.deletedAt) continue; const x = normalizeItem(r); if (x) out.push({ ...x, at: typeof r.at === 'string' ? r.at : '' }); }
+  return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? -1 : 1));
 }
 /** YouTube で 探す語(純関数): 「アーティスト アルバム名」 */
 export const youtubeQuery = (it) => [it?.artist, it?.name].filter(Boolean).join(' ').slice(0, 200);

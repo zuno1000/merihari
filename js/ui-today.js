@@ -20,7 +20,7 @@ import { artStrip } from './ui-art.js'; // v0.58・F23: 名画のピース(ホ�
 import { questStrip } from './ui-quest.js';
 import { vocabTile } from './ui-vocab.js'; // v0.85・F27: 英単語のタイル
 import { sleepTile } from './ui-sleep.js'; // v0.83・F26: 睡眠のタイル
-import { rpgTile } from './ui-rpg.js'; // v0.98・F30: ステータス(試作・今日のコンディション のタイル)
+import { rpgStrip } from './ui-rpg.js'; // v0.102: タイルを やめて 帯に / v0.98・F30: ステータス(試作・今日のコンディション のタイル)
 import { jacketTile } from './ui-jacket.js'; // v0.97・F29: アルバムジャケット(今日のお楽しみ のタイル)
 import { drinkTile } from './ui-drinks.js'; // v0.84・F19-9: 今日の一杯 // v0.56・F22: 解読(ホームの 1 行・FEATURES.QUEST)
 import { homeRows as extRows } from './ui-ext.js'; // v0.96・F28: 外部のタスクリストの 今日の分
@@ -518,7 +518,7 @@ export function renderNow(view, ctx, dateArg = null) {
     ...(isToday ? [
       topCard(hero, ctx),
       focusBox(e, rerender, ctx), // 今日やること: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
-      tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile(), rpgTile()]),
+      tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile()], rpgStrip()), // v0.102: ステータスは タイルの 並びから 出して 下の 帯に(4 つ 並ぶと 窮屈)
       tileGroup('はじめる', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender), bgmTile(rerender), vocabTile(rerender)]),
       tileGroup('今日のお楽しみ', [drinkTile(ctx, rerender), feedTile(rerender, buddyOn() ? `${buddyName()}が集めた記事` : 'キャッチアップ'), jacketTile()], stripRow([questStrip(), artStrip()])), // v0.56・F22 / v0.58・F23: 作業の記録で進む 1 行(無効なら無し)
       buddyActs(ctx),

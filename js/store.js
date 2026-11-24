@@ -10,7 +10,7 @@ import { DEFAULT_COLORS, LEGACY_COLORS } from './palette.js';
 import { normalizeRegion, MAX_REGIONS } from './weather.js';
 import { normalizeBgm } from './bgm.js';
 import { normalizeExt } from './ext.js';
-import { normalizeJacket } from './jacket.js'; // v0.97・F29
+import { normalizeJacket, normalizeItem as normalizeJacketItem } from './jacket.js'; // v0.97・F29(v0.102: お気に入りの 1 件の 検査)
 import { normalizeRpg } from './rpg.js'; // v0.98・F30(rpg.js は 何も import しない)
 import { normalizeArt } from './art.js';
 import { normalizeBuddy } from './buddy.js'; // v0.62・F24(buddy.js は store の entryRole を関数の中でしか使わないので、循環しても動く) // v0.58・F23(art.js は何も import しないので循環しない)
@@ -205,6 +205,7 @@ export function defaultData() {
     drinks: {},  // v0.51: 飲んだもの(F19・id → { id, kind:'coffee'|'sake'|'wine'|'beer'|'other', name, maker, place, date, taste:{軸:1〜5}, overall:0.0〜5.0, note, photo:bool(写真は端末の IndexedDB・同期しない), updatedAt, deletedAt })
     feed: {},    // v0.34: 記事の印(F17・記事 id → { id, state:'open'|'skip', at(ISO), date, updatedAt, deletedAt })。開いた / 読まない 記事を次から出さない
     vocab: {},   // v0.85: 英単語の進み(F27・id → 単語 { id: en, s: [段, 期限, 正解, ミス, 続けてのミス, 戻る段, 最後に解いた時刻] | null, my, ja, pos, updatedAt, deletedAt } / 日 { id: 'd:日付', n, ok, updatedAt, deletedAt })
+    jacket: {},  // v0.102: ジャケットの お気に入り(F29-9・アルバムの id → { id, name, artist, art(画像の場所), year, genre, url, at(ISO), updatedAt, deletedAt })。画像そのものは 置かない
     meta: { resetAt: null, lastSyncAt: null, setupAt: null, appVersion: null },
   };
 }
@@ -410,6 +411,12 @@ export function validateBusyNote(r, id) {
   return { ...stripUnsafe(r), id: `${m[1]}:${+m[2]}`, date: m[1], start: +m[2], text: str(r.text, 200), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) };
 }
 /** 気合(v0.25・F13): 日付と時刻('HH:MM'・深夜は 30:00 まで)。タグ(カテゴリ id)とメモ(200 字)は任意(v0.25.1) */
+/** ジャケットの お気に入り(v0.102・F29-9): 中身は jacket.normalizeItem で 検査(id は 数字・画像は Apple の置き場の URL だけ)。at は 付けた時刻 */
+export function validateJacketFav(r, id) {
+  if (!isObj(r)) return null;
+  const it = normalizeJacketItem({ ...r, id: r.id || id });
+  return it ? { ...stripUnsafe(r), ...it, at: str(r.at, 40), updatedAt: optStr(r.updatedAt, 40), deletedAt: optStr(r.deletedAt, 40) } : null;
+}
 /** 聞いた BGM(v0.32・F16): id は YouTube の動画 id(英数 _ - の 6〜20 字)・at は ISO・rating は 1 / -1 / null */
 export function validateBgmPlay(r, id) {
   const vid = String((isObj(r) && r.id) || id || '');
@@ -468,6 +475,7 @@ export function migrate(raw) {
   out.planBlocks = cleanMap(raw.planBlocks, validatePlanBlock); // v0.23
   out.kiai = cleanMap(raw.kiai, validateKiai); // v0.25
   out.bgm = {}; for (const [k, v] of Object.entries(cleanMap(raw.bgm, validateBgmPlay))) if (!out.bgm[v.id] || k === v.id) out.bgm[v.id] = v; // v0.32: キーは動画 id
+  out.jacket = {}; for (const v of Object.values(cleanMap(raw.jacket, validateJacketFav))) out.jacket[v.id] = v; // v0.102・F29-9: キーは アルバムの id
   out.feed = {}; for (const [k, v] of Object.entries(cleanMap(raw.feed, validateFeedMark))) if (!out.feed[v.id] || k === v.id) out.feed[v.id] = v; // v0.34: キーは記事 id
   out.busyNotes = {}; for (const [k, v] of Object.entries(cleanMap(raw.busyNotes, validateBusyNote))) if (!out.busyNotes[v.id] || k === v.id) out.busyNotes[v.id] = v; // v0.22: キーは id(日付:開始分)
   for (const [k, v] of Object.entries(out.diary)) if (v.date !== k) { delete out.diary[k]; if (!out.diary[v.date]) out.diary[v.date] = v; } // キーは日付

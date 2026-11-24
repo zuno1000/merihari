@@ -41,6 +41,24 @@ export function skillRank(have, need) {
   return { rank: n ? RANKS[n - 1] : null, prev: n ? need * SKILL_MULT[n - 1] : 0, next: n < SKILL_MULT.length ? need * SKILL_MULT[n] : null };
 }
 
+/**
+ * 魔法(v0.102・ユーザー要望「魔法の枠を 入れてほしい」): 枠は 3 つ。いちばん 時間を かけてきた カテゴリ(作業・趣味・運動)が、合わせて MAGIC_NEED 時間に 届くと 魔法として 発現する。
+ * 名前は「カテゴリの名前・型」(型は 記録の種類から: MAGIC_FORM。自前の名前)。ランクは スキルと 同じ 上がり方(need × SKILL_MULT)。保存しない(時間の 多い順に 枠へ 入るので、入れ替わることも ある)。
+ */
+export const MAGIC_SLOTS = 3, MAGIC_NEED = 20;
+export const MAGIC_FORM = Object.freeze({ mind: '探究の灯', body: '剛力の型', sport: '疾風の歩', play: '遊心の調べ' });
+export const magicName = (catName, cls) => `${String(catName || '').trim() || '無銘'}・${MAGIC_FORM[cls] || MAGIC_FORM.mind}`;
+/**
+ * 魔法の枠(純関数): cats = [{ id, min, cls, today }](時間の 多い順)。
+ * 戻り値 { slots:[{ id, cls, hours, today(今日の分), rank, prev, next }](発現したもの・3 つまで), cand:{ id, cls, hours, need } | null(次に 発現しそうな カテゴリ), empty(空きの枠の数) }
+ */
+export function magic(cats, slots = MAGIC_SLOTS, need = MAGIC_NEED) {
+  const list = (Array.isArray(cats) ? cats : []).filter((c) => c && c.min > 0).sort((a, b) => b.min - a.min);
+  const got = list.filter((c) => c.min >= need * 60).slice(0, slots).map((c) => { const hours = Math.floor(c.min / 60), r = skillRank(hours, need); return { id: c.id, cls: c.cls || 'mind', hours, today: c.today || 0, rank: r.rank, prev: r.prev, next: r.next }; });
+  const c = got.length < slots ? list.find((x) => x.min < need * 60) : null;
+  return { slots: got, cand: c ? { id: c.id, cls: c.cls || 'mind', hours: Math.floor(c.min / 60), need } : null, empty: slots - got.length };
+}
+
 /** 1 週間ぶんの 集計(月曜はじまり)。addWeek で 1 日ずつ 足す */
 export const newWeek = () => ({ mind: 0, body: 0, sport: 0, play: 0, sleep: 0, rest: 0, work: 0, morning: 0, night: 0, long: 0, done: 0, onTime: 0, checks: 0, workDays: 0, earlyDays: 0, sleepDays: 0, solidDays: 0, stepDays: 0, calmDays: 0, tidyDays: 0, maxWork: 0, streak: 0, run: 0, prev: null, cats: {} });
 /** その日の集計 o(growth の中の 1 日ぶん)を 週に 足す。d = 日の通し番号 */
@@ -208,8 +226,8 @@ export function vitals(entries, today, nowMin, classOf, { days = VITAL_DAYS, sta
  *          skills:[{ id, name, desc, need, unit, have, got, rank, prev, next }], trials:[{ id, name, desc, need, unit, have, rate, got }](今週の 3 つ), trialDaysLeft, owned:{ moods, jobs, trials:{ id: 回数 } }(集めた 二つ名・職業・果たした試練), cats:[{ id, min }](時間の 多い順) }
  */
 export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials = true } = {}) { // trials: false は テスト用(試練を 偉業に 数えない)
-  const t0 = dayNum(today), days = {}, cat = {};
-  const day = (k) => days[k] || (days[k] = { mind: 0, body: 0, sport: 0, play: 0, sleep: 0, rest: 0, drift: 0, work: 0, morning: 0, night: 0, long: 0, early: false, any: false, done: 0, onTime: 0, checks: 0, cats: {} });
+  const t0 = dayNum(today), days = {}, cat = {}, catCls = {};
+  const day =(k) => days[k] || (days[k] = { mind: 0, body: 0, sport: 0, play: 0, sleep: 0, rest: 0, drift: 0, work: 0, morning: 0, night: 0, long: 0, early: false, any: false, done: 0, onTime: 0, checks: 0, cats: {} });
   if (t0 != null) for (const e of Object.values(entries || {})) {
     if (!alive(e)) continue;
     const d = dayNum(e.date), s = hm(e.start); if (d == null || s == null || d > t0) continue;
@@ -219,7 +237,7 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials 
     o.any = true;
     if (cls === 'sleep') o.sleep += min; else if (isSkill(cls) || cls === 'rest' || cls === 'drift') o[cls] += min;
     if (w) { o.work += min; if (s < 720) o.morning += min; if (s >= 1320 || s < 240) o.night += min; if (min >= 120) o.long++; if (s >= 240 && s < 540) o.early = true; }
-    if (w || isSkill(cls)) { cat[e.categoryId] = (cat[e.categoryId] || 0) + min; o.cats[e.categoryId] = (o.cats[e.categoryId] || 0) + min; }
+    if (w || isSkill(cls)) { cat[e.categoryId] = (cat[e.categoryId] || 0) + min; o.cats[e.categoryId] = (o.cats[e.categoryId] || 0) + min; if (isSkill(cls)) { const cc = catCls[e.categoryId] || (catCls[e.categoryId] = {}); cc[cls] = (cc[cls] || 0) + min; } }
   }
   if (t0 != null) for (const t of Object.values(tasks || {})) {
     if (!alive(t)) continue;
@@ -259,14 +277,22 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials 
   const have = { ...cnt, moon: Math.floor(cnt.moon / 60), dual: Math.floor((Object.values(cat).sort((a, b) => b - a)[1] || 0) / 60) };
   const abilities = ABILITIES.map((x) => ({ key: x.key, name: x.name, value: Math.floor(ab[x.key]), rank: rankOf(ab[x.key]), today: Math.floor(ab[x.key]) - Math.floor(before[x.key]) }));
   const total = abilities.reduce((a, x) => a + x.value, 0), top = topOf(), td = days[today];
+  const clsOf = (id) => Object.entries(catCls[id] || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || 'mind'; // その カテゴリで いちばん 長い 種類(魔法の 型)
+  const cats = Object.entries(cat).map(([id, min]) => ({ id, min, cls: clsOf(id), today: (td && td.cats[id]) || 0 })).sort((a, b) => b.min - a.min);
   return {
+    magic: magic(cats),
     lv, tier: tierOf(total), total, abilities, top, ready: ab[top] >= RANK_UP, featToday: !!td && (td.work >= FEAT_WORK || td.done >= FEAT_TASKS || !!td.featTrial),
     dev: ABILITIES.filter((x) => dev[x.key]).map((x) => ({ key: x.key, name: DEV[x.key], n: dev[x.key] })), ups,
     skills: SKILLS.map((k) => { const h = have[k.id] || 0, r = skillRank(h, k.need); return { ...k, have: h, got: r.rank != null, rank: r.rank, prev: r.prev, next: r.next }; }),
     trials: wkTrials.map((tr) => trialState(tr, wk)), trialDaysLeft: curMon == null ? 0 : 6 - (t0 - curMon),
     owned: { moods: [...ownMood], jobs: [...ownJob], trials: cleared },
-    cats: Object.entries(cat).map(([id, min]) => ({ id, min })).sort((a, b) => b.min - a.min),
+    cats,
   };
+}
+/** Lv が 上がった 知らせ(純関数・v0.102): 昨日の 終わりに 上がっていれば { lv, dev(残った 発展アビリティの名前) }、そうでなければ null(知らせるのは 上がった 次の日の 1 日だけ) */
+export function lvUpOn(g, today) {
+  const last = g && Array.isArray(g.ups) && g.ups.length ? g.ups[g.ups.length - 1] : null, t = dayNum(today), d = last ? dayNum(last.date) : null;
+  return last && t != null && d != null && t - d === 1 ? { lv: last.lv, dev: DEV[last.top] || '' } : null;
 }
 /** ISO の時刻 → その端末の 日付(YYYY-MM-DD)。読めなければ 頭の 10 字 */
 function localDay(iso) {
