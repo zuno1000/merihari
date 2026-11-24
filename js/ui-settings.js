@@ -24,6 +24,7 @@ import * as pomo from './pomo.js'; // v0.72・F25
 import { sectionSleep, sleepSummary } from './ui-sleep.js'; // v0.83・F26
 import { sectionJacket, jacketSummary } from './ui-jacket.js'; // v0.97・F29
 import { sectionRpg, rpgSummary } from './ui-rpg.js'; // v0.98・F30
+import { sectionWatch, watchSummary } from './ui-watch.js'; // v0.103・F31
 import { sectionVocab, vocabSummary } from './ui-vocab.js'; // v0.85・F27
 import { notifyUrl } from './ui-pomo.js';
 import { sectionHelp, resetHelp } from './ui-help.js'; // v0.70: 使い方は 目次+テーマごとのページ
@@ -770,6 +771,7 @@ const SECTIONS = {
   ...(FEATURES.VOCAB ? { vocab: { title: '英単語', build: (re) => sectionVocab(re) } } : {}), // v0.85・F27
   ...(FEATURES.JACKET ? { jacket: { title: 'アルバムジャケット', build: (re) => sectionJacket(re) } } : {}), // v0.97・F29
   ...(FEATURES.RPG ? { rpg: { title: 'ステータス(試作)', build: (re) => sectionRpg(re) } } : {}), // v0.98・F30
+  ...(FEATURES.WATCH ? { watch: { title: '端末(merihari-watch)', build: (re) => sectionWatch(re) } } : {}), // v0.103・F31
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -878,6 +880,7 @@ export function renderSettings(view, ctx, section = null) {
         : srow('Google に接続して同期する', '未接続', open('google'), { accent: true }),
       ...att.filter((x) => x.key !== 'sync').map((x) => srow(x.label, x.value, () => x.run(() => ctx.go('settings')), { dot: true })),
       google.isConnected() ? srow('Google(カレンダー・Drive)', '接続済み', open('google')) : null, // v0.70: Google の束をここへ(未接続のときは 上の行が同じ画面を開く)
+      FEATURES.WATCH ? srow('端末(merihari-watch)', watchSummary(), open('watch')) : null, // v0.103・F31: 受け渡しファイル(同期の 束に)
       srow('アップデートを確認', `いまは v${ctx.version}`, () => ctx.checkUpdate(), { accent: true }), // v0.28.4(実機 FB): 更新も先頭に
     ]),
     // v0.70(ユーザー要望「設定の項目を配置し直し、重複や不要なものを統廃合して 分かりやすく簡潔に」): 何を変える所か で束ね直す。Google は 同期の束へ(重複していた)・バージョンの行は アップデートを確認 に・データの大きさは 書き出しの行に

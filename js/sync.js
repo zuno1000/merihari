@@ -2,7 +2,9 @@
 // merge は純関数で対称(merge(a,b) ≡ merge(b,a))。tests で固定する。
 import * as store from './store.js';
 import { normalizeAfterMerge, alignToCut } from './log.js';
-import { dayCut } from './time.js';
+import { dayCut, effectiveDay, dateKey, minuteOfDay } from './time.js';
+import * as watch from './watch.js'; // v0.103・F31: 端末(merihari-watch)への 受け渡しファイル
+import { FEATURES } from './features.js';
 import { gfetch, getToken, isConnected, savedToken, loadGis, quietOn } from './google.js';
 import { el, sheet, toast } from './ui.js';
 import * as passkey from './passkey.js';
@@ -278,24 +280,45 @@ function askPass({ hint = '', isNew = false } = {}) {
 }
 
 // ---- Drive ----
-async function findFile(interactive) {
-  const q = encodeURIComponent(`name='${DRIVE_FILE}' and trashed=false`);
+async function findFile(interactive, name = DRIVE_FILE) {
+  const q = encodeURIComponent(`name='${name}' and trashed=false`);
   const j = await (await gfetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)`, {}, { interactive })).json();
   return j.files?.[0] || null;
 }
 async function download(id, interactive) { return (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {}, { interactive })).text(); }
 /** いまの modifiedTime(v0.25・レビュー A-2: アップロード直前に、取ってから別の端末が上げていないかを見る) */
 async function fileMeta(id, interactive) { return (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,modifiedTime`, {}, { interactive })).json(); }
-async function upload(id, body, interactive) {
+async function upload(id, body, interactive, name = DRIVE_FILE) {
   if (id) {
     await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }, { interactive });
     return id;
   }
-  const meta = JSON.stringify({ name: DRIVE_FILE, parents: ['appDataFolder'] });
+  const meta = JSON.stringify({ name, parents: ['appDataFolder'] });
   const boundary = 'b' + store.uid().replace(/-/g, '');
   const mp = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
   const j = await (await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: mp }, { interactive })).json();
   return j.id;
+}
+
+/**
+ * 端末(merihari-watch)への 受け渡しファイル watch-digest.enc を 書く(v0.103・F31)。同期の 終わりに 呼ぶ(と、設定の「いま 書き出す」)。
+ * 使っていなければ 何もしない('off')。中身が 前に この端末で 書いたものと 同じなら 書かない('same'。force で 必ず 書く)。書いたら 'ok'。
+ * merihari.enc とは 別の ファイル・別の 鍵(settings.watch.key)。ここで 失敗しても 同期そのものは 成功の まま(呼ぶ側で 握る)
+ */
+export async function writeWatchDigest({ interactive = false, force = false } = {}) {
+  if (!FEATURES.WATCH) return 'off';
+  const d = store.state.data, w = watch.normalizeWatch(d.settings.watch), local = store.state.local;
+  if (!w.enabled || !w.key) return 'off';
+  const n = effectiveDay(d.settings, dateKey(), minuteOfDay());
+  const digest = watch.buildDigest(d, n.date, store.nowISO());
+  const sig = `${w.key.slice(0, 8)}:${watch.digestSig(digest)}`;
+  if (!force && local.watchSig === sig) return 'same';
+  if (!(await getToken({ interactive }))) return 'skip';
+  const body = await watch.seal(digest, w.key);
+  const file = await findFile(interactive, watch.DIGEST_FILE);
+  await upload(file?.id || null, body, interactive, watch.DIGEST_FILE);
+  local.watchSig = sig; local.watchAt = Date.now(); store.saveLocal();
+  return 'ok';
 }
 
 let syncing = null;
@@ -376,6 +399,7 @@ export async function syncDrive({ interactive = false } = {}) {
       break;
     }
     local.lastSyncAt = Date.now(); local.syncHint = hint || local.syncHint || '';
+    try { await writeWatchDigest({ interactive }); } catch (e) { console.warn('watch digest', e); } // v0.103・F31: 端末への 受け渡し(失敗しても 同期は 成功の まま・次の同期で もう一度)
     if (store.state.saveSeq === seq) local.pendingSync = false; // v0.16: アップロード中に記録を変えていたら「未同期の変更あり」のまま(次の同期で上がる)
     store.saveLocal();
     if (changed) { try { hooks.onChanged?.(); } catch (e) { console.warn(e); } }

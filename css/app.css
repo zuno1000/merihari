@@ -2220,3 +2220,5 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .jk-pill.fav.on{background:#fff;color:#101114;font-weight:600}
 .jk-note.left{text-align:left;margin:0;font-size:13px}
 .jk-row .jk-pill{padding:0 14px}
+/* v0.103・F31: 端末(merihari-watch)の鍵(.wt-key: 16 進 64 字を 4 字ごとに・折り返す) */
+.wt-key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.7;background:var(--bg);border-radius:10px;padding:8px 10px;margin:4px 0 8px;overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}

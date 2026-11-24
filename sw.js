@@ -7,7 +7,7 @@
 // v0.25: ①ネットワークを待つのは最長 2 秒(超えたら手元のキャッシュから出す・取れたものは裏で入れ替える)。
 //        気合(F13)の「開いてすぐ押す」のため、電波の弱いところで起動が数秒止まらないように。
 //        ②index.html へのフォールバックは画面の遷移(navigate)だけ(レビュー A-3: JS/CSS に HTML が返って構文エラーになっていた)。
-const CACHE = 'merihari-v0.102.0';
+const CACHE = 'merihari-v0.103.0';
 const NET_TIMEOUT_MS = 2000;
 const ASSETS = [
   './', './index.html', './css/app.css', './manifest.webmanifest', './icon.svg', './icon-512.png', './news.json',
@@ -15,6 +15,7 @@ const ASSETS = [
   './js/ext.js', './js/ui-ext.js', // v0.96・F28: 外部のタスクリスト
   './js/jacket.js', './js/ui-jacket.js', // v0.97・F29: アルバムジャケット(画像は 入れない)
   './js/rpg.js', './js/ui-rpg.js', // v0.98・F30: ステータス(試作)
+  './js/watch.js', './js/ui-watch.js', // v0.103・F31: 端末(merihari-watch)への 受け渡し
   './bgm.html', './css/nfc.css', './js/nfc.js', // v0.94・F16-8: NFC タグから開く 小さなページ
 ];
 /** v0.32.1: 版と一緒に固定しないデータ(作業用 BGM のカタログ・Actions が毎週更新。v0.34: キャッチアップの記事一覧・毎朝更新)。先読みはするが、取得は「手元から即出し、裏で新しいものに入れ替え」(stale-while-revalidate) */
