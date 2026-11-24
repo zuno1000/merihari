@@ -7,19 +7,23 @@
 // 成長(v0.99・ユーザー要望「スキルを カテゴリそのままに するのではなく、RPG の アビリティ風に。Habitica や Life RPG を 参考に」+ 示された ゲームの設定):
 //   基本アビリティ 5 つ(力・耐久・器用・敏捷・魔力)が 行動で 伸び、値は 0〜999 を I〜S の 10 段(100 ごと)で 書く(1000〜 は SS・1100〜 は SSS)。
 //   Lv は「どれかが D(500)以上」+「その日に 偉業(作業 6 時間 か タスク 5 件)」で 1 つ 上がり、アビリティは 0 に 戻る(その Lv で いちばん 伸びたものが 発展アビリティに 残る)。
-//   上がるのは 次の日の 更新(日が 変わったとき)。スキルは 記録の 積み重ねで 身につく(SKILLS)。どれも 保存せず、記録を 日付の順に たどって 出す。
+//   上がるのは 次の日の 更新(日が 変わったとき)。スキルは 記録の 積み重ねで 身につき、そのあとも I〜S と 育つ(SKILLS・v0.100)。今週の試練(TRIALS から 週替わりで 3 つ・v0.100)を 果たした日も 偉業。どれも 保存せず、記録を 日付の順に たどって 出す。
 // HP / MP(0〜100): 直近 7 日の記録を 時間の順に たどって 出す。1 時間あたりの 増減は RATES(記録の 種類ごと)。
 export const ABILITIES = Object.freeze([{ key: 'str', name: '力' }, { key: 'end', name: '耐久' }, { key: 'dex', name: '器用' }, { key: 'agi', name: '敏捷' }, { key: 'mag', name: '魔力' }]);
 /** 何で 伸びるか(シートの 行の下に 出す) */
 export const ABILITY_HINT = Object.freeze({ str: '体の作業・運動', end: '睡眠・習慣', dex: 'タスクの完了・趣味', agi: '期限までの完了・午前の作業', mag: '頭の作業' });
 export const RANKS = 'IHGFEDCBAS';
 export const RANK_UP = 500;                    // D: ここに 届くと Lv が 上がる 資格
-export const FEAT_WORK = 360, FEAT_TASKS = 5;   // 偉業: 1 日に 作業 6 時間 か タスク 5 件
+export const FEAT_WORK = 360, FEAT_TASKS = 5;   // 偉業: 1 日に 作業 6 時間 か タスク 5 件(v0.100: 今週の試練を 果たした日も 偉業)
 /** 伸び方: 記録 30 分で 1(運動は 15 分で 1)・睡眠 1 時間で 1(1 日 8 時間まで)・習慣の印 2・タスクの完了 4(器用)・期限までの完了 4(敏捷) */
 export const GAIN = Object.freeze({ min: 30, sportMin: 15, sleepMin: 60, sleepCap: 480, habit: 2, task: 4, onTime: 4 });
 /** 発展アビリティ(その Lv で いちばん 伸びた 基本アビリティから) */
 export const DEV = Object.freeze({ str: '剛体', end: '不屈', dex: '多芸', agi: '先手', mag: '探究' });
-/** スキル(記録の 積み重ねで 身につく): have が need に 届くと 発現 */
+/**
+ * スキル(記録の 積み重ねで 身につく): have が need に 届くと 発現(ランク I)。
+ * v0.100(ユーザー判断「次第に すべて 満たして 新鮮さが なくなりそう → ランクを 付ける」): そのあとも need × SKILL_MULT ごとに H・G … S と 育つ(基本アビリティと 同じ 文字)
+ */
+export const SKILL_MULT = Object.freeze([1, 2, 3, 5, 7, 10, 14, 20, 30, 50]);
 export const SKILLS = Object.freeze([
   { id: 'dawn', name: '夜明けの一番手', desc: '朝 9 時より前に 作業を 始めた日', need: 10, unit: '日' },
   { id: 'moon', name: '月下の集中', desc: '22 時からの 作業', need: 20, unit: '時間' },
@@ -28,8 +32,78 @@ export const SKILLS = Object.freeze([
   { id: 'promise', name: '先約履行', desc: '期限までに 済ませた タスク', need: 30, unit: '件' },
   { id: 'sleep', name: '安眠の加護', desc: '7 時間以上 寝た日', need: 20, unit: '日' },
   { id: 'habit', name: '型の継承', desc: '習慣の印', need: 50, unit: 'つ' },
-  { id: 'dual', name: '二刀流', desc: '20 時間を こえた カテゴリ', need: 2, unit: 'つ' },
+  { id: 'dual', name: '二刀流', desc: '2 番目に 長い カテゴリの 時間', need: 20, unit: '時間' },
+  { id: 'trial', name: '試練踏破', desc: '果たした 今週の試練', need: 3, unit: 'つ' },
 ]);
+/** スキルのランク(純関数): { rank(まだなら null), prev(いまの段の 始まり), next(次の段。S なら null) } */
+export function skillRank(have, need) {
+  const h = Number.isFinite(have) ? have : 0, n = SKILL_MULT.filter((m) => h >= need * m).length;
+  return { rank: n ? RANKS[n - 1] : null, prev: n ? need * SKILL_MULT[n - 1] : 0, next: n < SKILL_MULT.length ? need * SKILL_MULT[n] : null };
+}
+
+/** 1 週間ぶんの 集計(月曜はじまり)。addWeek で 1 日ずつ 足す */
+export const newWeek = () => ({ mind: 0, body: 0, sport: 0, play: 0, sleep: 0, rest: 0, work: 0, morning: 0, night: 0, long: 0, done: 0, onTime: 0, checks: 0, workDays: 0, earlyDays: 0, sleepDays: 0, solidDays: 0, stepDays: 0, calmDays: 0, tidyDays: 0, maxWork: 0, streak: 0, run: 0, prev: null, cats: {} });
+/** その日の集計 o(growth の中の 1 日ぶん)を 週に 足す。d = 日の通し番号 */
+export function addWeek(w, o, d = 0) {
+  for (const k of ['mind', 'body', 'sport', 'play', 'sleep', 'rest', 'work', 'morning', 'night', 'long', 'done', 'onTime', 'checks']) w[k] += o[k] || 0;
+  if (o.work > 0) { w.workDays++; w.run = w.prev != null && d - w.prev === 1 ? w.run + 1 : 1; w.prev = d; w.streak = Math.max(w.streak, w.run); }
+  if (o.early) w.earlyDays++;
+  if (o.sleep >= 420) w.sleepDays++;
+  if (o.work >= 180) w.solidDays++;
+  if (o.work >= 30) w.stepDays++;
+  if (o.any && (o.drift || 0) <= 60) w.calmDays++;
+  if (o.done >= 3) w.tidyDays++;
+  w.maxWork = Math.max(w.maxWork, o.work || 0);
+  for (const [id, m] of Object.entries(o.cats || {})) w.cats[id] = (w.cats[id] || 0) + m;
+  return w;
+}
+const catsOver = (w, min) => Object.values(w.cats).filter((m) => m >= min).length;
+/**
+ * 今週の試練の 一覧(v0.100・ユーザー要望「週替わりの 課題。種類は 多い方が 楽しい」): 毎週 この中から 3 つ(pickTrials)。その週(月〜日)の記録だけで 見る。
+ * val(週の集計)が need に 届くと 果たした扱い。hour = 時間で 数えるもの(小数 1 けたで 出す)
+ */
+export const TRIALS = Object.freeze([
+  { id: 'morning', name: '朝駆け', desc: '12 時より前に 始めた 作業', need: 5, unit: '時間', hour: true, val: (w) => w.morning / 60 },
+  { id: 'night', name: '夜警', desc: '22 時からの 作業', need: 3, unit: '時間', hour: true, val: (w) => w.night / 60 },
+  { id: 'attend', name: '皆勤', desc: '作業を 記録した日', need: 6, unit: '日', val: (w) => w.workDays },
+  { id: 'chant', name: '大詠唱', desc: '2 時間以上の 作業の記録', need: 4, unit: '回', val: (w) => w.long },
+  { id: 'hunt', name: '討伐', desc: 'タスクの完了', need: 8, unit: '件', val: (w) => w.done },
+  { id: 'first', name: '先手必勝', desc: '期限までに 済ませた タスク', need: 5, unit: '件', val: (w) => w.onTime },
+  { id: 'kata', name: '型稽古', desc: '習慣の印', need: 5, unit: 'つ', val: (w) => w.checks },
+  { id: 'rest7', name: '快眠', desc: '7 時間以上 寝た日', need: 5, unit: '日', val: (w) => w.sleepDays },
+  { id: 'explore', name: '知の探索', desc: '頭の作業', need: 20, unit: '時間', hour: true, val: (w) => w.mind / 60 },
+  { id: 'forge', name: '鍛錬', desc: '体の作業と 運動', need: 4, unit: '時間', hour: true, val: (w) => (w.body + w.sport) / 60 },
+  { id: 'leisure', name: '余暇の達人', desc: '趣味', need: 3, unit: '時間', hour: true, val: (w) => w.play / 60 },
+  { id: 'vanguard', name: '一番手', desc: '朝 9 時より前に 作業を 始めた日', need: 3, unit: '日', val: (w) => w.earlyDays },
+  { id: 'solid', name: '堅陣', desc: '作業が 3 時間以上の日', need: 5, unit: '日', val: (w) => w.solidDays },
+  { id: 'march', name: '大遠征', desc: '作業の 合計', need: 30, unit: '時間', hour: true, val: (w) => w.work / 60 },
+  { id: 'many', name: '多芸多才', desc: '作業や 趣味を 記録した カテゴリ', need: 4, unit: 'つ', val: (w) => catsOver(w, 1) },
+  { id: 'pierce', name: '一点突破', desc: '1 日の 作業の 最長', need: 8, unit: '時間', hour: true, val: (w) => w.maxWork / 60 },
+  { id: 'heal', name: '養生', desc: '睡眠の 合計', need: 45, unit: '時間', hour: true, val: (w) => w.sleep / 60 },
+  { id: 'breath', name: '息抜き', desc: '休憩の記録', need: 2, unit: '時間', hour: true, val: (w) => w.rest / 60 },
+  { id: 'calm', name: '節制', desc: 'ダラダラが 1 時間以内の日(記録の ある日)', need: 5, unit: '日', val: (w) => w.calmDays },
+  { id: 'both', name: '文武両道', desc: '頭の作業 10 時間と 体の作業・運動 2 時間', need: 100, unit: '%', val: (w) => Math.min(100, w.mind / 6, (w.body + w.sport) / 1.2) },
+  { id: 'tidy', name: '片づけ', desc: 'タスクを 3 件 済ませた日', need: 2, unit: '日', val: (w) => w.tidyDays },
+  { id: 'combo', name: '連撃', desc: '続けて 作業を 記録した日数', need: 5, unit: '日', val: (w) => w.streak },
+  { id: 'twin', name: '二兎', desc: '3 時間を こえた カテゴリ', need: 2, unit: 'つ', val: (w) => catsOver(w, 180) },
+  { id: 'step', name: '小さな一歩', desc: '作業が 30 分以上の日', need: 7, unit: '日', val: (w) => w.stepDays },
+]);
+export const TRIALS_PER_WEEK = 3;
+/** その日を含む週の 月曜(日の通し番号)。1970-01-01 は 木曜 */
+export const monOf = (d) => d - ((((d + 4) % 7) + 6) % 7);
+/** その週の試練 3 つ(純関数): 月曜の通し番号を 種に、いつも 同じ 3 つを えらぶ(端末が ちがっても 同じ) */
+export function pickTrials(mon, n = TRIALS_PER_WEEK) {
+  let x = (Math.imul((mon | 0) ^ 0x9e3779b9, 2654435761) >>> 0) || 1;
+  const rnd = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+  const pool = [...TRIALS], out = [];
+  while (out.length < n && pool.length) out.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+  return out;
+}
+/** 試練の いまの進み(純関数): { id, name, desc, need, unit, have(出す数), got } */
+export function trialState(tr, w) {
+  const v = tr.val(w), got = v >= tr.need;
+  return { id: tr.id, name: tr.name, desc: tr.desc, need: tr.need, unit: tr.unit, have: got ? tr.need : tr.hour ? Math.floor(v * 10) / 10 : Math.floor(v), rate: Math.max(0, Math.min(1, v / tr.need)), got };
+}
 export const VITAL_DAYS = 7, VITAL_START = 70, LONG_GAP = 180;
 /** 記録の種類ごとの 1 時間あたりの増減 [HP, MP]。none = 起きていて 記録の無い時間・blank = 記録の無い 3 時間以上(寝ていたか 休んでいたと みなして 少し 回復) */
 export const RATES = Object.freeze({
@@ -131,20 +205,21 @@ export function vitals(entries, today, nowMin, classOf, { days = VITAL_DAYS, sta
 /**
  * 成長(純関数): これまでの ぜんぶの記録と タスクを 日付の順に たどる。classOf(entry) → 種類・workOf(entry) → 作業に 数えるか。
  * 戻り値 { lv, tier, total, abilities:[{ key, name, value, rank, today }], top, ready(どれかが D 以上), featToday, dev:[{ key, name, n }], ups:[{ date, lv, top }],
- *          skills:[{ id, name, desc, need, unit, have, got }], cats:[{ id, min }](時間の 多い順) }
+ *          skills:[{ id, name, desc, need, unit, have, got, rank, prev, next }], trials:[{ id, name, desc, need, unit, have, rate, got }](今週の 3 つ), trialDaysLeft, cats:[{ id, min }](時間の 多い順) }
  */
-export function growth(entries, tasks, today, nowMin, classOf, workOf) {
+export function growth(entries, tasks, today, nowMin, classOf, workOf, { trials = true } = {}) { // trials: false は テスト用(試練を 偉業に 数えない)
   const t0 = dayNum(today), days = {}, cat = {};
-  const day = (k) => days[k] || (days[k] = { mind: 0, body: 0, sport: 0, play: 0, sleep: 0, work: 0, morning: 0, night: 0, long: 0, early: false, done: 0, onTime: 0, checks: 0 });
+  const day = (k) => days[k] || (days[k] = { mind: 0, body: 0, sport: 0, play: 0, sleep: 0, rest: 0, drift: 0, work: 0, morning: 0, night: 0, long: 0, early: false, any: false, done: 0, onTime: 0, checks: 0, cats: {} });
   if (t0 != null) for (const e of Object.values(entries || {})) {
     if (!alive(e)) continue;
     const d = dayNum(e.date), s = hm(e.start); if (d == null || s == null || d > t0) continue;
     const en = e.end == null ? (d === t0 ? nowMin : null) : hm(e.end); if (en == null) continue;
     const min = en - s; if (!(min > 0) || min > 1800) continue;
     const cls = classOf(e), w = !!workOf(e), o = day(e.date);
-    if (cls === 'sleep') o.sleep += min; else if (isSkill(cls)) o[cls] += min;
+    o.any = true;
+    if (cls === 'sleep') o.sleep += min; else if (isSkill(cls) || cls === 'rest' || cls === 'drift') o[cls] += min;
     if (w) { o.work += min; if (s < 720) o.morning += min; if (s >= 1320 || s < 240) o.night += min; if (min >= 120) o.long++; if (s >= 240 && s < 540) o.early = true; }
-    if (w || isSkill(cls)) cat[e.categoryId] = (cat[e.categoryId] || 0) + min;
+    if (w || isSkill(cls)) { cat[e.categoryId] = (cat[e.categoryId] || 0) + min; o.cats[e.categoryId] = (o.cats[e.categoryId] || 0) + min; }
   }
   if (t0 != null) for (const t of Object.values(tasks || {})) {
     if (!alive(t)) continue;
@@ -152,8 +227,9 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf) {
     for (const c of (Array.isArray(t.checks) ? t.checks : [])) if (typeof c === 'string' && dayNum(c) != null && c <= today) day(c).checks++;
   }
   const ab = { str: 0, end: 0, dex: 0, agi: 0, mag: 0 }, dev = {}, ups = [];
-  const cnt = { dawn: 0, moon: 0, chain: 0, long: 0, promise: 0, sleep: 0, habit: 0 };
+  const cnt = { dawn: 0, moon: 0, chain: 0, long: 0, promise: 0, sleep: 0, habit: 0, trial: 0 };
   let lv = 1, before = null, run = 0, prev = null;
+  let wkMon = null, wk = newWeek(), wkGot = new Set(), wkTrials = []; // 今週の試練: 週が 替わるたびに 集計と 3 つを 取り直す
   const topOf = () => ABILITIES.reduce((a, x) => (ab[x.key] > ab[a] ? x.key : a), ABILITIES[0].key);
   for (const k of Object.keys(days).sort()) {
     const o = days[k], d = dayNum(k);
@@ -166,19 +242,26 @@ export function growth(entries, tasks, today, nowMin, classOf, workOf) {
     if (o.early) cnt.dawn++;
     cnt.moon += o.night; cnt.long += o.long; cnt.promise += o.onTime; cnt.habit += o.checks; if (o.sleep >= 420) cnt.sleep++;
     if (o.work > 0) { run = prev != null && d - prev === 1 ? run + 1 : 1; prev = d; cnt.chain = Math.max(cnt.chain, run); }
+    const mon = monOf(d);
+    if (mon !== wkMon) { wkMon = mon; wk = newWeek(); wkGot = new Set(); wkTrials = pickTrials(mon); }
+    addWeek(wk, o, d);
+    for (const tr of wkTrials) if (!wkGot.has(tr.id) && tr.val(wk) >= tr.need) { wkGot.add(tr.id); cnt.trial++; if (trials) o.featTrial = true; } // 試練を 果たした日は 偉業
     if (k < today) { // 更新は 日が 変わったとき: 資格(D 以上)と その日の 偉業が そろえば Lv が 上がり、アビリティは 0 から
       const top = topOf();
-      if (ab[top] >= RANK_UP && (o.work >= FEAT_WORK || o.done >= FEAT_TASKS)) { lv++; dev[top] = (dev[top] || 0) + 1; ups.push({ date: k, lv, top }); for (const x of ABILITIES) ab[x.key] = 0; }
+      if (ab[top] >= RANK_UP && (o.work >= FEAT_WORK || o.done >= FEAT_TASKS || o.featTrial)) { lv++; dev[top] = (dev[top] || 0) + 1; ups.push({ date: k, lv, top }); for (const x of ABILITIES) ab[x.key] = 0; }
     }
   }
   if (!before) before = { ...ab };
-  const have = { ...cnt, moon: Math.floor(cnt.moon / 60), dual: Object.values(cat).filter((m) => m >= 1200).length };
+  const curMon = t0 == null ? null : monOf(t0);
+  if (wkMon !== curMon) { wk = newWeek(); wkGot = new Set(); wkTrials = curMon == null ? [] : pickTrials(curMon); } // 今週は まだ 記録が 無い
+  const have = { ...cnt, moon: Math.floor(cnt.moon / 60), dual: Math.floor((Object.values(cat).sort((a, b) => b - a)[1] || 0) / 60) };
   const abilities = ABILITIES.map((x) => ({ key: x.key, name: x.name, value: Math.floor(ab[x.key]), rank: rankOf(ab[x.key]), today: Math.floor(ab[x.key]) - Math.floor(before[x.key]) }));
   const total = abilities.reduce((a, x) => a + x.value, 0), top = topOf(), td = days[today];
   return {
-    lv, tier: tierOf(total), total, abilities, top, ready: ab[top] >= RANK_UP, featToday: !!td && (td.work >= FEAT_WORK || td.done >= FEAT_TASKS),
+    lv, tier: tierOf(total), total, abilities, top, ready: ab[top] >= RANK_UP, featToday: !!td && (td.work >= FEAT_WORK || td.done >= FEAT_TASKS || !!td.featTrial),
     dev: ABILITIES.filter((x) => dev[x.key]).map((x) => ({ key: x.key, name: DEV[x.key], n: dev[x.key] })), ups,
-    skills: SKILLS.map((k) => ({ ...k, have: have[k.id] || 0, got: (have[k.id] || 0) >= k.need })),
+    skills: SKILLS.map((k) => { const h = have[k.id] || 0, r = skillRank(h, k.need); return { ...k, have: h, got: r.rank != null, rank: r.rank, prev: r.prev, next: r.next }; }),
+    trials: wkTrials.map((tr) => trialState(tr, wk)), trialDaysLeft: curMon == null ? 0 : 6 - (t0 - curMon),
     cats: Object.entries(cat).map(([id, min]) => ({ id, min })).sort((a, b) => b.min - a.min),
   };
 }

@@ -1,6 +1,6 @@
 // merihari ─ ui-rpg.js: ステータス(v0.98・F30・試作・FEATURES.RPG)の画面。計算は rpg.js(純関数)。
 // 入口は 3 つだけ: rpgTile(ホームの「今日のコンディション」のタイル)・sectionRpg(設定の項目)・rpgSummary(設定の一覧の右側)。
-// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP → 今日の動き(v0.99.1: HP / MP の 線と、種類ごとの 増減の 棒)→ 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
+// シート(v0.99 で アビリティの形に): 今週のキャラクター(絵・二つ名と 職業・Lv と ロー / ミッド / ハイ・ランクアップの条件)→ HP / MP(押すと 下に 今日の動き: HP / MP の 線と、種類ごとの 増減の 棒・v0.100)→ 今週の試練(週替わりの 3 つ・v0.100)→ 基本アビリティ(力・耐久・器用・敏捷・魔力を I〜S で)
 //   → 発展アビリティ → スキル(発現したものと これからのもの)→ 得意分野(カテゴリごとの時間・折りたたみ)→ 決まり(折りたたみ)。
 // 何も 保存しない(記録・タスクから そのつど 計算)。出すのは 数字と 名前だけ(はげましや 注意の文は 書かない = アシスタントの場面は 足していない)。
 import { el, sheet, svg } from './ui.js';
@@ -82,9 +82,15 @@ const abilityRow = (a) => el('div.rp-ab', { class: `rp-ab${a.value >= rpg.RANK_U
 ]);
 /** スキルの 1 行: 発現したものは 名前と 中身、まだのものは「？？？」と いまの進み */
 const skillRow = (k) => el('div.rp-sk', { class: `rp-sk${k.got ? ' got' : ''}` }, [
-  el('span.rp-kn', k.got ? `【${k.name}】` : '【？？？】'),
-  el('span.rp-kd', `${k.desc} ${Math.min(k.have, k.got ? k.have : k.need)} / ${k.need} ${k.unit}`),
-  k.got ? null : bar(k.have / k.need, 'sk'),
+  el('span.rp-kn', [k.got ? `【${k.name}】` : '【？？？】', k.got ? el('b.rp-kr', { 'aria-label': `ランク ${k.rank}` }, k.rank) : null]),
+  el('span.rp-kd', k.next != null ? `${k.desc} ${k.have} / ${k.next} ${k.unit}${k.got ? '(次のランクまで)' : ''}` : `${k.desc} ${k.have} ${k.unit}`),
+  k.next != null ? bar((k.have - k.prev) / (k.next - k.prev), 'sk') : null,
+]);
+/** 今週の試練の 1 行: 果たしたものは ✓ */
+const trialRow = (t) => el('div.rp-tr', { class: `rp-tr${t.got ? ' got' : ''}` }, [
+  el('span.rp-tm', { 'aria-hidden': 'true' }, t.got ? '✓' : ''),
+  el('span.rp-tn', [el('b', t.name), el('span', `${t.desc} ${t.have} / ${t.need} ${t.unit}`)]),
+  bar(t.rate, 'sk'),
 ]);
 
 /**
@@ -144,7 +150,9 @@ export function rpgSheet() {
     const moves = v.today.filter((m) => m.min >= 5 && (m.hp || m.mp)).slice(0, 6);
     const mvMax = Math.max(1, ...moves.map((m) => Math.max(Math.abs(m.hp), Math.abs(m.mp))));
     const got = g.skills.filter((k) => k.got), rest = g.skills.filter((k) => !k.got).sort((a, b) => b.have / b.need - a.have / a.need);
-    const feat = `偉業(1 日に 作業 ${fmtMin(rpg.FEAT_WORK)} か タスク ${rpg.FEAT_TASKS} 件)`;
+    const feat = `偉業(1 日に 作業 ${fmtMin(rpg.FEAT_WORK)} か タスク ${rpg.FEAT_TASKS} 件、または 今週の試練を 1 つ 果たす)`;
+    const trGot = g.trials.filter((t) => t.got).length;
+    let open = false; // 今日の動き は HP / MP の枠を 押すと 開く(v0.100・ユーザー要望)
     const last = g.ups.length ? g.ups[g.ups.length - 1] : null;
     const cond = g.ready
       ? (g.featToday ? '条件が そろいました。日が 変わると Lv が 上がります。' : `資格あり(${ta.name} ${ta.rank} ${ta.value})。あとは ${feat}。`)
@@ -160,12 +168,21 @@ export function rpgSheet() {
         ]),
       ]),
       el('p.rp-note', cond),
-      el('section.rp-box', [vital('HP', '体力', v.hp, v.hp0), vital('MP', '気力', v.mp, v.mp0)]),
-      el('section.rp-box', [
-        el('h3', '今日の動き'),
-        vitalChart(v, x.n.min),
-        moves.length ? el('div.rp-rows', [el('div.rp-mvh', [el('span', '← 消耗'), el('span', '回復 →')]), ...moves.map((m) => moveRow(m, mvMax))]) : el('p.muted.small', '今日の記録は まだ ありません。'),
-      ]),
+      (() => {
+        const more = el('span.rp-more', '今日の動き ▾');
+        const detail = el('section.rp-box.rp-detail', { hidden: true }, [
+          el('h3', '今日の動き'),
+          vitalChart(v, x.n.min),
+          moves.length ? el('div.rp-rows', [el('div.rp-mvh', [el('span', '← 消耗'), el('span', '回復 →')]), ...moves.map((m) => moveRow(m, mvMax))]) : el('p.muted.small', '今日の記録は まだ ありません。'),
+        ]);
+        const btn = el('button.rp-box.rp-vbtn', { type: 'button', 'aria-expanded': 'false', 'aria-label': `HP ${v.hp}・MP ${v.mp}(今日の動きを 開く)`, onclick: () => { open = !open; detail.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); more.textContent = open ? '今日の動き ▴' : '今日の動き ▾'; } },
+          [vital('HP', '体力', v.hp, v.hp0), vital('MP', '気力', v.mp, v.mp0), more]);
+        return [btn, detail];
+      })(),
+      g.trials.length ? el('section.rp-box', [
+        el('h3', `今週の試練 ${trGot} / ${g.trials.length}・${g.trialDaysLeft ? `あと ${g.trialDaysLeft} 日` : '今日まで'}`),
+        el('div.rp-rows', g.trials.map(trialRow)),
+      ]) : null,
       el('section.rp-box', [el('h3', '基本アビリティ'), el('div.rp-rows', g.abilities.map(abilityRow))]),
       g.dev.length ? el('section.rp-box', [el('h3', '発展アビリティ'), el('div.rp-devs', g.dev.map((d) => el('span.rp-dev', [el('b', d.name), d.n > 1 ? ` ×${d.n}` : null])))]) : null,
       el('section.rp-box', [
@@ -181,11 +198,12 @@ export function rpgSheet() {
         el('p.muted.small', '何も 保存せず、記録と タスクを 日付の順に たどって そのつど 計算しています(記録を 直すと 数字も 変わります)。'),
         el('p.muted.small', `基本アビリティ: 値は 0〜999 を I・H・G・F・E・D・C・B・A・S の 10 段(100 ごと)で 書きます(1000 から SS・1100 から SSS)。魔力 = 頭の作業 ${rpg.GAIN.min} 分で 1。力 = 体の作業 ${rpg.GAIN.min} 分で 1・運動 ${rpg.GAIN.sportMin} 分で 1。耐久 = 睡眠 1 時間で 1(1 日 8 時間まで)・習慣の印 ${rpg.GAIN.habit}。器用 = タスクの完了 ${rpg.GAIN.task}・趣味 ${rpg.GAIN.min} 分で 1。敏捷 = 期限までに 済ませたタスク ${rpg.GAIN.onTime}・12 時より前に 始めた作業 ${rpg.GAIN.min} 分で 1。`),
         el('p.muted.small', `Lv: 基本アビリティの どれかが D(${rpg.RANK_UP})以上に なり、その日に ${feat}を 果たすと、日が 変わったときに Lv が 1 つ 上がります。上がると 基本アビリティは I の 0 から 始まり、その Lv で いちばん 伸びたものが 発展アビリティ(力 = 剛体・耐久 = 不屈・器用 = 多芸・敏捷 = 先手・魔力 = 探究)に 残ります。同じ Lv の中では、合計が 500 未満 = ロー・1000 未満 = ミッド・それ以上 = ハイ。`),
+        el('p.muted.small', `スキル: 条件に 届くと 発現(ランク I)し、そのあとも 条件の ${rpg.SKILL_MULT.slice(1).join('・')} 倍で H・G・F・E・D・C・B・A・S と 育ちます。今週の試練: 毎週(月曜から 日曜)、${rpg.TRIALS.length} 種類の中から ${rpg.TRIALS_PER_WEEK} つが 決まります。その週の記録だけで 数え、果たした日は 偉業に なります。`),
         el('p.muted.small', `HP / MP: 直近 ${rpg.VITAL_DAYS} 日の記録を 順に たどります。1 時間あたり ─ ${['mind', 'body', 'sleep', 'rest', 'play', 'sport', 'drift', 'move', 'life', 'none'].map((k) => `${rpg.CLASS_LABELS[k]} HP ${rpg.signed(rpg.RATES[k][0])} / MP ${rpg.signed(rpg.RATES[k][1])}`).join('、')}。記録の無い 3 時間以上は 少し 回復(HP・MP ${rpg.signed(rpg.RATES.blank[0])})。`),
         el('p.muted.small', '体を使うか どうかは カテゴリの名前から 見立てています(バイト・家事 = 体の作業、運動・筋トレ = 運動、ほかの作業 = 頭の作業、作業いがい = 趣味)。'),
         el('p.muted.small', '今週のキャラクター: この 7 日で 頭の作業が 多ければ 賢者、体の作業なら 戦士、どちらも 3 割以上なら 魔法戦士、趣味なら 吟遊詩人、運動なら 武闘家、合わせて 5 時間に 届かなければ 旅人。二つ名は 動いた日数・時間帯・睡眠から。服の色は いちばん 長かった カテゴリの色です。'),
       ]),
-    ].filter(Boolean);
+    ].flat().filter(Boolean);
   }, null, { cls: 'rp-sheet' });
 }
 

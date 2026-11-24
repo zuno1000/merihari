@@ -2158,3 +2158,18 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .rp-dv.mp i{background:var(--rp-mp)}
 .rp-dv i.pos{border-radius:0 4px 4px 0}
 .rp-dv i.neg{border-radius:4px 0 0 4px}
+/* v0.100・F30: HP / MP の枠は ボタン(.rp-vbtn・押すと 下に 今日の動き)・今週の試練(.rp-tr)・スキルのランクの文字(.rp-kr) */
+.rp-vbtn{display:block;width:100%;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.rp-vbtn:active{background:var(--accent-bg)}
+.rp-more{display:block;text-align:center;font-size:12px;color:var(--accent);font-weight:600;padding-top:4px}
+.rp-detail{margin-top:4px}
+.rp-tr{display:grid;grid-template-columns:22px 1fr;grid-template-areas:"m n" "b b";gap:3px 6px;align-items:center;padding:7px 0}
+.rp-tr+.rp-tr{border-top:1px solid var(--line)}
+.rp-tm{grid-area:m;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--deemph);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--on-accent)}
+.rp-tr.got .rp-tm{background:var(--accent);border-color:var(--accent)}
+.rp-tn{grid-area:n;display:flex;flex-direction:column;min-width:0}
+.rp-tn b{font-size:14px}
+.rp-tn span{font-size:12px;color:var(--muted)}
+.rp-tr .rp-bar{grid-area:b;height:4px}
+.rp-kn{display:flex;align-items:baseline;gap:4px}
+.rp-kr{font-family:Georgia,"Times New Roman",serif;font-size:17px;line-height:1;color:var(--accent)}
