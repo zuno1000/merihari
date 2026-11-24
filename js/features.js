@@ -1,6 +1,8 @@
 // merihari ─ features.js: 機能の切替(v0.26)。消した機能を「容易に復活できる」ように、呼び出し側は FEATURES を見るだけにする。
 // 値を true にすればコードを足さずに戻る。設計の芯(仕様書 §2)は変えない。テストから M.features で見える。
 export const FEATURES = Object.freeze({
+  /** v0.97・F29(ユーザー要望「Apple の API で 高画質の アルバムジャケットを ランダムに 見る・探す・保存する。今日のお楽しみ に 入口」): アルバムジャケット。隔離した実装: js/jacket.js・js/ui-jacket.js と、ホームのタイル 1 つ・設定の 1 項目・settings.jacket・local.jacket だけ。false で どれも出ない */
+  JACKET: true,
   /** v0.96・F28(ユーザー要望「外部のタスクリストを 任意機能として 足せるように」): 外部のタスクリスト。隔離した実装: js/ext.js・js/ui-ext.js と、ホームの 今日やること の行・タスクのタブの区画・設定の 1 項目・settings.ext・local.extCache / extMarks だけ */
   EXT: true,
   // ▶(タスクからいまから記録。習慣・やりたいことは「区切り」つき・F5-12)。v0.26 でユーザー指示により非表示。

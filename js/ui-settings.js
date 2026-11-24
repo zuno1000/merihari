@@ -22,6 +22,7 @@ import { sectionArt, artSummary } from './ui-art.js'; // v0.58・F23
 import { sectionBuddy, buddySummary } from './ui-buddy.js'; // v0.62・F24
 import * as pomo from './pomo.js'; // v0.72・F25
 import { sectionSleep, sleepSummary } from './ui-sleep.js'; // v0.83・F26
+import { sectionJacket, jacketSummary } from './ui-jacket.js'; // v0.97・F29
 import { sectionVocab, vocabSummary } from './ui-vocab.js'; // v0.85・F27
 import { notifyUrl } from './ui-pomo.js';
 import { sectionHelp, resetHelp } from './ui-help.js'; // v0.70: 使い方は 目次+テーマごとのページ
@@ -766,6 +767,7 @@ const SECTIONS = {
   ...(FEATURES.BUDDY ? { buddy: { title: 'アシスタント', build: (re) => sectionBuddy(re) } } : {}), // v0.62・F24
   ...(FEATURES.SLEEP ? { sleep: { title: '睡眠', build: (re) => sectionSleep(re) } } : {}), // v0.83・F26
   ...(FEATURES.VOCAB ? { vocab: { title: '英単語', build: (re) => sectionVocab(re) } } : {}), // v0.85・F27
+  ...(FEATURES.JACKET ? { jacket: { title: 'アルバムジャケット', build: (re) => sectionJacket(re) } } : {}), // v0.97・F29
   google: { title: 'Google', build: (re) => sectionGoogle(re) },
 };
 
@@ -907,6 +909,7 @@ export function renderSettings(view, ctx, section = null) {
       srow('作業用 BGM', summary.bgm(), open('bgm')),
       srow('キャッチアップ', summary.feed(), open('feed')),
       FEATURES.EXT ? srow('外部のタスクリスト', extLib.summaryLine(S().ext, extLists()), open('ext')) : null,
+      FEATURES.JACKET ? srow('アルバムジャケット', jacketSummary(), open('jacket')) : null,
     ]),
     group('お金', [srow('予算・カテゴリ', summary.money(), open('money'))]),
     group('データ', [

@@ -2019,3 +2019,51 @@ button.vc-poschip::after{content:'';position:absolute;inset:-6px -3px}
 .ext-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .ext-open{color:var(--accent);font-size:13px;font-weight:600;text-decoration:none;min-height:36px;display:inline-flex;align-items:center}
 .fx-row.ext .tname{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:14px;line-height:1.4}
+/* v0.97・F29: アルバムジャケット(ホームのタイル .qtile.jk・画面ぜんたい .jk-page)。音楽を流すアプリの形なので、配色に かかわらず 暗い地に 白い文字(後ろは ジャケットを ぼかしたもの) */
+.qtile.jk{--tc:#c2477f}
+@media (prefers-color-scheme:dark){.qtile.jk{--tc:#ee8db8}}
+.overlay.full:has(.jk-page){background:#101114}
+.sheet.jk-page{position:relative;background:#101114;color:#fff;max-width:640px;gap:6px}
+.jk-bg{position:absolute;inset:-12%;width:124%;height:124%;object-fit:cover;filter:blur(46px) saturate(1.3) brightness(.5);opacity:.9;pointer-events:none;z-index:0}
+.jk-bg:not([src]){display:none}
+.jk-head,.jk-body{position:relative;z-index:1}
+.jk-head{display:flex;align-items:center;gap:8px;flex:none}
+.jk-name{flex:1;text-align:center;font-size:14px;font-weight:600;letter-spacing:.04em;opacity:.85}
+.jk-top{min-width:44px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:20px;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:14px;cursor:pointer;padding:0 12px}
+.jk-top.on{background:#fff;color:#101114}
+.jk-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.jk-player{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:6px}
+.jk-artwrap{flex:1 1 0;min-height:120px;width:100%;display:flex;align-items:center;justify-content:center}
+.jk-art{max-width:100%;max-height:100%;aspect-ratio:1;object-fit:contain;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.55);background:rgba(255,255,255,.06);transition:opacity .25s;-webkit-touch-callout:default;user-select:auto}
+.jk-art.loading{opacity:.35}
+.jk-art:not([src]){visibility:hidden}
+.jk-text{width:100%;display:flex;flex-direction:column;gap:1px;min-height:68px;flex:none}
+.jk-title{font-size:19px;line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.jk-artist{font-size:15px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jk-meta{font-size:12px;opacity:.6}
+.jk-ctrl{display:flex;align-items:center;justify-content:center;gap:30px;flex:none}
+.jk-btn{width:56px;height:56px;border-radius:50%;border:0;background:none;color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.jk-btn:active{background:rgba(255,255,255,.14)}
+.jk-btn:disabled{opacity:.3}
+.jk-btn.play{width:72px;height:72px;background:#fff;color:#101114}
+.jk-btn.play:active{background:#d9d9de}
+.jk-ico{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block}
+.jk-ico[data-fill]{fill:currentColor}
+.jk-ico.big{width:32px;height:32px;margin-left:3px}
+.jk-ico.sm{width:20px;height:20px}
+.jk-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;flex:none}
+.jk-pill{min-height:40px;display:inline-flex;align-items:center;gap:6px;border:0;border-radius:20px;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:14px;padding:0 16px;text-decoration:none;cursor:pointer}
+.jk-pill:disabled{opacity:.4}
+.jk-pill.solid{background:#fff;color:#101114;font-weight:600;flex:none}
+.jk-status{min-height:20px;margin:0;font-size:12px;opacity:.75;text-align:center;flex:none}
+.jk-credit{margin:0;font-size:11px;opacity:.5;text-align:center;flex:none}
+.jk-finder{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding-top:6px}
+.jk-form{display:flex;gap:8px;flex:none}
+.jk-input{flex:1;min-width:0;min-height:44px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:16px;padding:0 16px;-webkit-appearance:none;appearance:none}
+.jk-input::placeholder{color:rgba(255,255,255,.55)}
+.jk-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:12px 10px;align-content:start;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.jk-note{grid-column:1/-1;margin:16px 0;text-align:center;font-size:14px;opacity:.75}
+.jk-cell{display:flex;flex-direction:column;gap:2px;border:0;background:none;color:#fff;font:inherit;text-align:left;padding:0;min-width:0;cursor:pointer}
+.jk-cell img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;background:rgba(255,255,255,.08)}
+.jk-cn{font-size:12px;line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.jk-ca{font-size:11px;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
