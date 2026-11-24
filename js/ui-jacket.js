@@ -9,6 +9,7 @@
 import { el, clear, sheet, svg, toast } from './ui.js';
 import * as store from './store.js';
 import * as jacket from './jacket.js';
+import * as photos from './photos.js'; // v0.105: 印刷に 重ねる ロゴ(端末の IndexedDB・同期しない)
 import { platformOf, STAY_MS } from './bgm.js';
 import { FEATURES } from './features.js';
 import { autoSync } from './sync.js';
@@ -27,25 +28,29 @@ const FIND = () => ico('jk-ico sm', [svg('circle', { cx: 11, cy: 11, r: 6 }), sv
 const DOWN = () => ico('jk-ico sm', [svg('path', { d: 'M12 4v11M7 11l5 5 5-5M5 20h14' })]);
 const PRN = () => ico('jk-ico sm', [svg('path', { d: 'M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M7 14h10v6H7z' })]);
 const mm = (v) => `${v}mm`;
+const logoUrls = new Map(); // ロゴの 鍵 → 画像の URL(端末の IndexedDB から 読んだもの。画面を 閉じても 使い回す)
 /**
- * 印刷する 1 枚の 紙(A4 縦・mm で 置く): items = ジャケットの 配列(3 つまで)・back = 裏の面('text' = 題名の文字 / 'art' = 同じ絵)。
+ * 印刷する 1 枚の 紙(A4 縦・mm で 置く): items = ジャケットの 配列(3 つまで)・look(it) = その 1 組の 見え方 { bg, ink, logoUrl, size, text, inner }。
+ * v0.105(ユーザー案): 裏表紙と バックインレイの 外側・背は 単色の 地(絵の いちばん 多い色 か えらんだ色)に、ロゴ(透けた PNG)と 題名の文字を 重ねる。表紙と ディスクは 絵。内側は 絵(ケースを 開くと トレイ越しに 見える)か 単色。
  * 実線 = 切り取り・点線 = 山折り。右の 余白に 50mm の ものさし(印刷の 倍率が 100% かを 確かめる)
  */
-function printPage(items, back) {
-  const at = (cls, x, y, w, h, kids = null) => el(`div.${cls}`, { style: { left: mm(x), top: mm(y), width: mm(w), height: mm(h) } }, kids);
+function printPage(items, look) {
+  const at = (cls, x, y, w, h, kids = null, extra = {}) => el(`div.${cls}`, { style: { left: mm(x), top: mm(y), width: mm(w), height: mm(h), ...extra } }, kids);
   const art = (it) => el('img', { src: jacket.artUrl(it.art, jacket.VIEW_PX), alt: '' });
-  const text = (it) => el('div.pr-text', [el('b', it.name), el('span', it.artist), el('small', [it.year, it.genre].filter(Boolean).join('・'))]);
-  const face = (it) => (back === 'art' ? art(it) : text(it));
+  const face = (it, L) => el('div.pr-face', { style: { background: L.bg, color: L.ink } }, [
+    L.logoUrl ? el('img.pr-logo', { src: L.logoUrl, alt: '', style: { width: `${jacket.LOGO_SIZES[L.size]}%` } }) : null,
+    L.text ? el('div.pr-text', [el('b', it.name), el('span', it.artist), el('small', [it.year, it.genre].filter(Boolean).join('・'))]) : null,
+  ]);
   const kids = [];
-  jacket.printLayout(items.length).forEach((L, i) => {
-    const it = items[i], j = L.jacket, d = L.disc, n = L.inlay, f = n.folds;
-    kids.push(at('pr-part', j.x, j.y, j.w, j.h, [at('pr-seg', 0, 0, j.fold, j.h, face(it)), at('pr-seg', j.fold, 0, j.w - j.fold, j.h, art(it)), at('pr-fold', j.fold, 0, 0, j.h)]));
+  jacket.printLayout(items.length).forEach((B, i) => {
+    const it = items[i], L = look(it), j = B.jacket, d = B.disc, n = B.inlay, f = n.folds, tone = { background: L.bg, color: L.ink };
+    kids.push(at('pr-part', j.x, j.y, j.w, j.h, [at('pr-seg', 0, 0, j.fold, j.h, face(it, L)), at('pr-seg', j.fold, 0, j.w - j.fold, j.h, art(it)), at('pr-fold', j.fold, 0, 0, j.h)]));
     kids.push(at('pr-label', j.x, j.y + j.h + 1, j.w, 3, 'ジャケット(左: 裏表紙・右: 表紙)'));
     kids.push(at('pr-part.disc', d.x, d.y, d.d, d.d, [art(it), at('pr-hole', (d.d - d.hole) / 2, (d.d - d.hole) / 2, d.hole, d.hole)]));
     kids.push(at('pr-label', d.x, d.y + d.d + 1, d.d, 3, 'ディスク'));
     kids.push(at('pr-part', n.x, n.y, n.w, n.h, [
-      at('pr-seg', 0, 0, f[0], n.h, back === 'art' ? art(it) : null), at('pr-seg', f[0], 0, f[1] - f[0], n.h, face(it)),
-      at('pr-seg.spine', f[1], 0, f[2] - f[1], n.h, el('span', jacket.spineText(it))), at('pr-seg.spine', f[2], 0, n.w - f[2], n.h, el('span', it.name)),
+      at('pr-seg', 0, 0, f[0], n.h, L.inner === 'art' ? art(it) : null, L.inner === 'art' ? {} : { background: L.bg }), at('pr-seg', f[0], 0, f[1] - f[0], n.h, face(it, L)),
+      at('pr-seg.spine', f[1], 0, f[2] - f[1], n.h, el('span', jacket.spineText(it)), tone), at('pr-seg.spine', f[2], 0, n.w - f[2], n.h, el('span', it.name), tone),
       ...f.map((x) => at('pr-fold', x, 0, 0, n.h)),
     ]));
     kids.push(at('pr-label', n.x, n.y + n.h + 1, n.w, 3, 'バックインレイ(左: 内側・右: 外側と 背)'));
@@ -104,7 +109,37 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
   ]);
   const favGrid = el('div.jk-grid'), favPane = el('div.jk-finder', [favGrid]);
   const prPane = el('div.jk-finder.pr-pane');
-  let prList = [], prBack = 'text'; // 印刷に 並べる ジャケット(3 つまで)と 裏の面
+  let prList = [], prEdit = null; // 印刷に 並べる ジャケット(3 つまで)と、いま 編集している 組の id
+  const pals = new Map(); // アルバムの id → 絵の 色(多い順)。null = 読み込み中
+  /** 絵の 色を 読む(小さい画像を canvas に 描いて 数える。Apple の 画像の置き場は ほかの サイトからの 読み取りを 許している) */
+  function loadPal(it) {
+    if (pals.has(it.id)) return;
+    pals.set(it.id, null);
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 48; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, 48, 48); pals.set(it.id, jacket.palette(g.getImageData(0, 0, 48, 48).data)); } catch { pals.set(it.id, []); } if (mode === 'print') drawPrint(); };
+    im.onerror = () => { pals.set(it.id, []); };
+    im.src = jacket.artUrl(it.art, 100);
+  }
+  const PS = () => jacket.normalizePrintState(store.state.local.jacketPrint);
+  const designOf = (id) => jacket.normalizeDesign(PS().designs[id]);
+  const savePS = (st) => { store.state.local.jacketPrint = jacket.normalizePrintState(st); store.saveLocal(); };
+  const setDesign = (id, patch) => { const st = PS(); delete st.designs[id]; st.designs[id] = { ...designOf(id), ...patch }; savePS(st); drawPrint(); };
+  /** その 1 組の 見え方: 地の色(えらんだ色 か 絵の いちばん 多い色)・文字の色・ロゴ・文字・内側 */
+  const look = (it) => { const d = designOf(it.id), bg = d.color || (pals.get(it.id) || [])[0] || '#ffffff'; return { bg, ink: jacket.inkOn(bg), logoUrl: d.logo ? logoUrls.get(d.logo) || null : null, size: d.size, text: d.text, inner: d.inner }; };
+  /** ロゴを 足す: 透けた所を 残すため PNG の まま(長い辺 800px まで)端末に 置く。6 つを こえたら 古いものから 消す */
+  async function addLogo(file, forId) {
+    try {
+      const bmp = await createImageBitmap(file), k = Math.min(1, 800 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k)); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      if (!blob) throw new Error('png');
+      const id = `jk:logo:${Date.now()}`, st = PS();
+      await photos.putPhoto(id, blob); logoUrls.set(id, URL.createObjectURL(blob));
+      for (const old of [...st.logos, id].slice(0, -jacket.LOGO_MAX)) { photos.delPhoto(old); const u = logoUrls.get(old); if (u) URL.revokeObjectURL(u); logoUrls.delete(old); }
+      st.logos = [...st.logos, id]; delete st.designs[forId]; st.designs[forId] = { ...designOf(forId), logo: id, text: false }; savePS(st); drawPrint();
+    } catch { toast('画像を 読めませんでした'); }
+  }
+  function dropLogo(id) { const st = PS(); st.logos = st.logos.filter((x) => x !== id); savePS(st); photos.delPhoto(id); const u = logoUrls.get(id); if (u) URL.revokeObjectURL(u); logoUrls.delete(id); drawPrint(); }
   const body = el('div.jk-body');
   const findBtn = el('button.jk-top', { type: 'button', 'aria-label': 'ジャケットを 探す', onclick: () => setMode(mode === 'find' ? 'play' : 'find') }, FIND());
   const listBtn = el('button.jk-top', { type: 'button', 'aria-label': 'お気に入りの 一覧', onclick: () => setMode(mode === 'fav' ? 'play' : 'fav') }, STAR(true));
@@ -136,30 +171,66 @@ export function jacketScreen({ opener = null, nav = null } = {}) {
       el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '', loading: 'lazy', decoding: 'async' }), el('span.jk-cn', it.name), el('span.jk-ca', it.artist),
     ])));
   }
-  /** 印刷の画面: 並べる ジャケット(外せる)→ お気に入りから 足す → 裏の面 → 縮めた 見本 → 印刷する */
-  function drawPrint() {
-    const P = jacket.PRINT, favs = jacket.favList(F()).filter((x) => !prList.some((y) => y.id === x.id));
+  /** 組ごとの 編集: 地の色(絵から 取った色・白・黒・自分で)→ ロゴ(端末に 置いた 6 つまで・写真から 足す)→ 大きさ → 題名の文字 → インレイの 内側 */
+  function editor(it) {
+    const d = designOf(it.id), pal = pals.get(it.id) || [], st = PS();
     const chip = (label, on, fn) => el('button.jk-pill', { type: 'button', class: `jk-pill${on ? ' solid' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
+    const sw = (hex, label, on, fn) => el('button.pr-sw', { type: 'button', class: `pr-sw${on ? ' on' : ''}`, 'aria-label': label, 'aria-pressed': on ? 'true' : 'false', style: { background: hex }, onclick: fn });
+    const pick = el('input.pr-color', { type: 'color', 'aria-label': '色を 自分で えらぶ', value: d.color || pal[0] || '#ffffff', onchange: (e) => setDesign(it.id, { color: e.target.value }) });
+    const file = el('input', { type: 'file', accept: 'image/png,image/webp,image/*', hidden: true, onchange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) addLogo(f, it.id); } });
+    return el('div.pr-edit', [
+      el('p.jk-note.left', '地の色(はじめは 絵の いちばん 多い色)'),
+      el('div.pr-sws', [
+        ...pal.map((hex, i) => sw(hex, i ? `絵の色 ${i + 1}` : '絵の いちばん 多い色', i ? d.color === hex : !d.color || d.color === hex, () => setDesign(it.id, { color: i ? hex : null }))),
+        sw('#ffffff', '白', d.color === '#ffffff', () => setDesign(it.id, { color: '#ffffff' })), sw('#111111', '黒', d.color === '#111111', () => setDesign(it.id, { color: '#111111' })), pick,
+      ]),
+      el('p.jk-note.left', 'ロゴ(背景の 透けた PNG を 写真から。この端末に 6 つまで)'),
+      el('div.pr-sws', [
+        ...st.logos.map((id) => el('button.pr-lg', { type: 'button', class: `pr-lg${d.logo === id ? ' on' : ''}`, 'aria-label': 'この ロゴを 使う', 'aria-pressed': d.logo === id ? 'true' : 'false', onclick: () => setDesign(it.id, d.logo === id ? { logo: null, text: true } : { logo: id, text: false }) }, logoUrls.get(id) ? el('img', { src: logoUrls.get(id), alt: '' }) : null)),
+        file, el('button.jk-pill', { type: 'button', onclick: () => file.click() }, '＋ 写真から'),
+        d.logo ? el('button.jk-pill', { type: 'button', onclick: () => dropLogo(d.logo) }, 'この ロゴを 消す') : null,
+      ]),
+      d.logo ? el('div.jk-row.left', [el('span.jk-note.left', '大きさ'), chip('小', d.size === 's', () => setDesign(it.id, { size: 's' })), chip('中', d.size === 'm', () => setDesign(it.id, { size: 'm' })), chip('大', d.size === 'l', () => setDesign(it.id, { size: 'l' }))]) : null,
+      el('div.jk-row.left', [el('span.jk-note.left', '題名の文字'), chip('入れる', d.text, () => setDesign(it.id, { text: true })), chip('入れない', !d.text, () => setDesign(it.id, { text: false }))]),
+      el('div.jk-row.left', [el('span.jk-note.left', 'インレイの 内側'), chip('絵', d.inner === 'art', () => setDesign(it.id, { inner: 'art' })), chip('単色', d.inner === 'color', () => setDesign(it.id, { inner: 'color' }))]),
+      prList.length > 1 ? el('div.jk-row.left', [el('button.jk-pill', { type: 'button', onclick: () => { const s2 = PS(); for (const x of prList) if (x.id !== it.id) { const o = designOf(x.id); delete s2.designs[x.id]; s2.designs[x.id] = { ...o, logo: d.logo, size: d.size, text: d.text, inner: d.inner }; } savePS(s2); drawPrint(); toast('ほかの 組にも そろえました(色は それぞれの まま)'); } }, 'ロゴと 文字を ほかの 組にも')]) : null,
+    ]);
+  }
+  /** 印刷の画面: 並べる ジャケット(編集・外す)→ お気に入りから 足す → 縮めた 見本 → 印刷する */
+  function drawPrint() {
+    const P = jacket.PRINT, favs = jacket.favList(F()).filter((x) => !prList.some((y) => y.id === x.id)), top = prPane.scrollTop;
+    prList.forEach(loadPal);
+    const need = PS().logos.filter((id) => !logoUrls.has(id));
+    if (need.length) { need.forEach((id) => logoUrls.set(id, null)); Promise.all(need.map((id) => photos.getPhoto(id).then((b) => { logoUrls.set(id, b ? URL.createObjectURL(b) : null); }))).then(() => { if (mode === 'print') drawPrint(); }); }
+    if (prEdit && !prList.some((x) => x.id === prEdit)) prEdit = null;
     const view = el('div.pr-view');
     if (prList.length) {
-      const page = printPage(prList, prBack); view.append(page);
+      const page = printPage(prList, look); view.append(page);
       requestAnimationFrame(() => { const k = view.clientWidth / page.offsetWidth; if (k > 0 && Number.isFinite(k)) { page.style.transform = `scale(${k})`; view.style.height = `${page.offsetHeight * k}px`; } });
     }
-    clear(prPane).append(
+    const pickRow = (it) => [
+      el('div.pr-pick', [
+        el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '' }), el('span', it.name),
+        el('button.jk-pill', { type: 'button', class: `jk-pill${prEdit === it.id ? ' solid' : ''}`, 'aria-expanded': prEdit === it.id ? 'true' : 'false', onclick: () => { prEdit = prEdit === it.id ? null : it.id; drawPrint(); } }, prEdit === it.id ? '閉じる' : '編集'),
+        el('button.jk-pill', { type: 'button', 'aria-label': `${it.name} を 外す`, onclick: () => { prList = prList.filter((x) => x.id !== it.id); drawPrint(); } }, '×'),
+      ]),
+      prEdit === it.id ? editor(it) : null,
+    ];
+    clear(prPane).append(...[
       el('div.jk-form', [el('button.jk-pill', { type: 'button', onclick: () => setMode('play') }, '‹ 戻る'), el('b.pr-h', 'ミニ CD の 型で 印刷')]),
-      el('p.jk-note.left', `ジャケット ${P.jacket.w}×${P.jacket.h}mm・バックインレイ ${P.inlay.w}×${P.inlay.h}mm・ディスク ${P.disc.d}mm を、A4 に ${P.perPage} 組まで 並べます。`),
-      el('div.pr-picks', prList.length ? prList.map((it) => el('button.pr-pick', { type: 'button', 'aria-label': `${it.name} を 外す`, onclick: () => { prList = prList.filter((x) => x.id !== it.id); drawPrint(); } }, [el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '' }), el('span', it.name), el('i', { 'aria-hidden': 'true' }, '×')])) : el('p.jk-note.left', '並べる ジャケットが ありません。下の お気に入りから 足してください。')),
+      el('p.jk-note.left', `ジャケット ${P.jacket.w}×${P.jacket.h}mm・バックインレイ ${P.inlay.w}×${P.inlay.h}mm・ディスク ${P.disc.d}mm を、A4 に ${P.perPage} 組まで 並べます。裏表紙と 背は、絵の いちばん 多い色の 単色です。「編集」で 色・ロゴ・文字を 変えられます。`),
+      el('div.pr-picks', prList.length ? prList.flatMap(pickRow).filter(Boolean) : el('p.jk-note.left', '並べる ジャケットが ありません。下の お気に入りから 足してください。')),
       prList.length < P.perPage && favs.length ? el('div.pr-add', [el('p.jk-note.left', 'お気に入りから 足す'), el('div.pr-thumbs', favs.slice(0, 30).map((it) => el('button', { type: 'button', 'aria-label': `${it.name} を 足す`, onclick: () => { prList = jacket.printAdd(prList, it); drawPrint(); } }, el('img', { src: jacket.artUrl(it.art, jacket.THUMB_PX), alt: '', loading: 'lazy' }))))]) : null,
-      el('div.jk-row.left', [el('span.jk-note.left', '裏の面'), chip('題名の文字', prBack === 'text', () => { prBack = 'text'; drawPrint(); }), chip('同じ絵', prBack === 'art', () => { prBack = 'art'; drawPrint(); })]),
       view,
       el('div.jk-row', [el('button.jk-pill.solid', { type: 'button', disabled: !prList.length, onclick: () => doPrint() }, [PRN(), el('span', '印刷する')])]),
-      el('p.jk-note.left', '印刷の 設定で 用紙は A4・倍率は 100%(「用紙に 合わせる」を 切る)に してください。紙の 右上の 線が 50mm なら 等倍です。'),
-    );
+      el('p.jk-note.left', '印刷の 設定で 用紙は A4・倍率は 100%(「用紙に 合わせる」を 切る)に してください。紙の 右上の 線が 50mm なら 等倍です。色と ロゴの 設定は この端末が 覚えます。'),
+    ].filter(Boolean));
+    prPane.scrollTop = top;
   }
   async function doPrint() {
     if (!prList.length) return;
     document.querySelectorAll('.pr-root').forEach((n) => n.remove());
-    const root = el('div.pr-root', printPage(prList, prBack));
+    const root = el('div.pr-root', printPage(prList, look));
     document.body.append(root);
     // 画像が そろってから(読み込みの 合図を 待つ。隠した所の img.decode() は 終わらないことが あるので 使わない)。長くても 5 秒で 進む
     const ready = (im) => (im.complete ? Promise.resolve() : new Promise((res) => { im.addEventListener('load', res, { once: true }); im.addEventListener('error', res, { once: true }); }));

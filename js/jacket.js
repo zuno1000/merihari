@@ -137,6 +137,49 @@ export function printAdd(list, item) {
   const cur = (Array.isArray(list) ? list : []).map(normalizeItem).filter(Boolean), it = normalizeItem(item);
   return !it || cur.some((x) => x.id === it.id) || cur.length >= PRINT.perPage ? cur : [...cur, it];
 }
+/**
+ * 絵の 色(純関数・v0.105・F29-11・ユーザー案「表紙の画像で 最も 割合の 多い色を 単色の 背景に」): rgba = 画素の 並び(r, g, b, a の くり返し)。
+ * 色を 16 段ずつに 丸めて 数え、多い順に n 色(#rrggbb・その ます の 平均の色)。すでに えらんだ色に 近いもの(差の 合計が 96 未満)は 飛ばす。透けた画素は 数えない
+ */
+export function palette(rgba, n = 5) {
+  const bins = new Map(), d = rgba && typeof rgba.length === 'number' ? rgba : [];
+  for (let i = 0; i + 3 < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    const k = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4), b = bins.get(k) || [0, 0, 0, 0];
+    b[0]++; b[1] += d[i]; b[2] += d[i + 1]; b[3] += d[i + 2]; bins.set(k, b);
+  }
+  const out = [];
+  for (const [k, b] of [...bins.entries()].sort((x, y) => y[1][0] - x[1][0] || x[0] - y[0])) {
+    if (out.length >= n) break;
+    const c = [Math.round(b[1] / b[0]), Math.round(b[2] / b[0]), Math.round(b[3] / b[0])];
+    if (out.some((o) => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) + Math.abs(o[2] - c[2]) < 96)) continue;
+    out.push(c);
+  }
+  return out.map((c) => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`);
+}
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+/** 地の色の 上の 文字の色(純関数): 明るい地には 黒、暗い地には 白 */
+export function inkOn(hex) {
+  if (!HEX_RE.test(String(hex))) return '#111111';
+  const v = parseInt(hex.slice(1), 16), l = (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
+  return l > 0.6 ? '#111111' : '#ffffff';
+}
+export const LOGO_MAX = 6, DESIGN_MAX = 60, LOGO_SIZES = Object.freeze({ s: 40, m: 58, l: 76 }); // ロゴの 幅(その面の 幅の %)
+const LOGO_ID = /^jk:logo:\d{1,16}$/;
+/**
+ * 印刷の 1 組の デザイン(純関数): color = 地の色(#rrggbb。null = 絵の いちばん 多い色)・logo = ロゴの 置き場の鍵(null = なし)・size = ロゴの 大きさ(s / m / l)・
+ * text = 題名の文字を 入れるか・inner = バックインレイの 内側('art' = 絵 / 'color' = 単色)
+ */
+export function normalizeDesign(raw) {
+  const o = isObj(raw) ? raw : {};
+  return { color: HEX_RE.test(String(o.color)) ? String(o.color).toLowerCase() : null, logo: LOGO_ID.test(String(o.logo)) ? o.logo : null, size: Object.hasOwn(LOGO_SIZES, o.size) ? o.size : 'm', text: o.text !== false, inner: o.inner === 'color' ? 'color' : 'art' };
+}
+/** 端末に 覚える 印刷の 控え local.jacketPrint(純関数): designs(アルバムの id → デザイン・新しい 60 件)・logos(ロゴの 鍵・6 つまで)。無くなった ロゴを 指す デザインは ロゴなしに */
+export function normalizePrintState(raw) {
+  const o = isObj(raw) ? raw : {}, logos = [...new Set((Array.isArray(o.logos) ? o.logos : []).filter((x) => LOGO_ID.test(String(x))))].slice(-LOGO_MAX), designs = {};
+  for (const [id, d] of Object.entries(isObj(o.designs) ? o.designs : {}).filter(([id]) => /^\d{1,24}$/.test(id)).slice(-DESIGN_MAX)) { const x = normalizeDesign(d); designs[id] = logos.includes(x.logo) ? x : { ...x, logo: null }; }
+  return { designs, logos };
+}
 /** YouTube で 探す語(純関数): 「アーティスト アルバム名」 */
 export const youtubeQuery = (it) => [it?.artist, it?.name].filter(Boolean).join(' ').slice(0, 200);
 /** YouTube の 検索結果の URL(純関数): plat = 'ios' / 'android' / 'other'・app = アプリで開くか */

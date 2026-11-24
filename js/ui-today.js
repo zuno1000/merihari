@@ -519,7 +519,7 @@ export function renderNow(view, ctx, dateArg = null) {
       topCard(hero, ctx),
       focusBox(e, rerender, ctx), // 今日やること: 作業の進み・期限のタスク・今日の習慣(F5-15)を 1 枚に
       // v0.104(実機 FB「ボタンが 多く カラフルで ごちゃごちゃし始めた。全体を シンプルに。ネストが 深くなっても よい」): 色は 抑え(タイルごとの 色を やめる)、
-      //   コンディションは 1 枚に まとめ、はじめる は 記録と ポモドーロだけ。BGM・英単語(作業の おとも)と お楽しみは、メニューの 行から 開く シートへ
+      //   コンディションは 1 枚に まとめ、はじめる は 記録と ポモドーロだけ。BGM・英単語(作業のおとも)と お楽しみは、メニューの 行から 開く シートへ
       tileGroup('今日のコンディション', [trainTile(ctx), weatherTile(ctx), sleepTile()], rpgStrip(), 'cond'),
       tileGroup('はじめる', [hero ? null : recordTile(rerender), hero ? null : pomoTile(e, rerender)], null, 'start'),
       homeMenu(ctx, rerender),
@@ -672,7 +672,7 @@ function tileGroup(title, tiles, extra = null, cls = '') {
   return el('section.group.quick-box', { class: `group quick-box${cls ? ` ${cls}` : ''}` }, [el('h2', title), xs.length ? el('div.quick-row', { class: `quick-row${xs.length > 4 ? ' two' : ''}` }, xs) : null, extra].filter(Boolean));
 }
 /**
- * ホームの メニュー(v0.104・F2-11): 「作業の おとも」(BGM・英単語)と「今日のお楽しみ」(今日の一杯・記事・ジャケット・小説と図録)を、1 行ずつの 入口に。
+ * ホームの メニュー(v0.104・F2-11): 「作業のおとも」(BGM・英単語)と「今日のお楽しみ」(今日の一杯・記事・ジャケット・小説と図録)を、1 行ずつの 入口に。
  * 行の 右には いまの様子を 短く(タイルの 大きい文字を 2 つまで)。押すと シートが 開き、中に これまでの タイルが 並ぶ。使っているものが 無い行は 出さない
  */
 function homeMenu(ctx, rerender) {
@@ -687,7 +687,7 @@ function homeMenu(ctx, rerender) {
   const row = (label, val, fn) => el('button.home-row', { type: 'button', 'aria-label': `${label}を 開く`, onclick: fn }, [el('span.hr-l', label), el('span.hr-v', val), el('span.hr-c', { 'aria-hidden': 'true' }, '›')]);
   const a0 = aid(), f0 = fun();
   const rows = [
-    a0.length ? row('作業の おとも', a0.map((t) => (t.querySelector('.qt-k')?.textContent || '').trim()).filter(Boolean).join('・'), () => open('作業の おとも', () => [el('div.quick-row', aid())])) : null,
+    a0.length ? row('作業のおとも', a0.map((t) => (t.querySelector('.qt-k')?.textContent || '').trim()).filter(Boolean).join('・'), () => open('作業のおとも', () => [el('div.quick-row', aid())])) : null,
     f0 ? row('今日のお楽しみ', brief([...f0.querySelectorAll('.qtile, .q-strip')]), () => open('今日のお楽しみ', () => [...fun().children].filter((n) => n.tagName !== 'H2'))) : null,
   ].filter(Boolean);
   return rows.length ? el('section.group.home-menu', rows) : null;
