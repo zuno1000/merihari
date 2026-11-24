@@ -33,9 +33,13 @@ export function normalizeJacket(raw) {
   const o = isObj(raw) ? raw : {};
   return { enabled: o.enabled !== false, words: splitWords(Array.isArray(o.words) ? o.words.filter((w) => typeof w === 'string').join('\n') : ''), country: Object.hasOwn(COUNTRIES, o.country) ? o.country : 'JP' };
 }
-/** 検索の URL(純関数) */
+/**
+ * 検索の URL(純関数)。
+ * v0.98.2(実機 FB「ジャケットを 取れませんでした と出る」): **media=music を 付けない**。付けると、iPhone / iPad からの 要求を Apple が
+ * Apple Music アプリ向けの `musics://…` へ 301 で 転送し、fetch が 失敗する(PC では 起きない)。entity=album だけなら 転送されず、返る中身は 同じ。
+ */
 export function searchUrl(term, { country = 'JP', limit = PAGE, offset = 0 } = {}) {
-  const q = new URLSearchParams({ term: str(term, 100), country: Object.hasOwn(COUNTRIES, country) ? country : 'JP', media: 'music', entity: 'album', limit: String(Math.max(1, Math.min(200, Math.round(limit) || PAGE))) });
+  const q = new URLSearchParams({ term: str(term, 100), country: Object.hasOwn(COUNTRIES, country) ? country : 'JP', entity: 'album', limit: String(Math.max(1, Math.min(200, Math.round(limit) || PAGE))) });
   if (offset > 0) q.set('offset', String(Math.round(offset)));
   return `${SEARCH_URL}?${q}`;
 }
