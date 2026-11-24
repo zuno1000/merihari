@@ -126,7 +126,6 @@ export function maybeBrief(ctx) {
  * 下に ‹ 戻る・ページの点・次へ ›(最後は 閉じる)。おすすめに出すものが無ければ 2 ページ。アシスタントを止めていれば吹き出しは出ない。閉じたら いまの画面を描き直す
  */
 export function openBrief(ctx, { manual = false } = {}) {
-  const d = store.state.data;
   const body = el('div.brief');
   let close = () => {};
   let page = 0;
@@ -134,12 +133,14 @@ export function openBrief(ctx, { manual = false } = {}) {
   // 自分で開いたとき(manual・ホームの 日報 / アシスタントのシート / 設定)は 全体から、枠の初回は その枠の範囲から。上のチップで替える
   let view = null;
   const draw = () => {
+    const d = store.state.data; // v0.98.1: 描くたびに 取り直す(開いている間に 同期が store.state.data を 入れ替える。外で 1 回だけ 取ると 古い方を 見続ける)
     const n = now();
     const slot = brief.slotOf(n.min, brief.bedOf(d.settings));
     const views = brief.viewsAt(n.min);
     if (!view || !views.includes(view)) view = brief.defaultView(slot, n.min, manual, entriesOf(d.entries, n.date).length > 0);
     const b = brief.build({ slot, date: n.date, nowMin: n.min, entries: d.entries, tasks: d.tasks, settings: d.settings, planBlocks: d.planBlocks, view });
-    const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); draw(); };
+    // v0.98.1(実機 FB「日報で タスクに チェックを入れても タスクのタブに 反映されない」): 起動時の日報は 同期と 同時に 開くので、行が持つ t は 同期の前の データのもの。いまの データの 同じ id のタスクに 付ける
+    const done = (t0) => { const live = store.state.data.tasks, t = live[t0.id] || t0; t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); live[t.id] = t; store.save(); autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); draw(); };
     const row = (t, kind) => {
       const k = t.deadline.slice(0, 10), tm = plan.deadlineMin(t) != null ? ` ${t.deadline.slice(11, 16)}` : '';
       const meta = kind === 'over' ? `期限切れ(${fmtMD(k)}${tm})` : kind === 'tmr' ? `期限 明日${tm}` : `期限 今日${tm}`;

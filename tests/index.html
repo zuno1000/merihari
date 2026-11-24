@@ -1194,6 +1194,11 @@ document.getElementById('app').addEventListener('load', async () => {
         const uj = await (await fetch('../js/ui-jacket.js', { cache: 'no-store' })).text(), jj = await (await fetch('../js/jacket.js', { cache: 'no-store' })).text(), uty2 = await (await fetch('../js/ui-today.js', { cache: 'no-store' })).text(), idxj = await (await fetch('../index.html', { cache: 'no-store' })).text();
         ok(sw.includes(`'./js/jacket.js'`) && sw.includes(`'./js/ui-jacket.js'`) && !/innerHTML/.test(uj + jj) && /tileGroup\('今日のお楽しみ', \[[^\]]*jacketTile\(\)\]/.test(uty2) && /connect-src[^;]*https:\/\/itunes\.apple\.com https:\/\/\*\.mzstatic\.com /.test(idxj) && uj.includes('iTunes Search API') && !/store\.state\.data\.(?!settings|meta)/.test(uj), 'sw.js の ASSETS・innerHTML を使わない・入口は 今日のお楽しみ・CSP に Apple の 2 つ・出どころの表示・記録には 触らない');
       }
+      { // v0.98.1(実機 FB): 日報の ✓ が 同期のあと 消える(開いたままの シートが 古い store.state.data を 見ていた)
+        const ub = await (await fetch('../js/ui-brief.js', { cache: 'no-store' })).text(), ut5 = await (await fetch('../js/ui-today.js', { cache: 'no-store' })).text();
+        const ob = ub.slice(ub.indexOf('export function openBrief'));
+        ok(ob.indexOf('const d = store.state.data;') > ob.indexOf('const draw = () => {') && /const done = \(t0\) => \{ const live = store\.state\.data\.tasks, t = live\[t0\.id\] \|\| t0;[^\n]*live\[t\.id\] = t; store\.save\(\)/.test(ob) && /const done = \(t0\) => \{ const t = T\(\)\[t0\.id\] \|\| t0;[^\n]*T\(\)\[t\.id\] = t; store\.save\(\)/.test(ut5), '日報と ホームの ✓: データは 描くたびに 取り直し、いまのデータの 同じ id のタスクに 付けて 書き戻す(同期が store.state.data を 入れ替えても 消えない)');
+      }
       { // v0.98・F30: ステータス(試作・rpg.js・純関数)
         const R = M.rpg;
         ok(eq(R.levelOf(0), { lv: 1, into: 0, need: 120, left: 120, rate: 0 }) && R.levelOf(120).lv === 2 && R.levelOf(120).need === 240 && eq([R.levelOf(359).lv, R.levelOf(359).into, R.levelOf(359).left], [2, 239, 1]) && R.levelOf(360).lv === 3 && R.levelOf(-5).lv === 1 && R.levelOf(NaN).lv === 1 && R.levelOf(60, 60).lv === 2 && R.levelOf(179, 60).lv === 2 && R.levelOf(180, 60).lv === 3, 'levelOf: Lv L → L+1 に step × L・壊れた値は Lv 1');

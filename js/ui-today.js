@@ -606,7 +606,7 @@ function focusBox(n, rerender, ctx) {
   ]);
   // タスク: 今日が期限 → 期限切れ
   const due = plan.dueTasks(T(), n.date, E(), { nowMin: n.min }); // v0.82・F5-18: 24 時間以内が期限(明日の この時刻までの 時刻つきも)
-  const done = (t) => { t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
+  const done = (t0) => { const t = T()[t0.id] || t0; t.doneAt = store.nowISO(); t.updatedAt = store.nowISO(); T()[t.id] = t; store.save(); sync.autoSync(); toast(t.recur ? '済み。期限を過ぎると来週の分が出ます' : '完了'); rerender(); };
   const all = [...due.today.map((t) => [t, false]), ...due.overdue.map((t) => [t, true])];
   const TASK_MAX = 3, ROW_MAX = 6; // v0.95: 一目で 読める量に(あふれた分は タスクのタブへ)。v0.96: 外部のリストの分が入るので 6 行まで
   const rows = all.slice(0, TASK_MAX).map(([t, over]) => {
@@ -626,7 +626,7 @@ function focusBox(n, rerender, ctx) {
       st && st.streak >= 2 ? `${st.streak}${unit}続いてる` : null,
       st && st.week ? `今週${st.week.met}/${st.week.days}日` : null,
     ].filter(Boolean).join('・');
-    const onCheck = () => { t.checks = plan.toggleCheck(t, n.date); t.updatedAt = store.nowISO(); store.save(); sync.autoSync(); toast(plan.isChecked(t, n.date) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); };
+    const onCheck = () => { const live = T()[t.id]; if (live && live !== t) { live.checks = plan.toggleCheck(live, n.date); live.updatedAt = store.nowISO(); } else { t.checks = plan.toggleCheck(t, n.date); t.updatedAt = store.nowISO(); } store.save(); sync.autoSync(); toast(plan.isChecked(t, n.date) ? `${span}は済み(明日もまた出ます)` : '印を外しました'); rerender(); };
     rows.push(line({ cls: g.done ? ' done' : '', on: g.checked || g.done, checkLabel: `${t.name} を${g.checked ? `${span}の済みから外す` : `${span}は済んだことにする`}`, onCheck, name: t.name, color: catOf(g.categoryId).color, meta, tag: g.kind === 'weekly' ? '毎週' : '習慣', open: () => ctx.go('tasks', 'habits') }));
   }
   const rest = Math.max(0, all.length - TASK_MAX) + Math.max(0, rows.length - ROW_MAX);
